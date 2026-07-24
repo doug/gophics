@@ -28,8 +28,43 @@ type Owner struct {
 	// (pre-M4 focus model; see Handler).
 	KeyboardTarget *Handler
 
-	root  *element
-	dirty []*element
+	root    *element
+	dirty   []*element
+	tickers []Ticker
+}
+
+// Ticker is per-frame animation work. Tick reports whether the ticker is
+// still active; inactive tickers stay registered but cost one call per
+// animated frame. anim.Controller implements this.
+type Ticker interface {
+	Tick(dt float64) bool
+}
+
+// AddTicker registers t to be advanced each frame while any animation runs.
+func (o *Owner) AddTicker(t Ticker) {
+	o.tickers = append(o.tickers, t)
+	o.requestFrame()
+}
+
+// RemoveTicker unregisters t (call from State.Dispose).
+func (o *Owner) RemoveTicker(t Ticker) {
+	for i, x := range o.tickers {
+		if x == t {
+			o.tickers = append(o.tickers[:i], o.tickers[i+1:]...)
+			return
+		}
+	}
+}
+
+// TickAll advances all tickers and reports whether any is still running.
+func (o *Owner) TickAll(dt float64) bool {
+	active := false
+	for _, t := range o.tickers {
+		if t.Tick(dt) {
+			active = true
+		}
+	}
+	return active
 }
 
 func (o *Owner) requestFrame() {

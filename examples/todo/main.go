@@ -1,17 +1,20 @@
 // Command todo is the todo example, written against the widget layer.
 //
-// Compare with the previous revision of this file (git log): the same app
-// hand-rolled against paint/shell was ~250 lines of manual layout math, hit
-// testing, and invalidation. All of that now lives in the framework.
+// It exercises the framework end to end: stateful widgets with keyed
+// reconciliation, per-row hover animations (anim.Controller tickers),
+// tap-to-focus with focus-aware visuals, a scrolling viewport, and text
+// input — all testable headless (see render_test.go).
 package main
 
 import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/doug/gossamer/anim"
 	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
@@ -44,7 +47,7 @@ type todoState struct {
 	widget.StateBase[Todo]
 	items []item
 	input string
-	hover int
+	hover int // last hovered row index (observed by tests)
 }
 
 // stateHook lets tests observe the mounted state.
@@ -60,84 +63,163 @@ func (s *todoState) Init(widget.Ctx) {
 		{text: "Open a window", done: true},
 		{text: "Build the todo example", done: true},
 		{text: "Grow widgets until this file shrinks", done: true},
+		{text: "Animate, focus, scroll", done: true},
 		{text: "Ship the web shell", done: false},
 	}
 }
 
 func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 	left := 0
-	rows := make([]widget.Widget, 0, len(s.items)+4)
-	rows = append(rows,
-		widget.Text{S: "gossamer · todo", Size: 15, Color: colDim},
-		widget.Sized{H: 16},
-		s.inputField(),
-		widget.Sized{H: 12},
-	)
+	rows := make([]widget.Widget, 0, 2*len(s.items))
 	for i, it := range s.items {
 		if !it.done {
 			left++
 		}
-		rows = append(rows, widget.WithKey{Key: it.text, Child: s.row(i)}, widget.Sized{H: 8})
+		i := i
+		rows = append(rows, widget.WithKey{Key: it.text, Child: todoRow{
+			Item:     it,
+			OnToggle: func() { s.SetState(func() { s.items[i].done = !s.items[i].done }) },
+			OnDelete: func() { s.SetState(func() { s.remove(i) }) },
+			OnHover:  func() { s.hover = i },
+			OnLeave:  func() { s.leave(i) },
+		}}, widget.Sized{H: 8})
 	}
+	list := widget.Column(rows...)
+	list.CrossAlign = layout.CrossStretch
+
 	footer := fmt.Sprintf("%d left · click row to toggle · hover shows delete", left)
-	rows = append(rows,
-		widget.Expand(widget.Sized{}),
+	col := widget.Column(
+		widget.Text{S: "gossamer · todo", Size: 15, Color: colDim},
+		widget.Sized{H: 16},
+		inputField{
+			Value:  s.input,
+			OnText: s.onText,
+			OnKey:  s.onKey,
+		},
+		widget.Sized{H: 12},
+		widget.Expand(widget.Scroll{Child: list}),
+		widget.Sized{H: 12},
 		widget.Text{S: footer, Size: 12, Color: colDim},
 	)
-
-	col := widget.Column(rows...)
 	col.CrossAlign = layout.CrossStretch
 	return widget.Padding{All: 20, Child: col}
 }
 
-func (s *todoState) inputField() widget.Widget {
-	label := widget.Text{S: s.input, Color: colText}
-	if s.input == "" {
-		label = widget.Text{S: "What needs doing?  (Enter adds)", Color: colDim}
+// inputField is the entry box: focus-aware border, caret when focused.
+type inputField struct {
+	Value  string
+	OnText func(string)
+	OnKey  func(shell.Key)
+}
+
+func (f inputField) CreateState() widget.State { return &inputState{} }
+
+type inputState struct {
+	widget.StateBase[inputField]
+	focused bool
+}
+
+func (s *inputState) Build(widget.Ctx) widget.Widget {
+	f := s.W()
+	border, borderW := colDim, float32(1)
+	if s.focused {
+		border, borderW = colAccent, 1.5
+	}
+	label := widget.Text{S: f.Value, Color: colText}
+	var caret widget.Widget = widget.Sized{W: 2}
+	if s.focused {
+		caret = widget.Canvas{W: 2, H: 18, Draw: func(c *paint.Canvas, r geom.Rect) {
+			c.FillRect(r, colAccent)
+		}}
+	}
+	content := widget.Row(label, caret, widget.Expand(widget.Sized{}))
+	if f.Value == "" {
+		placeholder := widget.Text{S: "What needs doing?  (Enter adds)", Color: colDim}
+		content = widget.Row(caret, placeholder, widget.Expand(widget.Sized{}))
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{OnText: s.onText, OnKey: s.onKey},
+		Handler: widget.Handler{
+			OnText:  f.OnText,
+			OnKey:   f.OnKey,
+			OnFocus: func(v bool) { s.SetState(func() { s.focused = v }) },
+		},
 		Child: widget.Decorated{
-			Color: colCard, Radius: 8, BorderColor: colAccent, BorderWidth: 1,
+			Color: colCard, Radius: 8, BorderColor: border, BorderWidth: borderW,
 			Child: widget.Padding{
 				Insets: geom.InsetsSymmetric(14, 12),
-				Child:  widget.Row(label, widget.Expand(widget.Sized{})),
+				Child:  content,
 			},
 		},
 	}
 }
 
-func (s *todoState) row(i int) widget.Widget {
-	it := s.items[i]
-	bg := colCard
-	if i == s.hover {
-		bg = colCardHov
+// todoRow is one list row, with its own animated hover state.
+type todoRow struct {
+	Item     item
+	OnToggle func()
+	OnDelete func()
+	OnHover  func()
+	OnLeave  func()
+}
+
+func (r todoRow) CreateState() widget.State { return &rowState{} }
+
+type rowState struct {
+	widget.StateBase[todoRow]
+	ctx     widget.Ctx
+	hover   *anim.Controller
+	hovered bool
+}
+
+func (s *rowState) Init(ctx widget.Ctx) {
+	s.ctx = ctx
+	s.hover = &anim.Controller{
+		Duration: 120 * time.Millisecond,
+		OnChange: func() { s.SetState(nil) },
 	}
+	ctx.AddTicker(s.hover)
+}
+
+func (s *rowState) Dispose() { s.ctx.RemoveTicker(s.hover) }
+
+func (s *rowState) Build(widget.Ctx) widget.Widget {
+	r := s.W()
+	bg := paint.Lerp(colCard, colCardHov, s.hover.Value())
 	labelColor := colText
-	if it.done {
+	if r.Item.done {
 		labelColor = colDim
 	}
 	var del widget.Widget = widget.Sized{W: 20, H: 20}
-	if i == s.hover {
+	if s.hovered {
 		del = widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.remove(i) }) }},
+			Handler: widget.Handler{OnTap: r.OnDelete},
 			Child:   widget.Text{S: "×", Size: 16, Color: colDanger},
 		}
 	}
 	return widget.Interactive{
 		Handler: widget.Handler{
-			OnTap:   func() { s.SetState(func() { s.items[i].done = !s.items[i].done }) },
-			OnEnter: func() { s.SetState(func() { s.hover = i }) },
-			OnExit:  func() { s.SetState(func() { s.leave(i) }) },
+			OnTap: r.OnToggle,
+			OnEnter: func() {
+				r.OnHover()
+				s.SetState(func() { s.hovered = true })
+				s.hover.Forward()
+				s.ctx.Invalidate()
+			},
+			OnExit: func() {
+				r.OnLeave()
+				s.SetState(func() { s.hovered = false })
+				s.hover.Reverse()
+				s.ctx.Invalidate()
+			},
 		},
 		Child: widget.Decorated{
 			Color: bg, Radius: 8,
 			Child: widget.Padding{
 				Insets: geom.InsetsSymmetric(12, 12),
 				Child: widget.Row(
-					checkbox(it.done),
+					checkbox(r.Item.done),
 					widget.Sized{W: 12},
-					widget.Text{S: it.text, Color: labelColor},
+					widget.Text{S: r.Item.text, Color: labelColor},
 					widget.Expand(widget.Sized{}),
 					del,
 				),

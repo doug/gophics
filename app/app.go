@@ -33,9 +33,16 @@ type Core struct {
 	root       widget.Widget
 	size       geom.Size
 
-	hovered []*widget.InteractiveBox
-	pressed *widget.InteractiveBox
+	hovered  []*widget.InteractiveBox
+	pressed  *widget.InteractiveBox
+	dragging *widget.InteractiveBox
+	lastPos  geom.Pt
+	downPos  geom.Pt
+	moved    bool
 }
+
+// tapSlop is the drag distance that cancels a pending tap, in logical px.
+const tapSlop = 4
 
 // NewCore builds a runtime for the given root widget.
 func NewCore(root widget.Widget, cfg Config) (*Core, error) {
@@ -89,11 +96,25 @@ func (c *Core) interactivesAt(p geom.Pt) []*widget.InteractiveBox {
 	return out
 }
 
-// Pointer dispatches a pointer event: hover enter/exit, and tap on
-// press+release over the same Interactive.
+// Pointer dispatches a pointer event: hover enter/exit, drag, scroll,
+// tap on press+release over the same Interactive, and tap-to-focus.
 func (c *Core) Pointer(e shell.Pointer) {
 	switch e.Kind {
 	case shell.PointerMove:
+		delta := e.Pos.Sub(c.lastPos)
+		c.lastPos = e.Pos
+		if c.dragging != nil {
+			if !c.moved {
+				d := e.Pos.Sub(c.downPos)
+				if d.X*d.X+d.Y*d.Y > tapSlop*tapSlop {
+					c.moved = true
+					c.pressed = nil // slop exceeded: cancel pending tap
+				}
+			}
+			if c.moved && c.dragging.Handler.OnDrag != nil {
+				c.dragging.Handler.OnDrag(delta)
+			}
+		}
 		now := c.interactivesAt(e.Pos)
 		for _, b := range c.hovered {
 			if !slices.Contains(now, b) && b.Handler.OnExit != nil {
@@ -107,27 +128,63 @@ func (c *Core) Pointer(e shell.Pointer) {
 		}
 		c.hovered = now
 
+	case shell.PointerScroll:
+		for _, b := range c.interactivesAt(c.lastPos) {
+			if b.Handler.OnScroll != nil {
+				b.Handler.OnScroll(e.Scroll)
+				return
+			}
+		}
+
 	case shell.PointerDown:
 		if e.Button != 0 {
 			return
 		}
-		c.pressed = nil
-		for _, b := range c.interactivesAt(e.Pos) {
-			if b.Handler.OnTap != nil {
+		c.downPos, c.lastPos, c.moved = e.Pos, e.Pos, false
+		c.pressed, c.dragging = nil, nil
+		hits := c.interactivesAt(e.Pos)
+		for _, b := range hits {
+			if c.pressed == nil && b.Handler.OnTap != nil {
 				c.pressed = b
-				break
+			}
+			if c.dragging == nil && b.Handler.OnDrag != nil {
+				c.dragging = b
 			}
 		}
+		c.focusFrom(hits)
 
 	case shell.PointerUp:
-		if e.Button != 0 || c.pressed == nil {
+		if e.Button != 0 {
 			return
 		}
 		pressed := c.pressed
-		c.pressed = nil
-		if slices.Contains(c.interactivesAt(e.Pos), pressed) {
+		c.pressed, c.dragging = nil, nil
+		if pressed != nil && slices.Contains(c.interactivesAt(e.Pos), pressed) {
 			pressed.Handler.OnTap()
 		}
+	}
+}
+
+// focusFrom moves keyboard focus to the topmost focusable hit, if any.
+// A press on nothing focusable leaves focus where it is.
+func (c *Core) focusFrom(hits []*widget.InteractiveBox) {
+	for _, b := range hits {
+		h := &b.Handler
+		if h.OnText == nil && h.OnKey == nil {
+			continue
+		}
+		old := c.Owner.KeyboardTarget
+		if old == h {
+			return
+		}
+		c.Owner.KeyboardTarget = h
+		if old != nil && old.OnFocus != nil {
+			old.OnFocus(false)
+		}
+		if h.OnFocus != nil {
+			h.OnFocus(true)
+		}
+		return
 	}
 }
 
@@ -171,6 +228,10 @@ type shellHandler struct {
 
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
+	// Frame pipeline (PLAN.md §3): tick animations → build → layout → paint.
+	if h.core.Owner.TickAll(dt) {
+		w.Invalidate() // animations still running: keep frames coming
+	}
 	h.core.Layout(f.Size())
 	canvas := h.core.Painter.Begin(f)
 	h.core.Paint(canvas)

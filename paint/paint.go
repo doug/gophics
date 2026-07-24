@@ -26,6 +26,16 @@ type Color struct {
 // RGB returns an opaque Color.
 func RGB(r, g, b float32) Color { return Color{r, g, b, 1} }
 
+// Lerp interpolates between colors a and b; t=0 yields a, t=1 yields b.
+func Lerp(a, b Color, t float32) Color {
+	return Color{
+		R: a.R + (b.R-a.R)*t,
+		G: a.G + (b.G-a.G)*t,
+		B: a.B + (b.B-a.B)*t,
+		A: a.A + (b.A-a.A)*t,
+	}
+}
+
 func (c Color) nrgba() color.NRGBA {
 	return color.NRGBA{
 		R: uint8(clamp01(c.R) * 255),
@@ -195,6 +205,18 @@ func (c *Canvas) Line(a, b geom.Pt, width float32, col Color) {
 	c.dc.DrawLine(float64(a.X), float64(a.Y), float64(b.X), float64(b.Y))
 	c.dc.Stroke()
 }
+
+// PushClip saves the canvas state and clips subsequent drawing to r.
+// Balance every PushClip with PopClip.
+func (c *Canvas) PushClip(r geom.Rect) {
+	c.dc.Push()
+	c.dc.ClipRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
+}
+
+// PopClip restores the canvas state saved by the matching PushClip.
+// (gg's Push/Pop save and restore transform, paint, clip, and mask; nested
+// clips intersect.)
+func (c *Canvas) PopClip() { c.dc.Pop() }
 
 // Text draws s with its baseline-left at pos.
 func (c *Canvas) Text(s string, pos geom.Pt, size float32, col Color) {

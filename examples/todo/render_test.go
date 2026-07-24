@@ -87,9 +87,25 @@ func TestTapTogglesAndHoverTracks(t *testing.T) {
 	}
 }
 
+func TestHoverAnimationSettles(t *testing.T) {
+	h, st := newHeadless(t)
+	rowPoint(t, h, st, 0)
+	steps := 0
+	for h.Step(0.016) {
+		if steps++; steps > 60 {
+			t.Fatal("hover animation did not settle within 60 frames")
+		}
+	}
+	if steps == 0 {
+		t.Fatal("hover should have started an animation")
+	}
+}
+
 func TestRenderOffscreen(t *testing.T) {
 	h, st := newHeadless(t)
 	rowPoint(t, h, st, 1) // leave row 1 hovered: exercises hover + delete UI
+	for h.Step(0.016) {   // settle the hover animation
+	}
 
 	img := h.Render()
 	if img == nil {

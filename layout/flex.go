@@ -5,12 +5,13 @@ import (
 	"github.com/doug/gossamer/paint"
 )
 
-// Axis is a layout direction.
+// Axis is a layout direction. The zero value is Vertical: the natural
+// default for scrolling and for a zero-value Flex (a column).
 type Axis uint8
 
 const (
-	Horizontal Axis = iota
-	Vertical
+	Vertical Axis = iota
+	Horizontal
 )
 
 // MainAlign distributes free space along the main axis when no child flexes.

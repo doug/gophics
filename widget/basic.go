@@ -167,6 +167,80 @@ func (f Flex) attach(b layout.Box, kids []layout.Box) {
 	}
 }
 
+// Scroll makes its child scrollable along Axis (default vertical) via
+// wheel/trackpad and drag. The offset is retained widget state.
+type Scroll struct {
+	Axis  layout.Axis
+	Child Widget
+}
+
+func (s Scroll) CreateState() State { return &scrollState{} }
+
+type scrollState struct {
+	StateBase[Scroll]
+	offset float32
+	vp     *viewportRef
+}
+
+type viewportRef struct{ box *layout.Viewport }
+
+func (s *scrollState) Init(Ctx) { s.vp = &viewportRef{} }
+
+func (s *scrollState) scrollBy(d geom.Pt) {
+	w := s.W()
+	delta := d.Y
+	if w.Axis == layout.Horizontal {
+		delta = d.X
+	}
+	if delta == 0 {
+		return
+	}
+	s.SetState(func() {
+		s.offset += delta
+		// Clamp against the last layout when available; Layout re-clamps.
+		if s.vp.box != nil {
+			if m := s.vp.box.MaxOffset(); s.offset > m {
+				s.offset = m
+			}
+		}
+		if s.offset < 0 {
+			s.offset = 0
+		}
+	})
+}
+
+func (s *scrollState) Build(Ctx) Widget {
+	w := s.W()
+	return Interactive{
+		Handler: Handler{
+			OnScroll: func(d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
+			OnDrag:   func(d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
+		},
+		Child: viewport{Axis: w.Axis, Offset: s.offset, Ref: s.vp, Child: w.Child},
+	}
+}
+
+// viewport is the internal render widget behind Scroll.
+type viewport struct {
+	Axis   layout.Axis
+	Offset float32
+	Ref    *viewportRef
+	Child  Widget
+}
+
+func (v viewport) createBox(Ctx) layout.Box { return &layout.Viewport{} }
+func (v viewport) updateBox(_ Ctx, b layout.Box) {
+	vb := b.(*layout.Viewport)
+	vb.Axis, vb.Offset = v.Axis, v.Offset
+	if v.Ref != nil {
+		v.Ref.box = vb
+	}
+}
+func (v viewport) childWidgets() []Widget { return []Widget{v.Child} }
+func (v viewport) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Viewport).Child = first(kids)
+}
+
 // Canvas is the custom-painting escape hatch: a fixed-size leaf that paints
 // itself with the given function. Draw is called with the widget's rect in
 // canvas coordinates.
@@ -219,8 +293,12 @@ func (iw Interactive) createBox(ctx Ctx) layout.Box { return &InteractiveBox{} }
 func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 	ib := b.(*InteractiveBox)
 	ib.Handler = iw.Handler
-	if iw.Handler.OnText != nil || iw.Handler.OnKey != nil {
+	// Autofocus: a focusable widget mounted while nothing has focus takes it.
+	if ib.Handler.focusable() && ctx.el.owner.KeyboardTarget == nil {
 		ctx.el.owner.KeyboardTarget = &ib.Handler
+		if ib.Handler.OnFocus != nil {
+			ib.Handler.OnFocus(true)
+		}
 	}
 }
 func (iw Interactive) childWidgets() []Widget { return []Widget{iw.Child} }

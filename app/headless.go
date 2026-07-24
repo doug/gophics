@@ -35,6 +35,26 @@ func (h *Headless) Render() image.Image {
 	return h.Core.Painter.Image()
 }
 
+// Step advances animations by dt seconds, reporting whether any are still
+// running. Deterministic replacement for vsync in tests.
+func (h *Headless) Step(dt float64) bool { return h.Core.Owner.TickAll(dt) }
+
+// Drag dispatches press at from, a move to to (exceeding tap slop), and
+// release at to.
+func (h *Headless) Drag(from, to geom.Pt) {
+	h.layoutForInput()
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: to})
+}
+
+// Scroll dispatches a scroll delta at the last pointer position (Move first
+// to position the pointer).
+func (h *Headless) Scroll(delta geom.Pt) {
+	h.layoutForInput()
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: delta})
+}
+
 // Move dispatches a pointer move (hover) to p.
 func (h *Headless) Move(p geom.Pt) {
 	h.layoutForInput()

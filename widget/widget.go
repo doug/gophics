@@ -18,6 +18,7 @@
 package widget
 
 import (
+	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/shell"
 )
@@ -95,6 +96,12 @@ func (c Ctx) Painter() *paint.Painter { return c.el.owner.Painter }
 // Invalidate requests a new frame.
 func (c Ctx) Invalidate() { c.el.owner.requestFrame() }
 
+// AddTicker registers per-frame animation work (see Owner.AddTicker).
+func (c Ctx) AddTicker(t Ticker) { c.el.owner.AddTicker(t) }
+
+// RemoveTicker unregisters a ticker; call from Dispose.
+func (c Ctx) RemoveTicker(t Ticker) { c.el.owner.RemoveTicker(t) }
+
 // WithKey attaches a reconciliation key to its child. Keys preserve element
 // and state identity when children move within a list.
 type WithKey struct {
@@ -122,10 +129,18 @@ type Handler struct {
 	OnTap   func()
 	OnEnter func()
 	OnExit  func()
-	// OnText and OnKey receive keyboard input while this widget is the
-	// keyboard target. Pre-M4 focus model: the most recently mounted
-	// Interactive with keyboard callbacks is the target (sufficient for a
-	// single input field; the real focus system is PLAN.md M4).
-	OnText func(s string)
-	OnKey  func(k shell.Key)
+	// OnDrag receives pointer movement while pressed on this widget. Once a
+	// drag exceeds the tap slop, a pending tap is cancelled.
+	OnDrag func(delta geom.Pt)
+	// OnScroll receives wheel/trackpad deltas while the pointer is over
+	// this widget.
+	OnScroll func(delta geom.Pt)
+	// OnText and OnKey receive keyboard input while focused. A widget with
+	// either becomes focusable: it gains focus when tapped (or when mounted
+	// while nothing has focus) and OnFocus reports transitions.
+	OnText  func(s string)
+	OnKey   func(k shell.Key)
+	OnFocus func(focused bool)
 }
+
+func (h *Handler) focusable() bool { return h.OnText != nil || h.OnKey != nil }
