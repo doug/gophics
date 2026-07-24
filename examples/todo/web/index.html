@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gossamer todo</title>
+  <script src="wasm_exec.js"></script>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("todo.wasm"), go.importObject)
+      .then(r => go.run(r.instance));
+  </script>
+</head>
+<body></body>
+</html>

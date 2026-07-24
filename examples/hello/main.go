@@ -1,3 +1,5 @@
+//go:build !js
+
 // Command hello is the minimal gossamer app: a colored, vsynced, resizable
 // window driven through the shell + paint layers (no widgets).
 package main

@@ -12,6 +12,11 @@ See [PLAN.md](PLAN.md) for the full plan, architecture, and roadmap;
 ```sh
 go run ./examples/hello   # a colored, vsynced, resizable window
 go run ./examples/todo    # a widget-tree todo app: state, taps, hover, text input
+
+# the same todo app in the browser:
+GOOS=js GOARCH=wasm go build -o examples/todo/web/todo.wasm ./examples/todo
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/todo/web/
+python3 -m http.server -d examples/todo/web 8080   # open http://localhost:8080
 ```
 
 Packages:
@@ -20,8 +25,13 @@ Packages:
   logical pixels — ADR 0001)
 - `shell` — the platform interface: windows, frames, input events
 - `shell/desktop` — macOS/Linux/Windows shell over gogpu (pure Go, no CGo)
-- `paint` — canvas over gg's CPU rasterizer, GPU-composited; offscreen
+- `shell/web` — browser shell (js/wasm): canvas presentation, RAF frames,
+  DOM input
+- `paint` — Canvas interface; gg CPU rasterizer backend, GPU-composited on
+  desktop, pixel-presented on web; gradients, drop shadows, offscreen
   rendering for golden tests
+- `scene` — recorded display lists, replayable onto any Canvas
+- `anim` — curves and controllers driven by frame tickers
 - `layout` — the box protocol (constraints down, sizes up) + core boxes:
   flex, padding, align, sized, decorated, text
 - `widget` — immutable widgets, keyed reconciliation into a retained
