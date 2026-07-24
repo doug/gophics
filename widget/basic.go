@@ -1,0 +1,271 @@
+package widget
+
+import (
+	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/layout"
+	"github.com/doug/gossamer/paint"
+)
+
+// Text displays a single line of text.
+type Text struct {
+	S     string
+	Size  float32 // 0 → 14
+	Color paint.Color
+}
+
+func (t Text) size() float32 {
+	if t.Size == 0 {
+		return 14
+	}
+	return t.Size
+}
+
+func (t Text) createBox(ctx Ctx) layout.Box { return &layout.TextBox{Painter: ctx.Painter()} }
+func (t Text) updateBox(ctx Ctx, b layout.Box) {
+	tb := b.(*layout.TextBox)
+	tb.Text, tb.TextSize, tb.Color = t.S, t.size(), t.Color
+}
+func (t Text) childWidgets() []Widget               { return nil }
+func (t Text) attach(layout.Box, []layout.Box)      {}
+
+// Padding insets its child. Set Insets, or All as shorthand.
+type Padding struct {
+	Insets geom.Insets
+	All    float32
+	Child  Widget
+}
+
+func (p Padding) insets() geom.Insets {
+	if p.All != 0 {
+		return geom.InsetsAll(p.All)
+	}
+	return p.Insets
+}
+
+func (p Padding) createBox(Ctx) layout.Box { return &layout.Padded{} }
+func (p Padding) updateBox(_ Ctx, b layout.Box) {
+	b.(*layout.Padded).Insets = p.insets()
+}
+func (p Padding) childWidgets() []Widget { return []Widget{p.Child} }
+func (p Padding) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Padded).Child = first(kids)
+}
+
+// Sized forces dimensions (zero = unspecified). With no child it is a spacer.
+type Sized struct {
+	W, H  float32
+	Child Widget
+}
+
+func (s Sized) createBox(Ctx) layout.Box { return &layout.Sized{} }
+func (s Sized) updateBox(_ Ctx, b layout.Box) {
+	sb := b.(*layout.Sized)
+	sb.W, sb.H = s.W, s.H
+}
+func (s Sized) childWidgets() []Widget { return []Widget{s.Child} }
+func (s Sized) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Sized).Child = first(kids)
+}
+
+// Decorated paints a rounded-rect background and/or border behind its child.
+type Decorated struct {
+	Color       paint.Color
+	Radius      float32
+	BorderColor paint.Color
+	BorderWidth float32
+	Child       Widget
+}
+
+func (d Decorated) createBox(Ctx) layout.Box { return &layout.Decorated{} }
+func (d Decorated) updateBox(_ Ctx, b layout.Box) {
+	db := b.(*layout.Decorated)
+	db.Color, db.Radius = d.Color, d.Radius
+	db.BorderColor, db.BorderWidth = d.BorderColor, d.BorderWidth
+}
+func (d Decorated) childWidgets() []Widget { return []Widget{d.Child} }
+func (d Decorated) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Decorated).Child = first(kids)
+}
+
+// Align positions its child; X/Y in [0,1] (0 start, 0.5 center, 1 end).
+type Align struct {
+	X, Y  float32
+	Child Widget
+}
+
+// Center centers its child.
+func Center(child Widget) Align { return Align{X: 0.5, Y: 0.5, Child: child} }
+
+func (a Align) createBox(Ctx) layout.Box { return &layout.Aligned{} }
+func (a Align) updateBox(_ Ctx, b layout.Box) {
+	ab := b.(*layout.Aligned)
+	ab.AlignX, ab.AlignY = a.X, a.Y
+}
+func (a Align) childWidgets() []Widget { return []Widget{a.Child} }
+func (a Align) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Aligned).Child = first(kids)
+}
+
+// Flexible gives a Flex child a share of the remaining main-axis space.
+type Flexible struct {
+	Flex  int
+	Child Widget
+}
+
+// Expand wraps w to fill remaining space in a Row/Column (flex 1).
+func Expand(w Widget) Flexible { return Flexible{Flex: 1, Child: w} }
+
+// Flex lays out children along an axis. Use Row/Column constructors.
+type Flex struct {
+	Axis       layout.Axis
+	MainAlign  layout.MainAlign
+	CrossAlign layout.CrossAlign
+	Children   []Widget
+}
+
+// Row is a horizontal Flex (children cross-centered).
+func Row(children ...Widget) Flex {
+	return Flex{Axis: layout.Horizontal, CrossAlign: layout.CrossCenter, Children: children}
+}
+
+// Column is a vertical Flex (children cross-centered).
+func Column(children ...Widget) Flex {
+	return Flex{Axis: layout.Vertical, CrossAlign: layout.CrossCenter, Children: children}
+}
+
+func (f Flex) createBox(Ctx) layout.Box { return &layout.Flex{} }
+func (f Flex) updateBox(_ Ctx, b layout.Box) {
+	fb := b.(*layout.Flex)
+	fb.Axis, fb.MainAlign, fb.CrossAlign = f.Axis, f.MainAlign, f.CrossAlign
+}
+
+func (f Flex) childWidgets() []Widget {
+	out := make([]Widget, len(f.Children))
+	for i, c := range f.Children {
+		if fl, ok := c.(Flexible); ok {
+			c = fl.Child
+		}
+		out[i] = c
+	}
+	return out
+}
+
+func (f Flex) attach(b layout.Box, kids []layout.Box) {
+	fb := b.(*layout.Flex)
+	fb.Children = fb.Children[:0]
+	ki := 0
+	for _, c := range f.Children {
+		if c == nil {
+			continue
+		}
+		flex := 0
+		if fl, ok := c.(Flexible); ok {
+			flex = fl.Flex
+		}
+		fb.Children = append(fb.Children, layout.FlexChild{Box: kids[ki], Flex: flex})
+		ki++
+	}
+}
+
+// Canvas is the custom-painting escape hatch: a fixed-size leaf that paints
+// itself with the given function. Draw is called with the widget's rect in
+// canvas coordinates.
+type Canvas struct {
+	W, H float32
+	Draw func(c *paint.Canvas, r geom.Rect)
+}
+
+func (cw Canvas) createBox(Ctx) layout.Box { return &canvasBox{} }
+func (cw Canvas) updateBox(_ Ctx, b layout.Box) {
+	cb := b.(*canvasBox)
+	cb.w, cb.h, cb.draw = cw.W, cw.H, cw.Draw
+}
+func (cw Canvas) childWidgets() []Widget          { return nil }
+func (cw Canvas) attach(layout.Box, []layout.Box) {}
+
+type canvasBox struct {
+	w, h float32
+	draw func(c *paint.Canvas, r geom.Rect)
+	size geom.Size
+}
+
+func (b *canvasBox) Layout(cs layout.Constraints) geom.Size {
+	b.size = cs.Constrain(geom.Size{W: b.w, H: b.h})
+	return b.size
+}
+
+func (b *canvasBox) Size() geom.Size { return b.size }
+
+func (b *canvasBox) Paint(c *paint.Canvas, at geom.Pt) {
+	if b.draw != nil {
+		b.draw(c, geom.Rect{Min: at, Max: at.Add(b.size.Pt())})
+	}
+}
+
+func (b *canvasBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
+	if p.X >= 0 && p.Y >= 0 && p.X < b.size.W && p.Y < b.size.H {
+		*hits = append(*hits, layout.Hit{Box: b, Pos: p})
+	}
+}
+
+// Interactive makes its child respond to input via Handler callbacks.
+// It adds no visuals and takes its child's size.
+type Interactive struct {
+	Handler Handler
+	Child   Widget
+}
+
+func (iw Interactive) createBox(ctx Ctx) layout.Box { return &InteractiveBox{} }
+func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
+	ib := b.(*InteractiveBox)
+	ib.Handler = iw.Handler
+	if iw.Handler.OnText != nil || iw.Handler.OnKey != nil {
+		ctx.el.owner.KeyboardTarget = &ib.Handler
+	}
+}
+func (iw Interactive) childWidgets() []Widget { return []Widget{iw.Child} }
+func (iw Interactive) attach(b layout.Box, kids []layout.Box) {
+	b.(*InteractiveBox).Child = first(kids)
+}
+
+// InteractiveBox is the render object behind Interactive. The app runner
+// type-switches on it in hit paths to dispatch pointer events.
+type InteractiveBox struct {
+	Handler Handler
+	Child   layout.Box
+	size    geom.Size
+}
+
+func (b *InteractiveBox) Layout(cs layout.Constraints) geom.Size {
+	if b.Child != nil {
+		b.size = b.Child.Layout(cs)
+	} else {
+		b.size = cs.Constrain(geom.Size{})
+	}
+	return b.size
+}
+
+func (b *InteractiveBox) Size() geom.Size { return b.size }
+
+func (b *InteractiveBox) Paint(c *paint.Canvas, at geom.Pt) {
+	if b.Child != nil {
+		b.Child.Paint(c, at)
+	}
+}
+
+func (b *InteractiveBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
+	if p.X < 0 || p.Y < 0 || p.X >= b.size.W || p.Y >= b.size.H {
+		return
+	}
+	if b.Child != nil {
+		b.Child.AddHits(p, hits)
+	}
+	*hits = append(*hits, layout.Hit{Box: b, Pos: p})
+}
+
+func first(kids []layout.Box) layout.Box {
+	if len(kids) > 0 {
+		return kids[0]
+	}
+	return nil
+}

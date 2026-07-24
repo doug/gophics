@@ -1,11 +1,8 @@
-// Command todo is a hand-rolled todo app: the first vertical slice through
-// the whole gossamer stack — shell events, paint (gg CPU rasterizer → GPU
-// surface), text, and hit testing.
+// Command todo is the todo example, written against the widget layer.
 //
-// Everything here is deliberately manual (layout arithmetic, hit tests,
-// invalidation). As the layout/widget layers land (PLAN.md M2–M3), this
-// example shrinks until it is only widget declarations; its diff history is
-// the framework's progress report.
+// Compare with the previous revision of this file (git log): the same app
+// hand-rolled against paint/shell was ~250 lines of manual layout math, hit
+// testing, and invalidation. All of that now lives in the framework.
 package main
 
 import (
@@ -15,10 +12,12 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/desktop"
+	"github.com/doug/gossamer/widget"
 )
 
 var (
@@ -31,235 +30,191 @@ var (
 	colDanger  = paint.RGB(0.90, 0.42, 0.42)
 )
 
-const (
-	pad    = 20
-	fieldH = 44
-	rowH   = 44
-	rowGap = 8
-)
-
 type item struct {
 	text string
 	done bool
 }
 
-type app struct {
-	painter *paint.Painter
-	size    geom.Size
+// Todo is the root widget.
+type Todo struct{}
 
+func (Todo) CreateState() widget.State { return &todoState{} }
+
+type todoState struct {
+	widget.StateBase[Todo]
 	items []item
 	input string
-	hover int // hovered row index, -1 for none
-
-	// rects recomputed every frame, used for hit testing between frames
-	fieldRect geom.Rect
-	rowRects  []geom.Rect
+	hover int
 }
 
-func newApp() *app {
-	p := paint.NewPainter()
-	if err := p.LoadFont(goregular.TTF); err != nil {
-		log.Fatal(err)
+// stateHook lets tests observe the mounted state.
+var stateHook func(*todoState)
+
+func (s *todoState) Init(widget.Ctx) {
+	if stateHook != nil {
+		stateHook(s)
 	}
-	return &app{
-		painter: p,
-		hover:   -1,
-		items: []item{
-			{text: "Plan the port", done: true},
-			{text: "Open a window", done: true},
-			{text: "Build the todo example", done: false},
-			{text: "Grow widgets until this file shrinks", done: false},
+	s.hover = -1
+	s.items = []item{
+		{text: "Plan the port", done: true},
+		{text: "Open a window", done: true},
+		{text: "Build the todo example", done: true},
+		{text: "Grow widgets until this file shrinks", done: true},
+		{text: "Ship the web shell", done: false},
+	}
+}
+
+func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
+	left := 0
+	rows := make([]widget.Widget, 0, len(s.items)+4)
+	rows = append(rows,
+		widget.Text{S: "gossamer · todo", Size: 15, Color: colDim},
+		widget.Sized{H: 16},
+		s.inputField(),
+		widget.Sized{H: 12},
+	)
+	for i, it := range s.items {
+		if !it.done {
+			left++
+		}
+		rows = append(rows, widget.WithKey{Key: it.text, Child: s.row(i)}, widget.Sized{H: 8})
+	}
+	footer := fmt.Sprintf("%d left · click row to toggle · hover shows delete", left)
+	rows = append(rows,
+		widget.Expand(widget.Sized{}),
+		widget.Text{S: footer, Size: 12, Color: colDim},
+	)
+
+	col := widget.Column(rows...)
+	col.CrossAlign = layout.CrossStretch
+	return widget.Padding{All: 20, Child: col}
+}
+
+func (s *todoState) inputField() widget.Widget {
+	label := widget.Text{S: s.input, Color: colText}
+	if s.input == "" {
+		label = widget.Text{S: "What needs doing?  (Enter adds)", Color: colDim}
+	}
+	return widget.Interactive{
+		Handler: widget.Handler{OnText: s.onText, OnKey: s.onKey},
+		Child: widget.Decorated{
+			Color: colCard, Radius: 8, BorderColor: colAccent, BorderWidth: 1,
+			Child: widget.Padding{
+				Insets: geom.InsetsSymmetric(14, 12),
+				Child:  widget.Row(label, widget.Expand(widget.Sized{})),
+			},
 		},
 	}
 }
 
-func (a *app) Frame(w shell.Window, f shell.Frame, dt float64) {
-	a.size = f.Size()
-	c := a.painter.Begin(f)
-	a.layout()
-	a.draw(c)
-	if err := a.painter.End(f); err != nil {
-		log.Printf("paint: %v", err)
+func (s *todoState) row(i int) widget.Widget {
+	it := s.items[i]
+	bg := colCard
+	if i == s.hover {
+		bg = colCardHov
 	}
-	// No Invalidate here: rendering is on-demand. Events that change state
-	// request the next frame; idle means zero GPU work.
-}
-
-func (a *app) layout() {
-	content := geom.RectFromSize(a.size)
-	content = geom.InsetsAll(pad).Inset(content)
-
-	a.fieldRect = geom.RectXYWH(content.Min.X, content.Min.Y+40, content.Dx(), fieldH)
-
-	a.rowRects = a.rowRects[:0]
-	y := a.fieldRect.Max.Y + pad
-	for range a.items {
-		a.rowRects = append(a.rowRects, geom.RectXYWH(content.Min.X, y, content.Dx(), rowH))
-		y += rowH + rowGap
+	labelColor := colText
+	if it.done {
+		labelColor = colDim
 	}
-}
-
-func (a *app) draw(c *paint.Canvas) {
-	c.Clear(colBg)
-
-	c.Text("gossamer · todo", geom.Pt{X: pad, Y: pad + 8}, 15, colDim)
-
-	// Input field.
-	c.FillRRect(a.fieldRect, 8, colCard)
-	c.StrokeRRect(a.fieldRect, 8, 1, colAccent)
-	tx := a.fieldRect.Min.X + 14
-	ty := a.fieldRect.Min.Y + fieldH/2 + 5
-	if a.input == "" {
-		c.Text("What needs doing?  (Enter adds)", geom.Pt{X: tx, Y: ty}, 14, colDim)
-	} else {
-		c.Text(a.input, geom.Pt{X: tx, Y: ty}, 14, colText)
-	}
-	// Caret.
-	cw, _ := c.MeasureText(a.input, 14)
-	caretX := tx + cw + 1
-	c.Line(geom.Pt{X: caretX, Y: ty - 12}, geom.Pt{X: caretX, Y: ty + 3}, 1.5, colAccent)
-
-	// Rows.
-	for i, r := range a.rowRects {
-		it := a.items[i]
-		bg := colCard
-		if i == a.hover {
-			bg = colCardHov
-		}
-		c.FillRRect(r, 8, bg)
-
-		// Checkbox.
-		cb := a.checkboxRect(r)
-		if it.done {
-			c.FillRRect(cb, 5, colAccent)
-			// Check mark.
-			c.Line(geom.Pt{X: cb.Min.X + 4, Y: cb.Min.Y + 10}, geom.Pt{X: cb.Min.X + 8, Y: cb.Min.Y + 14}, 2, colBg)
-			c.Line(geom.Pt{X: cb.Min.X + 8, Y: cb.Min.Y + 14}, geom.Pt{X: cb.Min.X + 16, Y: cb.Min.Y + 5}, 2, colBg)
-		} else {
-			c.StrokeRRect(cb, 5, 1.5, colDim)
-		}
-
-		// Label.
-		col := colText
-		if it.done {
-			col = colDim
-		}
-		lx := cb.Max.X + 12
-		ly := r.Min.Y + rowH/2 + 5
-		c.Text(it.text, geom.Pt{X: lx, Y: ly}, 14, col)
-		if it.done {
-			lw, _ := c.MeasureText(it.text, 14)
-			c.Line(geom.Pt{X: lx, Y: ly - 4}, geom.Pt{X: lx + lw, Y: ly - 4}, 1, colDim)
-		}
-
-		// Delete button on hover.
-		if i == a.hover {
-			d := a.deleteRect(r)
-			c.Text("×", geom.Pt{X: d.Min.X + 6, Y: d.Min.Y + 16}, 16, colDanger)
+	var del widget.Widget = widget.Sized{W: 20, H: 20}
+	if i == s.hover {
+		del = widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.remove(i) }) }},
+			Child:   widget.Text{S: "×", Size: 16, Color: colDanger},
 		}
 	}
+	return widget.Interactive{
+		Handler: widget.Handler{
+			OnTap:   func() { s.SetState(func() { s.items[i].done = !s.items[i].done }) },
+			OnEnter: func() { s.SetState(func() { s.hover = i }) },
+			OnExit:  func() { s.SetState(func() { s.leave(i) }) },
+		},
+		Child: widget.Decorated{
+			Color: bg, Radius: 8,
+			Child: widget.Padding{
+				Insets: geom.InsetsSymmetric(12, 12),
+				Child: widget.Row(
+					checkbox(it.done),
+					widget.Sized{W: 12},
+					widget.Text{S: it.text, Color: labelColor},
+					widget.Expand(widget.Sized{}),
+					del,
+				),
+			},
+		},
+	}
+}
 
-	// Footer.
-	left := 0
-	for _, it := range a.items {
-		if !it.done {
-			left++
+func checkbox(done bool) widget.Widget {
+	if done {
+		return widget.Decorated{
+			Color: colAccent, Radius: 5,
+			Child: widget.Canvas{W: 20, H: 20, Draw: func(c *paint.Canvas, r geom.Rect) {
+				c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, colBg)
+				c.Line(r.Min.Add(geom.Pt{X: 8, Y: 14}), r.Min.Add(geom.Pt{X: 16, Y: 5}), 2, colBg)
+			}},
 		}
 	}
-	footer := fmt.Sprintf("%d left · click row to toggle · hover shows delete", left)
-	fy := a.size.H - pad + 4
-	c.Text(footer, geom.Pt{X: pad, Y: fy}, 12, colDim)
+	return widget.Decorated{
+		BorderColor: colDim, BorderWidth: 1.5, Radius: 5,
+		Child: widget.Sized{W: 20, H: 20},
+	}
 }
 
-func (a *app) checkboxRect(row geom.Rect) geom.Rect {
-	return geom.RectXYWH(row.Min.X+12, row.Min.Y+(rowH-20)/2, 20, 20)
+func (s *todoState) onText(t string) {
+	t = strings.Map(func(r rune) rune {
+		if r < ' ' {
+			return -1
+		}
+		return r
+	}, t)
+	if t != "" {
+		s.SetState(func() { s.input += t })
+	}
 }
 
-func (a *app) deleteRect(row geom.Rect) geom.Rect {
-	return geom.RectXYWH(row.Max.X-32, row.Min.Y+(rowH-20)/2, 20, 20)
+func (s *todoState) onKey(k shell.Key) {
+	if k.Kind != shell.KeyPress {
+		return
+	}
+	switch k.Code {
+	case shell.KeyEnter:
+		if t := strings.TrimSpace(s.input); t != "" {
+			s.SetState(func() {
+				s.items = append(s.items, item{text: t})
+				s.input = ""
+			})
+		}
+	case shell.KeyBackspace:
+		if s.input != "" {
+			s.SetState(func() {
+				r := []rune(s.input)
+				s.input = string(r[:len(r)-1])
+			})
+		}
+	case shell.KeyEscape:
+		s.SetState(func() { s.input = "" })
+	}
 }
 
-func (a *app) Event(w shell.Window, e shell.Event) {
-	switch e := e.(type) {
-	case shell.Text:
-		s := strings.Map(func(r rune) rune {
-			if r < ' ' {
-				return -1
-			}
-			return r
-		}, e.S)
-		if s != "" {
-			a.input += s
-			w.Invalidate()
-		}
+func (s *todoState) remove(i int) {
+	s.items = append(s.items[:i], s.items[i+1:]...)
+	s.hover = -1
+}
 
-	case shell.Key:
-		if e.Kind != shell.KeyPress {
-			return
-		}
-		switch e.Code {
-		case shell.KeyEnter:
-			if t := strings.TrimSpace(a.input); t != "" {
-				a.items = append(a.items, item{text: t})
-				a.input = ""
-				w.Invalidate()
-			}
-		case shell.KeyBackspace:
-			if a.input != "" {
-				r := []rune(a.input)
-				a.input = string(r[:len(r)-1])
-				w.Invalidate()
-			}
-		case shell.KeyEscape:
-			if a.input != "" {
-				a.input = ""
-				w.Invalidate()
-			}
-		}
-
-	case shell.Pointer:
-		switch e.Kind {
-		case shell.PointerMove:
-			hover := -1
-			for i, r := range a.rowRects {
-				if r.Contains(e.Pos) {
-					hover = i
-					break
-				}
-			}
-			if hover != a.hover {
-				a.hover = hover
-				w.Invalidate()
-			}
-		case shell.PointerDown:
-			if e.Button != 0 {
-				return
-			}
-			for i, r := range a.rowRects {
-				if !r.Contains(e.Pos) {
-					continue
-				}
-				if a.deleteRect(r).Contains(e.Pos) {
-					a.items = append(a.items[:i], a.items[i+1:]...)
-					a.hover = -1
-				} else {
-					a.items[i].done = !a.items[i].done
-				}
-				w.Invalidate()
-				return
-			}
-		}
-
-	case shell.Resize:
-		w.Invalidate()
+func (s *todoState) leave(i int) {
+	if s.hover == i {
+		s.hover = -1
 	}
 }
 
 func main() {
-	err := desktop.Run(newApp(), shell.Config{
-		Title:     "gossamer todo",
-		Size:      geom.Size{W: 440, H: 560},
-		Resizable: true,
+	err := app.Run(Todo{}, app.Config{
+		Title:      "gossamer todo",
+		Size:       geom.Size{W: 440, H: 560},
+		Background: colBg,
+		Font:       goregular.TTF,
 	})
 	if err != nil {
 		log.Fatal(err)

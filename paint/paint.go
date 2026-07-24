@@ -82,6 +82,39 @@ func (p *Painter) face(size float32) text.Face {
 	return f
 }
 
+// TextMetrics are font metrics at a given size, in logical pixels.
+type TextMetrics struct {
+	Ascent, Descent, LineGap float32
+}
+
+// LineHeight is the default line advance: ascent + descent + line gap.
+func (m TextMetrics) LineHeight() float32 { return m.Ascent + m.Descent + m.LineGap }
+
+// MeasureWidth returns the advance width of s at the given size, without
+// needing an active frame. Used by layout.
+func (p *Painter) MeasureWidth(s string, size float32) float32 {
+	f := p.face(size)
+	if f == nil {
+		return 0
+	}
+	return float32(f.Advance(s))
+}
+
+// Metrics returns font metrics at the given size, without needing an active
+// frame. Used by layout.
+func (p *Painter) Metrics(size float32) TextMetrics {
+	f := p.face(size)
+	if f == nil {
+		return TextMetrics{}
+	}
+	m := f.Metrics()
+	return TextMetrics{
+		Ascent:  float32(m.Ascent),
+		Descent: float32(m.Descent),
+		LineGap: float32(m.LineGap),
+	}
+}
+
 // Begin starts drawing a frame, (re)allocating the context if the surface
 // size or scale changed.
 func (p *Painter) Begin(f shell.Frame) *Canvas {
