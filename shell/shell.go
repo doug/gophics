@@ -15,7 +15,11 @@
 //     shell a composited scene (scene.Scene) once the paint/scene layers exist.
 package shell
 
-import "github.com/doug/gossamer/geom"
+import (
+	"github.com/gogpu/gpucontext"
+
+	"github.com/doug/gossamer/geom"
+)
 
 // Config describes the initial window configuration.
 type Config struct {
@@ -45,6 +49,10 @@ type Frame interface {
 	Scale() float32
 	// Clear fills the frame with a color. M0 placeholder — see package docs.
 	Clear(r, g, b, a float32)
+	// View returns the frame's GPU render target and its physical pixel size.
+	// M0-provisional: consumed by the paint package; replaced by a scene
+	// handoff once paint/scene exist.
+	View() (view gpucontext.TextureView, width, height int)
 }
 
 // Handler receives frames and events. All calls happen on the UI goroutine.
@@ -94,8 +102,26 @@ type Pointer struct {
 type KeyKind uint8
 
 const (
-	KeyDown KeyKind = iota
+	KeyPress KeyKind = iota
+	KeyRelease
+)
+
+// KeyCode identifies a physical key, independent of layout. The full key
+// model is a pending M0 ADR; until then only the codes the framework itself
+// needs are named, and unlisted keys arrive as KeyUnknown.
+type KeyCode uint32
+
+const (
+	KeyUnknown KeyCode = iota
+	KeyEnter
+	KeyBackspace
+	KeyDelete
+	KeyEscape
+	KeyTab
+	KeyLeft
+	KeyRight
 	KeyUp
+	KeyDown
 )
 
 // Key is a physical key event. Text input arrives separately via Text
@@ -103,9 +129,7 @@ const (
 // path from the start; see PLAN.md §6.1).
 type Key struct {
 	Kind KeyKind
-	// Code is a platform-independent key code. The concrete key model is an
-	// M0 ADR; until then this carries the platform scancode.
-	Code uint32
+	Code KeyCode
 }
 
 // Text is committed text input (post-IME).

@@ -6,6 +6,7 @@ package desktop
 
 import (
 	"github.com/gogpu/gogpu"
+	"github.com/gogpu/gpucontext"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"
@@ -46,18 +47,77 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		h.Event(w, shell.Closed{})
 	})
 
+	es := app.EventSource()
+	es.OnMouseMove(func(x, y float64) {
+		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: float32(x), Y: float32(y)}})
+	})
+	es.OnMousePress(func(b gpucontext.MouseButton, x, y float64) {
+		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: float32(x), Y: float32(y)}, Button: button(b)})
+	})
+	es.OnMouseRelease(func(b gpucontext.MouseButton, x, y float64) {
+		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: float32(x), Y: float32(y)}, Button: button(b)})
+	})
+	es.OnScroll(func(dx, dy float64) {
+		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{X: float32(dx), Y: float32(dy)}})
+	})
+	es.OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
+		h.Event(w, shell.Key{Kind: shell.KeyPress, Code: keyCode(key)})
+	})
+	es.OnKeyRelease(func(key gpucontext.Key, mods gpucontext.Modifiers) {
+		h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: keyCode(key)})
+	})
+	es.OnTextInput(func(text string) {
+		h.Event(w, shell.Text{S: text})
+	})
+
 	return app.Run()
+}
+
+func button(b gpucontext.MouseButton) uint8 {
+	switch b {
+	case gpucontext.MouseButtonLeft:
+		return 0
+	case gpucontext.MouseButtonRight:
+		return 1
+	case gpucontext.MouseButtonMiddle:
+		return 2
+	}
+	return 0
+}
+
+func keyCode(k gpucontext.Key) shell.KeyCode {
+	switch k {
+	case gpucontext.KeyEnter:
+		return shell.KeyEnter
+	case gpucontext.KeyBackspace:
+		return shell.KeyBackspace
+	case gpucontext.KeyDelete:
+		return shell.KeyDelete
+	case gpucontext.KeyEscape:
+		return shell.KeyEscape
+	case gpucontext.KeyTab:
+		return shell.KeyTab
+	case gpucontext.KeyLeft:
+		return shell.KeyLeft
+	case gpucontext.KeyRight:
+		return shell.KeyRight
+	case gpucontext.KeyUp:
+		return shell.KeyUp
+	case gpucontext.KeyDown:
+		return shell.KeyDown
+	}
+	return shell.KeyUnknown
 }
 
 type window struct {
 	app *gogpu.App
 }
 
-func (w *window) Invalidate()          { w.app.RequestRedraw() }
+func (w *window) Invalidate()           { w.app.RequestRedraw() }
 func (w *window) SetTitle(title string) { w.app.SetTitle(title) }
-func (w *window) Close()               { w.app.Quit() }
+func (w *window) Close()                { w.app.Quit() }
 
-func (w *window) ClipboardRead() (string, error)  { return w.app.ClipboardRead() }
+func (w *window) ClipboardRead() (string, error)   { return w.app.ClipboardRead() }
 func (w *window) ClipboardWrite(text string) error { return w.app.ClipboardWrite(text) }
 
 func (w *window) scale() float32 {
@@ -86,3 +146,8 @@ func (f *frame) Scale() float32 {
 }
 
 func (f *frame) Clear(r, g, b, a float32) { f.dc.Clear(r, g, b, a) }
+
+func (f *frame) View() (gpucontext.TextureView, int, int) {
+	pw, ph := f.dc.FramebufferSize()
+	return f.dc.RenderTarget().SurfaceView(), pw, ph
+}
