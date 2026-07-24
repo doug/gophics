@@ -128,7 +128,7 @@ func (s *inputState) Build(widget.Ctx) widget.Widget {
 	label := widget.Text{S: f.Value, Color: colText}
 	var caret widget.Widget = widget.Sized{W: 2}
 	if s.focused {
-		caret = widget.Canvas{W: 2, H: 18, Draw: func(c *paint.Canvas, r geom.Rect) {
+		caret = widget.Canvas{W: 2, H: 18, Draw: func(c paint.Canvas, r geom.Rect) {
 			c.FillRect(r, colAccent)
 		}}
 	}
@@ -185,9 +185,9 @@ func (s *rowState) Dispose() { s.ctx.RemoveTicker(s.hover) }
 func (s *rowState) Build(widget.Ctx) widget.Widget {
 	r := s.W()
 	bg := paint.Lerp(colCard, colCardHov, s.hover.Value())
-	labelColor := colText
+	label := widget.Text{S: r.Item.text, Color: colText}
 	if r.Item.done {
-		labelColor = colDim
+		label.Color, label.Strike = colDim, true
 	}
 	var del widget.Widget = widget.Sized{W: 20, H: 20}
 	if s.hovered {
@@ -219,7 +219,7 @@ func (s *rowState) Build(widget.Ctx) widget.Widget {
 				Child: widget.Row(
 					checkbox(r.Item.done),
 					widget.Sized{W: 12},
-					widget.Text{S: r.Item.text, Color: labelColor},
+					label,
 					widget.Expand(widget.Sized{}),
 					del,
 				),
@@ -232,7 +232,7 @@ func checkbox(done bool) widget.Widget {
 	if done {
 		return widget.Decorated{
 			Color: colAccent, Radius: 5,
-			Child: widget.Canvas{W: 20, H: 20, Draw: func(c *paint.Canvas, r geom.Rect) {
+			Child: widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, r geom.Rect) {
 				c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, colBg)
 				c.Line(r.Min.Add(geom.Pt{X: 8, Y: 14}), r.Min.Add(geom.Pt{X: 16, Y: 5}), 2, colBg)
 			}},

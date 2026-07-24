@@ -145,9 +145,7 @@ func (f *frame) Scale() float32 {
 	return float32(pw) / float32(f.dc.Width())
 }
 
-func (f *frame) Clear(r, g, b, a float32) { f.dc.Clear(r, g, b, a) }
-
-func (f *frame) View() (gpucontext.TextureView, int, int) {
+func (f *frame) Target() shell.Target {
 	pw, ph := f.dc.FramebufferSize()
-	return f.dc.RenderTarget().SurfaceView(), pw, ph
+	return shell.GPUTarget{View: f.dc.RenderTarget().SurfaceView(), W: pw, H: ph}
 }

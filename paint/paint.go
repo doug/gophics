@@ -1,15 +1,17 @@
 // Package paint provides gossamer's drawing layer.
 //
-// M0/M1-provisional: Canvas is a concrete type wrapping gogpu/gg's CPU
-// rasterizer, flushed to the frame's GPU surface. Per PLAN.md §5, this
-// becomes an interface with pluggable backends (gg stays one of them) once
-// the display-list/scene layers exist. Coordinates are logical pixels; HiDPI
-// is handled internally via gg's device scale.
+// Canvas is the drawing interface the render layer paints into. The default
+// implementation wraps gogpu/gg's CPU rasterizer (analytic AA), presented to
+// the shell's frame target; scene.Recorder implements the same interface to
+// capture display lists (PLAN.md §5: backends are pluggable behind Canvas).
+// Coordinates are logical pixels; HiDPI is handled via gg's device scale.
 package paint
 
 import (
 	"image"
 	"image/color"
+	"image/draw"
+	"strings"
 
 	"github.com/gogpu/gg"
 	"github.com/gogpu/gg/text"
@@ -36,6 +38,12 @@ func Lerp(a, b Color, t float32) Color {
 	}
 }
 
+// WithAlpha returns c with its alpha multiplied by a.
+func (c Color) WithAlpha(a float32) Color {
+	c.A *= a
+	return c
+}
+
 func (c Color) nrgba() color.NRGBA {
 	return color.NRGBA{
 		R: uint8(clamp01(c.R) * 255),
@@ -43,6 +51,10 @@ func (c Color) nrgba() color.NRGBA {
 		B: uint8(clamp01(c.B) * 255),
 		A: uint8(clamp01(c.A) * 255),
 	}
+}
+
+func (c Color) ggRGBA() gg.RGBA {
+	return gg.RGBA{R: float64(c.R), G: float64(c.G), B: float64(c.B), A: float64(c.A)}
 }
 
 func clamp01(v float32) float32 {
@@ -54,6 +66,52 @@ func clamp01(v float32) float32 {
 	}
 	return v
 }
+
+// Canvas is the drawing interface for one frame, in logical pixels.
+// Implemented by the gg-backed painter canvas and by scene.Recorder.
+type Canvas interface {
+	// Clear fills the whole surface with c.
+	Clear(c Color)
+	FillRect(r geom.Rect, c Color)
+	FillRRect(r geom.Rect, radius float32, c Color)
+	// FillRRectGradient fills with a linear gradient from 'from' at the
+	// top/left to 'to' at the bottom/right (by axis).
+	FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool)
+	StrokeRRect(r geom.Rect, radius, width float32, c Color)
+	Line(a, b geom.Pt, width float32, c Color)
+	// Text draws s with its baseline-left at pos.
+	Text(s string, pos geom.Pt, size float32, c Color)
+	// PushClip clips subsequent drawing to r; balance with PopClip.
+	// Nested clips intersect.
+	PushClip(r geom.Rect)
+	PopClip()
+}
+
+// DropShadow paints a soft shadow under the rounded rect r. It approximates
+// a Gaussian blur with layered rrects (gg has no blur primitive — spike
+// finding, PLAN.md §5.1); blur is the softness radius, offset shifts the
+// shadow. Works on any Canvas, including recorders.
+func DropShadow(c Canvas, r geom.Rect, radius float32, offset geom.Pt, blur float32, col Color) {
+	const steps = 5
+	if blur <= 0 {
+		return
+	}
+	base := r.Translate(offset)
+	for i := steps; i >= 1; i-- {
+		grow := blur * float32(i) / steps
+		layer := geom.Insets{Top: -grow, Right: -grow, Bottom: -grow, Left: -grow}.Inset(base)
+		alpha := col.A / (steps * 1.6)
+		c.FillRRect(layer, radius+grow, Color{col.R, col.G, col.B, alpha})
+	}
+}
+
+// TextMetrics are font metrics at a given size, in logical pixels.
+type TextMetrics struct {
+	Ascent, Descent, LineGap float32
+}
+
+// LineHeight is the default line advance: ascent + descent + line gap.
+func (m TextMetrics) LineHeight() float32 { return m.Ascent + m.Descent + m.LineGap }
 
 // Painter owns the drawing context and font resources across frames.
 // It is not safe for concurrent use; call it only from the UI goroutine.
@@ -92,14 +150,6 @@ func (p *Painter) face(size float32) text.Face {
 	return f
 }
 
-// TextMetrics are font metrics at a given size, in logical pixels.
-type TextMetrics struct {
-	Ascent, Descent, LineGap float32
-}
-
-// LineHeight is the default line advance: ascent + descent + line gap.
-func (m TextMetrics) LineHeight() float32 { return m.Ascent + m.Descent + m.LineGap }
-
 // MeasureWidth returns the advance width of s at the given size, without
 // needing an active frame. Used by layout.
 func (p *Painter) MeasureWidth(s string, size float32) float32 {
@@ -125,34 +175,57 @@ func (p *Painter) Metrics(size float32) TextMetrics {
 	}
 }
 
+// WrapText splits s into lines that fit maxWidth at the given size.
+// Explicit newlines are respected; lines break greedily at spaces, with
+// over-long words placed on their own line (no mid-word breaking yet —
+// grapheme-aware breaking arrives with the text package, PLAN.md §6.1).
+func (p *Painter) WrapText(s string, size, maxWidth float32) []string {
+	var lines []string
+	for para := range strings.SplitSeq(s, "\n") {
+		words := strings.Fields(para)
+		if len(words) == 0 {
+			lines = append(lines, "")
+			continue
+		}
+		cur := words[0]
+		for _, w := range words[1:] {
+			candidate := cur + " " + w
+			if p.MeasureWidth(candidate, size) <= maxWidth {
+				cur = candidate
+			} else {
+				lines = append(lines, cur)
+				cur = w
+			}
+		}
+		lines = append(lines, cur)
+	}
+	return lines
+}
+
 // Begin starts drawing a frame, (re)allocating the context if the surface
 // size or scale changed.
-func (p *Painter) Begin(f shell.Frame) *Canvas {
-	size := f.Size()
-	w, h := int(size.W), int(size.H)
-	scale := float64(f.Scale())
-	if p.dc == nil || p.w != w || p.h != h || p.scale != scale {
-		p.dc = gg.NewContextWithScale(w, h, scale)
-		p.w, p.h, p.scale = w, h, scale
-	}
-	return &Canvas{p: p, dc: p.dc}
+func (p *Painter) Begin(f shell.Frame) Canvas {
+	return p.begin(f.Size(), f.Scale())
 }
 
 // BeginOffscreen starts drawing into an offscreen surface of the given
 // logical size and scale, with no shell frame. Retrieve the result with
 // Image. This is the headless path used by tests and golden images.
-func (p *Painter) BeginOffscreen(size geom.Size, scale float32) *Canvas {
+func (p *Painter) BeginOffscreen(size geom.Size, scale float32) Canvas {
+	return p.begin(size, scale)
+}
+
+func (p *Painter) begin(size geom.Size, scale float32) Canvas {
 	w, h := int(size.W), int(size.H)
 	s := float64(scale)
 	if p.dc == nil || p.w != w || p.h != h || p.scale != s {
 		p.dc = gg.NewContextWithScale(w, h, s)
 		p.w, p.h, p.scale = w, h, s
 	}
-	return &Canvas{p: p, dc: p.dc}
+	return &ggCanvas{p: p, dc: p.dc}
 }
 
-// Image returns the current surface contents. Valid after drawing with
-// BeginOffscreen (physical-pixel resolution).
+// Image returns the current surface contents (physical-pixel resolution).
 func (p *Painter) Image() image.Image {
 	if p.dc == nil {
 		return nil
@@ -160,66 +233,83 @@ func (p *Painter) Image() image.Image {
 	return p.dc.Image()
 }
 
-// End flushes the frame to the shell's GPU surface.
+// End presents the frame to the shell's target.
 func (p *Painter) End(f shell.Frame) error {
-	view, pw, ph := f.View()
-	// Empty damage rect = full compositor pass; damage-aware paths come with
-	// the scene layer (PLAN.md §5).
-	return p.dc.FlushGPUWithViewDamage(view, uint32(pw), uint32(ph), image.Rectangle{})
+	switch t := f.Target().(type) {
+	case shell.GPUTarget:
+		// Empty damage rect = full compositor pass; damage-aware paths come
+		// with scene-level dirty tracking (PLAN.md §5).
+		return p.dc.FlushGPUWithViewDamage(t.View, uint32(t.W), uint32(t.H), image.Rectangle{})
+	case shell.PixelTarget:
+		t.Put(asRGBA(p.dc.Image()))
+		return nil
+	}
+	return nil
 }
 
-// Canvas draws into the current frame in logical pixels.
-type Canvas struct {
+func asRGBA(img image.Image) *image.RGBA {
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba
+	}
+	b := img.Bounds()
+	out := image.NewRGBA(b)
+	draw.Draw(out, b, img, b.Min, draw.Src)
+	return out
+}
+
+// ggCanvas is the gg-backed Canvas.
+type ggCanvas struct {
 	p  *Painter
 	dc *gg.Context
 }
 
-// Clear fills the whole surface with c.
-func (c *Canvas) Clear(col Color) {
+func (c *ggCanvas) Clear(col Color) {
 	c.dc.SetColor(col.nrgba())
 	c.dc.Clear()
 }
 
-func (c *Canvas) FillRect(r geom.Rect, col Color) {
+func (c *ggCanvas) FillRect(r geom.Rect, col Color) {
 	c.dc.SetColor(col.nrgba())
 	c.dc.DrawRectangle(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
 	c.dc.Fill()
 }
 
-func (c *Canvas) FillRRect(r geom.Rect, radius float32, col Color) {
+func (c *ggCanvas) FillRRect(r geom.Rect, radius float32, col Color) {
 	c.dc.SetColor(col.nrgba())
 	c.dc.DrawRoundedRectangle(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
 	c.dc.Fill()
 }
 
-func (c *Canvas) StrokeRRect(r geom.Rect, radius, width float32, col Color) {
+func (c *ggCanvas) FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool) {
+	var brush gg.Brush
+	if horizontal {
+		brush = gg.LinearGradient(from.ggRGBA(), to.ggRGBA(),
+			float64(r.Min.X), float64(r.Min.Y), float64(r.Max.X), float64(r.Min.Y))
+	} else {
+		brush = gg.LinearGradient(from.ggRGBA(), to.ggRGBA(),
+			float64(r.Min.X), float64(r.Min.Y), float64(r.Min.X), float64(r.Max.Y))
+	}
+	c.dc.SetFillBrush(brush)
+	c.dc.DrawRoundedRectangle(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
+	c.dc.Fill()
+	c.dc.SetColor(color.NRGBA{A: 255}) // reset brush to solid
+}
+
+func (c *ggCanvas) StrokeRRect(r geom.Rect, radius, width float32, col Color) {
 	c.dc.SetColor(col.nrgba())
 	c.dc.SetLineWidth(float64(width))
 	c.dc.DrawRoundedRectangle(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
 	c.dc.Stroke()
 }
 
-func (c *Canvas) Line(a, b geom.Pt, width float32, col Color) {
+func (c *ggCanvas) Line(a, b geom.Pt, width float32, col Color) {
 	c.dc.SetColor(col.nrgba())
 	c.dc.SetLineWidth(float64(width))
 	c.dc.DrawLine(float64(a.X), float64(a.Y), float64(b.X), float64(b.Y))
 	c.dc.Stroke()
 }
 
-// PushClip saves the canvas state and clips subsequent drawing to r.
-// Balance every PushClip with PopClip.
-func (c *Canvas) PushClip(r geom.Rect) {
-	c.dc.Push()
-	c.dc.ClipRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
-}
-
-// PopClip restores the canvas state saved by the matching PushClip.
-// (gg's Push/Pop save and restore transform, paint, clip, and mask; nested
-// clips intersect.)
-func (c *Canvas) PopClip() { c.dc.Pop() }
-
-// Text draws s with its baseline-left at pos.
-func (c *Canvas) Text(s string, pos geom.Pt, size float32, col Color) {
+func (c *ggCanvas) Text(s string, pos geom.Pt, size float32, col Color) {
 	face := c.p.face(size)
 	if face == nil {
 		return
@@ -229,13 +319,9 @@ func (c *Canvas) Text(s string, pos geom.Pt, size float32, col Color) {
 	c.dc.DrawString(s, float64(pos.X), float64(pos.Y))
 }
 
-// MeasureText returns the logical width and height of s at the given size.
-func (c *Canvas) MeasureText(s string, size float32) (w, h float32) {
-	face := c.p.face(size)
-	if face == nil {
-		return 0, 0
-	}
-	c.dc.SetFont(face)
-	mw, mh := c.dc.MeasureString(s)
-	return float32(mw), float32(mh)
+func (c *ggCanvas) PushClip(r geom.Rect) {
+	c.dc.Push()
+	c.dc.ClipRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
 }
+
+func (c *ggCanvas) PopClip() { c.dc.Pop() }

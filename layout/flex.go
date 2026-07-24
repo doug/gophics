@@ -182,7 +182,7 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 	return f.setSize(own)
 }
 
-func (f *Flex) Paint(c *paint.Canvas, at geom.Pt) {
+func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
 	for i, ch := range f.Children {
 		ch.Box.Paint(c, at.Add(f.offsets[i]))
 	}

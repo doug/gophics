@@ -50,7 +50,7 @@ func (v *Viewport) scrollPt() geom.Pt {
 	return geom.Pt{Y: -v.Offset}
 }
 
-func (v *Viewport) Paint(c *paint.Canvas, at geom.Pt) {
+func (v *Viewport) Paint(c paint.Canvas, at geom.Pt) {
 	if v.Child == nil {
 		return
 	}

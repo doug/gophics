@@ -5,30 +5,67 @@ import (
 	"github.com/doug/gossamer/paint"
 )
 
-// TextBox lays out and paints a single line of text. (Wrapping paragraphs
-// arrive with the text package's paragraph layouter; see PLAN.md §6.1.)
+// TextBox lays out and paints text: single-line by default, greedy
+// word-wrap within the width constraint when Wrap is set, with optional
+// strike/underline decorations. (Shaped paragraphs — bidi, grapheme
+// breaking — arrive with the text package; PLAN.md §6.1.)
 //
 // Painter supplies measurement and must be the painter used at paint time;
 // the widget layer injects it from the app context.
 type TextBox struct {
 	Base
-	Painter  *paint.Painter
-	Text     string
-	TextSize float32
-	Color    paint.Color
+	Painter   *paint.Painter
+	Text      string
+	TextSize  float32
+	Color     paint.Color
+	Wrap      bool
+	Strike    bool
+	Underline bool
 
-	baseline float32
+	lines    []string
+	baseline float32 // first-line baseline
+	lineH    float32 // baseline-to-baseline advance
+	descent  float32
 }
 
 func (b *TextBox) Layout(cs Constraints) geom.Size {
 	m := b.Painter.Metrics(b.TextSize)
-	w := b.Painter.MeasureWidth(b.Text, b.TextSize)
 	b.baseline = m.Ascent
-	return b.setSize(cs.Constrain(geom.Size{W: w, H: m.Ascent + m.Descent}))
+	b.lineH = m.LineHeight()
+	b.descent = m.Descent
+
+	if b.Wrap && cs.BoundedW() {
+		b.lines = b.Painter.WrapText(b.Text, b.TextSize, cs.Max.W)
+	} else {
+		b.lines = append(b.lines[:0], b.Text)
+	}
+	var w float32
+	for _, ln := range b.lines {
+		if lw := b.Painter.MeasureWidth(ln, b.TextSize); lw > w {
+			w = lw
+		}
+	}
+	h := m.Ascent + m.Descent + float32(len(b.lines)-1)*b.lineH
+	return b.setSize(cs.Constrain(geom.Size{W: w, H: h}))
 }
 
-func (b *TextBox) Paint(c *paint.Canvas, at geom.Pt) {
-	c.Text(b.Text, geom.Pt{X: at.X, Y: at.Y + b.baseline}, b.TextSize, b.Color)
+func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {
+	for i, ln := range b.lines {
+		base := at.Y + b.baseline + float32(i)*b.lineH
+		c.Text(ln, geom.Pt{X: at.X, Y: base}, b.TextSize, b.Color)
+		if !b.Strike && !b.Underline {
+			continue
+		}
+		w := b.Painter.MeasureWidth(ln, b.TextSize)
+		if b.Strike {
+			y := base - b.baseline*0.3
+			c.Line(geom.Pt{X: at.X, Y: y}, geom.Pt{X: at.X + w, Y: y}, 1, b.Color)
+		}
+		if b.Underline {
+			y := base + b.descent*0.6
+			c.Line(geom.Pt{X: at.X, Y: y}, geom.Pt{X: at.X + w, Y: y}, 1, b.Color)
+		}
+	}
 }
 
 func (b *TextBox) AddHits(p geom.Pt, hits *[]Hit) {

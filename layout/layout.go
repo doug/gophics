@@ -84,7 +84,7 @@ type Box interface {
 	// Size returns the size computed by the last Layout.
 	Size() geom.Size
 	// Paint draws the box with its origin at 'at' in canvas coordinates.
-	Paint(c *paint.Canvas, at geom.Pt)
+	Paint(c paint.Canvas, at geom.Pt)
 	// AddHits appends boxes containing p (in this box's local coordinates)
 	// to hits, deepest (visually front-most) first.
 	AddHits(p geom.Pt, hits *[]Hit)
@@ -135,7 +135,7 @@ func (b *Padded) Layout(cs Constraints) geom.Size {
 
 func (b *Padded) childOffset() geom.Pt { return geom.Pt{X: b.Insets.Left, Y: b.Insets.Top} }
 
-func (b *Padded) Paint(c *paint.Canvas, at geom.Pt) {
+func (b *Padded) Paint(c paint.Canvas, at geom.Pt) {
 	if b.Child != nil {
 		b.Child.Paint(c, at.Add(b.childOffset()))
 	}
@@ -184,7 +184,7 @@ func (b *Aligned) Layout(cs Constraints) geom.Size {
 	return b.setSize(size)
 }
 
-func (b *Aligned) Paint(c *paint.Canvas, at geom.Pt) {
+func (b *Aligned) Paint(c paint.Canvas, at geom.Pt) {
 	if b.Child != nil {
 		b.Child.Paint(c, at.Add(b.offset))
 	}
@@ -224,7 +224,7 @@ func (b *Sized) Layout(cs Constraints) geom.Size {
 	return b.setSize(inner.Constrain(geom.Size{}))
 }
 
-func (b *Sized) Paint(c *paint.Canvas, at geom.Pt) {
+func (b *Sized) Paint(c paint.Canvas, at geom.Pt) {
 	if b.Child != nil {
 		b.Child.Paint(c, at)
 	}
@@ -258,7 +258,7 @@ func (b *Decorated) Layout(cs Constraints) geom.Size {
 	return b.setSize(cs.Constrain(geom.Size{}))
 }
 
-func (b *Decorated) Paint(c *paint.Canvas, at geom.Pt) {
+func (b *Decorated) Paint(c paint.Canvas, at geom.Pt) {
 	r := geom.Rect{Min: at, Max: at.Add(b.Size().Pt())}
 	if b.Color.A > 0 {
 		c.FillRRect(r, b.Radius, b.Color)

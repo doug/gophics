@@ -74,7 +74,7 @@ func (c *Core) Layout(size geom.Size) layout.Box {
 }
 
 // Paint draws the current tree onto canvas (after Layout).
-func (c *Core) Paint(canvas *paint.Canvas) {
+func (c *Core) Paint(canvas paint.Canvas) {
 	canvas.Clear(c.background)
 	if box := c.Owner.RootBox(); box != nil {
 		box.Paint(canvas, geom.Pt{})

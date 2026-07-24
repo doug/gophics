@@ -16,7 +16,7 @@ type leaf struct {
 func (l *leaf) Layout(cs Constraints) geom.Size {
 	return l.setSize(cs.Constrain(geom.Size{W: l.w, H: l.h}))
 }
-func (l *leaf) Paint(c *paint.Canvas, at geom.Pt) {}
+func (l *leaf) Paint(c paint.Canvas, at geom.Pt) {}
 func (l *leaf) AddHits(p geom.Pt, hits *[]Hit) {
 	if l.contains(p) {
 		*hits = append(*hits, Hit{l, p})

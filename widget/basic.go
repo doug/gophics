@@ -6,11 +6,15 @@ import (
 	"github.com/doug/gossamer/paint"
 )
 
-// Text displays a single line of text.
+// Text displays text: single-line by default, word-wrapped when Wrap is
+// set, with optional decorations.
 type Text struct {
-	S     string
-	Size  float32 // 0 → 14
-	Color paint.Color
+	S         string
+	Size      float32 // 0 → 14
+	Color     paint.Color
+	Wrap      bool
+	Strike    bool
+	Underline bool
 }
 
 func (t Text) size() float32 {
@@ -24,6 +28,7 @@ func (t Text) createBox(ctx Ctx) layout.Box { return &layout.TextBox{Painter: ct
 func (t Text) updateBox(ctx Ctx, b layout.Box) {
 	tb := b.(*layout.TextBox)
 	tb.Text, tb.TextSize, tb.Color = t.S, t.size(), t.Color
+	tb.Wrap, tb.Strike, tb.Underline = t.Wrap, t.Strike, t.Underline
 }
 func (t Text) childWidgets() []Widget               { return nil }
 func (t Text) attach(layout.Box, []layout.Box)      {}
@@ -246,7 +251,7 @@ func (v viewport) attach(b layout.Box, kids []layout.Box) {
 // canvas coordinates.
 type Canvas struct {
 	W, H float32
-	Draw func(c *paint.Canvas, r geom.Rect)
+	Draw func(c paint.Canvas, r geom.Rect)
 }
 
 func (cw Canvas) createBox(Ctx) layout.Box { return &canvasBox{} }
@@ -259,7 +264,7 @@ func (cw Canvas) attach(layout.Box, []layout.Box) {}
 
 type canvasBox struct {
 	w, h float32
-	draw func(c *paint.Canvas, r geom.Rect)
+	draw func(c paint.Canvas, r geom.Rect)
 	size geom.Size
 }
 
@@ -270,7 +275,7 @@ func (b *canvasBox) Layout(cs layout.Constraints) geom.Size {
 
 func (b *canvasBox) Size() geom.Size { return b.size }
 
-func (b *canvasBox) Paint(c *paint.Canvas, at geom.Pt) {
+func (b *canvasBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.draw != nil {
 		b.draw(c, geom.Rect{Min: at, Max: at.Add(b.size.Pt())})
 	}
@@ -325,7 +330,7 @@ func (b *InteractiveBox) Layout(cs layout.Constraints) geom.Size {
 
 func (b *InteractiveBox) Size() geom.Size { return b.size }
 
-func (b *InteractiveBox) Paint(c *paint.Canvas, at geom.Pt) {
+func (b *InteractiveBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.Child != nil {
 		b.Child.Paint(c, at)
 	}

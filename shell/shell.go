@@ -16,6 +16,8 @@
 package shell
 
 import (
+	"image"
+
 	"github.com/gogpu/gpucontext"
 
 	"github.com/doug/gossamer/geom"
@@ -47,12 +49,24 @@ type Frame interface {
 	Size() geom.Size
 	// Scale is the device pixel ratio (physical / logical).
 	Scale() float32
-	// Clear fills the frame with a color. M0 placeholder — see package docs.
-	Clear(r, g, b, a float32)
-	// View returns the frame's GPU render target and its physical pixel size.
-	// M0-provisional: consumed by the paint package; replaced by a scene
-	// handoff once paint/scene exist.
-	View() (view gpucontext.TextureView, width, height int)
+	// Target returns this frame's presentation target — one of the concrete
+	// types below. The paint package type-switches on it.
+	Target() Target
+}
+
+// Target is a platform presentation target: GPUTarget or PixelTarget.
+type Target any
+
+// GPUTarget presents by compositing onto a WebGPU texture view.
+type GPUTarget struct {
+	View gpucontext.TextureView
+	W, H int // physical pixels
+}
+
+// PixelTarget presents by handing finished physical-pixel frames to Put
+// (e.g. a browser canvas or a test sink).
+type PixelTarget struct {
+	Put func(img *image.RGBA)
 }
 
 // Handler receives frames and events. All calls happen on the UI goroutine.
