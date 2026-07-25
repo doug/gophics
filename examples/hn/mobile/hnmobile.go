@@ -43,8 +43,14 @@ func Resize(widthPx, heightPx int, scale float64) {
 // NeedsFrame reports whether the UI wants a repaint (poll each vsync).
 func NeedsFrame() bool { return bridge.NeedsFrame() }
 
-// RenderFrame renders and returns RGBA8888 pixels (widthPx*heightPx*4).
+// RenderFrame renders and returns RGBA8888 pixels; the frame's exact
+// dimensions are FrameWidth×FrameHeight (may differ from the surface by a
+// rounding pixel).
 func RenderFrame(dtSeconds float64) []byte { return bridge.RenderFrame(dtSeconds) }
+
+// FrameWidth / FrameHeight are the pixel dimensions of the last frame.
+func FrameWidth() int  { return bridge.FrameWidth() }
+func FrameHeight() int { return bridge.FrameHeight() }
 
 // Touch forwards a touch event: phase 0 down, 1 move, 2 up, 3 cancel.
 func Touch(phase int, xPx, yPx float64) {

@@ -51,7 +51,7 @@ class GossamerView(private val activity: Activity) :
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {
         Hnmobile.resize(w.toLong(), h.toLong(), resources.displayMetrics.density.toDouble())
-        bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bitmap = null // recreated at the frame's exact pixel size
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -66,12 +66,21 @@ class GossamerView(private val activity: Activity) :
 
         if (Hnmobile.needsFrame()) {
             val pixels = Hnmobile.renderFrame(dt)
-            val bmp = bitmap
-            if (pixels != null && bmp != null) {
+            val fw = Hnmobile.frameWidth().toInt()
+            val fh = Hnmobile.frameHeight().toInt()
+            if (pixels != null && fw > 0 && fh > 0) {
+                var bmp = bitmap
+                if (bmp == null || bmp.width != fw || bmp.height != fh) {
+                    bmp = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
+                    bitmap = bmp
+                }
                 bmp.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
                 val canvas: Canvas? = holder.lockCanvas()
                 if (canvas != null) {
-                    canvas.drawBitmap(bmp, 0f, 0f, null)
+                    // The frame may be a rounding pixel smaller than the
+                    // surface; scale the blit to cover.
+                    canvas.drawBitmap(bmp, null,
+                        android.graphics.Rect(0, 0, width, height), null)
                     holder.unlockCanvasAndPost(canvas)
                 }
             }

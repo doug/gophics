@@ -85,6 +85,24 @@ func (b *Bridge) RenderFrame(dtSeconds float64) []byte {
 	return b.frame.Pix
 }
 
+// FrameWidth and FrameHeight are the pixel dimensions of the frame
+// returned by RenderFrame — they can differ from the surface size by a
+// rounding pixel (logical sizes are integral); hosts size their bitmap to
+// these and scale the blit.
+func (b *Bridge) FrameWidth() int {
+	if b.frame == nil {
+		return 0
+	}
+	return b.frame.Rect.Dx()
+}
+
+func (b *Bridge) FrameHeight() int {
+	if b.frame == nil {
+		return 0
+	}
+	return b.frame.Rect.Dy()
+}
+
 // Touch delivers a single-pointer touch event in physical pixels.
 // (Multi-touch gestures — pinch — arrive with the gesture milestone.)
 func (b *Bridge) Touch(phase int, xPx, yPx float32) {
