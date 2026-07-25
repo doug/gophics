@@ -24,8 +24,15 @@ func NewHeadless(root widget.Widget, cfg Config, scale float32) (*Headless, erro
 		return nil, err
 	}
 	core.Owner.RequestFrame = func() {} // frames are pulled via Render
+	core.Owner.Clipboard = &MemClipboard{}
 	return &Headless{Core: core, size: cfg.Size, scale: scale}, nil
 }
+
+// MemClipboard is the in-memory clipboard used by Headless.
+type MemClipboard struct{ S string }
+
+func (m *MemClipboard) ClipboardRead() (string, error)  { return m.S, nil }
+func (m *MemClipboard) ClipboardWrite(s string) error   { m.S = s; return nil }
 
 // Render lays out and paints a frame through the damage-aware pipeline,
 // returning the physical-pixel image (retained across frames, so an
@@ -72,14 +79,36 @@ func (h *Headless) Tap(p geom.Pt) {
 	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
-// Type dispatches committed text input.
+// Type dispatches committed text input. Pending rebuilds are flushed
+// first, mirroring the frame between events in a real shell.
 func (h *Headless) Type(s string) {
+	h.layoutForInput()
 	h.Core.Keyboard(shell.Text{S: s})
 }
 
-// Key dispatches a key press.
+// Key dispatches a key press (flushing pending rebuilds first).
 func (h *Headless) Key(code shell.KeyCode) {
+	h.layoutForInput()
 	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
+}
+
+// KeyMod dispatches a key press with modifiers.
+func (h *Headless) KeyMod(code shell.KeyCode, mods shell.Mods) {
+	h.layoutForInput()
+	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code, Mods: mods})
+}
+
+// DragTo dispatches press at from and a move to to without releasing
+// (for selection dragging; call Release to finish).
+func (h *Headless) DragTo(from, to geom.Pt) {
+	h.layoutForInput()
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
+}
+
+// Release dispatches pointer-up at p.
+func (h *Headless) Release(p geom.Pt) {
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
 // layoutForInput ensures hit testing sees current sizes even before the

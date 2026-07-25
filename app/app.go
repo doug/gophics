@@ -44,12 +44,13 @@ type Core struct {
 	lastPaintSize geom.Size
 	lastScale     float32
 
-	hovered  []*widget.InteractiveBox
-	pressed  *widget.InteractiveBox
-	dragging *widget.InteractiveBox
-	lastPos  geom.Pt
-	downPos  geom.Pt
-	moved    bool
+	hovered    []*widget.InteractiveBox
+	pressed    *widget.InteractiveBox
+	dragging   *widget.InteractiveBox
+	dragOrigin geom.Pt // window origin of the dragging box at press time
+	lastPos    geom.Pt
+	downPos    geom.Pt
+	moved      bool
 }
 
 // tapSlop is the drag distance that cancels a pending tap, in logical px.
@@ -136,17 +137,32 @@ func (c *Core) ReplayDamaged(canvas paint.Canvas, damage geom.Rect) {
 	canvas.PopClip()
 }
 
+// hitInteractive pairs an InteractiveBox with the hit position in its
+// local coordinates.
+type hitInteractive struct {
+	box   *widget.InteractiveBox
+	local geom.Pt
+}
+
 // interactivesAt returns the InteractiveBoxes under p, topmost first.
-func (c *Core) interactivesAt(p geom.Pt) []*widget.InteractiveBox {
+func (c *Core) interactivesAt(p geom.Pt) []hitInteractive {
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
 	}
-	var out []*widget.InteractiveBox
+	var out []hitInteractive
 	for _, h := range layout.HitTest(box, p) {
 		if ib, ok := h.Box.(*widget.InteractiveBox); ok {
-			out = append(out, ib)
+			out = append(out, hitInteractive{ib, h.Pos})
 		}
+	}
+	return out
+}
+
+func boxes(hits []hitInteractive) []*widget.InteractiveBox {
+	out := make([]*widget.InteractiveBox, len(hits))
+	for i, h := range hits {
+		out[i] = h.box
 	}
 	return out
 }
@@ -167,10 +183,12 @@ func (c *Core) Pointer(e shell.Pointer) {
 				}
 			}
 			if c.moved && c.dragging.Handler.OnDrag != nil {
-				c.dragging.Handler.OnDrag(delta)
+				// Local position via the press-time origin: drags keep
+				// delivering even when the pointer leaves the box.
+				c.dragging.Handler.OnDrag(e.Pos.Sub(c.dragOrigin), delta)
 			}
 		}
-		now := c.interactivesAt(e.Pos)
+		now := boxes(c.interactivesAt(e.Pos))
 		for _, b := range c.hovered {
 			if !slices.Contains(now, b) && b.Handler.OnExit != nil {
 				b.Handler.OnExit()
@@ -184,9 +202,9 @@ func (c *Core) Pointer(e shell.Pointer) {
 		c.hovered = now
 
 	case shell.PointerScroll:
-		for _, b := range c.interactivesAt(c.lastPos) {
-			if b.Handler.OnScroll != nil {
-				b.Handler.OnScroll(e.Scroll)
+		for _, h := range c.interactivesAt(c.lastPos) {
+			if h.box.Handler.OnScroll != nil {
+				h.box.Handler.OnScroll(e.Scroll)
 				return
 			}
 		}
@@ -198,12 +216,16 @@ func (c *Core) Pointer(e shell.Pointer) {
 		c.downPos, c.lastPos, c.moved = e.Pos, e.Pos, false
 		c.pressed, c.dragging = nil, nil
 		hits := c.interactivesAt(e.Pos)
-		for _, b := range hits {
-			if c.pressed == nil && b.Handler.OnTap != nil {
-				c.pressed = b
+		for _, h := range hits {
+			if h.box.Handler.OnPress != nil {
+				h.box.Handler.OnPress(h.local)
 			}
-			if c.dragging == nil && b.Handler.OnDrag != nil {
-				c.dragging = b
+			if c.pressed == nil && h.box.Handler.OnTap != nil {
+				c.pressed = h.box
+			}
+			if c.dragging == nil && h.box.Handler.OnDrag != nil {
+				c.dragging = h.box
+				c.dragOrigin = e.Pos.Sub(h.local)
 			}
 		}
 		c.focusFrom(hits)
@@ -214,7 +236,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 		}
 		pressed := c.pressed
 		c.pressed, c.dragging = nil, nil
-		if pressed != nil && slices.Contains(c.interactivesAt(e.Pos), pressed) {
+		if pressed != nil && slices.Contains(boxes(c.interactivesAt(e.Pos)), pressed) {
 			pressed.Handler.OnTap()
 		}
 	}
@@ -222,9 +244,9 @@ func (c *Core) Pointer(e shell.Pointer) {
 
 // focusFrom moves keyboard focus to the topmost focusable hit, if any.
 // A press on nothing focusable leaves focus where it is.
-func (c *Core) focusFrom(hits []*widget.InteractiveBox) {
-	for _, b := range hits {
-		h := &b.Handler
+func (c *Core) focusFrom(hits []hitInteractive) {
+	for _, hit := range hits {
+		h := &hit.box.Handler
 		if h.OnText == nil && h.OnKey == nil {
 			continue
 		}
@@ -283,6 +305,7 @@ type shellHandler struct {
 
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
+	h.core.Owner.Clipboard = w
 	// Frame pipeline (PLAN.md §3): tick animations → build → layout →
 	// record → diff → replay damage → present.
 	if h.core.Owner.TickAll(dt) {
@@ -300,6 +323,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 
 func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 	h.window = w
+	h.core.Owner.Clipboard = w
 	switch e := e.(type) {
 	case shell.Pointer:
 		h.core.Pointer(e)

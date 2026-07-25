@@ -136,7 +136,30 @@ const (
 	KeyRight
 	KeyUp
 	KeyDown
+	KeyHome
+	KeyEnd
+	// Letter keys are delivered only for command shortcuts (a modifier
+	// beyond Shift is held); plain typing arrives as Text.
+	KeyA
+	KeyC
+	KeyV
+	KeyX
 )
+
+// Mods is a bitmask of held modifier keys.
+type Mods uint8
+
+const (
+	ModShift Mods = 1 << iota
+	ModCtrl
+	ModAlt
+	// ModSuper is Cmd on macOS, Win elsewhere.
+	ModSuper
+)
+
+// Command reports whether the platform's primary command modifier is held
+// (Cmd on macOS/web-mac, Ctrl elsewhere). Shells set the platform bit.
+func (m Mods) Command() bool { return m&(ModCtrl|ModSuper) != 0 }
 
 // Key is a physical key event. Text input arrives separately via Text
 // (and, later, IME composition events — the shell interface reserves that
@@ -144,6 +167,7 @@ const (
 type Key struct {
 	Kind KeyKind
 	Code KeyCode
+	Mods Mods
 }
 
 // Text is committed text input (post-IME).

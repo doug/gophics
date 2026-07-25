@@ -64,9 +64,10 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	})
 	listen(doc, "keydown", func(e js.Value) {
 		key := e.Get("key").String()
-		if code := keyCode(key); code != shell.KeyUnknown {
+		mods := modBits(e)
+		if code := keyCode(key, mods); code != shell.KeyUnknown {
 			e.Call("preventDefault")
-			h.Event(w, shell.Key{Kind: shell.KeyPress, Code: code})
+			h.Event(w, shell.Key{Kind: shell.KeyPress, Code: code, Mods: mods})
 			return
 		}
 		// Printable input: single-rune keys without command modifiers.
@@ -76,8 +77,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		}
 	})
 	listen(doc, "keyup", func(e js.Value) {
-		if code := keyCode(e.Get("key").String()); code != shell.KeyUnknown {
-			h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: code})
+		mods := modBits(e)
+		if code := keyCode(e.Get("key").String(), mods); code != shell.KeyUnknown {
+			h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: code, Mods: mods})
 		}
 	})
 	listen(js.Global(), "resize", func(js.Value) {
@@ -91,7 +93,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	select {} // run forever; the browser owns the loop
 }
 
-func keyCode(key string) shell.KeyCode {
+func keyCode(key string, mods shell.Mods) shell.KeyCode {
 	switch key {
 	case "Enter":
 		return shell.KeyEnter
@@ -111,8 +113,42 @@ func keyCode(key string) shell.KeyCode {
 		return shell.KeyUp
 	case "ArrowDown":
 		return shell.KeyDown
+	case "Home":
+		return shell.KeyHome
+	case "End":
+		return shell.KeyEnd
+	}
+	// Letter keys only as command shortcuts; plain letters are text input.
+	if mods.Command() {
+		switch key {
+		case "a", "A":
+			return shell.KeyA
+		case "c", "C":
+			return shell.KeyC
+		case "v", "V":
+			return shell.KeyV
+		case "x", "X":
+			return shell.KeyX
+		}
 	}
 	return shell.KeyUnknown
+}
+
+func modBits(e js.Value) shell.Mods {
+	var m shell.Mods
+	if e.Get("shiftKey").Bool() {
+		m |= shell.ModShift
+	}
+	if e.Get("ctrlKey").Bool() {
+		m |= shell.ModCtrl
+	}
+	if e.Get("altKey").Bool() {
+		m |= shell.ModAlt
+	}
+	if e.Get("metaKey").Bool() {
+		m |= shell.ModSuper
+	}
+	return m
 }
 
 type window struct {

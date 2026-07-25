@@ -96,6 +96,16 @@ func (c Ctx) Painter() *paint.Painter { return c.el.owner.Painter }
 // Invalidate requests a new frame.
 func (c Ctx) Invalidate() { c.el.owner.requestFrame() }
 
+// Clipboard is the platform clipboard surface available to widgets.
+type Clipboard interface {
+	ClipboardRead() (string, error)
+	ClipboardWrite(text string) error
+}
+
+// Clipboard returns the platform clipboard, or nil before the app runner
+// provides one.
+func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
+
 // AddTicker registers per-frame animation work (see Owner.AddTicker).
 func (c Ctx) AddTicker(t Ticker) { c.el.owner.AddTicker(t) }
 
@@ -124,14 +134,18 @@ func keyOf(w Widget) any {
 }
 
 // Handler bundles the interaction callbacks of Interactive widgets.
-// All callbacks are optional.
+// All callbacks are optional. Positions are in the widget's local
+// coordinates.
 type Handler struct {
 	OnTap   func()
 	OnEnter func()
 	OnExit  func()
+	// OnPress fires on pointer-down over this widget with the local
+	// position (before tap/drag disambiguation).
+	OnPress func(pos geom.Pt)
 	// OnDrag receives pointer movement while pressed on this widget. Once a
 	// drag exceeds the tap slop, a pending tap is cancelled.
-	OnDrag func(delta geom.Pt)
+	OnDrag func(pos, delta geom.Pt)
 	// OnScroll receives wheel/trackpad deltas while the pointer is over
 	// this widget.
 	OnScroll func(delta geom.Pt)

@@ -75,7 +75,7 @@ func TestDragCancelsTapAndDelivers(t *testing.T) {
 	root := widget.Center(widget.Interactive{
 		Handler: widget.Handler{
 			OnTap:  func() { taps++ },
-			OnDrag: func(d geom.Pt) { drag = drag.Add(d) },
+			OnDrag: func(_, d geom.Pt) { drag = drag.Add(d) },
 		},
 		Child: widget.Sized{W: 100, H: 100},
 	})

@@ -61,10 +61,10 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{X: float32(dx), Y: float32(dy)}})
 	})
 	es.OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
-		h.Event(w, shell.Key{Kind: shell.KeyPress, Code: keyCode(key)})
+		h.Event(w, shell.Key{Kind: shell.KeyPress, Code: keyCode(key), Mods: modBits(mods)})
 	})
 	es.OnKeyRelease(func(key gpucontext.Key, mods gpucontext.Modifiers) {
-		h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: keyCode(key)})
+		h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: keyCode(key), Mods: modBits(mods)})
 	})
 	es.OnTextInput(func(text string) {
 		h.Event(w, shell.Text{S: text})
@@ -105,8 +105,37 @@ func keyCode(k gpucontext.Key) shell.KeyCode {
 		return shell.KeyUp
 	case gpucontext.KeyDown:
 		return shell.KeyDown
+	case gpucontext.KeyHome:
+		return shell.KeyHome
+	case gpucontext.KeyEnd:
+		return shell.KeyEnd
+	case gpucontext.KeyA:
+		return shell.KeyA
+	case gpucontext.KeyC:
+		return shell.KeyC
+	case gpucontext.KeyV:
+		return shell.KeyV
+	case gpucontext.KeyX:
+		return shell.KeyX
 	}
 	return shell.KeyUnknown
+}
+
+func modBits(m gpucontext.Modifiers) shell.Mods {
+	var out shell.Mods
+	if m.HasShift() {
+		out |= shell.ModShift
+	}
+	if m.HasControl() {
+		out |= shell.ModCtrl
+	}
+	if m.HasAlt() {
+		out |= shell.ModAlt
+	}
+	if m.HasSuper() {
+		out |= shell.ModSuper
+	}
+	return out
 }
 
 type window struct {

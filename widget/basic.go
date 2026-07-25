@@ -219,7 +219,7 @@ func (s *scrollState) Build(Ctx) Widget {
 	return Interactive{
 		Handler: Handler{
 			OnScroll: func(d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
-			OnDrag:   func(d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
+			OnDrag:   func(_, d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
 		},
 		Child: viewport{Axis: w.Axis, Offset: s.offset, Ref: s.vp, Child: w.Child},
 	}

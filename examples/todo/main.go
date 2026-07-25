@@ -19,7 +19,6 @@ import (
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
 	"github.com/doug/gossamer/widget"
 )
 
@@ -92,9 +91,9 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 		widget.Text{S: "gossamer · todo", Size: 15, Color: colDim},
 		widget.Sized{H: 16},
 		inputField{
-			Value:  s.input,
-			OnText: s.onText,
-			OnKey:  s.onKey,
+			Value:    s.input,
+			OnChange: func(v string) { s.SetState(func() { s.input = v }) },
+			OnSubmit: s.submit,
 		},
 		widget.Sized{H: 12},
 		widget.Expand(widget.Scroll{Child: list}),
@@ -105,11 +104,12 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Padding{All: 20, Child: col}
 }
 
-// inputField is the entry box: focus-aware border, caret when focused.
+// inputField wraps widget.TextField with the app's chrome: card background
+// and a border that tracks focus.
 type inputField struct {
-	Value  string
-	OnText func(string)
-	OnKey  func(shell.Key)
+	Value    string
+	OnChange func(string)
+	OnSubmit func(string)
 }
 
 func (f inputField) CreateState() widget.State { return &inputState{} }
@@ -125,29 +125,20 @@ func (s *inputState) Build(widget.Ctx) widget.Widget {
 	if s.focused {
 		border, borderW = colAccent, 1.5
 	}
-	label := widget.Text{S: f.Value, Color: colText}
-	var caret widget.Widget = widget.Sized{W: 2}
-	if s.focused {
-		caret = widget.Canvas{W: 2, H: 18, Draw: func(c paint.Canvas, r geom.Rect) {
-			c.FillRect(r, colAccent)
-		}}
-	}
-	content := widget.Row(label, caret, widget.Expand(widget.Sized{}))
-	if f.Value == "" {
-		placeholder := widget.Text{S: "What needs doing?  (Enter adds)", Color: colDim}
-		content = widget.Row(caret, placeholder, widget.Expand(widget.Sized{}))
-	}
-	return widget.Interactive{
-		Handler: widget.Handler{
-			OnText:  f.OnText,
-			OnKey:   f.OnKey,
-			OnFocus: func(v bool) { s.SetState(func() { s.focused = v }) },
-		},
-		Child: widget.Decorated{
-			Color: colCard, Radius: 8, BorderColor: border, BorderWidth: borderW,
-			Child: widget.Padding{
-				Insets: geom.InsetsSymmetric(14, 12),
-				Child:  content,
+	return widget.Decorated{
+		Color: colCard, Radius: 8, BorderColor: border, BorderWidth: borderW,
+		Child: widget.Padding{
+			Insets: geom.InsetsSymmetric(14, 12),
+			Child: widget.TextField{
+				Value:            f.Value,
+				Placeholder:      "What needs doing?  (Enter adds)",
+				OnChange:         f.OnChange,
+				OnSubmit:         f.OnSubmit,
+				OnFocus:          func(v bool) { s.SetState(func() { s.focused = v }) },
+				TextColor:        colText,
+				PlaceholderColor: colDim,
+				CaretColor:       colAccent,
+				SelectionColor:   paint.Color{R: 0.36, G: 0.62, B: 0.98, A: 0.35},
 			},
 		},
 	}
@@ -244,39 +235,12 @@ func checkbox(done bool) widget.Widget {
 	}
 }
 
-func (s *todoState) onText(t string) {
-	t = strings.Map(func(r rune) rune {
-		if r < ' ' {
-			return -1
-		}
-		return r
-	}, t)
-	if t != "" {
-		s.SetState(func() { s.input += t })
-	}
-}
-
-func (s *todoState) onKey(k shell.Key) {
-	if k.Kind != shell.KeyPress {
-		return
-	}
-	switch k.Code {
-	case shell.KeyEnter:
-		if t := strings.TrimSpace(s.input); t != "" {
-			s.SetState(func() {
-				s.items = append(s.items, item{text: t})
-				s.input = ""
-			})
-		}
-	case shell.KeyBackspace:
-		if s.input != "" {
-			s.SetState(func() {
-				r := []rune(s.input)
-				s.input = string(r[:len(r)-1])
-			})
-		}
-	case shell.KeyEscape:
-		s.SetState(func() { s.input = "" })
+func (s *todoState) submit(v string) {
+	if t := strings.TrimSpace(v); t != "" {
+		s.SetState(func() {
+			s.items = append(s.items, item{text: t})
+			s.input = ""
+		})
 	}
 }
 

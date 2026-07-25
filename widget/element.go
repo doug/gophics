@@ -27,6 +27,8 @@ type Owner struct {
 	// KeyboardTarget is the current Handler receiving OnText/OnKey
 	// (pre-M4 focus model; see Handler).
 	KeyboardTarget *Handler
+	// Clipboard is the platform clipboard, set by the app runner.
+	Clipboard Clipboard
 
 	root    *element
 	dirty   []*element
