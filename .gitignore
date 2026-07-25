@@ -1,3 +1,7 @@
 .claude/settings.local.json
 examples/*/web/*.wasm
 examples/*/web/wasm_exec.js
+examples/hn/android/app/libs/*.aar
+examples/hn/android/.gradle/
+examples/hn/android/app/build/
+examples/hn/android/local.properties
