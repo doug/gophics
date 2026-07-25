@@ -8,6 +8,7 @@ import (
 // RichSpan is one styled run of a rich paragraph.
 type RichSpan struct {
 	Text      string
+	Font      string // named font family ("" = default)
 	Color     paint.Color
 	Underline bool
 	// Link marks the span tappable; RichBox.LinkAt reports it.
@@ -73,8 +74,10 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 	var width float32
 	for li, line := range lines {
 		y := b.baseline + float32(li)*b.lineH
-		// Split the line's rune range at span boundaries.
+		// Split the line's rune range at span boundaries; x advances by the
+		// cumulative width of prior segments, each measured in its own font.
 		a := line.Start
+		var x float32
 		for a < line.End {
 			span := b.spanAt(a)
 			end := line.End
@@ -87,14 +90,13 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 				end = spanEnd
 			}
 			segText := string(runes[a:end])
-			prefix := string(runes[line.Start:a])
-			x := b.Painter.MeasureWidth(prefix, b.TextSize)
-			w := b.Painter.MeasureWidth(segText, b.TextSize)
+			w := b.Painter.MeasureWidthIn(b.Spans[span].Font, segText, b.TextSize)
 			b.segs = append(b.segs, richSeg{text: segText, span: span, x: x, y: y, w: w})
+			x += w
 			a = end
 		}
-		if lw := line.Width; lw > width {
-			width = lw
+		if x > width {
+			width = x
 		}
 	}
 	h := m.Ascent + m.Descent
@@ -108,7 +110,7 @@ func (b *RichBox) Paint(c paint.Canvas, at geom.Pt) {
 	for _, s := range b.segs {
 		sp := b.Spans[s.span]
 		pos := geom.Pt{X: at.X + s.x, Y: at.Y + s.y}
-		c.Text(s.text, pos, b.TextSize, sp.Color)
+		c.TextIn(sp.Font, s.text, pos, b.TextSize, sp.Color)
 		if sp.Underline || sp.Link != "" {
 			y := pos.Y + 2
 			c.Line(geom.Pt{X: pos.X, Y: y}, geom.Pt{X: pos.X + s.w, Y: y}, 1, sp.Color)

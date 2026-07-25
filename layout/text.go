@@ -16,6 +16,7 @@ type TextBox struct {
 	Base
 	Painter   *paint.Painter
 	Text      string
+	Font      string // named font family ("" = default)
 	TextSize  float32
 	Color     paint.Color
 	Wrap      bool
@@ -32,19 +33,19 @@ func (b *TextBox) Layout(cs Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
-	m := b.Painter.Metrics(b.TextSize)
+	m := b.Painter.MetricsIn(b.Font, b.TextSize)
 	b.baseline = m.Ascent
 	b.lineH = m.LineHeight()
 	b.descent = m.Descent
 
 	if b.Wrap && cs.BoundedW() {
-		b.lines = b.Painter.WrapText(b.Text, b.TextSize, cs.Max.W)
+		b.lines = b.Painter.WrapTextIn(b.Font, b.Text, b.TextSize, cs.Max.W)
 	} else {
 		b.lines = append(b.lines[:0], b.Text)
 	}
 	var w float32
 	for _, ln := range b.lines {
-		if lw := b.Painter.MeasureWidth(ln, b.TextSize); lw > w {
+		if lw := b.Painter.MeasureWidthIn(b.Font, ln, b.TextSize); lw > w {
 			w = lw
 		}
 	}
@@ -55,11 +56,11 @@ func (b *TextBox) Layout(cs Constraints) geom.Size {
 func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {
 	for i, ln := range b.lines {
 		base := at.Y + b.baseline + float32(i)*b.lineH
-		c.Text(ln, geom.Pt{X: at.X, Y: base}, b.TextSize, b.Color)
+		c.TextIn(b.Font, ln, geom.Pt{X: at.X, Y: base}, b.TextSize, b.Color)
 		if !b.Strike && !b.Underline {
 			continue
 		}
-		w := b.Painter.MeasureWidth(ln, b.TextSize)
+		w := b.Painter.MeasureWidthIn(b.Font, ln, b.TextSize)
 		if b.Strike {
 			y := base - b.baseline*0.3
 			c.Line(geom.Pt{X: at.X, Y: y}, geom.Pt{X: at.X + w, Y: y}, 1, b.Color)

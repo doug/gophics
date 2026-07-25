@@ -8,8 +8,8 @@ import (
 // Measurer supplies text extents for damage computation; paint.Painter
 // implements it.
 type Measurer interface {
-	MeasureWidth(s string, size float32) float32
-	Metrics(size float32) paint.TextMetrics
+	MeasureWidthIn(font, s string, size float32) float32
+	MetricsIn(font string, size float32) paint.TextMetrics
 }
 
 // Diff compares l against prev and returns the damage: the union of the
@@ -101,8 +101,8 @@ func opBounds(o op, m Measurer) geom.Rect {
 	case imageOp:
 		return o.dst
 	case textOp:
-		w := m.MeasureWidth(o.s, o.size)
-		mt := m.Metrics(o.size)
+		w := m.MeasureWidthIn(o.font, o.s, o.size)
+		mt := m.MetricsIn(o.font, o.size)
 		return geom.Rect{
 			Min: geom.Pt{X: o.pos.X, Y: o.pos.Y - mt.Ascent},
 			Max: geom.Pt{X: o.pos.X + w, Y: o.pos.Y + mt.Descent},

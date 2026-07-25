@@ -55,6 +55,12 @@ func (h *Headless) Render() image.Image {
 	return h.Core.Painter.Image()
 }
 
+// SetDarkMode sets the simulated platform color scheme and rebuilds.
+func (h *Headless) SetDarkMode(dark bool) {
+	h.Core.Owner.DarkMode = dark
+	h.Core.Owner.RebuildAll()
+}
+
 // Step advances animations by dt seconds, reporting whether any are still
 // running. Deterministic replacement for vsync in tests.
 func (h *Headless) Step(dt float64) bool { return h.Core.Owner.TickAll(dt) }

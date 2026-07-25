@@ -25,9 +25,13 @@ type TextField struct {
 	Value       string
 	Placeholder string
 	Size        float32 // 0 → 14
-	OnChange    func(string)
-	OnSubmit    func(string)
-	OnFocus     func(bool)
+	// Multiline wraps text to the field width and edits across lines:
+	// Enter inserts a newline (Cmd/Ctrl+Enter submits), Up/Down move the
+	// caret between lines, and the field grows with its content.
+	Multiline bool
+	OnChange  func(string)
+	OnSubmit  func(string)
+	OnFocus   func(bool)
 
 	TextColor        paint.Color
 	PlaceholderColor paint.Color
@@ -49,6 +53,9 @@ type textFieldState struct {
 	ed      text.Editor
 	focused bool
 	scrollX float32
+	// lastWidth is the box width from the last layout, used by multiline
+	// caret navigation and hit testing.
+	lastWidth float32
 
 	// IME preedit state: composing text displayed inline at the caret
 	// (underlined) until committed or cancelled.
@@ -83,6 +90,73 @@ func (s *textFieldState) line(ctx Ctx) text.Line {
 	return ctx.Painter().Shape(s.ed.Text(), s.W().size())
 }
 
+// paraLines returns the wrapped lines of the current content at the last
+// laid-out width (multiline mode).
+func (s *textFieldState) paraLines(ctx Ctx) []text.Line {
+	w := s.lastWidth
+	if w <= 0 {
+		w = 1e9
+	}
+	return ctx.Painter().Paragraph(s.ed.Text(), s.W().size(), w)
+}
+
+// lineOf returns the index of the wrapped line containing rune index idx.
+func lineOf(lines []text.Line, idx int) int {
+	for i, l := range lines {
+		if idx <= l.End || i == len(lines)-1 {
+			return i
+		}
+	}
+	return 0
+}
+
+// moveVertical moves the caret to the adjacent wrapped line, keeping x.
+func (s *textFieldState) moveVertical(ctx Ctx, dir int, extend bool) {
+	lines := s.paraLines(ctx)
+	if len(lines) == 0 {
+		return
+	}
+	li := lineOf(lines, s.ed.Caret)
+	x := lines[li].CaretX(s.ed.Caret - lines[li].Start)
+	li += dir
+	if li < 0 || li >= len(lines) {
+		return
+	}
+	target := lines[li]
+	idx := target.Start + target.IndexAt(x)
+	if idx > target.End {
+		idx = target.End
+	}
+	s.ed.MoveTo(idx, extend)
+	s.SetState(nil)
+}
+
+// indexAtPt maps a box-local point to a rune index.
+func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
+	f := s.W()
+	if !f.Multiline {
+		return s.line(ctx).IndexAt(p.X + s.scrollX)
+	}
+	lines := s.paraLines(ctx)
+	if len(lines) == 0 {
+		return 0
+	}
+	m := ctx.Painter().Metrics(f.size())
+	li := int(p.Y / m.LineHeight())
+	if li < 0 {
+		li = 0
+	}
+	if li >= len(lines) {
+		li = len(lines) - 1
+	}
+	l := lines[li]
+	idx := l.Start + l.IndexAt(p.X)
+	if idx > l.End {
+		idx = l.End
+	}
+	return idx
+}
+
 func (s *textFieldState) Build(ctx Ctx) Widget {
 	f := s.W()
 	if f.Value != s.ed.Text() {
@@ -102,6 +176,14 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		case shell.KeyRight:
 			s.ed.Move(1, shift)
 			s.SetState(nil)
+		case shell.KeyUp:
+			if f.Multiline {
+				s.moveVertical(ctx, -1, shift)
+			}
+		case shell.KeyDown:
+			if f.Multiline {
+				s.moveVertical(ctx, 1, shift)
+			}
 		case shell.KeyHome:
 			s.ed.Home(shift)
 			s.SetState(nil)
@@ -115,6 +197,11 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			s.ed.DeleteForward()
 			s.change(ctx)
 		case shell.KeyEnter:
+			if f.Multiline && !k.Mods.Command() {
+				s.ed.Insert("\n")
+				s.change(ctx)
+				return
+			}
 			if f.OnSubmit != nil {
 				f.OnSubmit(s.ed.Text())
 			}
@@ -153,7 +240,12 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	}
 
 	onText := func(t string) {
-		if t = sanitize(t); t != "" {
+		if f.Multiline {
+			t = sanitizeMultiline(t)
+		} else {
+			t = sanitize(t)
+		}
+		if t != "" {
 			s.ed.Insert(t)
 			s.change(ctx)
 		}
@@ -176,18 +268,14 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		s.SetState(nil)
 	}
 
-	indexAt := func(x float32) int {
-		return s.line(ctx).IndexAt(x + s.scrollX)
-	}
-
 	return Interactive{
 		Handler: Handler{
 			OnPress: func(p geom.Pt) {
-				s.ed.MoveTo(indexAt(p.X), false)
+				s.ed.MoveTo(s.indexAtPt(ctx, p), false)
 				s.SetState(nil)
 			},
 			OnDrag: func(p, _ geom.Pt) {
-				s.ed.MoveTo(indexAt(p.X), true)
+				s.ed.MoveTo(s.indexAtPt(ctx, p), true)
 				s.SetState(nil)
 			},
 			OnText:        onText,
@@ -208,6 +296,15 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 func sanitize(t string) string {
 	return strings.Map(func(r rune) rune {
 		if r < ' ' || r == 0x7f {
+			return -1
+		}
+		return r
+	}, t)
+}
+
+func sanitizeMultiline(t string) string {
+	return strings.Map(func(r rune) rune {
+		if (r < ' ' && r != '\n') || r == 0x7f {
 			return -1
 		}
 		return r
@@ -247,8 +344,19 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 	if cs.BoundedW() {
 		want.W = cs.Max.W
 	}
+	if f.Multiline && cs.BoundedW() {
+		lines := b.painter.Paragraph(b.state.ed.Text(), f.size(), cs.Max.W)
+		if n := len(lines); n > 1 {
+			want.H += float32(n-1) * m.LineHeight()
+		}
+	}
 	b.size = cs.Constrain(want)
+	b.state.lastWidth = b.size.W
 
+	if f.Multiline {
+		b.state.scrollX = 0
+		return b.size
+	}
 	// Keep the caret visible: adjust scrollX so it lies within the box.
 	caretX := b.painter.Shape(b.state.ed.Text(), f.size()).CaretX(b.state.ed.Caret)
 	if caretX-b.state.scrollX > b.size.W-2 {
@@ -266,6 +374,10 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 func (b *fieldBox) Size() geom.Size { return b.size }
 
 func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.state.W().Multiline {
+		b.paintMultiline(c, at)
+		return
+	}
 	f := b.state.W()
 	sz := f.size()
 	m := b.painter.Metrics(sz)
@@ -307,6 +419,53 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		}
 		x := origin.X + line.CaretX(caretIdx)
 		c.Line(geom.Pt{X: x, Y: at.Y}, geom.Pt{X: x, Y: at.Y + b.size.H}, 1.5, f.CaretColor)
+	}
+
+	c.PopClip()
+}
+
+// paintMultiline draws wrapped lines with per-line selection rects and the
+// caret on its wrapped line. (Preedit rendering in multiline mode reuses
+// the committed-text path; inline preedit arrives with focused IME work.)
+func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
+	f := b.state.W()
+	sz := f.size()
+	m := b.painter.Metrics(sz)
+	txt := b.state.ed.Text()
+	lines := b.painter.Paragraph(txt, sz, b.size.W)
+	lineH := m.LineHeight()
+
+	c.PushClip(geom.Rect{Min: at, Max: at.Add(b.size.Pt())})
+
+	selStart, selEnd := b.state.ed.Selection()
+	runes := []rune(txt)
+	for i, l := range lines {
+		top := at.Y + float32(i)*lineH
+		baseline := top + m.Ascent
+
+		if selStart != selEnd && selStart < l.End && selEnd > l.Start {
+			a, z := max(selStart, l.Start), min(selEnd, l.End)
+			x0 := at.X + l.CaretX(a-l.Start)
+			x1 := at.X + l.CaretX(z-l.Start)
+			c.FillRect(geom.Rect{
+				Min: geom.Pt{X: x0, Y: top},
+				Max: geom.Pt{X: x1, Y: top + lineH},
+			}, f.SelectionColor)
+		}
+
+		lineText := strings.TrimRight(string(runes[l.Start:l.End]), "\n")
+		c.Text(lineText, geom.Pt{X: at.X, Y: baseline}, sz, f.TextColor)
+	}
+
+	if len(runes) == 0 && f.Placeholder != "" {
+		c.Text(f.Placeholder, geom.Pt{X: at.X, Y: at.Y + m.Ascent}, sz, f.PlaceholderColor)
+	}
+
+	if b.state.focused && !b.state.ed.HasSelection() && len(lines) > 0 {
+		li := lineOf(lines, b.state.ed.Caret)
+		x := at.X + lines[li].CaretX(b.state.ed.Caret-lines[li].Start)
+		top := at.Y + float32(li)*lineH
+		c.Line(geom.Pt{X: x, Y: top}, geom.Pt{X: x, Y: top + lineH}, 1.5, f.CaretColor)
 	}
 
 	c.PopClip()

@@ -67,6 +67,7 @@ type lineOp struct {
 }
 
 type textOp struct {
+	font string
 	s    string
 	pos  geom.Pt
 	size float32
@@ -90,7 +91,7 @@ func (o rrectGradientOp) replay(c paint.Canvas) {
 }
 func (o strokeRRectOp) replay(c paint.Canvas) { c.StrokeRRect(o.r, o.radius, o.width, o.col) }
 func (o lineOp) replay(c paint.Canvas)        { c.Line(o.a, o.b, o.width, o.col) }
-func (o textOp) replay(c paint.Canvas)        { c.Text(o.s, o.pos, o.size, o.col) }
+func (o textOp) replay(c paint.Canvas)        { c.TextIn(o.font, o.s, o.pos, o.size, o.col) }
 func (o imageOp) replay(c paint.Canvas)       { c.Image(o.img, o.dst) }
 func (o pushClipOp) replay(c paint.Canvas)    { c.PushClip(o.r) }
 func (o popClipOp) replay(c paint.Canvas)     { c.PopClip() }
@@ -120,7 +121,11 @@ func (r recorder) Line(a, b geom.Pt, width float32, col paint.Color) {
 }
 
 func (r recorder) Text(s string, pos geom.Pt, size float32, col paint.Color) {
-	r.l.ops = append(r.l.ops, textOp{s, pos, size, col})
+	r.l.ops = append(r.l.ops, textOp{"", s, pos, size, col})
+}
+
+func (r recorder) TextIn(font, s string, pos geom.Pt, size float32, col paint.Color) {
+	r.l.ops = append(r.l.ops, textOp{font, s, pos, size, col})
 }
 
 func (r recorder) Image(img image.Image, dst geom.Rect) {

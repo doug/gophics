@@ -167,6 +167,8 @@ func (w *window) Close()                { w.app.Quit() }
 func (w *window) ClipboardRead() (string, error)   { return w.app.ClipboardRead() }
 func (w *window) ClipboardWrite(text string) error { return w.app.ClipboardWrite(text) }
 
+func (w *window) DarkMode() bool { return w.app.DarkMode() }
+
 func (w *window) OpenURL(url string) error {
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return fmt.Errorf("desktop: refusing to open non-http URL %q", url)

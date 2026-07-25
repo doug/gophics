@@ -22,6 +22,9 @@ type Config struct {
 	Size       geom.Size // initial logical window size
 	Background paint.Color
 	Font       []byte // TTF/OTF data for the default font (required for text)
+	// FontFamilies registers named families (e.g. "bold", "mono"),
+	// selectable per text run via widget.Text.Font / layout.RichSpan.Font.
+	FontFamilies map[string][]byte
 }
 
 // Core is the shell-independent runtime: element tree, layout, paint, and
@@ -63,6 +66,11 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 	p := paint.NewPainter()
 	if cfg.Font != nil {
 		if err := p.LoadFont(cfg.Font); err != nil {
+			return nil, err
+		}
+	}
+	for name, data := range cfg.FontFamilies {
+		if err := p.LoadFontFamily(name, data); err != nil {
 			return nil, err
 		}
 	}
@@ -353,6 +361,10 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
 	h.core.Owner.Clipboard = w
 	h.core.Owner.OpenURL = w.OpenURL
+	if dark := w.DarkMode(); dark != h.core.Owner.DarkMode {
+		h.core.Owner.DarkMode = dark
+		h.core.Owner.RebuildAll()
+	}
 	// Frame pipeline (PLAN.md §3): posted work → tick animations → build →
 	// layout → record → diff → replay damage → present.
 	h.core.drainPosted()

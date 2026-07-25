@@ -214,6 +214,11 @@ func (w *window) OpenURL(url string) error {
 	return nil
 }
 
+func (w *window) DarkMode() bool {
+	m := js.Global().Call("matchMedia", "(prefers-color-scheme: dark)")
+	return m.Truthy() && m.Get("matches").Bool()
+}
+
 func (w *window) put(img *image.RGBA) {
 	pw, ph := img.Rect.Dx(), img.Rect.Dy()
 	if w.buf.IsUndefined() || w.bufW != pw || w.bufH != ph {

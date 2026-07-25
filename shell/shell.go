@@ -44,6 +44,9 @@ type Window interface {
 
 	// OpenURL opens url in the system browser (or a new tab on web).
 	OpenURL(url string) error
+
+	// DarkMode reports whether the platform prefers a dark color scheme.
+	DarkMode() bool
 }
 
 // Frame gives the handler access to one vsync-paced frame.

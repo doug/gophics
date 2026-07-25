@@ -2,7 +2,9 @@ package widget
 
 import (
 	"fmt"
+	"log"
 	"reflect"
+	"runtime/debug"
 	"sort"
 
 	"github.com/doug/gossamer/layout"
@@ -34,6 +36,12 @@ type Owner struct {
 	Post func(fn func())
 	// OpenURL opens a URL in the system browser (set by the app runner).
 	OpenURL func(url string) error
+	// DarkMode reflects the platform color-scheme preference (kept fresh by
+	// the app runner; a change rebuilds the whole tree).
+	DarkMode bool
+	// OnBuildPanic observes recovered Build panics (default logs with a
+	// stack trace). The panicking subtree renders a BuildError instead.
+	OnBuildPanic func(recovered any)
 
 	root    *element
 	dirty   []*element
@@ -83,6 +91,13 @@ func (o *Owner) requestFrame() {
 // RequestFrameThreadSafe requests a frame from any goroutine. Shell
 // Invalidate implementations must be callable off the UI goroutine.
 func (o *Owner) RequestFrameThreadSafe() { o.requestFrame() }
+
+// RebuildAll marks the whole tree dirty (theme/color-scheme changes).
+func (o *Owner) RebuildAll() {
+	if o.root != nil {
+		o.root.markDirty()
+	}
+}
 
 // SetRoot mounts (or reconciles to) the given root widget.
 func (o *Owner) SetRoot(w Widget) {
@@ -153,6 +168,37 @@ func canUpdate(old Widget, new Widget) bool {
 	return reflect.TypeOf(old) == reflect.TypeOf(new) && keyOf(old) == keyOf(new)
 }
 
+// safeBuild runs a widget's Build, converting a panic into an inline error
+// widget so one failing subtree cannot take down the app (PLAN.md §4.7).
+// The panic is reported through OnBuildPanic (default: log).
+func (o *Owner) safeBuild(build func() Widget) (w Widget) {
+	defer func() {
+		if r := recover(); r != nil {
+			if o.OnBuildPanic != nil {
+				o.OnBuildPanic(r)
+			} else {
+				log.Printf("widget: recovered build panic: %v\n%s", r, debug.Stack())
+			}
+			w = BuildError{Message: fmt.Sprint(r)}
+		}
+	}()
+	return build()
+}
+
+// BuildError is the inline substitute rendered for a subtree whose Build
+// panicked.
+type BuildError struct{ Message string }
+
+func (e BuildError) Build(Ctx) Widget {
+	return Decorated{
+		Color: paint.Color{R: 0.75, G: 0.15, B: 0.15, A: 1}, Radius: 4,
+		Child: Padding{All: 8, Child: Text{
+			S: "build failed: " + e.Message, Size: 12, Wrap: true,
+			Color: paint.RGB(1, 1, 1),
+		}},
+	}
+}
+
 // updateChild is the reconciler entry point: reuse, replace, or remove.
 func (o *Owner) updateChild(parent *element, old *element, w Widget) *element {
 	if w == nil {
@@ -184,9 +230,9 @@ func (o *Owner) mount(parent *element, w Widget) *element {
 		if init, ok := el.state.(Initer); ok {
 			init.Init(el.ctx())
 		}
-		el.child = o.updateChild(el, nil, el.state.Build(el.ctx()))
+		el.child = o.updateChild(el, nil, o.safeBuild(func() Widget { return el.state.Build(el.ctx()) }))
 	case Stateless:
-		el.child = o.updateChild(el, nil, w.Build(el.ctx()))
+		el.child = o.updateChild(el, nil, o.safeBuild(func() Widget { return w.Build(el.ctx()) }))
 	case renderWidget:
 		el.box = w.createBox(el.ctx())
 		w.updateBox(el.ctx(), el.box)
@@ -224,9 +270,9 @@ func (el *element) update(w Widget) {
 	switch w := w.(type) {
 	case Stateful:
 		el.state.setWidget(w)
-		el.child = el.owner.updateChild(el, el.child, el.state.Build(el.ctx()))
+		el.child = el.owner.updateChild(el, el.child, el.owner.safeBuild(func() Widget { return el.state.Build(el.ctx()) }))
 	case Stateless:
-		el.child = el.owner.updateChild(el, el.child, w.Build(el.ctx()))
+		el.child = el.owner.updateChild(el, el.child, el.owner.safeBuild(func() Widget { return w.Build(el.ctx()) }))
 	case renderWidget:
 		w.updateBox(el.ctx(), el.box)
 		el.reconcileRenderChildren(w)
@@ -251,9 +297,9 @@ func (el *element) rebuild() {
 	el.dirty = false
 	switch w := el.widget.(type) {
 	case Stateful:
-		el.child = el.owner.updateChild(el, el.child, el.state.Build(el.ctx()))
+		el.child = el.owner.updateChild(el, el.child, el.owner.safeBuild(func() Widget { return el.state.Build(el.ctx()) }))
 	case Stateless:
-		el.child = el.owner.updateChild(el, el.child, w.Build(el.ctx()))
+		el.child = el.owner.updateChild(el, el.child, el.owner.safeBuild(func() Widget { return w.Build(el.ctx()) }))
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gossamer/app"
@@ -58,7 +59,7 @@ func header(title string, lead widget.Widget) widget.Widget {
 			Child: widget.Row(
 				lead,
 				widget.Sized{W: 10},
-				widget.Expand(widget.Text{S: title, Size: 15, Color: colOnBar}),
+				widget.Expand(widget.Text{S: title, Font: "bold", Size: 15, Color: colOnBar}),
 			)},
 	}
 }
@@ -149,7 +150,7 @@ func (s *feedState) storyRow(nav widget.Nav, i int) widget.Widget {
 		meta = d + " · " + meta
 	}
 	title := widget.Column(
-		widget.Text{S: st.Title, Size: 15, Color: colTitle, Wrap: true},
+		widget.Text{S: st.Title, Font: "bold", Size: 15, Color: colTitle, Wrap: true},
 		widget.Sized{H: 4},
 		widget.Text{S: meta, Size: 12, Color: colMeta},
 	)
@@ -216,7 +217,7 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 func storyHeaderCell(st Item, openURL func(string)) widget.Widget {
 	meta := fmt.Sprintf("%d points by %s · %d comments", st.Score, st.By, st.Descendants)
 	kids := []widget.Widget{
-		widget.Text{S: st.Title, Size: 17, Color: colTitle, Wrap: true},
+		widget.Text{S: st.Title, Font: "bold", Size: 17, Color: colTitle, Wrap: true},
 		widget.Sized{H: 6},
 		widget.Text{S: meta, Size: 12, Color: colMeta},
 	}
@@ -253,6 +254,7 @@ func main() {
 		Size:       geom.Size{W: 480, H: 720},
 		Background: colBg,
 		Font:       goregular.TTF,
+		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	})
 	if err != nil {
 		log.Fatal(err)

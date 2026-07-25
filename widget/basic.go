@@ -14,6 +14,7 @@ import (
 // set, with optional decorations.
 type Text struct {
 	S         string
+	Font      string  // named font family ("" = default; e.g. "bold")
 	Size      float32 // 0 → 14
 	Color     paint.Color
 	Wrap      bool
@@ -31,7 +32,7 @@ func (t Text) size() float32 {
 func (t Text) createBox(ctx Ctx) layout.Box { return &layout.TextBox{Painter: ctx.Painter()} }
 func (t Text) updateBox(ctx Ctx, b layout.Box) {
 	tb := b.(*layout.TextBox)
-	tb.Text, tb.TextSize, tb.Color = t.S, t.size(), t.Color
+	tb.Text, tb.Font, tb.TextSize, tb.Color = t.S, t.Font, t.size(), t.Color
 	tb.Wrap, tb.Strike, tb.Underline = t.Wrap, t.Strike, t.Underline
 }
 func (t Text) childWidgets() []Widget               { return nil }

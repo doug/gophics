@@ -78,8 +78,10 @@ type Canvas interface {
 	FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool)
 	StrokeRRect(r geom.Rect, radius, width float32, c Color)
 	Line(a, b geom.Pt, width float32, c Color)
-	// Text draws s with its baseline-left at pos.
+	// Text draws s with its baseline-left at pos, in the default family.
 	Text(s string, pos geom.Pt, size float32, c Color)
+	// TextIn draws s in a named font family ("" = default).
+	TextIn(font, s string, pos geom.Pt, size float32, c Color)
 	// Image draws img scaled into dst (bilinear). Pass the same image
 	// value across frames — scene diffing compares by identity.
 	Image(img image.Image, dst geom.Rect)
@@ -117,24 +119,36 @@ func (m TextMetrics) LineHeight() float32 { return m.Ascent + m.Descent + m.Line
 
 // Painter owns the drawing context and font resources across frames.
 // It is not safe for concurrent use; call it only from the UI goroutine.
+//
+// Fonts are organized as named families: "" is the default; register others
+// (e.g. "bold", "mono") with LoadFontFamily and select them per text run
+// (widget.Text.Font, layout.RichSpan.Font). Fallback fonts and the system
+// chain apply to every family.
 type Painter struct {
 	dc    *gg.Context
 	w, h  int
 	scale float64
 
-	shaper *text.Shaper
-	fonts  []*text.Font
+	families  map[string]*text.Font
+	fallbacks []*text.Font
+	shapers   map[string]*text.Shaper
 
 	// Shaping is the dominant text cost and layout re-measures every frame,
 	// so shaped lines are memoized (cleared on font change or when the
 	// cache grows past a bound).
 	shapes  map[shapeKey]text.Line
-	metrics map[float32]TextMetrics
+	metrics map[metricsKey]TextMetrics
 	imgBufs map[image.Image]*gg.ImageBuf
 }
 
 type shapeKey struct {
+	font string
 	s    string
+	size float32
+}
+
+type metricsKey struct {
+	font string
 	size float32
 }
 
@@ -142,51 +156,87 @@ const shapeCacheLimit = 1 << 13
 
 func NewPainter() *Painter {
 	return &Painter{
-		shaper:  text.NewShaper(),
-		shapes:  map[shapeKey]text.Line{},
-		metrics: map[float32]TextMetrics{},
-		imgBufs: map[image.Image]*gg.ImageBuf{},
+		families: map[string]*text.Font{},
+		shapers:  map[string]*text.Shaper{"": text.NewShaper()},
+		shapes:   map[shapeKey]text.Line{},
+		metrics:  map[metricsKey]TextMetrics{},
+		imgBufs:  map[image.Image]*gg.ImageBuf{},
 	}
 }
 
-// LoadFont sets the primary font from raw TTF/OTF data, resetting any
-// fallback chain.
+func (p *Painter) rebuildShapers() {
+	for name, sh := range p.shapers {
+		primary, ok := p.families[name]
+		if !ok {
+			primary = p.families[""]
+		}
+		chain := make([]*text.Font, 0, 1+len(p.fallbacks))
+		if primary != nil {
+			chain = append(chain, primary)
+		}
+		chain = append(chain, p.fallbacks...)
+		sh.SetFonts(chain...)
+	}
+	clear(p.shapes)
+	clear(p.metrics)
+}
+
+func (p *Painter) shaperFor(font string) *text.Shaper {
+	if sh, ok := p.shapers[font]; ok {
+		return sh
+	}
+	return p.shapers[""]
+}
+
+// LoadFont sets the default-family font from raw TTF/OTF data.
 func (p *Painter) LoadFont(data []byte) error {
+	return p.LoadFontFamily("", data)
+}
+
+// LoadFontFamily registers (or replaces) a named font family — e.g. "bold",
+// "mono" — selectable per text run.
+func (p *Painter) LoadFontFamily(name string, data []byte) error {
 	f, err := text.Parse(data)
 	if err != nil {
 		return err
 	}
-	p.fonts = []*text.Font{f}
-	p.shaper.SetFonts(p.fonts...)
-	clear(p.shapes)
-	clear(p.metrics)
+	p.families[name] = f
+	if _, ok := p.shapers[name]; !ok {
+		p.shapers[name] = text.NewShaper()
+	}
+	p.rebuildShapers()
 	return nil
 }
 
-// LoadFallbackFont appends a fallback font (per-rune font selection during
-// shaping — e.g. a CJK, Arabic, or symbol font behind the primary).
+// LoadFallbackFont appends a fallback font used by every family (per-rune
+// font selection during shaping — e.g. a CJK, Arabic, or symbol font).
 func (p *Painter) LoadFallbackFont(data []byte) error {
 	f, err := text.Parse(data)
 	if err != nil {
 		return err
 	}
-	p.fonts = append(p.fonts, f)
-	p.shaper.SetFonts(p.fonts...)
-	clear(p.shapes)
+	p.fallbacks = append(p.fallbacks, f)
+	p.rebuildShapers()
 	return nil
 }
 
-// Shape returns the shaped single line for s at size (memoized): full
-// shaping via the text package — bidi, fallback, positional forms.
+// Shape returns the shaped single line for s at size in the default
+// family (memoized): full shaping via the text package — bidi, fallback,
+// positional forms.
 func (p *Painter) Shape(s string, size float32) text.Line {
-	k := shapeKey{s, size}
+	return p.ShapeIn("", s, size)
+}
+
+// ShapeIn is Shape in a named font family ("" = default).
+func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
+	k := shapeKey{font, s, size}
 	if l, ok := p.shapes[k]; ok {
 		return l
 	}
 	if len(p.shapes) >= shapeCacheLimit {
 		clear(p.shapes)
 	}
-	l := p.shaper.Line(s, size)
+	l := p.shaperFor(font).Line(s, size)
 	p.shapes[k] = l
 	return l
 }
@@ -197,33 +247,54 @@ func (p *Painter) MeasureWidth(s string, size float32) float32 {
 	return p.Shape(s, size).Width
 }
 
-// Metrics returns font metrics at the given size, without needing an active
-// frame. Used by layout.
+// MeasureWidthIn is MeasureWidth in a named font family.
+func (p *Painter) MeasureWidthIn(font, s string, size float32) float32 {
+	return p.ShapeIn(font, s, size).Width
+}
+
+// Metrics returns default-family font metrics at the given size, without
+// needing an active frame. Used by layout.
 func (p *Painter) Metrics(size float32) TextMetrics {
-	if m, ok := p.metrics[size]; ok {
+	return p.MetricsIn("", size)
+}
+
+// MetricsIn is Metrics in a named font family.
+func (p *Painter) MetricsIn(font string, size float32) TextMetrics {
+	k := metricsKey{font, size}
+	if m, ok := p.metrics[k]; ok {
 		return m
 	}
-	f := p.shaper.Primary()
+	f := p.shaperFor(font).Primary()
 	if f == nil {
 		return TextMetrics{}
 	}
 	a, d, g := f.Extents(size)
 	m := TextMetrics{Ascent: a, Descent: d, LineGap: g}
-	p.metrics[size] = m
+	p.metrics[k] = m
 	return m
 }
 
 // Paragraph shapes and wraps s to maxWidth, returning positioned lines
 // with rune ranges (see text.Shaper.Paragraph). Used by rich text layout.
 func (p *Painter) Paragraph(s string, size, maxWidth float32) []text.Line {
-	return p.shaper.Paragraph(s, size, maxWidth)
+	return p.ParagraphIn("", s, size, maxWidth)
+}
+
+// ParagraphIn is Paragraph in a named font family.
+func (p *Painter) ParagraphIn(font, s string, size, maxWidth float32) []text.Line {
+	return p.shaperFor(font).Paragraph(s, size, maxWidth)
 }
 
 // WrapText splits s into lines that fit maxWidth at the given size, using
 // Unicode line-breaking (UAX #14) over shaped widths. Explicit newlines are
 // respected.
 func (p *Painter) WrapText(s string, size, maxWidth float32) []string {
-	lines := p.shaper.Paragraph(s, size, maxWidth)
+	return p.WrapTextIn("", s, size, maxWidth)
+}
+
+// WrapTextIn is WrapText in a named font family.
+func (p *Painter) WrapTextIn(font, s string, size, maxWidth float32) []string {
+	lines := p.ParagraphIn(font, s, size, maxWidth)
 	runes := []rune(s)
 	out := make([]string, len(lines))
 	for i, l := range lines {
@@ -349,7 +420,11 @@ func (c *ggCanvas) Line(a, b geom.Pt, width float32, col Color) {
 // metrics between measurement and rendering, at gg's analytic AA quality.
 // (A glyph mask cache is a known follow-up if profiles demand it.)
 func (c *ggCanvas) Text(s string, pos geom.Pt, size float32, col Color) {
-	line := c.p.Shape(s, size)
+	c.TextIn("", s, pos, size, col)
+}
+
+func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) {
+	line := c.p.ShapeIn(font, s, size)
 	if len(line.Glyphs) == 0 {
 		return
 	}
@@ -400,11 +475,13 @@ func (c *ggCanvas) PushClip(r geom.Rect) {
 
 func (c *ggCanvas) PopClip() { c.dc.Pop() }
 
-// LoadSystemFonts extends the fallback chain with the platform's installed
-// fonts (see text.Shaper.UseSystemFonts). Call after LoadFont.
+// LoadSystemFonts extends every family with the platform's installed fonts
+// (see text.Shaper.UseSystemFonts). Call after loading fonts.
 func (p *Painter) LoadSystemFonts() error {
-	if err := p.shaper.UseSystemFonts(""); err != nil {
-		return err
+	for _, sh := range p.shapers {
+		if err := sh.UseSystemFonts(""); err != nil {
+			return err
+		}
 	}
 	clear(p.shapes)
 	return nil

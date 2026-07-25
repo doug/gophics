@@ -115,6 +115,10 @@ func (c Ctx) OpenURL(url string) error {
 	return c.el.owner.OpenURL(url)
 }
 
+// DarkMode reports the platform color-scheme preference; a change rebuilds
+// the tree, so reading it in Build stays fresh.
+func (c Ctx) DarkMode() bool { return c.el.owner.DarkMode }
+
 // Post schedules fn onto the UI goroutine before the next build. Use it to
 // deliver results from background goroutines (network fetches, file IO):
 //
