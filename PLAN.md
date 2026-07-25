@@ -309,11 +309,19 @@ Prior art to learn from (and where gossamer differs):
   "adopt gg as backend #1 behind `paint.Canvas`" and the sparse-strips
   work moves to opportunistic. Its *text shaping* (a from-scratch
   GSUB/GPOS engine, explicitly not go-text/typesetting) is where
-  skepticism concentrates — complex-script shaping is a decade-scale
-  correctness problem; default remains go-text/typesetting for shaping
-  even if gg renders the glyphs. Hedge in both directions: v0.x weekly
-  churn and bus-factor-one mean gg must stay *a* backend behind the
-  Canvas interface, never a foundation.
+  skepticism concentrated — and the spike **confirmed it empirically**
+  (2026-07-24, gg v0.50.x, `paint/shaping_spike_test.go`): gg's shaper
+  applies **zero positional substitution to Arabic** (identical glyph
+  IDs to naive per-rune rendering, no bidi) — its "GSUB/GPOS support"
+  covers Latin ligatures/kerning only. Two structural cautions also
+  found: `Face.Advance` (measurement) bypasses the shaper `DrawString`
+  uses — a latent layout/paint mismatch once shaping matters — and
+  `Context.Image()` copies the full surface per call (web present-path
+  cost). Verdict: gg is the *rendering* backend; text beyond Latin goes
+  through go-text/typesetting (M7 text package), feeding gg positioned
+  glyphs via `DrawShapedGlyphs`. Hedge stands: v0.x weekly churn and
+  bus-factor-one mean gg must stay *a* backend behind the Canvas
+  interface, never a foundation.
 - **Cogent Core** — the closest existing "Flutter-in-Go" in scope
   (retained widgets, Material 3, go-text stack). Its 2D UI is
   CPU-rasterized (rasterx) with GPU reserved for 3D; gossamer's bet on a
