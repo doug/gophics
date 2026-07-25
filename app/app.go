@@ -144,6 +144,16 @@ type hitInteractive struct {
 	local geom.Pt
 }
 
+// Semantics returns the semantics tree of the current layout (a11y
+// foundation, PLAN.md §6.5). Call after a frame (or Headless.Render).
+func (c *Core) Semantics() []layout.SemNode {
+	box := c.Owner.RootBox()
+	if box == nil {
+		return nil
+	}
+	return layout.CollectSemantics(box)
+}
+
 // interactivesAt returns the InteractiveBoxes under p, topmost first.
 func (c *Core) interactivesAt(p geom.Pt) []hitInteractive {
 	box := c.Owner.RootBox()
@@ -280,6 +290,10 @@ func (c *Core) Keyboard(e shell.Event) {
 		if t.OnKey != nil {
 			t.OnKey(e)
 		}
+	case shell.Composition:
+		if t.OnComposition != nil {
+			t.OnComposition(e)
+		}
 	}
 }
 
@@ -327,7 +341,7 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 	switch e := e.(type) {
 	case shell.Pointer:
 		h.core.Pointer(e)
-	case shell.Text, shell.Key:
+	case shell.Text, shell.Key, shell.Composition:
 		h.core.Keyboard(e)
 	case shell.Resize:
 		w.Invalidate()

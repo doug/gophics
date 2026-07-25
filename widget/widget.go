@@ -152,9 +152,11 @@ type Handler struct {
 	// OnText and OnKey receive keyboard input while focused. A widget with
 	// either becomes focusable: it gains focus when tapped (or when mounted
 	// while nothing has focus) and OnFocus reports transitions.
-	OnText  func(s string)
-	OnKey   func(k shell.Key)
-	OnFocus func(focused bool)
+	OnText func(s string)
+	OnKey  func(k shell.Key)
+	// OnComposition receives IME preedit events while focused.
+	OnComposition func(c shell.Composition)
+	OnFocus       func(focused bool)
 }
 
 func (h *Handler) focusable() bool { return h.OnText != nil || h.OnKey != nil }

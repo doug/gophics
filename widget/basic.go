@@ -246,6 +246,66 @@ func (v viewport) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Viewport).Child = first(kids)
 }
 
+// Semantics overrides or supplies the semantic description of its subtree
+// (label decorative graphics, hide ornaments, group controls). Zero-value
+// fields defer to derived semantics.
+type Semantics struct {
+	Role   layout.Role
+	Label  string
+	Hidden bool
+	Child  Widget
+}
+
+func (sw Semantics) createBox(Ctx) layout.Box { return &semBox{} }
+func (sw Semantics) updateBox(_ Ctx, b layout.Box) {
+	sb := b.(*semBox)
+	sb.info = layout.SemInfo{Role: sw.Role, Label: sw.Label, Hidden: sw.Hidden}
+	if sb.info.Role == layout.RoleNone && (sw.Label != "" || sw.Hidden) {
+		sb.info.Role = layout.RoleGroup
+	}
+}
+func (sw Semantics) childWidgets() []Widget { return []Widget{sw.Child} }
+func (sw Semantics) attach(b layout.Box, kids []layout.Box) {
+	b.(*semBox).Child = first(kids)
+}
+
+type semBox struct {
+	info  layout.SemInfo
+	Child layout.Box
+	size  geom.Size
+}
+
+func (b *semBox) Layout(cs layout.Constraints) geom.Size {
+	if b.Child != nil {
+		b.size = b.Child.Layout(cs)
+	} else {
+		b.size = cs.Constrain(geom.Size{})
+	}
+	return b.size
+}
+
+func (b *semBox) Size() geom.Size { return b.size }
+
+func (b *semBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.Child != nil {
+		b.Child.Paint(c, at)
+	}
+}
+
+func (b *semBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
+	if b.Child != nil && p.X >= 0 && p.Y >= 0 && p.X < b.size.W && p.Y < b.size.H {
+		b.Child.AddHits(p, hits)
+	}
+}
+
+func (b *semBox) Semantics() layout.SemInfo { return b.info }
+
+func (b *semBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
+	if b.Child != nil {
+		visit(b.Child, geom.Pt{})
+	}
+}
+
 // Canvas is the custom-painting escape hatch: a fixed-size leaf that paints
 // itself with the given function. Draw is called with the widget's rect in
 // canvas coordinates.
@@ -333,6 +393,24 @@ func (b *InteractiveBox) Size() geom.Size { return b.size }
 func (b *InteractiveBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.Child != nil {
 		b.Child.Paint(c, at)
+	}
+}
+
+// Semantics derives a role from the handlers: keyboard handlers make a
+// text field, tap handlers a button.
+func (b *InteractiveBox) Semantics() layout.SemInfo {
+	switch {
+	case b.Handler.OnText != nil || b.Handler.OnKey != nil:
+		return layout.SemInfo{Role: layout.RoleTextField}
+	case b.Handler.OnTap != nil:
+		return layout.SemInfo{Role: layout.RoleButton}
+	}
+	return layout.SemInfo{}
+}
+
+func (b *InteractiveBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
+	if b.Child != nil {
+		visit(b.Child, geom.Pt{})
 	}
 }
 

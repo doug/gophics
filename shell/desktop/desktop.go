@@ -69,6 +69,19 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	es.OnTextInput(func(text string) {
 		h.Event(w, shell.Text{S: text})
 	})
+	es.OnIMECompositionStart(func() {
+		h.Event(w, shell.Composition{Kind: shell.CompositionStart})
+	})
+	es.OnIMECompositionUpdate(func(state gpucontext.IMEState) {
+		h.Event(w, shell.Composition{
+			Kind:    shell.CompositionUpdate,
+			Preedit: state.CompositionText,
+			Cursor:  state.CursorPos,
+		})
+	})
+	es.OnIMECompositionEnd(func(committed string) {
+		h.Event(w, shell.Composition{Kind: shell.CompositionEnd, Committed: committed})
+	})
 
 	return app.Run()
 }

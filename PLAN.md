@@ -319,7 +319,13 @@ Prior art to learn from (and where gossamer differs):
   `Context.Image()` copies the full surface per call (web present-path
   cost). Verdict: gg is the *rendering* backend; text beyond Latin goes
   through go-text/typesetting (M7 text package), feeding gg positioned
-  glyphs via `DrawShapedGlyphs`. Hedge stands: v0.x weekly churn and
+  glyphs via `DrawShapedGlyphs`. **GPU accelerator spike (2026-07-25)**:
+  gg's `gg/gpu` registration is process-global and has no CPU readback —
+  offscreen `Image()` renders blank, breaking golden tests, Headless, and
+  the web present path. Benchmarks under it are meaningless (work never
+  rasterizes). Gated behind `-tags gossamer_gpu` as experimental;
+  adoption blocked on per-context opt-in + readback upstream (or
+  gossamer's own M5 backend). Hedge stands: v0.x weekly churn and
   bus-factor-one mean gg must stay *a* backend behind the Canvas
   interface, never a foundation.
 - **Cogent Core** — the closest existing "Flutter-in-Go" in scope

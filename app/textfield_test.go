@@ -154,3 +154,26 @@ func TestFieldDragSelects(t *testing.T) {
 		t.Fatalf("drag-select replace: value = %q", st.value)
 	}
 }
+
+func TestFieldIMEComposition(t *testing.T) {
+	h, st := fieldHarness(t)
+	h.Type("ab")
+	h.Key(shell.KeyLeft) // caret between a and b
+
+	h.Compose("ni", 2)
+	if st.value != "ab" {
+		t.Fatalf("preedit must not change the value: %q", st.value)
+	}
+	h.Compose("nih", 3)
+	h.CommitComposition("你")
+	if st.value != "a你b" {
+		t.Fatalf("committed at caret: %q", st.value)
+	}
+
+	// Cancelled composition (empty commit) leaves the value alone.
+	h.Compose("x", 1)
+	h.CommitComposition("")
+	if st.value != "a你b" {
+		t.Fatalf("cancelled composition changed value: %q", st.value)
+	}
+}

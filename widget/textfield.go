@@ -49,6 +49,27 @@ type textFieldState struct {
 	ed      text.Editor
 	focused bool
 	scrollX float32
+
+	// IME preedit state: composing text displayed inline at the caret
+	// (underlined) until committed or cancelled.
+	preedit       string
+	preeditCursor int
+}
+
+// display returns the string to render: content with the preedit spliced
+// in at the caret, plus the preedit's rune range for styling.
+func (s *textFieldState) display() (str string, preStart, preEnd int) {
+	if s.preedit == "" {
+		return s.ed.Text(), 0, 0
+	}
+	runes := []rune(s.ed.Text())
+	caret := s.ed.Caret
+	pre := []rune(s.preedit)
+	out := make([]rune, 0, len(runes)+len(pre))
+	out = append(out, runes[:caret]...)
+	out = append(out, pre...)
+	out = append(out, runes[caret:]...)
+	return string(out), caret, caret + len(pre)
 }
 
 func (s *textFieldState) change(ctx Ctx) {
@@ -138,6 +159,23 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		}
 	}
 
+	onComposition := func(c shell.Composition) {
+		switch c.Kind {
+		case shell.CompositionStart:
+			s.preedit, s.preeditCursor = "", 0
+		case shell.CompositionUpdate:
+			s.preedit, s.preeditCursor = c.Preedit, c.Cursor
+		case shell.CompositionEnd:
+			s.preedit, s.preeditCursor = "", 0
+			if c.Committed != "" {
+				s.ed.Insert(sanitize(c.Committed))
+				s.change(ctx)
+				return
+			}
+		}
+		s.SetState(nil)
+	}
+
 	indexAt := func(x float32) int {
 		return s.line(ctx).IndexAt(x + s.scrollX)
 	}
@@ -152,8 +190,9 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				s.ed.MoveTo(indexAt(p.X), true)
 				s.SetState(nil)
 			},
-			OnText: onText,
-			OnKey:  onKey,
+			OnText:        onText,
+			OnKey:         onKey,
+			OnComposition: onComposition,
 			OnFocus: func(v bool) {
 				s.focused = v
 				if f.OnFocus != nil {
@@ -230,13 +269,15 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	f := b.state.W()
 	sz := f.size()
 	m := b.painter.Metrics(sz)
-	line := b.painter.Shape(b.state.ed.Text(), sz)
+	display, preStart, preEnd := b.state.display()
+	line := b.painter.Shape(display, sz)
 	origin := geom.Pt{X: at.X - b.state.scrollX, Y: at.Y}
 	baseline := at.Y + m.Ascent
+	composing := preEnd > preStart
 
 	c.PushClip(geom.Rect{Min: at, Max: at.Add(b.size.Pt())})
 
-	if start, end := b.state.ed.Selection(); start != end {
+	if start, end := b.state.ed.Selection(); start != end && !composing {
 		x0 := origin.X + line.CaretX(start)
 		x1 := origin.X + line.CaretX(end)
 		c.FillRect(geom.Rect{
@@ -245,18 +286,40 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		}, f.SelectionColor)
 	}
 
-	if b.state.ed.Len() == 0 && f.Placeholder != "" {
+	if len(display) == 0 && f.Placeholder != "" {
 		c.Text(f.Placeholder, geom.Pt{X: origin.X, Y: baseline}, sz, f.PlaceholderColor)
 	} else {
-		c.Text(b.state.ed.Text(), geom.Pt{X: origin.X, Y: baseline}, sz, f.TextColor)
+		c.Text(display, geom.Pt{X: origin.X, Y: baseline}, sz, f.TextColor)
+	}
+
+	if composing {
+		// Underline the preedit segment (IME convention).
+		x0 := origin.X + line.CaretX(preStart)
+		x1 := origin.X + line.CaretX(preEnd)
+		y := baseline + m.Descent*0.6
+		c.Line(geom.Pt{X: x0, Y: y}, geom.Pt{X: x1, Y: y}, 1.5, f.CaretColor)
 	}
 
 	if b.state.focused && !b.state.ed.HasSelection() {
-		x := origin.X + line.CaretX(b.state.ed.Caret)
+		caretIdx := b.state.ed.Caret
+		if composing {
+			caretIdx = preStart + b.state.preeditCursor
+		}
+		x := origin.X + line.CaretX(caretIdx)
 		c.Line(geom.Pt{X: x, Y: at.Y}, geom.Pt{X: x, Y: at.Y + b.size.H}, 1.5, f.CaretColor)
 	}
 
 	c.PopClip()
+}
+
+// Semantics reports the field's value and focus for assistive technology.
+func (b *fieldBox) Semantics() layout.SemInfo {
+	return layout.SemInfo{
+		Role:    layout.RoleTextField,
+		Label:   b.state.W().Placeholder,
+		Value:   b.state.ed.Text(),
+		Focused: b.state.focused,
+	}
 }
 
 func (b *fieldBox) AddHits(p geom.Pt, hits *[]layout.Hit) {

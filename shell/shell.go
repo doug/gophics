@@ -173,9 +173,31 @@ type Key struct {
 // Text is committed text input (post-IME).
 type Text struct{ S string }
 
-func (Resize) isEvent()  {}
-func (Closed) isEvent()  {}
-func (Focus) isEvent()   {}
-func (Pointer) isEvent() {}
-func (Key) isEvent()     {}
-func (Text) isEvent()    {}
+// CompositionKind discriminates Composition events.
+type CompositionKind uint8
+
+const (
+	CompositionStart CompositionKind = iota
+	CompositionUpdate
+	CompositionEnd
+)
+
+// Composition reports IME preedit state (e.g. pinyin or kana being
+// composed). During composition the preedit text is displayed inline with
+// underline styling at the caret; CompositionEnd carries the committed
+// text (which is NOT also delivered as Text).
+type Composition struct {
+	Kind    CompositionKind
+	Preedit string // current composition text (empty on End)
+	Cursor  int    // caret position within Preedit, in runes
+	// Committed is the final text, set only for CompositionEnd.
+	Committed string
+}
+
+func (Resize) isEvent()      {}
+func (Closed) isEvent()      {}
+func (Focus) isEvent()       {}
+func (Pointer) isEvent()     {}
+func (Key) isEvent()         {}
+func (Text) isEvent()        {}
+func (Composition) isEvent() {}

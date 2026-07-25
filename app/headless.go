@@ -92,6 +92,18 @@ func (h *Headless) Key(code shell.KeyCode) {
 	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
 }
 
+// Compose dispatches an IME composition update (Start on first call).
+func (h *Headless) Compose(preedit string, cursor int) {
+	h.layoutForInput()
+	h.Core.Keyboard(shell.Composition{Kind: shell.CompositionUpdate, Preedit: preedit, Cursor: cursor})
+}
+
+// CommitComposition ends composition, committing s.
+func (h *Headless) CommitComposition(s string) {
+	h.layoutForInput()
+	h.Core.Keyboard(shell.Composition{Kind: shell.CompositionEnd, Committed: s})
+}
+
 // KeyMod dispatches a key press with modifiers.
 func (h *Headless) KeyMod(code shell.KeyCode, mods shell.Mods) {
 	h.layoutForInput()
