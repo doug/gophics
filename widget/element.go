@@ -32,6 +32,8 @@ type Owner struct {
 	// Post schedules fn onto the UI goroutine (set by the app runner).
 	// The only safe way to touch widget state from other goroutines.
 	Post func(fn func())
+	// OpenURL opens a URL in the system browser (set by the app runner).
+	OpenURL func(url string) error
 
 	root    *element
 	dirty   []*element

@@ -5,6 +5,11 @@
 package desktop
 
 import (
+	"fmt"
+	"os/exec"
+	"runtime"
+	"strings"
+
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/gpucontext"
 
@@ -161,6 +166,20 @@ func (w *window) Close()                { w.app.Quit() }
 
 func (w *window) ClipboardRead() (string, error)   { return w.app.ClipboardRead() }
 func (w *window) ClipboardWrite(text string) error { return w.app.ClipboardWrite(text) }
+
+func (w *window) OpenURL(url string) error {
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("desktop: refusing to open non-http URL %q", url)
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		return exec.Command("xdg-open", url).Start()
+	}
+}
 
 func (w *window) scale() float32 {
 	lw, _ := w.app.Size()

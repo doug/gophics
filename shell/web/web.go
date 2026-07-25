@@ -209,6 +209,11 @@ func (w *window) ClipboardWrite(text string) error {
 	return nil
 }
 
+func (w *window) OpenURL(url string) error {
+	js.Global().Call("open", url, "_blank", "noopener")
+	return nil
+}
+
 func (w *window) put(img *image.RGBA) {
 	pw, ph := img.Rect.Dx(), img.Rect.Dy()
 	if w.buf.IsUndefined() || w.bufW != pw || w.bufH != ph {

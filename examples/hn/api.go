@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/doug/gossamer/layout"
+	"github.com/doug/gossamer/paint"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -85,23 +87,87 @@ func loadComments(api API, story Item, limit int) []Comment {
 }
 
 // plainText strips HN's comment HTML down to displayable text: paragraph
-// breaks preserved, tags dropped, entities unescaped. (Rich spans with
-// links are the next milestone; see PLAN.md §7.1.)
+// breaks preserved, tags dropped, entities unescaped.
 func plainText(s string) string {
-	s = strings.ReplaceAll(s, "<p>", "\n\n")
 	var b strings.Builder
-	inTag := false
-	for _, r := range s {
+	for _, sp := range parseSpans(s, spanStyle{}) {
+		b.WriteString(sp.Text)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// spanStyle carries the colors parseSpans assigns per span kind.
+type spanStyle struct {
+	Text, Link, Emph paint.Color
+}
+
+// parseSpans converts HN's comment HTML subset (<p>, <a href>, <i>,
+// <code>/<pre>) into rich spans: links tappable, italics emphasized,
+// entities unescaped, paragraph breaks preserved.
+func parseSpans(s string, style spanStyle) []layout.RichSpan {
+	var spans []layout.RichSpan
+	var cur strings.Builder
+	var href string
+	emph := false
+
+	flush := func() {
+		if cur.Len() == 0 {
+			return
+		}
+		sp := layout.RichSpan{Text: html.UnescapeString(cur.String()), Color: style.Text}
+		if href != "" {
+			sp.Link, sp.Color = href, style.Link
+		} else if emph {
+			sp.Color = style.Emph
+		}
+		spans = append(spans, sp)
+		cur.Reset()
+	}
+
+	for i := 0; i < len(s); {
+		if s[i] != '<' {
+			cur.WriteByte(s[i])
+			i++
+			continue
+		}
+		end := strings.IndexByte(s[i:], '>')
+		if end < 0 {
+			break
+		}
+		tag := s[i+1 : i+end]
+		i += end + 1
+		lower := strings.ToLower(tag)
 		switch {
-		case r == '<':
-			inTag = true
-		case r == '>':
-			inTag = false
-		case !inTag:
-			b.WriteRune(r)
+		case lower == "p" || lower == "/p":
+			flush()
+			if len(spans) > 0 {
+				spans = append(spans, layout.RichSpan{Text: "\n\n", Color: style.Text})
+			}
+		case strings.HasPrefix(lower, "a "):
+			flush()
+			if j := strings.Index(lower, `href="`); j >= 0 {
+				rest := tag[j+6:]
+				if k := strings.IndexByte(rest, '"'); k >= 0 {
+					href = html.UnescapeString(rest[:k])
+				}
+			}
+		case lower == "/a":
+			flush()
+			href = ""
+		case lower == "i" || lower == "em":
+			flush()
+			emph = true
+		case lower == "/i" || lower == "/em":
+			flush()
+			emph = false
 		}
 	}
-	return strings.TrimSpace(html.UnescapeString(b.String()))
+	flush()
+	// Trim a leading paragraph break.
+	if len(spans) > 0 && strings.TrimSpace(spans[0].Text) == "" {
+		spans = spans[1:]
+	}
+	return spans
 }
 
 // domain extracts the host for the story's meta line.

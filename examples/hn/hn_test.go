@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/png"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/layout"
 )
 
 // fakeAPI serves a deterministic HN corpus instantly.
@@ -40,14 +42,14 @@ func (f fakeAPI) Item(id int) (Item, error) {
 	}
 	return Item{
 		ID: id, Type: "comment", By: "commenter",
-		Text: "<p>This is a <i>comment</i> with &quot;entities&quot; and enough text to wrap across multiple lines when rendered in the thread view.</p>",
+		Text: `<p>This is a <i>comment</i> with a <a href="https://go.dev/blog">link to the Go blog</a> and enough text to wrap across lines.</p>`,
 	}, nil
 }
 
-func harness(t *testing.T) (*app.Headless, *hnState) {
+func harness(t *testing.T) (*app.Headless, *feedState) {
 	t.Helper()
-	var st *hnState
-	stateHook = func(s *hnState) { st = s }
+	var st *feedState
+	stateHook = func(s *feedState) { st = s }
 	defer func() { stateHook = nil }()
 	h, err := app.NewHeadless(HN{API: fakeAPI{stories: 500, commentsPer: 5}, PageSize: 500},
 		app.Config{Size: geom.Size{W: 480, H: 720}, Background: colBg, Font: goregular.TTF}, 2)
@@ -66,6 +68,30 @@ func harness(t *testing.T) (*app.Headless, *hnState) {
 	return h, st
 }
 
+func settle(h *app.Headless) {
+	for i := 0; i < 300 && h.Step(0.016); i++ {
+		h.Render()
+	}
+	h.Render()
+}
+
+func semLabels(h *app.Headless) []string {
+	var out []string
+	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+		out = append(out, n.Label)
+	}
+	return out
+}
+
+func hasLabel(h *app.Headless, substr string) bool {
+	for _, l := range semLabels(h) {
+		if strings.Contains(l, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFeedLoadsAndScrolls(t *testing.T) {
 	h, st := harness(t)
 	if len(st.stories) != 500 {
@@ -77,67 +103,81 @@ func TestFeedLoadsAndScrolls(t *testing.T) {
 		defer f.Close()
 		_ = png.Encode(f, img)
 	}
-	// Fling down the feed and make sure it keeps rendering.
 	h.Move(geom.Pt{X: 240, Y: 400})
 	for range 10 {
 		h.Scroll(geom.Pt{Y: -600})
 		h.Render()
 	}
-	if h.Core.LastDamage.IsEmpty() && !h.Core.Skipped {
-		t.Fatal("scrolling produced no damage")
+	if !hasLabel(h, "Story number") {
+		t.Fatal("feed rows missing after scroll")
 	}
 }
 
-func TestTapOpensThreadAndBack(t *testing.T) {
-	h, st := harness(t)
-	// First story row sits below the header (~40px): tap it.
+func TestNavigateThreadLinksAndBack(t *testing.T) {
+	h, _ := harness(t)
+
+	// Tap the first story row; wait for the thread to load and slide in.
 	h.Tap(geom.Pt{X: 240, Y: 80})
+	settle(h)
 	deadline := time.Now().Add(5 * time.Second)
-	for (st.open == nil || st.loadingC) && time.Now().Before(deadline) {
+	for !hasLabel(h, "link to the Go blog") && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 		h.Render()
+		settle(h)
 	}
-	if st.open == nil {
-		t.Fatal("tap did not open a story")
-	}
-	if len(st.comments) != 5 {
-		t.Fatalf("comments = %d, want 5", len(st.comments))
-	}
-	if got := plainText(st.comments[0].Text); got == "" || got[0] != 'T' {
-		t.Fatalf("comment text not cleaned: %q", got)
+	if !hasLabel(h, "link to the Go blog") {
+		t.Fatalf("thread comments not shown; labels=%v", semLabels(h)[:min(8, len(semLabels(h)))])
 	}
 
-	// Back returns to the feed.
-	h.Render()
-	h.Tap(geom.Pt{X: 30, Y: 20})
-	h.Render()
-	if st.open != nil {
-		t.Fatal("back did not return to feed")
+	// Tap around the first comment area until the link opens.
+	opened := false
+scan:
+	for y := float32(120); y < 500; y += 8 {
+		for x := float32(30); x < 460; x += 24 {
+			h.Tap(geom.Pt{X: x, Y: y})
+			if len(h.OpenedURLs) > 0 {
+				opened = true
+				break scan
+			}
+		}
+	}
+	if !opened || h.OpenedURLs[0] != "https://go.dev/blog" {
+		t.Fatalf("link tap did not open URL: %v", h.OpenedURLs)
 	}
 
 	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
-		h.Tap(geom.Pt{X: 240, Y: 80})
-		for st.loadingC {
-			time.Sleep(time.Millisecond)
-			h.Render()
-		}
 		img := h.Render()
-		f, err := os.Create(out)
-		if err != nil {
-			t.Fatal(err)
-		}
+		f, _ := os.Create(out)
 		defer f.Close()
-		if err := png.Encode(f, img); err != nil {
-			t.Fatal(err)
-		}
+		_ = png.Encode(f, img)
+	}
+
+	// Back returns to the feed.
+	h.Tap(geom.Pt{X: 30, Y: 20})
+	settle(h)
+	if hasLabel(h, "link to the Go blog") {
+		t.Fatal("back did not leave the thread")
+	}
+	if !hasLabel(h, "Story number") {
+		t.Fatal("feed not restored after back")
 	}
 }
 
-func TestPlainText(t *testing.T) {
-	got := plainText("<p>a &amp; b</p><a href=\"x\">link</a>")
-	if got != "a & b\n\nlink" && got != "a & blink" {
-		// <p> prefix becomes a break; leading one is trimmed.
-		t.Fatalf("plainText = %q", got)
+func TestParseSpans(t *testing.T) {
+	spans := parseSpans(`<p>a &amp; b</p><p><i>it</i> <a href="https://x.y">z</a></p>`, commentStyle)
+	var full string
+	var link string
+	for _, sp := range spans {
+		full += sp.Text
+		if sp.Link != "" {
+			link = sp.Link
+		}
+	}
+	if !strings.Contains(full, "a & b") || !strings.Contains(full, "it z") {
+		t.Fatalf("spans text = %q", full)
+	}
+	if link != "https://x.y" {
+		t.Fatalf("link = %q", link)
 	}
 	if domain("https://www.example.com/a/b") != "example.com" {
 		t.Fatal("domain extraction")

@@ -41,6 +41,9 @@ type Window interface {
 
 	ClipboardRead() (string, error)
 	ClipboardWrite(text string) error
+
+	// OpenURL opens url in the system browser (or a new tab on web).
+	OpenURL(url string) error
 }
 
 // Frame gives the handler access to one vsync-paced frame.

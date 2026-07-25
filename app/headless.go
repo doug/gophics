@@ -12,7 +12,10 @@ import (
 // Drive input with Tap/Move/Type/Key, then Render to inspect pixels — or
 // assert on state directly.
 type Headless struct {
-	Core  *Core
+	Core *Core
+	// OpenedURLs records ctx.OpenURL calls for assertions.
+	OpenedURLs []string
+
 	size  geom.Size
 	scale float32
 }
@@ -25,7 +28,12 @@ func NewHeadless(root widget.Widget, cfg Config, scale float32) (*Headless, erro
 	}
 	core.Owner.RequestFrame = func() {} // frames are pulled via Render
 	core.Owner.Clipboard = &MemClipboard{}
-	return &Headless{Core: core, size: cfg.Size, scale: scale}, nil
+	h := &Headless{Core: core, size: cfg.Size, scale: scale}
+	core.Owner.OpenURL = func(url string) error {
+		h.OpenedURLs = append(h.OpenedURLs, url)
+		return nil
+	}
+	return h, nil
 }
 
 // MemClipboard is the in-memory clipboard used by Headless.

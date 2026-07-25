@@ -106,6 +106,15 @@ type Clipboard interface {
 // provides one.
 func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
 
+// OpenURL opens url in the system browser (no-op before the runner
+// provides the hook).
+func (c Ctx) OpenURL(url string) error {
+	if c.el.owner.OpenURL == nil {
+		return nil
+	}
+	return c.el.owner.OpenURL(url)
+}
+
 // Post schedules fn onto the UI goroutine before the next build. Use it to
 // deliver results from background goroutines (network fetches, file IO):
 //

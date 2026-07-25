@@ -213,6 +213,12 @@ func (p *Painter) Metrics(size float32) TextMetrics {
 	return m
 }
 
+// Paragraph shapes and wraps s to maxWidth, returning positioned lines
+// with rune ranges (see text.Shaper.Paragraph). Used by rich text layout.
+func (p *Painter) Paragraph(s string, size, maxWidth float32) []text.Line {
+	return p.shaper.Paragraph(s, size, maxWidth)
+}
+
 // WrapText splits s into lines that fit maxWidth at the given size, using
 // Unicode line-breaking (UAX #14) over shaped widths. Explicit newlines are
 // respected.

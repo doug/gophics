@@ -280,6 +280,95 @@ func (b *Sized) AddHits(p geom.Pt, hits *[]Hit) {
 	*hits = append(*hits, Hit{b, p})
 }
 
+// Translated shifts its child by (Dx + FracX·width, Dy) without affecting
+// layout — the primitive under slide transitions.
+type Translated struct {
+	Base
+	Dx, Dy float32
+	// FracX adds a fraction of the box's own width (1 = fully offscreen
+	// right), resolved at layout time.
+	FracX float32
+	Child Box
+}
+
+func (b *Translated) offsetPt() geom.Pt {
+	return geom.Pt{X: b.Dx + b.FracX*b.Size().W, Y: b.Dy}
+}
+
+func (b *Translated) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
+	if b.Child == nil {
+		return b.Done(cs, cs.Constrain(geom.Size{}))
+	}
+	return b.Done(cs, b.Child.Layout(cs))
+}
+
+func (b *Translated) Paint(c paint.Canvas, at geom.Pt) {
+	if b.Child != nil {
+		b.Child.Paint(c, at.Add(b.offsetPt()))
+	}
+}
+
+func (b *Translated) AddHits(p geom.Pt, hits *[]Hit) {
+	if b.Child != nil {
+		b.Child.AddHits(p.Sub(b.offsetPt()), hits)
+	}
+}
+
+func (b *Translated) VisitChildren(visit func(Box, geom.Pt)) {
+	if b.Child != nil {
+		visit(b.Child, b.offsetPt())
+	}
+}
+
+// Stack layers children atop each other (first is bottom), sized to the
+// largest; the foundation for overlays and transitions.
+type Stack struct {
+	Base
+	Children []Box
+}
+
+func (b *Stack) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
+	var size geom.Size
+	for _, ch := range b.Children {
+		s := ch.Layout(cs.Loosen())
+		if s.W > size.W {
+			size.W = s.W
+		}
+		if s.H > size.H {
+			size.H = s.H
+		}
+	}
+	return b.Done(cs, cs.Constrain(size))
+}
+
+func (b *Stack) Paint(c paint.Canvas, at geom.Pt) {
+	for _, ch := range b.Children {
+		ch.Paint(c, at)
+	}
+}
+
+func (b *Stack) AddHits(p geom.Pt, hits *[]Hit) {
+	if !b.contains(p) {
+		return
+	}
+	for i := len(b.Children) - 1; i >= 0; i-- {
+		b.Children[i].AddHits(p, hits)
+	}
+	*hits = append(*hits, Hit{b, p})
+}
+
+func (b *Stack) VisitChildren(visit func(Box, geom.Pt)) {
+	for _, ch := range b.Children {
+		visit(ch, geom.Pt{})
+	}
+}
+
 // Decorated paints a rounded-rect background (and optional border) behind
 // its child, sizing to the child (or to constraints if childless).
 type Decorated struct {
