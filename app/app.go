@@ -339,9 +339,20 @@ func (c *Core) Keyboard(e shell.Event) {
 
 // Run opens a window and runs the app until the window closes.
 func Run(root widget.Widget, cfg Config) error {
-	core, err := NewCore(root, cfg)
+	h, err := NewHandler(root, cfg)
 	if err != nil {
 		return err
+	}
+	return desktopRun(h, shell.Config{Title: cfg.Title, Size: cfg.Size, Resizable: true})
+}
+
+// NewHandler builds the app's shell.Handler without attaching a shell —
+// for embedded hosts (shell/mobile bridges) that own the surface and
+// event loop.
+func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
+	core, err := NewCore(root, cfg)
+	if err != nil {
+		return nil, err
 	}
 	h := &shellHandler{core: core}
 	core.Owner.RequestFrame = func() {
@@ -349,7 +360,7 @@ func Run(root widget.Widget, cfg Config) error {
 			h.window.Invalidate()
 		}
 	}
-	return desktopRun(h, shell.Config{Title: cfg.Title, Size: cfg.Size, Resizable: true})
+	return h, nil
 }
 
 type shellHandler struct {
