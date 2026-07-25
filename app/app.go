@@ -11,6 +11,7 @@ import (
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
+	"github.com/doug/gossamer/scene"
 	"github.com/doug/gossamer/shell"
 	"github.com/doug/gossamer/widget"
 )
@@ -29,9 +30,19 @@ type Core struct {
 	Owner   *widget.Owner
 	Painter *paint.Painter
 
+	// LastDamage is the damage rect of the most recent frame; Skipped
+	// reports whether that frame's rasterization was skipped entirely
+	// (scene unchanged). Read-only stats for tests and tooling.
+	LastDamage geom.Rect
+	Skipped    bool
+
 	background paint.Color
 	root       widget.Widget
 	size       geom.Size
+
+	cur, prev     *scene.List
+	lastPaintSize geom.Size
+	lastScale     float32
 
 	hovered  []*widget.InteractiveBox
 	pressed  *widget.InteractiveBox
@@ -58,6 +69,8 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 		background: cfg.Background,
 		root:       root,
 		size:       cfg.Size,
+		cur:        &scene.List{},
+		prev:       &scene.List{},
 	}
 	c.Owner.SetRoot(root)
 	return c, nil
@@ -73,12 +86,54 @@ func (c *Core) Layout(size geom.Size) layout.Box {
 	return box
 }
 
-// Paint draws the current tree onto canvas (after Layout).
+// Paint draws the current tree onto canvas (after Layout), unconditionally.
+// The damage-aware path is RecordScene + ReplayDamaged.
 func (c *Core) Paint(canvas paint.Canvas) {
 	canvas.Clear(c.background)
 	if box := c.Owner.RootBox(); box != nil {
 		box.Paint(canvas, geom.Pt{})
 	}
+}
+
+// RecordScene records the current tree into a display list and diffs it
+// against the previous frame's. It reports whether rasterization is needed
+// and the (surface-clamped) damage rect. A size or scale change forces full
+// damage, since the painter's retained surface is reallocated.
+func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage geom.Rect) {
+	c.cur.Reset()
+	rec := c.cur.Recorder()
+	surface := geom.RectFromSize(size)
+	// Background as FillRect, not Clear: Clear ignores clips, which would
+	// wipe retained pixels outside the damage region during partial replay.
+	rec.FillRect(surface, c.background)
+	if box := c.Owner.RootBox(); box != nil {
+		box.Paint(rec, geom.Pt{})
+	}
+
+	damage, changed = c.cur.Diff(c.prev, c.Painter)
+	if size != c.lastPaintSize || scale != c.lastScale {
+		changed, damage = true, surface
+	}
+	c.lastPaintSize, c.lastScale = size, scale
+	damage = damage.Intersect(surface)
+	if changed && damage.IsEmpty() {
+		// Changed ops with degenerate bounds: repaint everything rather
+		// than nothing.
+		damage = surface
+	}
+	c.cur, c.prev = c.prev, c.cur // prev now holds the current scene
+	c.LastDamage, c.Skipped = damage, !changed
+	return changed, damage
+}
+
+// ReplayDamaged replays the current scene clipped to the damage rect,
+// culling ops that don't intersect it. Pixels outside damage are untouched
+// and remain valid from the previous frame (the painter's surface is
+// retained across frames).
+func (c *Core) ReplayDamaged(canvas paint.Canvas, damage geom.Rect) {
+	canvas.PushClip(damage)
+	c.prev.ReplayDamage(canvas, damage, c.Painter)
+	canvas.PopClip()
 }
 
 // interactivesAt returns the InteractiveBoxes under p, topmost first.
@@ -228,13 +283,18 @@ type shellHandler struct {
 
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
-	// Frame pipeline (PLAN.md §3): tick animations → build → layout → paint.
+	// Frame pipeline (PLAN.md §3): tick animations → build → layout →
+	// record → diff → replay damage → present.
 	if h.core.Owner.TickAll(dt) {
 		w.Invalidate() // animations still running: keep frames coming
 	}
 	h.core.Layout(f.Size())
-	canvas := h.core.Painter.Begin(f)
-	h.core.Paint(canvas)
+	if changed, damage := h.core.RecordScene(f.Size(), f.Scale()); changed {
+		canvas := h.core.Painter.Begin(f)
+		h.core.ReplayDamaged(canvas, damage)
+	}
+	// Present even when skipped: the painter's surface is retained, and the
+	// swapchain still needs this frame's image.
 	_ = h.core.Painter.End(f)
 }
 

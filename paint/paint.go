@@ -121,10 +121,27 @@ type Painter struct {
 	scale  float64
 	source *text.FontSource
 	faces  map[float32]text.Face
+
+	// Shaping is the dominant text cost and layout re-measures every frame,
+	// so advance widths are memoized (cleared on font change or when the
+	// cache grows past a bound).
+	widths  map[widthKey]float32
+	metrics map[float32]TextMetrics
 }
 
+type widthKey struct {
+	s    string
+	size float32
+}
+
+const widthCacheLimit = 1 << 13
+
 func NewPainter() *Painter {
-	return &Painter{faces: map[float32]text.Face{}}
+	return &Painter{
+		faces:   map[float32]text.Face{},
+		widths:  map[widthKey]float32{},
+		metrics: map[float32]TextMetrics{},
+	}
 }
 
 // LoadFont sets the font used by Canvas.Text from raw TTF/OTF data.
@@ -135,6 +152,8 @@ func (p *Painter) LoadFont(data []byte) error {
 	}
 	p.source = src
 	clear(p.faces)
+	clear(p.widths)
+	clear(p.metrics)
 	return nil
 }
 
@@ -151,28 +170,42 @@ func (p *Painter) face(size float32) text.Face {
 }
 
 // MeasureWidth returns the advance width of s at the given size, without
-// needing an active frame. Used by layout.
+// needing an active frame. Results are memoized. Used by layout.
 func (p *Painter) MeasureWidth(s string, size float32) float32 {
+	k := widthKey{s, size}
+	if w, ok := p.widths[k]; ok {
+		return w
+	}
 	f := p.face(size)
 	if f == nil {
 		return 0
 	}
-	return float32(f.Advance(s))
+	if len(p.widths) >= widthCacheLimit {
+		clear(p.widths)
+	}
+	w := float32(f.Advance(s))
+	p.widths[k] = w
+	return w
 }
 
 // Metrics returns font metrics at the given size, without needing an active
-// frame. Used by layout.
+// frame. Results are memoized. Used by layout.
 func (p *Painter) Metrics(size float32) TextMetrics {
+	if m, ok := p.metrics[size]; ok {
+		return m
+	}
 	f := p.face(size)
 	if f == nil {
 		return TextMetrics{}
 	}
-	m := f.Metrics()
-	return TextMetrics{
-		Ascent:  float32(m.Ascent),
-		Descent: float32(m.Descent),
-		LineGap: float32(m.LineGap),
+	fm := f.Metrics()
+	m := TextMetrics{
+		Ascent:  float32(fm.Ascent),
+		Descent: float32(fm.Descent),
+		LineGap: float32(fm.LineGap),
 	}
+	p.metrics[size] = m
+	return m
 }
 
 // WrapText splits s into lines that fit maxWidth at the given size.

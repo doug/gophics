@@ -27,11 +27,15 @@ func NewHeadless(root widget.Widget, cfg Config, scale float32) (*Headless, erro
 	return &Headless{Core: core, size: cfg.Size, scale: scale}, nil
 }
 
-// Render lays out and paints a frame, returning the physical-pixel image.
+// Render lays out and paints a frame through the damage-aware pipeline,
+// returning the physical-pixel image (retained across frames, so an
+// unchanged scene skips rasterization — check Core.Skipped).
 func (h *Headless) Render() image.Image {
 	h.Core.Layout(h.size)
-	c := h.Core.Painter.BeginOffscreen(h.size, h.scale)
-	h.Core.Paint(c)
+	if changed, damage := h.Core.RecordScene(h.size, h.scale); changed {
+		c := h.Core.Painter.BeginOffscreen(h.size, h.scale)
+		h.Core.ReplayDamaged(c, damage)
+	}
 	return h.Core.Painter.Image()
 }
 
