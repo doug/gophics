@@ -38,6 +38,7 @@ func (m *MemClipboard) ClipboardWrite(s string) error   { m.S = s; return nil }
 // returning the physical-pixel image (retained across frames, so an
 // unchanged scene skips rasterization — check Core.Skipped).
 func (h *Headless) Render() image.Image {
+	h.Core.drainPosted()
 	h.Core.Layout(h.size)
 	if changed, damage := h.Core.RecordScene(h.size, h.scale); changed {
 		c := h.Core.Painter.BeginOffscreen(h.size, h.scale)

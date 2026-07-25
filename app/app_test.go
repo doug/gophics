@@ -2,10 +2,12 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
+	"github.com/doug/gossamer/shell"
 	"github.com/doug/gossamer/widget"
 )
 
@@ -171,5 +173,52 @@ func TestViewportClips(t *testing.T) {
 	r, _, _, _ := img.At(25, 10).RGBA()
 	if r > 0x1000 {
 		t.Fatalf("red leaked through viewport clip: r=%x", r)
+	}
+}
+
+func TestFlingDeceleration(t *testing.T) {
+	rows := make([]widget.Widget, 40)
+	for i := range rows {
+		rows[i] = widget.Sized{W: 100, H: 30}
+	}
+	h, err := NewHeadless(widget.Scroll{Child: widget.Column(rows...)},
+		Config{Size: geom.Size{W: 100, H: 100}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	vp := findViewport(h.Core.Owner.RootBox())
+
+	// Drag upward with real timing so velocity tracking sees speed.
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 50, Y: 90}})
+	y := float32(90)
+	for i := 0; i < 5; i++ {
+		time.Sleep(8 * time.Millisecond)
+		y -= 12
+		h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 50, Y: y}})
+	}
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 50, Y: y}})
+	h.Render()
+	dragged := vp.Offset
+	if dragged <= 0 {
+		t.Fatalf("drag should scroll, offset=%v", dragged)
+	}
+
+	// Fling continues after release, decaying to rest within bounds.
+	steps := 0
+	for h.Step(0.016) {
+		h.Render()
+		if steps++; steps > 600 {
+			t.Fatal("fling never settled")
+		}
+	}
+	if vp.Offset <= dragged {
+		t.Fatalf("fling should continue scrolling: %v -> %v", dragged, vp.Offset)
+	}
+	if vp.Offset > vp.MaxOffset() {
+		t.Fatalf("fling overran the edge: %v > %v", vp.Offset, vp.MaxOffset())
+	}
+	if steps == 0 {
+		t.Fatal("no fling ticks ran")
 	}
 }

@@ -493,6 +493,30 @@ every phase de-risks the ones after it.
 - **M9 — Mobile.** Android shell first, then iOS (§6.4).
   *Exit: M7 app in an APK with touch, IME, lifecycle handling.*
 
+### 7.1 M-HN: the driving application (added 2026-07-25)
+
+The concrete goal that sequences all remaining work: **a smooth
+HackerNews client on desktop, web, and mobile** — the app class Flutter is
+usually reached for. Remaining work, in build order:
+
+1. ~~Async bridge~~ `Post()` onto the UI goroutine (§4.6, small).
+2. **Scroll physics**: velocity-tracked fling with friction decay —
+   "smooth" lives or dies here.
+3. **Lazy lists**: mount only the visible slice, measured-height cache
+   (real M6 content; a 500-comment thread must be O(visible)).
+4. **Images**: Canvas/scene op + widget.
+5. **The app itself** (desktop/web first): feed → comments, real API.
+6. **Rich text spans**: inline links, styles, selection (comments).
+7. **Navigator**: route stack, transitions, back handling.
+8. **Overlays/Stack**, theming via Provide/Of, error boundaries,
+   multi-line editing, pointer cursors.
+9. **M9 mobile shells**: Android first (SDK + emulator present on the
+   dev machine), `gomobile bind`-style embedding in a thin native shell,
+   touch + on-screen keyboard + lifecycle + safe areas; then iOS (Xcode
+   present). Exit: the HN app on a phone at 60fps+, IME-correct.
+10. A11y bridges + the M5 GPU backend ride behind, unblocked by any of
+    the above.
+
 ## 8. Testing strategy
 
 - **Golden images** everywhere, rendered headless via the software path;

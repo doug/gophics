@@ -80,6 +80,9 @@ type Canvas interface {
 	Line(a, b geom.Pt, width float32, c Color)
 	// Text draws s with its baseline-left at pos.
 	Text(s string, pos geom.Pt, size float32, c Color)
+	// Image draws img scaled into dst (bilinear). Pass the same image
+	// value across frames — scene diffing compares by identity.
+	Image(img image.Image, dst geom.Rect)
 	// PushClip clips subsequent drawing to r; balance with PopClip.
 	// Nested clips intersect.
 	PushClip(r geom.Rect)
@@ -127,6 +130,7 @@ type Painter struct {
 	// cache grows past a bound).
 	shapes  map[shapeKey]text.Line
 	metrics map[float32]TextMetrics
+	imgBufs map[image.Image]*gg.ImageBuf
 }
 
 type shapeKey struct {
@@ -141,6 +145,7 @@ func NewPainter() *Painter {
 		shaper:  text.NewShaper(),
 		shapes:  map[shapeKey]text.Line{},
 		metrics: map[float32]TextMetrics{},
+		imgBufs: map[image.Image]*gg.ImageBuf{},
 	}
 }
 
@@ -363,6 +368,24 @@ func (s ggSink) CubeTo(c1x, c1y, c2x, c2y, x, y float32) {
 	s.dc.CubicTo(float64(c1x), float64(c1y), float64(c2x), float64(c2y), float64(x), float64(y))
 }
 func (s ggSink) Close() { s.dc.ClosePath() }
+
+func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
+	if img == nil || dst.IsEmpty() {
+		return
+	}
+	buf, ok := c.p.imgBufs[img]
+	if !ok {
+		if len(c.p.imgBufs) > 256 {
+			clear(c.p.imgBufs)
+		}
+		buf = gg.ImageBufFromImage(img)
+		c.p.imgBufs[img] = buf
+	}
+	c.dc.DrawImageEx(buf, gg.DrawImageOptions{
+		X: float64(dst.Min.X), Y: float64(dst.Min.Y),
+		DstWidth: float64(dst.Dx()), DstHeight: float64(dst.Dy()),
+	})
+}
 
 func (c *ggCanvas) PushClip(r geom.Rect) {
 	c.dc.Push()

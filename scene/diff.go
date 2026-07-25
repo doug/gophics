@@ -98,6 +98,8 @@ func opBounds(o op, m Measurer) geom.Rect {
 			Max: geom.Pt{X: max32(o.a.X, o.b.X), Y: max32(o.a.Y, o.b.Y)},
 		}
 		return inflate(r, o.width)
+	case imageOp:
+		return o.dst
 	case textOp:
 		w := m.MeasureWidth(o.s, o.size)
 		mt := m.Metrics(o.size)

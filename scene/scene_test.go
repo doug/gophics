@@ -1,6 +1,7 @@
 package scene_test
 
 import (
+	"image"
 	"bytes"
 	"image/png"
 	"testing"
@@ -15,6 +16,7 @@ import (
 // drawScene paints a representative scene: fills, gradient, stroke, line,
 // text, and a nested clip.
 func drawScene(c paint.Canvas) {
+	c.Image(testImage, geom.RectXYWH(150, 10, 40, 30))
 	c.Clear(paint.RGB(0.1, 0.1, 0.12))
 	c.FillRect(geom.RectXYWH(10, 10, 100, 50), paint.RGB(0.9, 0.3, 0.3))
 	c.FillRRect(geom.RectXYWH(30, 40, 120, 60), 12, paint.RGB(0.3, 0.9, 0.5))
@@ -72,3 +74,11 @@ func TestResetKeepsWorking(t *testing.T) {
 		t.Fatalf("re-record op count = %d, want %d", list.Len(), n)
 	}
 }
+
+var testImage = func() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	for i := range img.Pix {
+		img.Pix[i] = uint8(i * 3)
+	}
+	return img
+}()

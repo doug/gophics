@@ -29,6 +29,9 @@ type Owner struct {
 	KeyboardTarget *Handler
 	// Clipboard is the platform clipboard, set by the app runner.
 	Clipboard Clipboard
+	// Post schedules fn onto the UI goroutine (set by the app runner).
+	// The only safe way to touch widget state from other goroutines.
+	Post func(fn func())
 
 	root    *element
 	dirty   []*element
@@ -74,6 +77,10 @@ func (o *Owner) requestFrame() {
 		o.RequestFrame()
 	}
 }
+
+// RequestFrameThreadSafe requests a frame from any goroutine. Shell
+// Invalidate implementations must be callable off the UI goroutine.
+func (o *Owner) RequestFrameThreadSafe() { o.requestFrame() }
 
 // SetRoot mounts (or reconciles to) the given root widget.
 func (o *Owner) SetRoot(w Widget) {

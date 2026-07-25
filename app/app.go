@@ -44,6 +44,8 @@ type Core struct {
 	lastPaintSize geom.Size
 	lastScale     float32
 
+	posted chan func()
+
 	hovered    []*widget.InteractiveBox
 	pressed    *widget.InteractiveBox
 	dragging   *widget.InteractiveBox
@@ -72,9 +74,32 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 		size:       cfg.Size,
 		cur:        &scene.List{},
 		prev:       &scene.List{},
+		posted:     make(chan func(), 128),
 	}
+	c.Owner.Post = c.Post
 	c.Owner.SetRoot(root)
 	return c, nil
+}
+
+// Post schedules fn to run on the UI goroutine before the next frame's
+// build phase (§4.6): the one safe way for background goroutines to touch
+// widget state. Safe to call from any goroutine.
+func (c *Core) Post(fn func()) {
+	c.posted <- fn
+	c.Owner.RequestFrameThreadSafe()
+}
+
+// drainPosted runs pending posted work; called on the UI goroutine at the
+// top of each frame.
+func (c *Core) drainPosted() {
+	for {
+		select {
+		case fn := <-c.posted:
+			fn()
+		default:
+			return
+		}
+	}
 }
 
 // Layout flushes pending builds and lays out the tree at the given size.
@@ -244,8 +269,11 @@ func (c *Core) Pointer(e shell.Pointer) {
 		if e.Button != 0 {
 			return
 		}
-		pressed := c.pressed
+		pressed, dragging := c.pressed, c.dragging
 		c.pressed, c.dragging = nil, nil
+		if dragging != nil && dragging.Handler.OnRelease != nil {
+			dragging.Handler.OnRelease()
+		}
 		if pressed != nil && slices.Contains(boxes(c.interactivesAt(e.Pos)), pressed) {
 			pressed.Handler.OnTap()
 		}
@@ -320,8 +348,9 @@ type shellHandler struct {
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
 	h.core.Owner.Clipboard = w
-	// Frame pipeline (PLAN.md §3): tick animations → build → layout →
-	// record → diff → replay damage → present.
+	// Frame pipeline (PLAN.md §3): posted work → tick animations → build →
+	// layout → record → diff → replay damage → present.
+	h.core.drainPosted()
 	if h.core.Owner.TickAll(dt) {
 		w.Invalidate() // animations still running: keep frames coming
 	}

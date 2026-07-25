@@ -106,6 +106,18 @@ type Clipboard interface {
 // provides one.
 func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
 
+// Post schedules fn onto the UI goroutine before the next build. Use it to
+// deliver results from background goroutines (network fetches, file IO):
+//
+//	go func() {
+//	    stories := fetch()
+//	    post(func() { s.SetState(func() { s.stories = stories }) })
+//	}()
+//
+// Capture the func from Ctx during Build/Init; it is safe to call from any
+// goroutine (unlike SetState directly).
+func (c Ctx) Post() func(fn func()) { return c.el.owner.Post }
+
 // AddTicker registers per-frame animation work (see Owner.AddTicker).
 func (c Ctx) AddTicker(t Ticker) { c.el.owner.AddTicker(t) }
 
@@ -146,6 +158,9 @@ type Handler struct {
 	// OnDrag receives pointer movement while pressed on this widget. Once a
 	// drag exceeds the tap slop, a pending tap is cancelled.
 	OnDrag func(pos, delta geom.Pt)
+	// OnRelease fires on pointer-up after this widget received the press
+	// (regardless of drag distance) — e.g. to start fling deceleration.
+	OnRelease func()
 	// OnScroll receives wheel/trackpad deltas while the pointer is over
 	// this widget.
 	OnScroll func(delta geom.Pt)

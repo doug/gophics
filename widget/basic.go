@@ -1,6 +1,10 @@
 package widget
 
 import (
+	"image"
+	"math"
+	"time"
+
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
@@ -173,10 +177,14 @@ func (f Flex) attach(b layout.Box, kids []layout.Box) {
 }
 
 // Scroll makes its child scrollable along Axis (default vertical) via
-// wheel/trackpad and drag. The offset is retained widget state.
+// wheel/trackpad and drag with fling deceleration. The offset is retained
+// widget state.
 type Scroll struct {
 	Axis  layout.Axis
 	Child Widget
+	// OnOffset reports scroll offset changes with the viewport's main-axis
+	// extent (LazyList uses this to window its children).
+	OnOffset func(offset, viewportExtent float32)
 }
 
 func (s Scroll) CreateState() State { return &scrollState{} }
@@ -185,41 +193,121 @@ type scrollState struct {
 	StateBase[Scroll]
 	offset float32
 	vp     *viewportRef
+
+	fling    flinger
+	velocity float32 // px/s along the main axis (drag direction)
+	lastDrag time.Time
 }
 
 type viewportRef struct{ box *layout.Viewport }
 
-func (s *scrollState) Init(Ctx) { s.vp = &viewportRef{} }
+func (s *scrollState) Init(ctx Ctx) {
+	s.vp = &viewportRef{}
+	s.fling.s = s
+	ctx.AddTicker(&s.fling)
+}
 
-func (s *scrollState) scrollBy(d geom.Pt) {
-	w := s.W()
-	delta := d.Y
-	if w.Axis == layout.Horizontal {
-		delta = d.X
+func (s *scrollState) Dispose() {}
+
+func (s *scrollState) mainDelta(d geom.Pt) float32 {
+	if s.W().Axis == layout.Horizontal {
+		return d.X
 	}
+	return d.Y
+}
+
+// scrollBy moves the content by delta (positive scrolls further down/right)
+// and reports whether the offset hit an edge.
+func (s *scrollState) scrollBy(delta float32) bool {
 	if delta == 0 {
-		return
+		return false
 	}
+	clamped := false
 	s.SetState(func() {
 		s.offset += delta
-		// Clamp against the last layout when available; Layout re-clamps.
 		if s.vp.box != nil {
 			if m := s.vp.box.MaxOffset(); s.offset > m {
-				s.offset = m
+				s.offset, clamped = m, true
 			}
 		}
 		if s.offset < 0 {
-			s.offset = 0
+			s.offset, clamped = 0, true
 		}
 	})
+	if cb := s.W().OnOffset; cb != nil {
+		var extent float32
+		if s.vp.box != nil {
+			sz := s.vp.box.Size()
+			if s.W().Axis == layout.Horizontal {
+				extent = sz.W
+			} else {
+				extent = sz.H
+			}
+		}
+		cb(s.offset, extent)
+	}
+	return clamped
 }
 
-func (s *scrollState) Build(Ctx) Widget {
+// flinger decelerates the scroll after release: exponential friction,
+// stopping at rest or at an edge.
+type flinger struct {
+	s      *scrollState
+	v      float32 // px/s
+	active bool
+}
+
+const (
+	flingFriction  = 3.5 // 1/s decay rate
+	flingMinStart  = 80  // px/s needed to start a fling
+	flingMinSpeed  = 20  // px/s considered at rest
+)
+
+func (f *flinger) Tick(dt float64) bool {
+	if !f.active {
+		return false
+	}
+	if f.s.scrollBy(-f.v * float32(dt)) {
+		f.active = false // edge reached
+		return false
+	}
+	f.v *= float32(math.Exp(-flingFriction * dt))
+	if f.v < flingMinSpeed && f.v > -flingMinSpeed {
+		f.active = false
+	}
+	return f.active
+}
+
+func (s *scrollState) Build(ctx Ctx) Widget {
 	w := s.W()
 	return Interactive{
 		Handler: Handler{
-			OnScroll: func(d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
-			OnDrag:   func(_, d geom.Pt) { s.scrollBy(geom.Pt{X: -d.X, Y: -d.Y}) },
+			OnScroll: func(d geom.Pt) {
+				s.fling.active = false
+				s.scrollBy(-s.mainDelta(d))
+			},
+			OnPress: func(geom.Pt) {
+				s.fling.active = false // grab stops the fling
+				s.velocity, s.lastDrag = 0, time.Now()
+			},
+			OnDrag: func(_, d geom.Pt) {
+				delta := s.mainDelta(d)
+				s.scrollBy(-delta)
+				now := time.Now()
+				dt := now.Sub(s.lastDrag).Seconds()
+				s.lastDrag = now
+				if dt > 0.001 && dt < 0.1 {
+					inst := delta / float32(dt)
+					s.velocity = s.velocity*0.7 + inst*0.3
+				}
+			},
+			OnRelease: func() {
+				if s.velocity > flingMinStart || s.velocity < -flingMinStart {
+					s.fling.v = s.velocity
+					s.fling.active = true
+					ctx.Invalidate()
+				}
+			},
 		},
 		Child: viewport{Axis: w.Axis, Offset: s.offset, Ref: s.vp, Child: w.Child},
 	}
@@ -245,6 +333,53 @@ func (v viewport) childWidgets() []Widget { return []Widget{v.Child} }
 func (v viewport) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Viewport).Child = first(kids)
 }
+
+// Image draws an image.Image scaled into its box. W/H set the logical
+// size (zero: the image's pixel size). Reuse the same decoded image value
+// across builds — identity drives both caching and damage diffing.
+type Image struct {
+	Src  image.Image
+	W, H float32
+}
+
+func (iw Image) createBox(Ctx) layout.Box { return &imageBox{} }
+func (iw Image) updateBox(_ Ctx, b layout.Box) {
+	ib := b.(*imageBox)
+	ib.src, ib.w, ib.h = iw.Src, iw.W, iw.H
+}
+func (iw Image) childWidgets() []Widget          { return nil }
+func (iw Image) attach(layout.Box, []layout.Box) {}
+
+type imageBox struct {
+	layout.Base
+	src  image.Image
+	w, h float32
+}
+
+func (b *imageBox) Layout(cs layout.Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
+	w, h := b.w, b.h
+	if (w == 0 || h == 0) && b.src != nil {
+		bounds := b.src.Bounds()
+		if w == 0 {
+			w = float32(bounds.Dx())
+		}
+		if h == 0 {
+			h = float32(bounds.Dy())
+		}
+	}
+	return b.Done(cs, cs.Constrain(geom.Size{W: w, H: h}))
+}
+
+func (b *imageBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.src != nil {
+		c.Image(b.src, geom.Rect{Min: at, Max: at.Add(b.Size().Pt())})
+	}
+}
+
+func (b *imageBox) AddHits(p geom.Pt, hits *[]layout.Hit) {}
 
 // Semantics overrides or supplies the semantic description of its subtree
 // (label decorative graphics, hide ornaments, group controls). Zero-value
