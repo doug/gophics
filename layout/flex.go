@@ -102,6 +102,9 @@ func (f *Flex) pt(main, cross float32) geom.Pt {
 }
 
 func (f *Flex) Layout(cs Constraints) geom.Size {
+	if sz, ok := f.Skip(cs); ok {
+		return sz
+	}
 	maxMain := f.main(cs.Max)
 	maxCross := f.cross(cs.Max)
 	boundedMain := maxMain != Inf
@@ -179,7 +182,7 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 		f.offsets = append(f.offsets, f.pt(pos, crossPos))
 		pos += f.main(s) + gap
 	}
-	return f.setSize(own)
+	return f.Done(cs, own)
 }
 
 func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {

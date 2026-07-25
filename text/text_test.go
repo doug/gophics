@@ -177,3 +177,30 @@ func (c *countSink) LineTo(x, y float32)                          { c.lines++ }
 func (c *countSink) QuadTo(cx, cy, x, y float32)                  { c.curves++ }
 func (c *countSink) CubeTo(a, b, d, e, x, y float32)              { c.curves++ }
 func (c *countSink) Close()                                       { c.closes++ }
+
+func TestSystemFontFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("system font scan")
+	}
+	s := NewShaper(regular(t))
+	if err := s.UseSystemFonts(t.TempDir()); err != nil {
+		t.Skipf("system fonts unavailable: %v", err)
+	}
+	// CJK is not in Go Regular; it must resolve through the system map.
+	l := s.Line("你好 hello", 16)
+	if len(l.Glyphs) == 0 {
+		t.Fatal("no glyphs")
+	}
+	sawSystem := false
+	for _, g := range l.Glyphs {
+		if g.Font != s.Primary() && g.Font != nil {
+			sawSystem = true
+			if g.GID == 0 {
+				t.Fatal("system glyph is .notdef")
+			}
+		}
+	}
+	if !sawSystem {
+		t.Fatal("CJK runes did not use a system font")
+	}
+}

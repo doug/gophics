@@ -14,7 +14,7 @@ type leaf struct {
 }
 
 func (l *leaf) Layout(cs Constraints) geom.Size {
-	return l.setSize(cs.Constrain(geom.Size{W: l.w, H: l.h}))
+	return l.Done(cs, cs.Constrain(geom.Size{W: l.w, H: l.h}))
 }
 func (l *leaf) Paint(c paint.Canvas, at geom.Pt) {}
 func (l *leaf) AddHits(p geom.Pt, hits *[]Hit) {
@@ -149,5 +149,52 @@ func TestHitOrderTopmostFirst(t *testing.T) {
 	hits := HitTest(dec, geom.Pt{X: 5, Y: 5})
 	if len(hits) != 2 || hits[0].Box != Box(inner) || hits[1].Box != Box(dec) {
 		t.Fatalf("hit order = %v, want inner then decorated", hits)
+	}
+}
+
+// countingLeaf counts real (non-skipped) layouts.
+type countingLeaf struct {
+	Base
+	w, h    float32
+	layouts int
+}
+
+func (l *countingLeaf) Layout(cs Constraints) geom.Size {
+	if sz, ok := l.Skip(cs); ok {
+		return sz
+	}
+	l.layouts++
+	return l.Done(cs, cs.Constrain(geom.Size{W: l.w, H: l.h}))
+}
+func (l *countingLeaf) Paint(c paint.Canvas, at geom.Pt) {}
+func (l *countingLeaf) AddHits(p geom.Pt, hits *[]Hit)   {}
+
+func TestLayoutSkipCache(t *testing.T) {
+	a := &countingLeaf{w: 10, h: 10}
+	b := &countingLeaf{w: 20, h: 20}
+	col := Column(a, b)
+	cs := Tight(sz(100, 100))
+
+	col.Layout(cs)
+	col.Layout(cs) // clean + same constraints: full skip
+	if a.layouts != 1 || b.layouts != 1 {
+		t.Fatalf("layout counts = %d/%d, want 1/1 (skipped)", a.layouts, b.layouts)
+	}
+
+	// Dirtying one child re-lays it; the flex re-runs, the sibling skips.
+	a.MarkLayoutDirty()
+	col.MarkLayoutDirty()
+	col.Layout(cs)
+	if a.layouts != 2 {
+		t.Fatalf("dirty child not relaid: %d", a.layouts)
+	}
+	if b.layouts != 1 {
+		t.Fatalf("clean sibling should skip, got %d layouts", b.layouts)
+	}
+
+	// New constraints invalidate everything (b was at 1 after skipping).
+	col.Layout(Tight(sz(200, 200)))
+	if a.layouts != 3 || b.layouts != 2 {
+		t.Fatalf("constraint change must relayout: %d/%d, want 3/2", a.layouts, b.layouts)
 	}
 }

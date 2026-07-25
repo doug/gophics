@@ -370,3 +370,13 @@ func (c *ggCanvas) PushClip(r geom.Rect) {
 }
 
 func (c *ggCanvas) PopClip() { c.dc.Pop() }
+
+// LoadSystemFonts extends the fallback chain with the platform's installed
+// fonts (see text.Shaper.UseSystemFonts). Call after LoadFont.
+func (p *Painter) LoadSystemFonts() error {
+	if err := p.shaper.UseSystemFonts(""); err != nil {
+		return err
+	}
+	clear(p.shapes)
+	return nil
+}

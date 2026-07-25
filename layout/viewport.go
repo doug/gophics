@@ -26,6 +26,9 @@ func (v *Viewport) MaxOffset() float32 {
 }
 
 func (v *Viewport) Layout(cs Constraints) geom.Size {
+	if sz, ok := v.Skip(cs); ok {
+		return sz
+	}
 	inner := cs.Loosen()
 	if v.Axis == Horizontal {
 		inner.Max.W = Inf
@@ -38,7 +41,7 @@ func (v *Viewport) Layout(cs Constraints) geom.Size {
 		v.content = geom.Size{}
 	}
 	size := cs.Constrain(v.content)
-	v.setSize(size)
+	v.Done(cs, size)
 	v.Offset = clamp(v.Offset, 0, v.MaxOffset())
 	return size
 }

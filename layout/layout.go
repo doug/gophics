@@ -103,13 +103,44 @@ func HitTest(b Box, p geom.Pt) []Hit {
 	return hits
 }
 
-// Base provides Size storage for Box implementations.
+// Base provides size storage and the layout skip-cache for Box
+// implementations: a clean box relayed the same constraints returns its
+// cached size without recursing (the lightweight version of Flutter's
+// relayout boundaries). Configuration changes must call MarkLayoutDirty —
+// the widget layer does this for every updated box and its ancestors.
 type Base struct {
-	size geom.Size
+	size   geom.Size
+	lastCS Constraints
+	clean  bool
 }
 
-func (b *Base) Size() geom.Size            { return b.size }
-func (b *Base) setSize(s geom.Size) geom.Size { b.size = s; return s }
+func (b *Base) Size() geom.Size { return b.size }
+
+// Skip reports whether layout can be skipped for cs, returning the cached
+// size. Boxes call it at the top of Layout.
+func (b *Base) Skip(cs Constraints) (geom.Size, bool) {
+	if b.clean && cs == b.lastCS {
+		return b.size, true
+	}
+	return geom.Size{}, false
+}
+
+// Done records the layout result for cs and marks the box clean.
+func (b *Base) Done(cs Constraints, s geom.Size) geom.Size {
+	b.lastCS, b.size, b.clean = cs, s, true
+	return s
+}
+
+// MarkLayoutDirty invalidates the skip-cache.
+func (b *Base) MarkLayoutDirty() { b.clean = false }
+
+// MarkDirty invalidates b's layout cache if it has one. Boxes without a
+// cache always re-lay out, so this is safely a no-op for them.
+func MarkDirty(b Box) {
+	if d, ok := b.(interface{ MarkLayoutDirty() }); ok {
+		d.MarkLayoutDirty()
+	}
+}
 
 func (b *Base) contains(p geom.Pt) bool {
 	return p.X >= 0 && p.Y >= 0 && p.X < b.size.W && p.Y < b.size.H
@@ -123,11 +154,14 @@ type Padded struct {
 }
 
 func (b *Padded) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
 	if b.Child == nil {
-		return b.setSize(cs.Constrain(geom.Size{W: b.Insets.Horizontal(), H: b.Insets.Vertical()}))
+		return b.Done(cs, cs.Constrain(geom.Size{W: b.Insets.Horizontal(), H: b.Insets.Vertical()}))
 	}
 	child := b.Child.Layout(cs.Deflate(b.Insets))
-	return b.setSize(cs.Constrain(geom.Size{
+	return b.Done(cs, cs.Constrain(geom.Size{
 		W: child.W + b.Insets.Horizontal(),
 		H: child.H + b.Insets.Vertical(),
 	}))
@@ -165,6 +199,9 @@ type Aligned struct {
 func Center(child Box) *Aligned { return &Aligned{AlignX: 0.5, AlignY: 0.5, Child: child} }
 
 func (b *Aligned) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
 	var child geom.Size
 	if b.Child != nil {
 		child = b.Child.Layout(cs.Loosen())
@@ -181,7 +218,7 @@ func (b *Aligned) Layout(cs Constraints) geom.Size {
 		X: (size.W - child.W) * b.AlignX,
 		Y: (size.H - child.H) * b.AlignY,
 	}
-	return b.setSize(size)
+	return b.Done(cs, size)
 }
 
 func (b *Aligned) Paint(c paint.Canvas, at geom.Pt) {
@@ -209,6 +246,9 @@ type Sized struct {
 }
 
 func (b *Sized) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
 	inner := cs
 	if b.W != 0 {
 		w := clamp(b.W, cs.Min.W, cs.Max.W)
@@ -219,9 +259,9 @@ func (b *Sized) Layout(cs Constraints) geom.Size {
 		inner.Min.H, inner.Max.H = h, h
 	}
 	if b.Child != nil {
-		return b.setSize(b.Child.Layout(inner))
+		return b.Done(cs, b.Child.Layout(inner))
 	}
-	return b.setSize(inner.Constrain(geom.Size{}))
+	return b.Done(cs, inner.Constrain(geom.Size{}))
 }
 
 func (b *Sized) Paint(c paint.Canvas, at geom.Pt) {
@@ -252,10 +292,13 @@ type Decorated struct {
 }
 
 func (b *Decorated) Layout(cs Constraints) geom.Size {
-	if b.Child != nil {
-		return b.setSize(b.Child.Layout(cs))
+	if sz, ok := b.Skip(cs); ok {
+		return sz
 	}
-	return b.setSize(cs.Constrain(geom.Size{}))
+	if b.Child != nil {
+		return b.Done(cs, b.Child.Layout(cs))
+	}
+	return b.Done(cs, cs.Constrain(geom.Size{}))
 }
 
 func (b *Decorated) Paint(c paint.Canvas, at geom.Pt) {

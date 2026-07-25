@@ -189,6 +189,7 @@ func (o *Owner) mount(parent *element, w Widget) *element {
 }
 
 func (el *element) mountRenderChildren(w renderWidget) {
+	el.markBoxChainDirty()
 	widgets := w.childWidgets()
 	el.kids = el.kids[:0]
 	for _, cw := range widgets {
@@ -220,8 +221,20 @@ func (el *element) update(w Widget) {
 	case renderWidget:
 		w.updateBox(el.ctx(), el.box)
 		el.reconcileRenderChildren(w)
+		// Updated configuration may change layout: invalidate this box and
+		// every ancestor box's skip-cache. Untouched sibling subtrees stay
+		// clean and skip their layout entirely.
+		el.markBoxChainDirty()
 	}
 	el.dirty = false
+}
+
+func (el *element) markBoxChainDirty() {
+	for e := el; e != nil; e = e.parent {
+		if e.box != nil {
+			layout.MarkDirty(e.box)
+		}
+	}
 }
 
 // rebuild re-runs Build for a dirty composite element.

@@ -29,6 +29,9 @@ type TextBox struct {
 }
 
 func (b *TextBox) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
 	m := b.Painter.Metrics(b.TextSize)
 	b.baseline = m.Ascent
 	b.lineH = m.LineHeight()
@@ -46,7 +49,7 @@ func (b *TextBox) Layout(cs Constraints) geom.Size {
 		}
 	}
 	h := m.Ascent + m.Descent + float32(len(b.lines)-1)*b.lineH
-	return b.setSize(cs.Constrain(geom.Size{W: w, H: h}))
+	return b.Done(cs, cs.Constrain(geom.Size{W: w, H: h}))
 }
 
 func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {

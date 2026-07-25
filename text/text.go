@@ -12,10 +12,13 @@ package text
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/go-text/typesetting/di"
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
+	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 )
@@ -126,13 +129,16 @@ type Line struct {
 	Start, End int
 }
 
-// Shaper shapes text through a font fallback chain. It caches segmentation
-// and wrapping state; it is not safe for concurrent use (UI goroutine only).
+// Shaper shapes text through a font fallback chain, optionally extended by
+// the system's fonts (UseSystemFonts). It caches segmentation and wrapping
+// state; it is not safe for concurrent use (UI goroutine only).
 type Shaper struct {
-	fonts []*Font
-	hb    shaping.HarfbuzzShaper
-	seg   shaping.Segmenter
-	wrap  shaping.LineWrapper
+	fonts  []*Font
+	system *fontscan.FontMap
+	byFace map[*font.Face]*Font
+	hb     shaping.HarfbuzzShaper
+	seg    shaping.Segmenter
+	wrap   shaping.LineWrapper
 }
 
 // NewShaper returns a shaper over the given fallback chain; fonts[0] is the
@@ -144,6 +150,27 @@ func NewShaper(fonts ...*Font) *Shaper {
 // SetFonts replaces the fallback chain.
 func (s *Shaper) SetFonts(fonts ...*Font) { s.fonts = fonts }
 
+// UseSystemFonts extends the fallback chain with the platform's installed
+// fonts (via fontscan): runes not covered by the explicit chain — CJK,
+// emoji, symbols — resolve to a system font. cacheDir holds fontscan's
+// index ("" uses the OS user cache dir). Scanning is slow the first time
+// and cached afterward.
+func (s *Shaper) UseSystemFonts(cacheDir string) error {
+	if cacheDir == "" {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			return fmt.Errorf("text: no cache dir: %w", err)
+		}
+		cacheDir = filepath.Join(base, "gossamer", "fontscan")
+	}
+	fm := fontscan.NewFontMap(nil)
+	if err := fm.UseSystemFonts(cacheDir); err != nil {
+		return fmt.Errorf("text: system fonts: %w", err)
+	}
+	s.system = fm
+	return nil
+}
+
 // Primary returns the primary font, or nil.
 func (s *Shaper) Primary() *Font {
 	if len(s.fonts) == 0 {
@@ -152,12 +179,17 @@ func (s *Shaper) Primary() *Font {
 	return s.fonts[0]
 }
 
-// ResolveFace implements shaping.Fontmap: first font in the chain with a
-// glyph for r, else the primary.
+// ResolveFace implements shaping.Fontmap: first explicit font with a glyph
+// for r, then the system font map (if enabled), else the primary.
 func (s *Shaper) ResolveFace(r rune) *font.Face {
 	for _, f := range s.fonts {
 		if f.HasGlyph(r) {
 			return f.face
+		}
+	}
+	if s.system != nil {
+		if face := s.system.ResolveFace(r); face != nil {
+			return face
 		}
 	}
 	return s.fonts[0].face
@@ -286,6 +318,19 @@ func (s *Shaper) fontFor(face *font.Face) *Font {
 		if f.face == face {
 			return f
 		}
+	}
+	// System-resolved faces get lazily created wrappers (stable per face,
+	// so glyph rendering and caching work unchanged).
+	if f, ok := s.byFace[face]; ok {
+		return f
+	}
+	if s.system != nil {
+		if s.byFace == nil {
+			s.byFace = map[*font.Face]*Font{}
+		}
+		f := &Font{face: face}
+		s.byFace[face] = f
+		return f
 	}
 	return s.Primary()
 }

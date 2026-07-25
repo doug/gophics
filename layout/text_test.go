@@ -37,7 +37,10 @@ func TestTextWrapsWithinConstraint(t *testing.T) {
 	}
 
 	// Unwrapped ignores the width constraint's effect on line count.
+	// Direct config mutation requires MarkDirty (the widget layer does this
+	// automatically on every updateBox).
 	tb.Wrap = false
+	tb.MarkLayoutDirty()
 	single := tb.Layout(Loose(geom.Size{W: 120, H: 1000}))
 	if single.H != wide.H {
 		t.Fatal("non-wrap must stay single-line")
