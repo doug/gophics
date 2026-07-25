@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-webgpu/goffi v0.6.0 // indirect
 	github.com/go-webgpu/webgpu v0.5.3 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect

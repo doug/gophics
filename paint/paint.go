@@ -11,13 +11,12 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"strings"
 
 	"github.com/gogpu/gg"
-	"github.com/gogpu/gg/text"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"
+	"github.com/doug/gossamer/text"
 )
 
 // Color is a straight-alpha RGBA color with float32 components in [0, 1].
@@ -116,123 +115,115 @@ func (m TextMetrics) LineHeight() float32 { return m.Ascent + m.Descent + m.Line
 // Painter owns the drawing context and font resources across frames.
 // It is not safe for concurrent use; call it only from the UI goroutine.
 type Painter struct {
-	dc     *gg.Context
-	w, h   int
-	scale  float64
-	source *text.FontSource
-	faces  map[float32]text.Face
+	dc    *gg.Context
+	w, h  int
+	scale float64
+
+	shaper *text.Shaper
+	fonts  []*text.Font
 
 	// Shaping is the dominant text cost and layout re-measures every frame,
-	// so advance widths are memoized (cleared on font change or when the
+	// so shaped lines are memoized (cleared on font change or when the
 	// cache grows past a bound).
-	widths  map[widthKey]float32
+	shapes  map[shapeKey]text.Line
 	metrics map[float32]TextMetrics
 }
 
-type widthKey struct {
+type shapeKey struct {
 	s    string
 	size float32
 }
 
-const widthCacheLimit = 1 << 13
+const shapeCacheLimit = 1 << 13
 
 func NewPainter() *Painter {
 	return &Painter{
-		faces:   map[float32]text.Face{},
-		widths:  map[widthKey]float32{},
+		shaper:  text.NewShaper(),
+		shapes:  map[shapeKey]text.Line{},
 		metrics: map[float32]TextMetrics{},
 	}
 }
 
-// LoadFont sets the font used by Canvas.Text from raw TTF/OTF data.
+// LoadFont sets the primary font from raw TTF/OTF data, resetting any
+// fallback chain.
 func (p *Painter) LoadFont(data []byte) error {
-	src, err := text.NewFontSource(data)
+	f, err := text.Parse(data)
 	if err != nil {
 		return err
 	}
-	p.source = src
-	clear(p.faces)
-	clear(p.widths)
+	p.fonts = []*text.Font{f}
+	p.shaper.SetFonts(p.fonts...)
+	clear(p.shapes)
 	clear(p.metrics)
 	return nil
 }
 
-func (p *Painter) face(size float32) text.Face {
-	if p.source == nil {
-		return nil
+// LoadFallbackFont appends a fallback font (per-rune font selection during
+// shaping — e.g. a CJK, Arabic, or symbol font behind the primary).
+func (p *Painter) LoadFallbackFont(data []byte) error {
+	f, err := text.Parse(data)
+	if err != nil {
+		return err
 	}
-	f, ok := p.faces[size]
-	if !ok {
-		f = p.source.Face(float64(size))
-		p.faces[size] = f
-	}
-	return f
+	p.fonts = append(p.fonts, f)
+	p.shaper.SetFonts(p.fonts...)
+	clear(p.shapes)
+	return nil
 }
 
-// MeasureWidth returns the advance width of s at the given size, without
-// needing an active frame. Results are memoized. Used by layout.
+// Shape returns the shaped single line for s at size (memoized): full
+// shaping via the text package — bidi, fallback, positional forms.
+func (p *Painter) Shape(s string, size float32) text.Line {
+	k := shapeKey{s, size}
+	if l, ok := p.shapes[k]; ok {
+		return l
+	}
+	if len(p.shapes) >= shapeCacheLimit {
+		clear(p.shapes)
+	}
+	l := p.shaper.Line(s, size)
+	p.shapes[k] = l
+	return l
+}
+
+// MeasureWidth returns the shaped advance width of s at the given size,
+// without needing an active frame. Used by layout.
 func (p *Painter) MeasureWidth(s string, size float32) float32 {
-	k := widthKey{s, size}
-	if w, ok := p.widths[k]; ok {
-		return w
-	}
-	f := p.face(size)
-	if f == nil {
-		return 0
-	}
-	if len(p.widths) >= widthCacheLimit {
-		clear(p.widths)
-	}
-	w := float32(f.Advance(s))
-	p.widths[k] = w
-	return w
+	return p.Shape(s, size).Width
 }
 
 // Metrics returns font metrics at the given size, without needing an active
-// frame. Results are memoized. Used by layout.
+// frame. Used by layout.
 func (p *Painter) Metrics(size float32) TextMetrics {
 	if m, ok := p.metrics[size]; ok {
 		return m
 	}
-	f := p.face(size)
+	f := p.shaper.Primary()
 	if f == nil {
 		return TextMetrics{}
 	}
-	fm := f.Metrics()
-	m := TextMetrics{
-		Ascent:  float32(fm.Ascent),
-		Descent: float32(fm.Descent),
-		LineGap: float32(fm.LineGap),
-	}
+	a, d, g := f.Extents(size)
+	m := TextMetrics{Ascent: a, Descent: d, LineGap: g}
 	p.metrics[size] = m
 	return m
 }
 
-// WrapText splits s into lines that fit maxWidth at the given size.
-// Explicit newlines are respected; lines break greedily at spaces, with
-// over-long words placed on their own line (no mid-word breaking yet —
-// grapheme-aware breaking arrives with the text package, PLAN.md §6.1).
+// WrapText splits s into lines that fit maxWidth at the given size, using
+// Unicode line-breaking (UAX #14) over shaped widths. Explicit newlines are
+// respected.
 func (p *Painter) WrapText(s string, size, maxWidth float32) []string {
-	var lines []string
-	for para := range strings.SplitSeq(s, "\n") {
-		words := strings.Fields(para)
-		if len(words) == 0 {
-			lines = append(lines, "")
-			continue
+	lines := p.shaper.Paragraph(s, size, maxWidth)
+	runes := []rune(s)
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		start, end := l.Start, l.End
+		// Trim the trailing break rune (space/newline) kept by the wrapper.
+		for end > start && (runes[end-1] == ' ' || runes[end-1] == '\n') {
+			end--
 		}
-		cur := words[0]
-		for _, w := range words[1:] {
-			candidate := cur + " " + w
-			if p.MeasureWidth(candidate, size) <= maxWidth {
-				cur = candidate
-			} else {
-				lines = append(lines, cur)
-				cur = w
-			}
-		}
-		lines = append(lines, cur)
+		out[i] = string(runes[start:end])
 	}
-	return lines
+	return out
 }
 
 // Begin starts drawing a frame, (re)allocating the context if the surface
@@ -342,15 +333,36 @@ func (c *ggCanvas) Line(a, b geom.Pt, width float32, col Color) {
 	c.dc.Stroke()
 }
 
+// Text shapes s (bidi, fallback, positional forms — see the text package)
+// and fills the glyph outlines as one path: correct scripts and identical
+// metrics between measurement and rendering, at gg's analytic AA quality.
+// (A glyph mask cache is a known follow-up if profiles demand it.)
 func (c *ggCanvas) Text(s string, pos geom.Pt, size float32, col Color) {
-	face := c.p.face(size)
-	if face == nil {
+	line := c.p.Shape(s, size)
+	if len(line.Glyphs) == 0 {
 		return
 	}
-	c.dc.SetFont(face)
 	c.dc.SetColor(col.nrgba())
-	c.dc.DrawString(s, float64(pos.X), float64(pos.Y))
+	c.dc.ClearPath()
+	sink := ggSink{c.dc}
+	for _, g := range line.Glyphs {
+		g.Font.AppendGlyphPath(sink, g.GID, size, pos.X+g.X, pos.Y+g.Y)
+	}
+	c.dc.Fill()
 }
+
+// ggSink adapts a gg path builder to text.PathSink.
+type ggSink struct{ dc *gg.Context }
+
+func (s ggSink) MoveTo(x, y float32) { s.dc.MoveTo(float64(x), float64(y)) }
+func (s ggSink) LineTo(x, y float32) { s.dc.LineTo(float64(x), float64(y)) }
+func (s ggSink) QuadTo(cx, cy, x, y float32) {
+	s.dc.QuadraticTo(float64(cx), float64(cy), float64(x), float64(y))
+}
+func (s ggSink) CubeTo(c1x, c1y, c2x, c2y, x, y float32) {
+	s.dc.CubicTo(float64(c1x), float64(c1y), float64(c2x), float64(c2y), float64(x), float64(y))
+}
+func (s ggSink) Close() { s.dc.ClosePath() }
 
 func (c *ggCanvas) PushClip(r geom.Rect) {
 	c.dc.Push()

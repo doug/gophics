@@ -30,7 +30,10 @@ Packages:
 - `paint` — Canvas interface; gg CPU rasterizer backend, GPU-composited on
   desktop, pixel-presented on web; gradients, drop shadows, offscreen
   rendering for golden tests
-- `scene` — recorded display lists, replayable onto any Canvas
+- `text` — shaping, bidi, font fallback, UAX #14 line breaking
+  (go-text/typesetting), glyph outline extraction
+- `scene` — recorded display lists, diffed for damage, replayable onto
+  any Canvas
 - `anim` — curves and controllers driven by frame tickers
 - `layout` — the box protocol (constraints down, sizes up) + core boxes:
   flex, padding, align, sized, decorated, text

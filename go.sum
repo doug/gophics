@@ -1,3 +1,5 @@
+github.com/go-text/typesetting v0.3.4 h1:YYurUOtEb9kGSOz4uE3k4OpBGsp1dDL8+fjCeaFamAU=
+github.com/go-text/typesetting v0.3.4/go.mod h1:4qZCQphq4KSgGTAeI0uMEkVbROgfah8BuyF5LRYr7XY=
 github.com/go-webgpu/goffi v0.6.0 h1:dTBwfzj8CZUW0w0fgeMaYGBrIktK7nzfjMsnSpkSt4Y=
 github.com/go-webgpu/goffi v0.6.0/go.mod h1:wfoxNsJkU+5RFbV1kNN1kunhc1lFHuJKK3zpgx08/uM=
 github.com/go-webgpu/webgpu v0.5.3 h1:EFinkgY9eSNBsougS8Z+m5v4Ue8k2B1w9G77Dvh1wTQ=
