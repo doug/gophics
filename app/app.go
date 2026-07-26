@@ -70,6 +70,8 @@ type Core struct {
 	longFired  bool
 	pendingTap *widget.InteractiveBox // deferred single-tap awaiting a possible double
 	tapElapsed float64
+
+	a11y *a11yTree
 }
 
 // doubleTapWindow is how long a deferred single-tap waits for a second tap.
@@ -511,6 +513,14 @@ type shellHandler struct {
 // input — embedded hosts use it to show/hide the on-screen keyboard.
 func (h *shellHandler) TextInputActive() bool {
 	return h.core.Owner.KeyboardTarget != nil
+}
+
+// Accessibility bridge methods (embedded hosts type-assert the handler).
+
+func (h *shellHandler) A11yTree(scale float32) []A11yNode { return h.core.A11yTree(scale) }
+func (h *shellHandler) A11yActivate(id int)               { h.core.A11yActivate(id) }
+func (h *shellHandler) A11yHitTest(x, y int, scale float32) int {
+	return h.core.A11yHitTest(x, y, scale)
 }
 
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {

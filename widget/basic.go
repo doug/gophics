@@ -657,13 +657,13 @@ func (b *InteractiveBox) Paint(c paint.Canvas, at geom.Pt) {
 }
 
 // Semantics derives a role from the handlers: keyboard handlers make a
-// text field, tap handlers a button.
+// text field, tap handlers a button whose activation runs OnTap.
 func (b *InteractiveBox) Semantics() layout.SemInfo {
 	switch {
 	case b.Handler.OnText != nil || b.Handler.OnKey != nil:
 		return layout.SemInfo{Role: layout.RoleTextField}
 	case b.Handler.OnTap != nil:
-		return layout.SemInfo{Role: layout.RoleButton}
+		return layout.SemInfo{Role: layout.RoleButton, OnActivate: b.Handler.OnTap}
 	}
 	return layout.SemInfo{}
 }

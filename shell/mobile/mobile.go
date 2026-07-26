@@ -16,6 +16,7 @@ import (
 	"image"
 	"sync/atomic"
 
+	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"
 )
@@ -39,6 +40,7 @@ type Bridge struct {
 	frame  *image.RGBA
 	dirty  atomic.Bool
 	dark   bool
+	a11y   []app.A11yNode
 	opened []string // OpenURL requests for the host to perform
 	clip   string
 }
@@ -142,6 +144,138 @@ func (b *Bridge) TextInputActive() bool {
 	return false
 }
 
+// Accessibility: the host (Android AccessibilityNodeProvider, iOS
+// UIAccessibility) refreshes the flat node tree, then reads nodes by index
+// and activates by ID. Rects are physical pixels.
+
+type a11yProvider interface {
+	A11yTree(scale float32) []app.A11yNode
+	A11yActivate(id int)
+	A11yHitTest(x, y int, scale float32) int
+}
+
+// A11yRefresh rebuilds the accessibility node tree and returns the node
+// count (0 if the handler provides no semantics).
+func (b *Bridge) A11yRefresh() int {
+	if p, ok := b.handler.(a11yProvider); ok {
+		b.a11y = p.A11yTree(b.scale)
+	} else {
+		b.a11y = nil
+	}
+	return len(b.a11y)
+}
+
+func (b *Bridge) a11yAt(i int) *app.A11yNode {
+	if i < 0 || i >= len(b.a11y) {
+		return nil
+	}
+	return &b.a11y[i]
+}
+
+// Flat per-index accessors (gomobile-friendly).
+func (b *Bridge) A11yID(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return -1
+	}
+	return n.ID
+}
+func (b *Bridge) A11yParent(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return -1
+	}
+	return n.ParentID
+}
+func (b *Bridge) A11yRole(i int) string {
+	n := b.a11yAt(i)
+	if n == nil {
+		return ""
+	}
+	return n.Role
+}
+func (b *Bridge) A11yLabel(i int) string {
+	n := b.a11yAt(i)
+	if n == nil {
+		return ""
+	}
+	return n.Label
+}
+func (b *Bridge) A11yValue(i int) string {
+	n := b.a11yAt(i)
+	if n == nil {
+		return ""
+	}
+	return n.Value
+}
+func (b *Bridge) A11yHint(i int) string {
+	n := b.a11yAt(i)
+	if n == nil {
+		return ""
+	}
+	return n.Hint
+}
+func (b *Bridge) A11yX(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return 0
+	}
+	return n.X
+}
+func (b *Bridge) A11yY(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return 0
+	}
+	return n.Y
+}
+func (b *Bridge) A11yW(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return 0
+	}
+	return n.W
+}
+func (b *Bridge) A11yH(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return 0
+	}
+	return n.H
+}
+func (b *Bridge) A11yTappable(i int) bool { n := b.a11yAt(i); return n != nil && n.Tappable }
+func (b *Bridge) A11yChildCount(i int) int {
+	n := b.a11yAt(i)
+	if n == nil {
+		return 0
+	}
+	return len(n.Children)
+}
+func (b *Bridge) A11yChild(i, j int) int {
+	n := b.a11yAt(i)
+	if n == nil || j < 0 || j >= len(n.Children) {
+		return -1
+	}
+	return n.Children[j]
+}
+
+// A11yActivate fires the node's action (screen-reader activate).
+func (b *Bridge) A11yActivate(id int) {
+	if p, ok := b.handler.(a11yProvider); ok {
+		p.A11yActivate(id)
+		b.dirty.Store(true)
+	}
+}
+
+// A11yHitTest returns the node ID at a physical-pixel point (explore by
+// touch), or -1.
+func (b *Bridge) A11yHitTest(xPx, yPx int) int {
+	if p, ok := b.handler.(a11yProvider); ok {
+		return p.A11yHitTest(xPx, yPx, b.scale)
+	}
+	return -1
+}
+
 // Key delivers a key press by shell.KeyCode value (host maps its codes).
 func (b *Bridge) Key(code int, pressed bool) {
 	kind := shell.KeyRelease
@@ -184,10 +318,10 @@ func (b *Bridge) ClipboardText() string { return b.clip }
 
 // shell.Window implementation.
 
-func (b *Bridge) Invalidate()          { b.dirty.Store(true) }
-func (b *Bridge) SetTitle(string)      {}
-func (b *Bridge) Close()               {}
-func (b *Bridge) DarkMode() bool       { return b.dark }
+func (b *Bridge) Invalidate()     { b.dirty.Store(true) }
+func (b *Bridge) SetTitle(string) {}
+func (b *Bridge) Close()          {}
+func (b *Bridge) DarkMode() bool  { return b.dark }
 func (b *Bridge) OpenURL(u string) error {
 	b.opened = append(b.opened, u)
 	return nil

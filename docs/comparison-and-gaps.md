@@ -104,15 +104,29 @@ Done (cont.):
     (frame timing). Still to do: a visual inspector UI on the dump.
 12. ~~Group opacity~~ (`Opacity` + `AnimateFloat` fades), ~~double-tap~~
     (deferred single-tap disambiguation).
+9. ~~**Accessibility bridge**~~ — the semantics tree now flattens to a flat,
+    ID-addressed `app.A11yNode` tree (`Core.A11yTree`/`A11yActivate`/
+    `A11yHitTest`), exposed through `shell/mobile.Bridge` and consumed by
+    Android's `AccessibilityNodeProvider` (virtual view hierarchy). Verified
+    on device: TalkBack sees every HN story row as a clickable node with the
+    right content description and bounds; `ACTION_CLICK` fires the widget's
+    `OnActivate`. `SemInfo` carries `OnActivate`/`Checked`/`Disabled`/
+    `Selected`/`Hint`. iOS `UIAccessibility` host landed too: `GossamerView`
+    exposes `accessibilityElements` as `GossamerA11yElement`s (label/value/
+    hint, screen-converted frames, `.button`/`.staticText` traits) built from
+    the same `HnmobileA11y*` accessors, with `accessibilityActivate()` wired
+    to `A11yActivate`. Builds and runs on the iOS simulator; full on-device
+    VoiceOver inspection (the iOS parallel to Android's `uiautomator dump`)
+    is the one remaining validation step.
 
 Remaining:
 
-9. **Accessibility bridge**: wire the existing semantics tree to
-   VoiceOver/TalkBack/AccessKit. The biggest reach gap; platform-deep.
 13. **Follow-ups**: swipe-to-dismiss, hero transitions, selectable static
-    text, reverse/bottom-anchored lists, pull-to-refresh, inspector UI.
+    text, reverse/bottom-anchored lists, pull-to-refresh, visual inspector
+    UI; on-device VoiceOver validation of the iOS a11y host.
 
-Of the 12 originally-identified cross-cutting gaps, 11 are addressed; the
-accessibility platform bridge is the one big remaining piece, plus a
-polish tail. Gossamer now has the breadth to build the four app
-archetypes end to end.
+All 12 originally-identified cross-cutting gaps are now addressed — the
+accessibility bridge landed on both platforms (Android verified on device
+via `uiautomator dump`, iOS building and running with the same Go a11y
+surface). What remains is a polish tail. Gossamer now has the breadth to
+build the four app archetypes end to end.

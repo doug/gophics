@@ -45,6 +45,17 @@ type SemInfo struct {
 	// Hidden prunes this box and its subtree from the semantics tree
 	// (decorative content).
 	Hidden bool
+	// OnActivate, if set, is invoked when assistive technology activates
+	// the node (VoiceOver double-tap, TalkBack activate). Usually the same
+	// action as OnTap.
+	OnActivate func()
+	// Checked is set for toggleable nodes (checkbox, switch); nil = not
+	// checkable. Disabled and Selected mirror the ARIA states.
+	Checked  *bool
+	Disabled bool
+	Selected bool
+	// Hint describes the result of activating the node ("opens the thread").
+	Hint string
 }
 
 // Semantic is implemented by boxes that contribute semantics.
@@ -61,12 +72,17 @@ type ChildVisitor interface {
 // SemNode is one node of the collected semantics tree, with its rect in
 // root coordinates.
 type SemNode struct {
-	Role    Role
-	Label   string
-	Value   string
-	Focused bool
-	Rect    geom.Rect
-	Children []SemNode
+	Role       Role
+	Label      string
+	Value      string
+	Focused    bool
+	Disabled   bool
+	Selected   bool
+	Checked    *bool
+	Hint       string
+	OnActivate func()
+	Rect       geom.Rect
+	Children   []SemNode
 }
 
 // CollectSemantics walks the laid-out tree and returns the semantics
@@ -97,11 +113,16 @@ func collectSem(b Box, at geom.Pt) []SemNode {
 		return kids
 	}
 	node := SemNode{
-		Role:    info.Role,
-		Label:   info.Label,
-		Value:   info.Value,
-		Focused: info.Focused,
-		Rect:    geom.Rect{Min: at, Max: at.Add(b.Size().Pt())},
+		Role:       info.Role,
+		Label:      info.Label,
+		Value:      info.Value,
+		Focused:    info.Focused,
+		Disabled:   info.Disabled,
+		Selected:   info.Selected,
+		Checked:    info.Checked,
+		Hint:       info.Hint,
+		OnActivate: info.OnActivate,
+		Rect:       geom.Rect{Min: at, Max: at.Add(b.Size().Pt())},
 	}
 	if node.Label == "" {
 		node.Label = joinLabels(kids)

@@ -14,6 +14,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityNodeProvider
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -198,5 +200,80 @@ class GossamerView(private val activity: Activity) :
         }
         Hnmobile.touch(phase, e.x.toDouble(), e.y.toDouble())
         return true
+    }
+
+    // --- Accessibility: expose gossamer's semantics tree to TalkBack as a
+    // virtual view hierarchy (the Go side owns the pixels, so there are no
+    // real child Views). ---
+
+    override fun getAccessibilityNodeProvider(): AccessibilityNodeProvider = a11yProvider
+
+    private val idToIndex = HashMap<Int, Int>()
+    private var rootId = -1
+
+    private fun refreshA11y() {
+        val count = Hnmobile.a11yRefresh().toInt()
+        idToIndex.clear()
+        rootId = -1
+        for (i in 0 until count) {
+            val id = Hnmobile.a11yID(i.toLong()).toInt()
+            idToIndex[id] = i
+            if (Hnmobile.a11yParent(i.toLong()).toInt() == -1) rootId = id
+        }
+    }
+
+    private val a11yProvider = object : AccessibilityNodeProvider() {
+        override fun createAccessibilityNodeInfo(virtualViewId: Int): AccessibilityNodeInfo? {
+            val loc = IntArray(2)
+            getLocationOnScreen(loc)
+
+            if (virtualViewId == HOST_VIEW_ID) {
+                refreshA11y()
+                val info = AccessibilityNodeInfo.obtain(this@GossamerView)
+                onInitializeAccessibilityNodeInfo(info)
+                val ri = idToIndex[rootId]
+                if (ri != null) {
+                    val cc = Hnmobile.a11yChildCount(ri.toLong()).toInt()
+                    for (j in 0 until cc) {
+                        info.addChild(this@GossamerView, Hnmobile.a11yChild(ri.toLong(), j.toLong()).toInt())
+                    }
+                }
+                return info
+            }
+
+            val idx = idToIndex[virtualViewId] ?: return null
+            val i = idx.toLong()
+            val info = AccessibilityNodeInfo.obtain(this@GossamerView, virtualViewId)
+            info.packageName = context.packageName
+            info.className = "gossamer." + Hnmobile.a11yRole(i)
+            val label = Hnmobile.a11yLabel(i)
+            val value = Hnmobile.a11yValue(i)
+            info.contentDescription = if (value.isNotEmpty()) "$label, $value" else label
+            val x = Hnmobile.a11yX(i).toInt()
+            val y = Hnmobile.a11yY(i).toInt()
+            info.setBoundsInScreen(Rect(loc[0] + x, loc[1] + y,
+                loc[0] + x + Hnmobile.a11yW(i).toInt(), loc[1] + y + Hnmobile.a11yH(i).toInt()))
+            info.isVisibleToUser = true
+            info.isFocusable = true
+            val parent = Hnmobile.a11yParent(i).toInt()
+            info.setParent(this@GossamerView, if (parent == rootId) HOST_VIEW_ID else parent)
+            if (Hnmobile.a11yTappable(i)) {
+                info.isClickable = true
+                info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
+            }
+            val cc = Hnmobile.a11yChildCount(i).toInt()
+            for (j in 0 until cc) {
+                info.addChild(this@GossamerView, Hnmobile.a11yChild(i, j.toLong()).toInt())
+            }
+            return info
+        }
+
+        override fun performAction(virtualViewId: Int, action: Int, arguments: android.os.Bundle?): Boolean {
+            if (action == AccessibilityNodeInfo.ACTION_CLICK) {
+                Hnmobile.a11yActivate(virtualViewId.toLong())
+                return true
+            }
+            return false
+        }
     }
 }

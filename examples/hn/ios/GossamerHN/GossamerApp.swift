@@ -115,4 +115,53 @@ class GossamerView: UIView, UIKeyInput {
         if text == "\n" { HnmobileKey(1, true) } else { HnmobileText(text) }
     }
     func deleteBackward() { HnmobileKey(2, true) }
+
+    // --- VoiceOver: expose gossamer's semantics tree as a flat list of
+    // virtual accessibility elements (the Go side owns the pixels, so there
+    // are no real subviews). Mirrors the Android AccessibilityNodeProvider,
+    // consuming the same Hnmobile.A11y* surface. ---
+
+    override var isAccessibilityElement: Bool {
+        get { false }
+        set { }
+    }
+
+    override var accessibilityElements: [Any]? {
+        get { buildA11yElements() }
+        set { }
+    }
+
+    private func buildA11yElements() -> [Any] {
+        let scale = window?.screen.scale ?? 2
+        let count = HnmobileA11yRefresh()
+        var out: [Any] = []
+        for i in 0..<count {
+            let label = HnmobileA11yLabel(i)
+            let tappable = HnmobileA11yTappable(i)
+            // Skip pure structural containers with nothing to announce.
+            if label.isEmpty && !tappable { continue }
+            let el = GossamerA11yElement(accessibilityContainer: self)
+            el.nodeID = HnmobileA11yID(i)
+            let value = HnmobileA11yValue(i)
+            el.accessibilityLabel = value.isEmpty ? label : "\(label), \(value)"
+            let hint = HnmobileA11yHint(i)
+            if !hint.isEmpty { el.accessibilityHint = hint }
+            el.accessibilityTraits = tappable ? .button : .staticText
+            let r = CGRect(x: Double(HnmobileA11yX(i)) / scale, y: Double(HnmobileA11yY(i)) / scale,
+                           width: Double(HnmobileA11yW(i)) / scale, height: Double(HnmobileA11yH(i)) / scale)
+            el.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(r, in: self)
+            out.append(el)
+        }
+        return out
+    }
+}
+
+/// A single VoiceOver element backed by a gossamer semantics node; activating
+/// it (double-tap) fires the widget's OnActivate through the bridge.
+final class GossamerA11yElement: UIAccessibilityElement {
+    var nodeID: Int = -1
+    override func accessibilityActivate() -> Bool {
+        HnmobileA11yActivate(nodeID)
+        return true
+    }
 }

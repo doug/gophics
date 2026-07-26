@@ -85,3 +85,22 @@ func TextInputActive() bool { return bridge.TextInputActive() }
 func Composition(kind int, preedit string, cursor int, committed string) {
 	bridge.Composition(kind, preedit, cursor, committed)
 }
+
+// Accessibility: the host refreshes then reads the flat node tree and
+// activates by ID. Rects are physical pixels.
+func A11yRefresh() int              { return bridge.A11yRefresh() }
+func A11yID(i int) int              { return bridge.A11yID(i) }
+func A11yParent(i int) int          { return bridge.A11yParent(i) }
+func A11yRole(i int) string         { return bridge.A11yRole(i) }
+func A11yLabel(i int) string        { return bridge.A11yLabel(i) }
+func A11yValue(i int) string        { return bridge.A11yValue(i) }
+func A11yHint(i int) string         { return bridge.A11yHint(i) }
+func A11yX(i int) int               { return bridge.A11yX(i) }
+func A11yY(i int) int               { return bridge.A11yY(i) }
+func A11yW(i int) int               { return bridge.A11yW(i) }
+func A11yH(i int) int               { return bridge.A11yH(i) }
+func A11yTappable(i int) bool       { return bridge.A11yTappable(i) }
+func A11yChildCount(i int) int      { return bridge.A11yChildCount(i) }
+func A11yChild(i int, j int) int    { return bridge.A11yChild(i, j) }
+func A11yActivate(id int)           { bridge.A11yActivate(id) }
+func A11yHitTest(xPx, yPx int) int  { return bridge.A11yHitTest(xPx, yPx) }
