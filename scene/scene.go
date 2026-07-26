@@ -13,14 +13,20 @@ import (
 
 // List is a recorded sequence of paint commands.
 type List struct {
-	ops []op
+	ops       []op
+	hasLayers bool // an opacity group was recorded (partial replay unsafe)
 }
 
 // Recorder returns a paint.Canvas that appends into the list.
 func (l *List) Recorder() paint.Canvas { return recorder{l} }
 
 // Reset clears the list for re-recording, keeping capacity.
-func (l *List) Reset() { l.ops = l.ops[:0] }
+func (l *List) Reset() { l.ops, l.hasLayers = l.ops[:0], false }
+
+// HasLayers reports whether an opacity group was recorded. Such frames must
+// repaint in full — culled partial replay would composite an incomplete
+// layer.
+func (l *List) HasLayers() bool { return l.hasLayers }
 
 // Len returns the number of recorded commands.
 func (l *List) Len() int { return len(l.ops) }
@@ -83,6 +89,10 @@ type pushClipOp struct{ r geom.Rect }
 
 type popClipOp struct{}
 
+type pushOpacityOp struct{ alpha float32 }
+
+type popOpacityOp struct{}
+
 func (o clearOp) replay(c paint.Canvas) { c.Clear(o.col) }
 func (o rectOp) replay(c paint.Canvas)  { c.FillRect(o.r, o.col) }
 func (o rrectOp) replay(c paint.Canvas) { c.FillRRect(o.r, o.radius, o.col) }
@@ -95,6 +105,8 @@ func (o textOp) replay(c paint.Canvas)        { c.TextIn(o.font, o.s, o.pos, o.s
 func (o imageOp) replay(c paint.Canvas)       { c.Image(o.img, o.dst) }
 func (o pushClipOp) replay(c paint.Canvas)    { c.PushClip(o.r) }
 func (o popClipOp) replay(c paint.Canvas)     { c.PopClip() }
+func (o pushOpacityOp) replay(c paint.Canvas) { c.PushOpacity(o.alpha) }
+func (o popOpacityOp) replay(c paint.Canvas)  { c.PopOpacity() }
 
 type recorder struct{ l *List }
 
@@ -134,3 +146,9 @@ func (r recorder) Image(img image.Image, dst geom.Rect) {
 
 func (r recorder) PushClip(rect geom.Rect) { r.l.ops = append(r.l.ops, pushClipOp{rect}) }
 func (r recorder) PopClip()                { r.l.ops = append(r.l.ops, popClipOp{}) }
+
+func (r recorder) PushOpacity(alpha float32) {
+	r.l.hasLayers = true
+	r.l.ops = append(r.l.ops, pushOpacityOp{alpha})
+}
+func (r recorder) PopOpacity() { r.l.ops = append(r.l.ops, popOpacityOp{}) }

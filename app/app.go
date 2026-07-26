@@ -241,6 +241,11 @@ func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 	if size != c.lastPaintSize || scale != c.lastScale {
 		changed, damage = true, surface
 	}
+	if c.cur.HasLayers() {
+		// Opacity groups can't be partially replayed (a culled layer
+		// composites wrong), so repaint the whole surface this frame.
+		changed, damage = true, surface
+	}
 	c.lastPaintSize, c.lastScale = size, scale
 	damage = damage.Intersect(surface)
 	if changed && damage.IsEmpty() {

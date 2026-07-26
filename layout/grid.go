@@ -117,6 +117,58 @@ func (b *Filled) VisitChildren(visit func(Box, geom.Pt)) {
 	}
 }
 
+// Opacity composites its child as a group at Alpha [0,1] — the whole
+// subtree fades together, not shape-by-shape (so overlapping content
+// doesn't double-blend). Alpha 1 is a pass-through; 0 hides the child but
+// keeps its layout size.
+type Opacity struct {
+	Base
+	Alpha float32
+	Child Box
+}
+
+func (b *Opacity) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
+	if b.Child != nil {
+		return b.Done(cs, b.Child.Layout(cs))
+	}
+	return b.Done(cs, cs.Constrain(geom.Size{}))
+}
+
+func (b *Opacity) Paint(c paint.Canvas, at geom.Pt) {
+	if b.Child == nil {
+		return
+	}
+	a := b.Alpha
+	if a >= 1 {
+		b.Child.Paint(c, at) // opaque: skip the layer
+		return
+	}
+	if a <= 0 {
+		return // fully transparent: draw nothing
+	}
+	c.PushOpacity(a)
+	b.Child.Paint(c, at)
+	c.PopOpacity()
+}
+
+func (b *Opacity) AddHits(p geom.Pt, hits *[]Hit) {
+	if b.Alpha <= 0 {
+		return // transparent groups don't receive input
+	}
+	if b.Child != nil {
+		b.Child.AddHits(p, hits)
+	}
+}
+
+func (b *Opacity) VisitChildren(visit func(Box, geom.Pt)) {
+	if b.Child != nil {
+		visit(b.Child, geom.Pt{})
+	}
+}
+
 // Grid lays children out in a fixed number of equal-width columns, top to
 // bottom, with uniform spacing. Row heights are the tallest cell in the row.
 // It shrink-wraps its height to the content (wrap it in Scroll for long

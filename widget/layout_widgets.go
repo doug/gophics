@@ -25,6 +25,22 @@ func (f Fill) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Filled).Child = first(kids)
 }
 
+// Opacity fades its child as a group at Alpha [0,1] (1 = opaque, 0 =
+// hidden but still laid out). Pair with AnimateFloat for fade transitions.
+type Opacity struct {
+	Alpha float32
+	Child Widget
+}
+
+func (o Opacity) createBox(Ctx) layout.Box { return &layout.Opacity{} }
+func (o Opacity) updateBox(_ Ctx, b layout.Box) {
+	b.(*layout.Opacity).Alpha = o.Alpha
+}
+func (o Opacity) childWidgets() []Widget { return []Widget{o.Child} }
+func (o Opacity) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Opacity).Child = first(kids)
+}
+
 // AspectRatio sizes its child to Ratio (width/height), as large as fits.
 type AspectRatio struct {
 	Ratio float32

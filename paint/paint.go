@@ -90,6 +90,11 @@ type Canvas interface {
 	// Nested clips intersect.
 	PushClip(r geom.Rect)
 	PopClip()
+	// PushOpacity begins a group composited at alpha [0,1] — everything
+	// until the matching PopOpacity fades as one (not per-shape). Balance
+	// every PushOpacity with PopOpacity.
+	PushOpacity(alpha float32)
+	PopOpacity()
 }
 
 // DropShadow paints a soft shadow under the rounded rect r. It approximates
@@ -550,6 +555,9 @@ func (c *ggCanvas) PushClip(r geom.Rect) {
 }
 
 func (c *ggCanvas) PopClip() { c.dc.Pop() }
+
+func (c *ggCanvas) PushOpacity(alpha float32) { c.dc.PushLayer(gg.BlendNormal, float64(alpha)) }
+func (c *ggCanvas) PopOpacity()               { c.dc.PopLayer() }
 
 // LoadSystemFonts extends every family with the platform's installed fonts
 // (see text.Shaper.UseSystemFonts). Call after loading fonts.
