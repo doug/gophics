@@ -29,6 +29,29 @@ type Size struct {
 	W, H float32
 }
 
+// Lerp linearly interpolates between sizes a and b.
+func (a Size) Lerp(b Size, t float32) Size {
+	return Size{W: a.W + (b.W-a.W)*t, H: a.H + (b.H-a.H)*t}
+}
+
+// Lerp linearly interpolates between rects a and b (corner-wise).
+func (a Rect) Lerp(b Rect, t float32) Rect {
+	return Rect{Min: a.Min.Lerp(b.Min, t), Max: a.Max.Lerp(b.Max, t)}
+}
+
+// Lerp linearly interpolates between insets a and b.
+func (a Insets) Lerp(b Insets, t float32) Insets {
+	return Insets{
+		Top:    a.Top + (b.Top-a.Top)*t,
+		Right:  a.Right + (b.Right-a.Right)*t,
+		Bottom: a.Bottom + (b.Bottom-a.Bottom)*t,
+		Left:   a.Left + (b.Left-a.Left)*t,
+	}
+}
+
+// LerpFloat linearly interpolates between two float32s.
+func LerpFloat(a, b, t float32) float32 { return a + (b-a)*t }
+
 func (s Size) IsEmpty() bool { return s.W <= 0 || s.H <= 0 }
 func (s Size) Pt() Pt        { return Pt{s.W, s.H} }
 
