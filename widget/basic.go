@@ -206,6 +206,11 @@ type Scroll struct {
 	// Refreshing is app-controlled: hold it true while a refresh runs (the
 	// spinner stays out), then set it false to snap the indicator away.
 	Refreshing bool
+	// Reverse anchors the scroll to the end (bottom/right): the newest
+	// content shows first and appended content stays pinned — the chat-log
+	// layout. OnEndReached then fires at the far (oldest) end, for loading
+	// history. Not combined with pull-to-refresh.
+	Reverse bool
 }
 
 func (s Scroll) CreateState() State { return &scrollState{} }
@@ -388,6 +393,16 @@ func (s *scrollState) scrollBy(delta float32) bool {
 	return clamped
 }
 
+// contentDelta moves the content to follow a finger/wheel/fling delta dm
+// (down/right positive), converting to an offset change that respects the
+// scroll direction. Returns whether an edge was hit.
+func (s *scrollState) contentDelta(dm float32) bool {
+	if s.W().Reverse {
+		return s.scrollBy(dm)
+	}
+	return s.scrollBy(-dm)
+}
+
 // flinger decelerates the scroll after release: exponential friction,
 // stopping at rest or at an edge.
 type flinger struct {
@@ -406,7 +421,7 @@ func (f *flinger) Tick(dt float64) bool {
 	if !f.active {
 		return false
 	}
-	if f.s.scrollBy(-f.v * float32(dt)) {
+	if f.s.contentDelta(f.v * float32(dt)) {
 		f.active = false // edge reached
 		return false
 	}
@@ -445,7 +460,7 @@ func (s *scrollState) dragMain(dm float32) {
 			return
 		}
 	}
-	s.scrollBy(-dm)
+	s.contentDelta(dm)
 }
 
 // animateOverscrollTo springs the overscroll to a resting value.
@@ -500,7 +515,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 		Handler: Handler{
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
-				s.scrollBy(-s.mainDelta(d))
+				s.contentDelta(s.mainDelta(d))
 			},
 			OnPress: func(geom.Pt) {
 				s.fling.active = false // grab stops the fling
@@ -526,7 +541,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				}
 			},
 		},
-		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Ref: s.vp, Child: w.Child},
+		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Reverse: w.Reverse, Ref: s.vp, Child: w.Child},
 	}
 	if w.OnRefresh == nil {
 		return inner
@@ -628,17 +643,18 @@ func (b *refreshBox) Paint(c paint.Canvas, at geom.Pt) {
 
 // viewport is the internal render widget behind Scroll.
 type viewport struct {
-	Axis   layout.Axis
-	Offset float32
-	Lead   float32
-	Ref    *viewportRef
-	Child  Widget
+	Axis    layout.Axis
+	Offset  float32
+	Lead    float32
+	Reverse bool
+	Ref     *viewportRef
+	Child   Widget
 }
 
 func (v viewport) createBox(Ctx) layout.Box { return &layout.Viewport{} }
 func (v viewport) updateBox(_ Ctx, b layout.Box) {
 	vb := b.(*layout.Viewport)
-	vb.Axis, vb.Offset, vb.Lead = v.Axis, v.Offset, v.Lead
+	vb.Axis, vb.Offset, vb.Lead, vb.Reverse = v.Axis, v.Offset, v.Lead, v.Reverse
 	if v.Ref != nil {
 		v.Ref.box = vb
 	}

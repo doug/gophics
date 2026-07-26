@@ -26,6 +26,10 @@ type LazyList struct {
 	// OnRefresh and Refreshing enable pull-to-refresh (see Scroll).
 	OnRefresh  func()
 	Refreshing bool
+	// Reverse anchors the list to the end (newest at the bottom, pinned on
+	// append) — the chat-log layout. OnEndReached then fires at the oldest
+	// end, for loading history. See Scroll.Reverse.
+	Reverse bool
 }
 
 func (l LazyList) estimate() float32 {
@@ -61,8 +65,20 @@ func (s *lazyState) Build(Ctx) Widget {
 		viewH = 800 // first frame: generous window until measured
 	}
 	overscan := viewH / 2
-	winTop := s.offset - overscan
-	winBottom := s.offset + viewH + overscan
+	// The scroll offset is measured from the start, or from the end when
+	// reversed — map both to a content-space [winTop, winBottom] window.
+	var winTop, winBottom float32
+	if w.Reverse {
+		var total float32
+		for i := 0; i < w.Count; i++ {
+			total += s.height(i)
+		}
+		winTop = total - s.offset - viewH - overscan
+		winBottom = total - s.offset + overscan
+	} else {
+		winTop = s.offset - overscan
+		winBottom = s.offset + viewH + overscan
+	}
 
 	children := make([]Widget, 0, 32)
 	var y, topPad, bottomPad float32
@@ -95,6 +111,7 @@ func (s *lazyState) Build(Ctx) Widget {
 		OnEndReached: s.W().OnEndReached,
 		OnRefresh:    s.W().OnRefresh,
 		Refreshing:   s.W().Refreshing,
+		Reverse:      w.Reverse,
 		OnOffset: func(off, extent float32) {
 			s.SetState(func() { s.offset, s.viewH = off, extent })
 		},

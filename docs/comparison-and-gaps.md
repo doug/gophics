@@ -125,9 +125,12 @@ Remaining:
     `Refreshing`, rubber-band overscroll, spoke spinner; wired into the HN
     feed). ~~swipe-to-dismiss~~ (`Dismissible`: finger-follow, threshold/
     flick trigger, spring-back, revealed background panel; wired into the
-    todo example). Still: hero transitions, selectable static text, reverse/
-    bottom-anchored lists, visual inspector UI; on-device VoiceOver
-    validation of the iOS a11y host.
+    todo example). ~~reverse/bottom-anchored lists~~ (`Scroll.Reverse` +
+    `LazyList.Reverse`: end-anchored offset origin, so newest-at-bottom and
+    stay-pinned-on-append fall out for free; virtualized; OnEndReached fires
+    at the oldest end for history loading — the chat-log layout). Still:
+    hero transitions, selectable static text, visual inspector UI; on-device
+    VoiceOver validation of the iOS a11y host.
 
 All 12 originally-identified cross-cutting gaps are now addressed — the
 accessibility bridge landed on both platforms (Android verified on device

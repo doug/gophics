@@ -16,8 +16,14 @@ type Viewport struct {
 	// translating content along the main axis without clamping — pull-to-
 	// refresh draws its indicator in the revealed band. Unlike Offset it does
 	// not participate in scroll-range clamping.
-	Lead  float32
-	Child Box
+	Lead float32
+	// Reverse anchors scrolling to the trailing edge: Offset 0 shows the end
+	// (bottom/right) with content aligned there, and Offset grows toward the
+	// start. Content shorter than the viewport sits at the end. This is the
+	// chat-log layout — appended content stays pinned to the end for free,
+	// since the offset origin is the end.
+	Reverse bool
+	Child   Box
 
 	content geom.Size
 }
@@ -53,9 +59,17 @@ func (v *Viewport) Layout(cs Constraints) geom.Size {
 
 func (v *Viewport) scrollPt() geom.Pt {
 	if v.Axis == Horizontal {
-		return geom.Pt{X: -v.Offset + v.Lead}
+		x := -v.Offset
+		if v.Reverse {
+			x = v.Size().W - v.content.W + v.Offset
+		}
+		return geom.Pt{X: x + v.Lead}
 	}
-	return geom.Pt{Y: -v.Offset + v.Lead}
+	y := -v.Offset
+	if v.Reverse {
+		y = v.Size().H - v.content.H + v.Offset
+	}
+	return geom.Pt{Y: y + v.Lead}
 }
 
 func (v *Viewport) Paint(c paint.Canvas, at geom.Pt) {
