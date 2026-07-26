@@ -178,6 +178,9 @@ type Handler struct {
 	// OnRelease fires on pointer-up after this widget received the press
 	// (regardless of drag distance) — e.g. to start fling deceleration.
 	OnRelease func()
+	// OnLongPress fires once when the pointer is held on this widget past
+	// the long-press threshold without moving; it cancels the pending tap.
+	OnLongPress func()
 	// OnScroll receives wheel/trackpad deltas while the pointer is over
 	// this widget.
 	OnScroll func(delta geom.Pt)

@@ -52,15 +52,43 @@ type Core struct {
 
 	hovered    []*widget.InteractiveBox
 	pressed    *widget.InteractiveBox
+	longPress  *widget.InteractiveBox // box eligible for long-press
 	dragging   *widget.InteractiveBox
 	dragOrigin geom.Pt // window origin of the dragging box at press time
 	lastPos    geom.Pt
 	downPos    geom.Pt
 	moved      bool
+	pressHeld  float64 // seconds the current press has been held, unmoved
+	longFired  bool
 }
 
 // tapSlop is the drag distance that cancels a pending tap, in logical px.
 const tapSlop = 4
+
+// longPressSeconds is how long a still press must be held to fire OnLongPress.
+const longPressSeconds = 0.5
+
+// longPressPending reports whether a long-press timer is running (the shell
+// keeps frames coming while it is).
+func (c *Core) longPressPending() bool {
+	return c.longPress != nil && !c.moved && !c.longFired
+}
+
+// TickGestures advances time-based gestures (long-press) by dt seconds. The
+// frame loop calls it; it fires OnLongPress once for a held, unmoved press.
+func (c *Core) TickGestures(dt float64) {
+	if c.longPress == nil || c.moved || c.longFired {
+		return
+	}
+	c.pressHeld += dt
+	if c.pressHeld >= longPressSeconds {
+		c.longFired = true
+		c.pressed = nil // long-press consumes the gesture; no tap on release
+		if c.longPress.Handler.OnLongPress != nil {
+			c.longPress.Handler.OnLongPress()
+		}
+	}
+}
 
 // NewCore builds a runtime for the given root widget.
 func NewCore(root widget.Widget, cfg Config) (*Core, error) {
@@ -238,19 +266,20 @@ func (c *Core) Pointer(e shell.Pointer) {
 	case shell.PointerMove:
 		delta := e.Pos.Sub(c.lastPos)
 		c.lastPos = e.Pos
-		if c.dragging != nil {
-			if !c.moved {
-				d := e.Pos.Sub(c.downPos)
-				if d.X*d.X+d.Y*d.Y > tapSlop*tapSlop {
-					c.moved = true
-					c.pressed = nil // slop exceeded: cancel pending tap
-				}
+		// Slop detection runs for any active press, so a move cancels a
+		// pending tap or long-press even on a widget with no drag handler.
+		if !c.moved && (c.pressed != nil || c.longPress != nil || c.dragging != nil) {
+			d := e.Pos.Sub(c.downPos)
+			if d.X*d.X+d.Y*d.Y > tapSlop*tapSlop {
+				c.moved = true
+				c.pressed = nil
+				c.longPress = nil
 			}
-			if c.moved && c.dragging.Handler.OnDrag != nil {
-				// Local position via the press-time origin: drags keep
-				// delivering even when the pointer leaves the box.
-				c.dragging.Handler.OnDrag(e.Pos.Sub(c.dragOrigin), delta)
-			}
+		}
+		if c.moved && c.dragging != nil && c.dragging.Handler.OnDrag != nil {
+			// Local position via the press-time origin: drags keep
+			// delivering even when the pointer leaves the box.
+			c.dragging.Handler.OnDrag(e.Pos.Sub(c.dragOrigin), delta)
 		}
 		now := boxes(c.interactivesAt(e.Pos))
 		for _, b := range c.hovered {
@@ -278,7 +307,8 @@ func (c *Core) Pointer(e shell.Pointer) {
 			return
 		}
 		c.downPos, c.lastPos, c.moved = e.Pos, e.Pos, false
-		c.pressed, c.dragging = nil, nil
+		c.pressed, c.dragging, c.longPress = nil, nil, nil
+		c.pressHeld, c.longFired = 0, false
 		hits := c.interactivesAt(e.Pos)
 		for _, h := range hits {
 			if h.box.Handler.OnPress != nil {
@@ -286,6 +316,9 @@ func (c *Core) Pointer(e shell.Pointer) {
 			}
 			if c.pressed == nil && h.box.Handler.OnTap != nil {
 				c.pressed = h.box
+			}
+			if c.longPress == nil && h.box.Handler.OnLongPress != nil {
+				c.longPress = h.box
 			}
 			if c.dragging == nil && h.box.Handler.OnDrag != nil {
 				c.dragging = h.box
@@ -299,7 +332,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 			return
 		}
 		pressed, dragging := c.pressed, c.dragging
-		c.pressed, c.dragging = nil, nil
+		c.pressed, c.dragging, c.longPress = nil, nil, nil
 		if dragging != nil && dragging.Handler.OnRelease != nil {
 			dragging.Handler.OnRelease()
 		}
@@ -403,8 +436,9 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// Frame pipeline (PLAN.md §3): posted work → tick animations → build →
 	// layout → record → diff → replay damage → present.
 	h.core.drainPosted()
-	if h.core.Owner.TickAll(dt) {
-		w.Invalidate() // animations still running: keep frames coming
+	h.core.TickGestures(dt)
+	if h.core.Owner.TickAll(dt) || h.core.longPressPending() {
+		w.Invalidate() // animations or a held long-press: keep frames coming
 	}
 	h.core.Layout(f.Size())
 	if changed, damage := h.core.RecordScene(f.Size(), f.Scale()); changed {
@@ -424,6 +458,9 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 	switch e := e.(type) {
 	case shell.Pointer:
 		h.core.Pointer(e)
+		if e.Kind == shell.PointerDown {
+			w.Invalidate() // start ticking for a possible long-press
+		}
 	case shell.Text, shell.Key, shell.Composition:
 		h.core.Keyboard(e)
 	case shell.Insets:

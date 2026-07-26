@@ -64,7 +64,10 @@ func (h *Headless) SetDarkMode(dark bool) {
 
 // Step advances animations by dt seconds, reporting whether any are still
 // running. Deterministic replacement for vsync in tests.
-func (h *Headless) Step(dt float64) bool { return h.Core.Owner.TickAll(dt) }
+func (h *Headless) Step(dt float64) bool {
+	h.Core.TickGestures(dt)
+	return h.Core.Owner.TickAll(dt)
+}
 
 // Drag dispatches press at from, a move to to (exceeding tap slop), and
 // release at to.
