@@ -134,21 +134,24 @@ Remaining:
     ~~selectable static text~~ (`SelectableText`: drag-select with glyph-
     midpoint hit testing, highlighted range, Cmd/Ctrl+C copy joining wrapped
     lines). ~~visual inspector UI~~ (`Core.SetInspect`, see tooling above).
-    Still: hero transitions; on-device VoiceOver validation of the iOS a11y
-    host.
+    ~~hero transitions~~ (see below). Still: on-device VoiceOver validation
+    of the iOS a11y host.
 
-**Hero transitions — blocked on a prerequisite.** A shared-element flight
-must interpolate the element's *size* between routes, but `paint.Canvas`
-exposes only translation (the paint origin), no scale/transform. Landing
-heroes cleanly first needs one of: (a) a Canvas affine transform
-(push/pop matrix) threaded through the gg-backed canvas and the scene
-recorder, or (b) offscreen sub-tree snapshotting — render a hero to an
-`image.RGBA` and blit it through the already-scaling `Canvas.Image(img,
-dstRect)` during the flight. The Navigator hero coordination (per-page
-hero registries via `Provide`, source/dest rect capture, suppressing the
-real heroes mid-flight) is then straightforward on top. Treated as its
-own milestone rather than a follow-up, since a version without size
-interpolation would look wrong.
+**Hero transitions — landed.** First added the prerequisite: a Canvas
+affine transform (`paint.Canvas.PushTransform`/`PopTransform`, `Transform`,
+`MapRect`) on the gg backend, recorded by the scene layer as a full-repaint
+layer op (like opacity groups, since a transform reshapes every inner op's
+bounds), with `layout.Transformed`/`widget.Transform` exposing it. On top,
+`widget.Hero{Tag, Child}` registers its painted rect into a per-page
+`heroRegistry` provided by the Navigator during a transition; the Navigator
+recovers each hero's at-rest rect (undoing the page slide via a paint-time
+`heroPageW` that records the slide fraction alongside the rects), suppresses
+both real heroes, and flies an overlay copy from source rect to destination
+rect with `MapRect` (size + position interpolated). Every page is wrapped in
+a stable `Provide[*heroRegistry]` so pages keep their state across role
+changes. Verified headless via pixel checks: the element flies center→corner
+on push and returns on pop, and non-hero navigation still preserves feed
+state.
 
 All 12 originally-identified cross-cutting gaps are now addressed — the
 accessibility bridge landed on both platforms (Android verified on device

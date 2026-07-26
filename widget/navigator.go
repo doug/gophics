@@ -48,6 +48,11 @@ type navState struct {
 	slide     *anim.Controller
 	trans     *transition
 	animating bool
+
+	// Hero-flight coordination during a transition: each transitioning page
+	// gets its own registry (via Provide) so its heroes report rects and get
+	// suppressed while the flight overlay animates the shared element.
+	underReg, overReg *heroRegistry
 }
 
 func (s *navState) Init(ctx Ctx) {
@@ -65,6 +70,7 @@ func (s *navState) Init(ctx Ctx) {
 						s.stack = s.stack[:len(s.stack)-1]
 					}
 					s.trans = nil
+					s.underReg, s.overReg = nil, nil
 				})
 				return
 			}
@@ -88,6 +94,7 @@ func (s *navState) push(w Widget) {
 		under := s.top()
 		s.stack = append(s.stack, w)
 		s.trans = &transition{under: under, over: w}
+		s.underReg, s.overReg = newHeroRegistry(), newHeroRegistry()
 		s.slide.Jump(0)
 		s.slide.Forward()
 		s.animating = true
@@ -106,6 +113,7 @@ func (s *navState) pop() {
 			under = s.stack[len(s.stack)-2]
 		}
 		s.trans = &transition{under: under, over: over, popping: true}
+		s.underReg, s.overReg = newHeroRegistry(), newHeroRegistry()
 		s.slide.Jump(0)
 		s.slide.Forward()
 		s.animating = true
@@ -128,22 +136,79 @@ func (s *navState) Build(Ctx) Widget {
 		}
 	}
 	for i, p := range pages {
-		key := WithKey{Key: i, Child: p}
+		// Every page is wrapped in the same Provide[*heroRegistry] shape
+		// (nil outside its transition role) so a page keeps its element — and
+		// its state (scroll, loaded data) — as it moves between roles; a
+		// wrapper that appeared only during a transition would remount it.
+		var reg *heroRegistry
+		if s.trans != nil {
+			switch i {
+			case len(pages) - 1:
+				reg = s.overReg
+			case visibleFrom:
+				reg = s.underReg
+			}
+		}
+		page := Provide[*heroRegistry]{Value: reg, Child: WithKey{Key: i, Child: p}}
 		switch {
 		case i < visibleFrom:
-			children = append(children, offstageW{Child: key})
+			children = append(children, offstageW{Child: page})
 		case s.trans != nil && i == len(pages)-1:
 			t := s.slide.Value()
 			frac := 1 - t // push: sliding in from the right
 			if s.trans.popping {
 				frac = t // pop: sliding out to the right
 			}
-			children = append(children, translatedW{FracX: frac, Child: key})
+			children = append(children, heroPageW{fracX: frac, reg: s.overReg, child: page})
 		default:
-			children = append(children, key)
+			children = append(children, page)
 		}
 	}
+	// Hero flight overlay: a LayoutBuilder gives the surface width needed to
+	// undo page slides when recovering at-rest hero rects.
+	if s.trans != nil {
+		children = append(children, LayoutBuilder{Build: func(cs layout.Constraints) Widget {
+			return stackW{Children: s.buildFlights(cs.Max.W)}
+		}})
+	}
 	return Provide[Nav]{Value: Nav{s: s}, Child: stackW{Children: children}}
+}
+
+// buildFlights returns the shared-element flight widgets for the current
+// transition: for each tag present on both the outgoing and incoming pages,
+// an overlay copy interpolating from one rect to the other, and it flags both
+// real heroes to suppress themselves. Rects come from the previous frame's
+// paint, so the flight appears one frame into the transition.
+func (s *navState) buildFlights(width float32) []Widget {
+	if s.underReg == nil || s.overReg == nil {
+		return nil
+	}
+	// The element travels from its rect on the outgoing page to the incoming.
+	from, to := s.underReg, s.overReg // push: under → over
+	if s.trans.popping {
+		from, to = s.overReg, s.underReg // pop: over → under
+	}
+	t := s.slide.Value()
+
+	var flights []Widget
+	for tag, toRC := range to.rects {
+		fromRC, ok := from.rects[tag]
+		if !ok {
+			continue
+		}
+		src := restRect(fromRC, from.frac, width)
+		dst := restRect(toRC, to.frac, width)
+		from.flying[tag], to.flying[tag] = true, true
+		cur := lerpRect(src, dst, t)
+		// The child is rebuilt at the origin (its natural size ≈ dst size);
+		// MapRect scales/moves it onto the interpolated rect.
+		child := to.child[tag]
+		flights = append(flights, Align{X: 0, Y: 0, Child: Transform{
+			T:     paint.MapRect(geom.RectFromSize(dst.Size()), cur),
+			Child: child,
+		}})
+	}
+	return flights
 }
 
 // stackW and translatedW are internal render widgets over the layout boxes.
