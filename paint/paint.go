@@ -89,6 +89,9 @@ type Canvas interface {
 	// PushClip clips subsequent drawing to r; balance with PopClip.
 	// Nested clips intersect.
 	PushClip(r geom.Rect)
+	// PushClipRRect clips to a rounded rectangle (e.g. a rounded photo or
+	// avatar); also balanced with PopClip.
+	PushClipRRect(r geom.Rect, radius float32)
 	PopClip()
 	// PushOpacity begins a group composited at alpha [0,1] — everything
 	// until the matching PopOpacity fades as one (not per-shape). Balance
@@ -600,6 +603,11 @@ func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
 func (c *ggCanvas) PushClip(r geom.Rect) {
 	c.dc.Push()
 	c.dc.ClipRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
+}
+
+func (c *ggCanvas) PushClipRRect(r geom.Rect, radius float32) {
+	c.dc.Push()
+	c.dc.ClipRoundRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
 }
 
 func (c *ggCanvas) PopClip() { c.dc.Pop() }

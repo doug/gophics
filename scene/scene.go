@@ -87,6 +87,11 @@ type imageOp struct {
 
 type pushClipOp struct{ r geom.Rect }
 
+type pushClipRRectOp struct {
+	r      geom.Rect
+	radius float32
+}
+
 type popClipOp struct{}
 
 type pushOpacityOp struct{ alpha float32 }
@@ -107,8 +112,9 @@ func (o strokeRRectOp) replay(c paint.Canvas) { c.StrokeRRect(o.r, o.radius, o.w
 func (o lineOp) replay(c paint.Canvas)        { c.Line(o.a, o.b, o.width, o.col) }
 func (o textOp) replay(c paint.Canvas)        { c.TextIn(o.font, o.s, o.pos, o.size, o.col) }
 func (o imageOp) replay(c paint.Canvas)       { c.Image(o.img, o.dst) }
-func (o pushClipOp) replay(c paint.Canvas)    { c.PushClip(o.r) }
-func (o popClipOp) replay(c paint.Canvas)     { c.PopClip() }
+func (o pushClipOp) replay(c paint.Canvas)      { c.PushClip(o.r) }
+func (o pushClipRRectOp) replay(c paint.Canvas) { c.PushClipRRect(o.r, o.radius) }
+func (o popClipOp) replay(c paint.Canvas)       { c.PopClip() }
 func (o pushOpacityOp) replay(c paint.Canvas)   { c.PushOpacity(o.alpha) }
 func (o popOpacityOp) replay(c paint.Canvas)    { c.PopOpacity() }
 func (o pushTransformOp) replay(c paint.Canvas) { c.PushTransform(o.t) }
@@ -151,7 +157,10 @@ func (r recorder) Image(img image.Image, dst geom.Rect) {
 }
 
 func (r recorder) PushClip(rect geom.Rect) { r.l.ops = append(r.l.ops, pushClipOp{rect}) }
-func (r recorder) PopClip()                { r.l.ops = append(r.l.ops, popClipOp{}) }
+func (r recorder) PushClipRRect(rect geom.Rect, radius float32) {
+	r.l.ops = append(r.l.ops, pushClipRRectOp{rect, radius})
+}
+func (r recorder) PopClip() { r.l.ops = append(r.l.ops, popClipOp{}) }
 
 func (r recorder) PushOpacity(alpha float32) {
 	r.l.hasLayers = true

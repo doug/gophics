@@ -44,7 +44,7 @@ func (l *List) Diff(prev *List, m Measurer) (geom.Rect, bool) {
 	add := func(ops []op) {
 		for _, o := range ops {
 			switch o.(type) {
-			case clearOp, pushClipOp, popClipOp, pushOpacityOp, popOpacityOp,
+			case clearOp, pushClipOp, pushClipRRectOp, popClipOp, pushOpacityOp, popOpacityOp,
 				pushTransformOp, popTransformOp:
 				// Structural change: damage everything.
 				unbounded = true
@@ -70,7 +70,7 @@ var layoutInf = float32(1 << 30)
 func (l *List) ReplayDamage(c paint.Canvas, damage geom.Rect, m Measurer) {
 	for _, o := range l.ops {
 		switch o.(type) {
-		case pushClipOp, popClipOp, clearOp, pushOpacityOp, popOpacityOp,
+		case pushClipOp, pushClipRRectOp, popClipOp, clearOp, pushOpacityOp, popOpacityOp,
 			pushTransformOp, popTransformOp:
 			o.replay(c)
 		default:

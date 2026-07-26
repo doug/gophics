@@ -15,7 +15,10 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 	"log"
+	"math"
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
@@ -61,7 +64,7 @@ func th(ctx widget.Ctx) theme { return themeFor(ctx.DarkMode()) }
 type card struct {
 	id            int
 	title, author string
-	a, b          paint.Color // swatch gradient endpoints
+	img           image.Image // a real decoded image (procedurally generated)
 	likes         int
 }
 
@@ -84,16 +87,71 @@ func makeCards(n, seed int) []card {
 	cards := make([]card, n)
 	for i := range cards {
 		k := i + seed
-		a, b := swatchHues(k)
 		cards[i] = card{
 			id:     k*100 + 7, // stable id independent of position
 			title:  titles[k%len(titles)],
 			author: authors[k%len(authors)],
-			a:      a, b: b,
-			likes: (k*37)%90 + 3,
+			img:    genImage(k),
+			likes:  (k*37)%90 + 3,
 		}
 	}
 	return cards
+}
+
+// genImage builds a deterministic, photographic-ish image (layered plasma over
+// a two-tone gradient, with a vignette and a little grain) so the feed shows
+// real decoded images — exercising the image decode/blit/scale path — instead
+// of flat gradients.
+func genImage(seed int) image.Image {
+	const n = 220 // large enough to stay crisp scaled up into the detail header
+	img := image.NewRGBA(image.Rect(0, 0, n, n))
+	a, b := swatchHues(seed)
+	fs := float64(seed)
+	for y := 0; y < n; y++ {
+		fy := float64(y) / n
+		for x := 0; x < n; x++ {
+			fx := float64(x) / n
+			v := 0.5 + 0.25*math.Sin((fx*3.7+fs)*math.Pi) +
+				0.22*math.Cos((fy*2.9-fs*0.7)*math.Pi) +
+				0.18*math.Sin((fx+fy)*5*math.Pi+fs)
+			v = clamp01f(v)
+			t := float32(v)*0.7 + float32(fy)*0.3
+			col := paint.Lerp(a, b, t)
+			dx, dy := fx-0.5, fy-0.5
+			vig := float32(clamp01f(1 - (dx*dx+dy*dy)*0.9))
+			if vig < 0.4 {
+				vig = 0.4
+			}
+			grain := float32((x*131+y*197+seed*17)%19)/19*0.06 - 0.03
+			img.SetRGBA(x, y, color.RGBA{
+				R: to8(col.R*vig + grain),
+				G: to8(col.G*vig + grain),
+				B: to8(col.B*vig + grain),
+				A: 255,
+			})
+		}
+	}
+	return img
+}
+
+func clamp01f(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func to8(v float32) uint8 {
+	if v < 0 {
+		v = 0
+	}
+	if v > 1 {
+		v = 1
+	}
+	return uint8(v * 255)
 }
 
 func bodyFor(c card) string {
@@ -207,7 +265,7 @@ func cardTile(t theme, c card) widget.Widget {
 	)
 	info.CrossAlign = layout.CrossStart
 	row := widget.Row(
-		widget.Hero{Tag: heroTag(c.id), Child: swatch(c.a, c.b, 60, 60, 14)},
+		widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 60, 60, 14)},
 		widget.Sized{W: 14},
 		widget.Expand(info),
 	)
@@ -243,7 +301,7 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	// Full-bleed hero header — tapping it (or the back chip) pops.
 	header := widget.Interactive{
 		Handler: widget.Handler{OnTap: func() { nav.Pop() }},
-		Child:   widget.Hero{Tag: heroTag(c.id), Child: swatch(c.a, c.b, 0, 200, 0)},
+		Child:   widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 0, 200, 0)},
 	}
 
 	likeScale := float32(1)
@@ -338,11 +396,19 @@ func scaffold(ctx widget.Ctx, title, subtitle string, body widget.Widget) widget
 
 func heroTag(id int) string { return fmt.Sprintf("swatch-%d", id) }
 
-// swatch draws a rounded gradient rectangle — a stand-in "image" that scales
-// cleanly, so it flies well as a Hero. W or H of 0 fills the available space.
-func swatch(a, b paint.Color, w, h, radius float32) widget.Widget {
+// swatch draws a real image clipped to a rounded rectangle — the card
+// thumbnail and detail header, and the Hero that flies between them (the
+// image scales with bilinear filtering, so the flight stays smooth). W or H
+// of 0 fills the available space.
+func swatch(img image.Image, w, h, radius float32) widget.Widget {
 	return widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, r geom.Rect) {
-		c.FillRRectGradient(r, radius, a, b, false)
+		if radius > 0 {
+			c.PushClipRRect(r, radius)
+			c.Image(img, r)
+			c.PopClip()
+		} else {
+			c.Image(img, r)
+		}
 	}}
 }
 
