@@ -19,6 +19,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"time"
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
@@ -304,22 +305,24 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 		Child:   widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 0, 200, 0)},
 	}
 
-	likeScale := float32(1)
-	if s.liked {
-		likeScale = 1.25
-	}
+	heartSize := float32(22)
 	heartColor := t.dim
 	if s.liked {
-		heartColor = t.danger
+		heartSize, heartColor = 30, t.danger
 	}
 	likeCount := c.likes
 	if s.liked {
 		likeCount++
 	}
+	// Animate the glyph's font size (re-rasterized each frame, so it stays
+	// crisp) rather than scaling a cached glyph bitmap, which would soften it.
 	like := widget.Interactive{
 		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.liked = !s.liked }) }},
 		Child: widget.Row(
-			widget.AnimatedScale(likeScale, 0, widget.Text{S: "♥", Size: 22, Color: heartColor}),
+			widget.Sized{W: 30, Child: widget.Center(
+				widget.AnimateFloat(heartSize, 140*time.Millisecond, func(sz float32) widget.Widget {
+					return widget.Text{S: "♥", Size: sz, Color: heartColor}
+				}))},
 			widget.Sized{W: 8},
 			widget.Text{S: fmt.Sprintf("%d", likeCount), Size: 15, Color: t.text},
 		),
