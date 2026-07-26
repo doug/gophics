@@ -101,9 +101,10 @@ func (f feedPage) CreateState() widget.State { return &feedState{} }
 
 type feedState struct {
 	widget.StateBase[feedPage]
-	stories []Item
-	loading bool
-	err     string
+	stories    []Item
+	loading    bool
+	refreshing bool
+	err        string
 }
 
 // stateHook lets tests observe the mounted feed state.
@@ -114,12 +115,18 @@ func (s *feedState) Init(ctx widget.Ctx) {
 		stateHook(s)
 	}
 	s.loading = true
+	s.fetch(ctx)
+}
+
+// fetch loads the top stories on a background goroutine and swaps them in.
+// Used for the initial load and for pull-to-refresh.
+func (s *feedState) fetch(ctx widget.Ctx) {
 	post := ctx.Post()
 	f := s.W()
 	go func() {
 		ids, err := f.API.TopStories()
 		if err != nil {
-			post(func() { s.SetState(func() { s.loading, s.err = false, err.Error() }) })
+			post(func() { s.SetState(func() { s.loading, s.refreshing, s.err = false, false, err.Error() }) })
 			return
 		}
 		if len(ids) > f.N {
@@ -131,7 +138,7 @@ func (s *feedState) Init(ctx widget.Ctx) {
 				stories = append(stories, it)
 			}
 		}
-		post(func() { s.SetState(func() { s.loading, s.stories = false, stories }) })
+		post(func() { s.SetState(func() { s.loading, s.refreshing, s.stories = false, false, stories }) })
 	}()
 }
 
@@ -148,6 +155,11 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 			Count:           len(s.stories),
 			EstimatedExtent: 66,
 			Build:           func(i int) widget.Widget { return s.storyRow(nav, i) },
+			Refreshing:      s.refreshing,
+			OnRefresh: func() {
+				s.SetState(func() { s.refreshing = true })
+				s.fetch(ctx)
+			},
 		}
 	}
 	return page(ctx, header("Hacker News", nil), body)

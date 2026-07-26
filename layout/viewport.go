@@ -12,7 +12,12 @@ type Viewport struct {
 	Base
 	Axis   Axis // Vertical: content scrolls up as Offset grows
 	Offset float32
-	Child  Box
+	// Lead is extra space revealed at the leading edge (top/left) by
+	// translating content along the main axis without clamping — pull-to-
+	// refresh draws its indicator in the revealed band. Unlike Offset it does
+	// not participate in scroll-range clamping.
+	Lead  float32
+	Child Box
 
 	content geom.Size
 }
@@ -48,9 +53,9 @@ func (v *Viewport) Layout(cs Constraints) geom.Size {
 
 func (v *Viewport) scrollPt() geom.Pt {
 	if v.Axis == Horizontal {
-		return geom.Pt{X: -v.Offset}
+		return geom.Pt{X: -v.Offset + v.Lead}
 	}
-	return geom.Pt{Y: -v.Offset}
+	return geom.Pt{Y: -v.Offset + v.Lead}
 }
 
 func (v *Viewport) Paint(c paint.Canvas, at geom.Pt) {

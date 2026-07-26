@@ -23,6 +23,9 @@ type LazyList struct {
 	OnEndReached func()
 	// Controller exposes programmatic scrolling (jump/animate to offset).
 	Controller *ScrollController
+	// OnRefresh and Refreshing enable pull-to-refresh (see Scroll).
+	OnRefresh  func()
+	Refreshing bool
 }
 
 func (l LazyList) estimate() float32 {
@@ -87,9 +90,11 @@ func (s *lazyState) Build(Ctx) Widget {
 	col := Column(children...)
 	col.CrossAlign = layout.CrossStretch
 	return Scroll{
-		Child:      col,
-		Controller: s.W().Controller,
+		Child:        col,
+		Controller:   s.W().Controller,
 		OnEndReached: s.W().OnEndReached,
+		OnRefresh:    s.W().OnRefresh,
+		Refreshing:   s.W().Refreshing,
 		OnOffset: func(off, extent float32) {
 			s.SetState(func() { s.offset, s.viewH = off, extent })
 		},

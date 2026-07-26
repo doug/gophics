@@ -199,6 +199,13 @@ type Scroll struct {
 	// Controller, if set, exposes programmatic scrolling and the live
 	// offset to the app.
 	Controller *ScrollController
+	// OnRefresh, if set, enables pull-to-refresh: dragging down past the top
+	// reveals a spinner, and releasing past the trigger distance fires
+	// OnRefresh. The app does its work, then clears Refreshing to retract.
+	OnRefresh func()
+	// Refreshing is app-controlled: hold it true while a refresh runs (the
+	// spinner stays out), then set it false to snap the indicator away.
+	Refreshing bool
 }
 
 func (s Scroll) CreateState() State { return &scrollState{} }
@@ -252,6 +259,14 @@ type scrollState struct {
 	glide      *anim.Controller
 	glideFrom  float32
 	glideTo    float32
+
+	// Pull-to-refresh state.
+	overscroll float32 // logical px the content is pulled past the top
+	refreshing bool    // latched true from trigger until the app clears it
+	spin       spinner // continuous rotation ticker for the indicator
+	snap       *anim.Controller
+	snapFrom   float32
+	snapTo     float32
 }
 
 type viewportRef struct{ box *layout.Viewport }
@@ -267,6 +282,12 @@ func (s *scrollState) Init(ctx Ctx) {
 		s.reportOffset()
 	}}
 	ctx.AddTicker(s.glide)
+	s.snap = &anim.Controller{Curve: anim.EaseOut, OnChange: func() {
+		s.SetState(func() { s.overscroll = geom.LerpFloat(s.snapFrom, s.snapTo, s.snap.Value()) })
+	}}
+	ctx.AddTicker(s.snap)
+	s.spin.s = s
+	ctx.AddTicker(&s.spin)
 	if c := s.W().Controller; c != nil {
 		c.s = s
 	}
@@ -275,6 +296,8 @@ func (s *scrollState) Init(ctx Ctx) {
 func (s *scrollState) Dispose() {
 	s.ctx.RemoveTicker(&s.fling)
 	s.ctx.RemoveTicker(s.glide)
+	s.ctx.RemoveTicker(s.snap)
+	s.ctx.RemoveTicker(&s.spin)
 }
 
 func (s *scrollState) jumpTo(offset float32) {
@@ -394,9 +417,86 @@ func (f *flinger) Tick(dt float64) bool {
 	return f.active
 }
 
+// Pull-to-refresh tuning (logical px).
+const (
+	overscrollResist = 0.5 // rubber-band factor while pulling past the top
+	refreshTrigger   = 64  // pull distance that fires OnRefresh on release
+	refreshRest      = 56  // indicator height held while a refresh runs
+)
+
+// dragMain applies one main-axis finger delta (down = positive). While
+// pull-to-refresh is enabled and the content is at the top, downward drag
+// feeds a rubber-banded overscroll instead of scrolling.
+func (s *scrollState) dragMain(dm float32) {
+	w := s.W()
+	if w.OnRefresh != nil && !s.refreshing {
+		if s.overscroll > 0 {
+			ns := s.overscroll + dm*overscrollResist
+			if ns <= 0 {
+				s.SetState(func() { s.overscroll = 0 })
+				s.scrollBy(-(ns / overscrollResist)) // spend the leftover on scroll
+			} else {
+				s.SetState(func() { s.overscroll = ns })
+			}
+			return
+		}
+		if s.offset <= 0 && dm > 0 {
+			s.SetState(func() { s.overscroll = dm * overscrollResist })
+			return
+		}
+	}
+	s.scrollBy(-dm)
+}
+
+// animateOverscrollTo springs the overscroll to a resting value.
+func (s *scrollState) animateOverscrollTo(to float32) {
+	s.snapFrom, s.snapTo = s.overscroll, to
+	s.snap.Jump(0)
+	s.snap.Forward()
+	s.ctx.Invalidate()
+}
+
+// releaseRefresh decides, on drag release, whether the pull was far enough
+// to trigger a refresh (hold the indicator) or should spring back.
+func (s *scrollState) releaseRefresh() {
+	if s.overscroll <= 0 {
+		return
+	}
+	if s.W().OnRefresh != nil && !s.refreshing && s.overscroll >= refreshTrigger {
+		s.refreshing = true
+		s.animateOverscrollTo(refreshRest)
+		s.W().OnRefresh()
+	} else if !s.refreshing {
+		s.animateOverscrollTo(0)
+	}
+}
+
+// spinner drives the pull-to-refresh indicator's continuous rotation; it
+// ticks only while the indicator is on screen.
+type spinner struct {
+	s     *scrollState
+	phase float32 // 0..1 rotation
+}
+
+func (sp *spinner) Tick(dt float64) bool {
+	if sp.s.refreshing {
+		sp.phase += float32(dt) // ~1 revolution / second
+		if sp.phase >= 1 {
+			sp.phase -= 1
+		}
+		return true
+	}
+	return sp.s.overscroll > 0 // stay alive while springing back
+}
+
 func (s *scrollState) Build(ctx Ctx) Widget {
 	w := s.W()
-	return Interactive{
+	// The app cleared Refreshing: retract the indicator.
+	if s.refreshing && !w.Refreshing {
+		s.refreshing = false
+		s.animateOverscrollTo(0)
+	}
+	inner := Interactive{
 		Handler: Handler{
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
@@ -408,7 +508,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			},
 			OnDrag: func(_, d geom.Pt) {
 				delta := s.mainDelta(d)
-				s.scrollBy(-delta)
+				s.dragMain(delta)
 				now := time.Now()
 				dt := now.Sub(s.lastDrag).Seconds()
 				s.lastDrag = now
@@ -418,6 +518,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				}
 			},
 			OnRelease: func() {
+				s.releaseRefresh()
 				if s.velocity > flingMinStart || s.velocity < -flingMinStart {
 					s.fling.v = s.velocity
 					s.fling.active = true
@@ -425,7 +526,103 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				}
 			},
 		},
-		Child: viewport{Axis: w.Axis, Offset: s.offset, Ref: s.vp, Child: w.Child},
+		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Ref: s.vp, Child: w.Child},
+	}
+	if w.OnRefresh == nil {
+		return inner
+	}
+	// Layer the indicator in the revealed band above the content.
+	return Stack{Children: []Widget{
+		inner,
+		Align{X: 0.5, Y: 0, Child: refreshIndicator{
+			extent:   s.overscroll,
+			progress: s.overscroll / refreshTrigger,
+			spinning: s.refreshing,
+			phase:    s.spin.phase,
+		}},
+	}}
+}
+
+// refreshIndicator draws the spoke spinner centered in the pulled-open band.
+type refreshIndicator struct {
+	extent   float32 // band height (== overscroll)
+	progress float32 // 0..1 pull toward trigger
+	spinning bool
+	phase    float32
+}
+
+func (r refreshIndicator) createBox(Ctx) layout.Box { return &refreshBox{} }
+func (r refreshIndicator) updateBox(_ Ctx, b layout.Box) {
+	rb := b.(*refreshBox)
+	rb.extent, rb.progress, rb.spinning, rb.phase = r.extent, r.progress, r.spinning, r.phase
+}
+func (r refreshIndicator) childWidgets() []Widget          { return nil }
+func (r refreshIndicator) attach(layout.Box, []layout.Box) {}
+
+type refreshBox struct {
+	layout.Base
+	extent   float32
+	progress float32
+	spinning bool
+	phase    float32
+	size     geom.Size
+}
+
+func (b *refreshBox) Layout(cs layout.Constraints) geom.Size {
+	w := cs.Max.W
+	if !cs.BoundedW() {
+		w = 0
+	}
+	b.size = cs.Constrain(geom.Size{W: w, H: b.extent})
+	return b.size
+}
+
+func (b *refreshBox) Size() geom.Size { return b.size }
+
+func (b *refreshBox) AddHits(geom.Pt, *[]layout.Hit) {} // never interactive
+
+const refreshSpokes = 12
+
+func (b *refreshBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.extent <= 1 {
+		return
+	}
+	cx := at.X + b.size.W/2
+	cy := at.Y + b.size.H/2
+	// Radius grows with the pull, capped so it fits the band.
+	rad := b.size.H * 0.32
+	if rad > 11 {
+		rad = 11
+	}
+	ri, ro := rad*0.5, rad
+	head := b.phase * refreshSpokes
+	fadeIn := b.progress
+	if fadeIn > 1 || b.spinning {
+		fadeIn = 1
+	}
+	for i := 0; i < refreshSpokes; i++ {
+		ang := float64(i)/refreshSpokes*2*math.Pi - math.Pi/2
+		cos, sin := float32(math.Cos(ang)), float32(math.Sin(ang))
+		var alpha float32
+		if b.spinning {
+			// Comet trail: brightest at the head, fading behind it.
+			t := float32(math.Mod(float64(head-float32(i)+refreshSpokes), refreshSpokes)) / refreshSpokes
+			alpha = 1 - t
+		} else {
+			// Reveal spokes in order as the pull approaches the trigger.
+			if float32(i)/refreshSpokes <= b.progress {
+				alpha = 1
+			} else {
+				alpha = 0.15
+			}
+		}
+		alpha *= fadeIn
+		if alpha <= 0.02 {
+			continue
+		}
+		col := paint.Color{R: 0.55, G: 0.55, B: 0.55, A: alpha}
+		c.Line(geom.Pt{X: cx + ri*cos, Y: cy + ri*sin},
+			geom.Pt{X: cx + ro*cos, Y: cy + ro*sin}, 2, col)
 	}
 }
 
@@ -433,6 +630,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 type viewport struct {
 	Axis   layout.Axis
 	Offset float32
+	Lead   float32
 	Ref    *viewportRef
 	Child  Widget
 }
@@ -440,7 +638,7 @@ type viewport struct {
 func (v viewport) createBox(Ctx) layout.Box { return &layout.Viewport{} }
 func (v viewport) updateBox(_ Ctx, b layout.Box) {
 	vb := b.(*layout.Viewport)
-	vb.Axis, vb.Offset = v.Axis, v.Offset
+	vb.Axis, vb.Offset, vb.Lead = v.Axis, v.Offset, v.Lead
 	if v.Ref != nil {
 		v.Ref.box = vb
 	}
