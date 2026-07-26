@@ -100,8 +100,9 @@ func TestGallerySelectableBody(t *testing.T) {
 	settle(h)
 
 	// Drag horizontally across the body paragraph and copy. The body sits
-	// below the 200px header, back chip, title and byline.
-	h.DragTo(geom.Pt{X: 20, Y: 345}, geom.Pt{X: 380, Y: 345})
+	// below the 200px header, back chip, title and byline. Start past the
+	// left back-swipe edge strip (~22px), which reserves the very left edge.
+	h.DragTo(geom.Pt{X: 40, Y: 345}, geom.Pt{X: 380, Y: 345})
 	h.Release(geom.Pt{X: 380, Y: 345})
 	h.KeyMod(shell.KeyC, shell.ModSuper)
 
