@@ -95,6 +95,54 @@ type Canvas interface {
 	// every PushOpacity with PopOpacity.
 	PushOpacity(alpha float32)
 	PopOpacity()
+	// PushTransform applies an affine transform (translate + scale/rotate
+	// about a pivot) to everything drawn until the matching PopTransform —
+	// the basis for scale/rotate animations and shared-element flights.
+	// Balance every PushTransform with PopTransform.
+	PushTransform(t Transform)
+	PopTransform()
+}
+
+// Transform is an affine transform: content is translated by (TX, TY) and
+// scaled/rotated about Pivot (in pre-transform coordinates). Zero SX/SY mean
+// no scaling (treated as 1); zero Rotation means none. The mapping is
+// translate, then about the pivot: rotate, then scale.
+type Transform struct {
+	TX, TY         float32
+	SX, SY         float32 // 0 → 1 (no scale)
+	Rotation       float32 // radians
+	PivotX, PivotY float32
+}
+
+// MapRect returns the transform that makes content authored in rectangle src
+// appear at rectangle dst — the shared-element flight primitive. Scale is
+// dst/src about src's top-left, then translate src to dst.
+func MapRect(src, dst geom.Rect) Transform {
+	sx, sy := float32(1), float32(1)
+	if w := src.Dx(); w != 0 {
+		sx = dst.Dx() / w
+	}
+	if h := src.Dy(); h != 0 {
+		sy = dst.Dy() / h
+	}
+	return Transform{
+		TX: dst.Min.X - src.Min.X, TY: dst.Min.Y - src.Min.Y,
+		SX: sx, SY: sy, PivotX: src.Min.X, PivotY: src.Min.Y,
+	}
+}
+
+func (t Transform) sx() float32 {
+	if t.SX == 0 {
+		return 1
+	}
+	return t.SX
+}
+
+func (t Transform) sy() float32 {
+	if t.SY == 0 {
+		return 1
+	}
+	return t.SY
 }
 
 // DropShadow paints a soft shadow under the rounded rect r. It approximates
@@ -558,6 +606,20 @@ func (c *ggCanvas) PopClip() { c.dc.Pop() }
 
 func (c *ggCanvas) PushOpacity(alpha float32) { c.dc.PushLayer(gg.BlendNormal, float64(alpha)) }
 func (c *ggCanvas) PopOpacity()               { c.dc.PopLayer() }
+
+func (c *ggCanvas) PushTransform(t Transform) {
+	c.dc.Push() // saves the current matrix (restored by Pop)
+	c.dc.Translate(float64(t.TX), float64(t.TY))
+	px, py := float64(t.PivotX), float64(t.PivotY)
+	c.dc.Translate(px, py)
+	if t.Rotation != 0 {
+		c.dc.Rotate(float64(t.Rotation))
+	}
+	c.dc.Scale(float64(t.sx()), float64(t.sy()))
+	c.dc.Translate(-px, -py)
+}
+
+func (c *ggCanvas) PopTransform() { c.dc.Pop() }
 
 // LoadSystemFonts extends every family with the platform's installed fonts
 // (see text.Shaper.UseSystemFonts). Call after loading fonts.

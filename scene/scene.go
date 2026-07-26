@@ -93,6 +93,10 @@ type pushOpacityOp struct{ alpha float32 }
 
 type popOpacityOp struct{}
 
+type pushTransformOp struct{ t paint.Transform }
+
+type popTransformOp struct{}
+
 func (o clearOp) replay(c paint.Canvas) { c.Clear(o.col) }
 func (o rectOp) replay(c paint.Canvas)  { c.FillRect(o.r, o.col) }
 func (o rrectOp) replay(c paint.Canvas) { c.FillRRect(o.r, o.radius, o.col) }
@@ -105,8 +109,10 @@ func (o textOp) replay(c paint.Canvas)        { c.TextIn(o.font, o.s, o.pos, o.s
 func (o imageOp) replay(c paint.Canvas)       { c.Image(o.img, o.dst) }
 func (o pushClipOp) replay(c paint.Canvas)    { c.PushClip(o.r) }
 func (o popClipOp) replay(c paint.Canvas)     { c.PopClip() }
-func (o pushOpacityOp) replay(c paint.Canvas) { c.PushOpacity(o.alpha) }
-func (o popOpacityOp) replay(c paint.Canvas)  { c.PopOpacity() }
+func (o pushOpacityOp) replay(c paint.Canvas)   { c.PushOpacity(o.alpha) }
+func (o popOpacityOp) replay(c paint.Canvas)    { c.PopOpacity() }
+func (o pushTransformOp) replay(c paint.Canvas) { c.PushTransform(o.t) }
+func (o popTransformOp) replay(c paint.Canvas)  { c.PopTransform() }
 
 type recorder struct{ l *List }
 
@@ -152,3 +158,12 @@ func (r recorder) PushOpacity(alpha float32) {
 	r.l.ops = append(r.l.ops, pushOpacityOp{alpha})
 }
 func (r recorder) PopOpacity() { r.l.ops = append(r.l.ops, popOpacityOp{}) }
+
+func (r recorder) PushTransform(t paint.Transform) {
+	// A transform reshapes the coordinate space of every op inside it, so
+	// damage-culled partial replay can't reason about their bounds — force a
+	// full-surface repaint for the frame (as with opacity groups).
+	r.l.hasLayers = true
+	r.l.ops = append(r.l.ops, pushTransformOp{t})
+}
+func (r recorder) PopTransform() { r.l.ops = append(r.l.ops, popTransformOp{}) }

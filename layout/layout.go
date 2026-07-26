@@ -323,6 +323,66 @@ func (b *Translated) VisitChildren(visit func(Box, geom.Pt)) {
 	}
 }
 
+// Transformed applies an affine transform (paint.Transform) to its child
+// when painting — scale, rotate, translate — sizing to the child unchanged
+// (the transform is visual, like CSS transform). Hit testing inverts the
+// translate/scale so pointers still land (rotation is ignored in hit tests).
+type Transformed struct {
+	Base
+	T     paint.Transform
+	Child Box
+}
+
+func (b *Transformed) Layout(cs Constraints) geom.Size {
+	if sz, ok := b.Skip(cs); ok {
+		return sz
+	}
+	if b.Child == nil {
+		return b.Done(cs, cs.Constrain(geom.Size{}))
+	}
+	return b.Done(cs, b.Child.Layout(cs))
+}
+
+func (b *Transformed) Paint(c paint.Canvas, at geom.Pt) {
+	if b.Child == nil {
+		return
+	}
+	// The transform is authored in this box's local space; shift it to the
+	// paint origin so a translate of (tx,ty) moves the child by that in local
+	// coordinates regardless of where the box sits.
+	t := b.T
+	t.PivotX += at.X
+	t.PivotY += at.Y
+	c.PushTransform(t)
+	b.Child.Paint(c, at)
+	c.PopTransform()
+}
+
+func (b *Transformed) AddHits(p geom.Pt, hits *[]Hit) {
+	if b.Child == nil {
+		return
+	}
+	// Invert translate + scale about the pivot (rotation ignored).
+	sx, sy := b.T.SX, b.T.SY
+	if sx == 0 {
+		sx = 1
+	}
+	if sy == 0 {
+		sy = 1
+	}
+	local := geom.Pt{
+		X: b.T.PivotX + (p.X-b.T.TX-b.T.PivotX)/sx,
+		Y: b.T.PivotY + (p.Y-b.T.TY-b.T.PivotY)/sy,
+	}
+	b.Child.AddHits(local, hits)
+}
+
+func (b *Transformed) VisitChildren(visit func(Box, geom.Pt)) {
+	if b.Child != nil {
+		visit(b.Child, geom.Pt{X: b.T.TX, Y: b.T.TY}) // best-effort (ignores scale)
+	}
+}
+
 // Stack layers children atop each other (first is bottom), sized to the
 // largest; the foundation for overlays and transitions.
 type Stack struct {

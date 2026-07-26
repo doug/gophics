@@ -41,6 +41,30 @@ func (o Opacity) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Opacity).Child = first(kids)
 }
 
+// Transform applies an affine transform to its child when painting (scale,
+// rotate, translate) without affecting layout — like CSS transform. Pair with
+// AnimateFloat to drive scale/rotate animations; the shared-element flight
+// (Hero) builds on it via paint.MapRect.
+type Transform struct {
+	T     paint.Transform
+	Child Widget
+}
+
+// Scale returns a Transform that scales child by factor about its center-ish
+// origin (pivot at top-left; wrap in Center for centered scaling).
+func Scale(factor float32, child Widget) Transform {
+	return Transform{T: paint.Transform{SX: factor, SY: factor}, Child: child}
+}
+
+func (t Transform) createBox(Ctx) layout.Box { return &layout.Transformed{} }
+func (t Transform) updateBox(_ Ctx, b layout.Box) {
+	b.(*layout.Transformed).T = t.T
+}
+func (t Transform) childWidgets() []Widget { return []Widget{t.Child} }
+func (t Transform) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Transformed).Child = first(kids)
+}
+
 // AspectRatio sizes its child to Ratio (width/height), as large as fits.
 type AspectRatio struct {
 	Ratio float32

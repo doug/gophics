@@ -75,6 +75,28 @@ func TestResetKeepsWorking(t *testing.T) {
 	}
 }
 
+func drawTransformed(c paint.Canvas) {
+	c.Clear(paint.RGB(0.1, 0.1, 0.12))
+	c.PushTransform(paint.MapRect(geom.RectXYWH(0, 0, 40, 20), geom.RectXYWH(60, 60, 80, 40)))
+	c.FillRRect(geom.RectXYWH(0, 0, 40, 20), 4, paint.RGB(0.9, 0.5, 0.2))
+	c.Text("hi", geom.Pt{X: 4, Y: 15}, 12, paint.RGB(1, 1, 1))
+	c.PopTransform()
+}
+
+func TestTransformReplayMatchesDirect(t *testing.T) {
+	direct := render(t, drawTransformed)
+
+	var list scene.List
+	drawTransformed(list.Recorder())
+	if !list.HasLayers() {
+		t.Fatal("a recorded transform must set HasLayers (full-repaint frame)")
+	}
+	replayed := render(t, list.Replay)
+	if !bytes.Equal(direct, replayed) {
+		t.Fatal("transform record+replay must be pixel-identical to direct painting")
+	}
+}
+
 var testImage = func() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 	for i := range img.Pix {
