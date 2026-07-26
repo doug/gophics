@@ -64,6 +64,14 @@ func (s *selectableState) Build(ctx Ctx) Widget {
 					s.copy()
 				}
 			},
+			// Double-tap selects the word under the pointer (OnPress set
+			// s.focus to the tapped offset on the way in).
+			OnDoubleTap: func() {
+				if s.ref.box != nil {
+					lo, hi := s.ref.box.wordAt(s.focus)
+					s.SetState(func() { s.anchor, s.focus = lo, hi })
+				}
+			},
 		},
 		Child: selText{
 			text: t.S, font: t.Font, size: t.size(), color: t.Color,
@@ -195,6 +203,33 @@ func (b *selectableBox) offsetAt(p geom.Pt) int {
 		}
 	}
 	return b.lineStart[li] + col
+}
+
+// wordAt returns the linear range of the whitespace-delimited word containing
+// (or immediately before) the offset — for double-tap word selection. A tap
+// on whitespace returns an empty range.
+func (b *selectableBox) wordAt(off int) (int, int) {
+	for li := len(b.lines) - 1; li >= 0; li-- {
+		start := b.lineStart[li]
+		if off < start {
+			continue
+		}
+		runes := []rune(b.lines[li])
+		col := off - start
+		if col > len(runes) {
+			col = len(runes)
+		}
+		word := func(r rune) bool { return r != ' ' && r != '\t' }
+		lo, hi := col, col
+		for lo > 0 && word(runes[lo-1]) {
+			lo--
+		}
+		for hi < len(runes) && word(runes[hi]) {
+			hi++
+		}
+		return start + lo, start + hi
+	}
+	return off, off
 }
 
 // selectedText returns the runes in [lo, hi) joined across lines with "\n".

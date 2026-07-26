@@ -43,6 +43,60 @@ func TestSelectablePartialRanges(t *testing.T) {
 	}
 }
 
+// doubleTapAt taps twice at the same point with no time between, so the
+// gesture host recognizes a double-tap.
+func doubleTapAt(h *Headless, x, y float32) {
+	h.Tap(geom.Pt{X: x, Y: y})
+	h.Tap(geom.Pt{X: x, Y: y})
+}
+
+func TestSelectableDoubleTapSelectsWord(t *testing.T) {
+	const s = "Hello World"
+
+	// Double-tap inside "World" → selects the whole word.
+	h := selHarness(t, s)
+	mid := h.Core.Painter.MeasureWidth("Hello Wor", 14) // inside "World"
+	doubleTapAt(h, mid, 8)
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "World" {
+		t.Fatalf("double-tap in World copied %q, want \"World\"", got)
+	}
+
+	// Double-tap inside "Hello" → selects "Hello".
+	h2 := selHarness(t, s)
+	doubleTapAt(h2, h2.Core.Painter.MeasureWidth("He", 14), 8)
+	h2.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h2); got != "Hello" {
+		t.Fatalf("double-tap in Hello copied %q, want \"Hello\"", got)
+	}
+}
+
+func TestSelectableDoubleTapAtBoundarySelectsNearestWord(t *testing.T) {
+	const s = "Hello World"
+	h := selHarness(t, s)
+	// A tap at the single-space boundary rounds to an adjacent word offset,
+	// so double-tap grabs the nearest whole word (never crashes or empties).
+	x := (h.Core.Painter.MeasureWidth("Hello", 14) + h.Core.Painter.MeasureWidth("Hello ", 14)) / 2
+	doubleTapAt(h, x, 8)
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "Hello" && got != "World" {
+		t.Fatalf("double-tap at the word boundary copied %q, want an adjacent word", got)
+	}
+}
+
+func TestSelectableDoubleTapInGapSelectsNothing(t *testing.T) {
+	const s = "Hi   there" // three spaces — a genuine whitespace run
+	h := selHarness(t, s)
+	// Middle of the gap: the offset lands on a space flanked by spaces.
+	x := (h.Core.Painter.MeasureWidth("Hi ", 14) + h.Core.Painter.MeasureWidth("Hi  ", 14)) / 2
+	doubleTapAt(h, x, 8)
+	h.Core.Owner.Clipboard.(*MemClipboard).S = "SENTINEL"
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "SENTINEL" {
+		t.Fatalf("double-tap inside a whitespace run selected %q, want nothing", got)
+	}
+}
+
 func TestSelectableClickCollapsesSelection(t *testing.T) {
 	const s = "Hello World"
 	h := selHarness(t, s)
