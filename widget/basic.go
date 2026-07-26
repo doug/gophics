@@ -41,8 +41,8 @@ func (t Text) updateBox(ctx Ctx, b layout.Box) {
 	tb.Wrap, tb.Strike, tb.Underline = t.Wrap, t.Strike, t.Underline
 	tb.MaxLines, tb.Ellipsis = t.MaxLines, t.Ellipsis
 }
-func (t Text) childWidgets() []Widget               { return nil }
-func (t Text) attach(layout.Box, []layout.Box)      {}
+func (t Text) childWidgets() []Widget          { return nil }
+func (t Text) attach(layout.Box, []layout.Box) {}
 
 // Padding insets its child. Set Insets, or All as shorthand.
 type Padding struct {
@@ -257,13 +257,13 @@ type scrollState struct {
 	offset float32
 	vp     *viewportRef
 
-	fling      flinger
-	velocity   float32 // px/s along the main axis (drag direction)
-	lastDrag   time.Time
-	endArmed   bool
-	glide      *anim.Controller
-	glideFrom  float32
-	glideTo    float32
+	fling     flinger
+	velocity  float32 // px/s along the main axis (drag direction)
+	lastDrag  time.Time
+	endArmed  bool
+	glide     *anim.Controller
+	glideFrom float32
+	glideTo   float32
 
 	// Pull-to-refresh state.
 	overscroll float32 // logical px the content is pulled past the top
@@ -272,6 +272,10 @@ type scrollState struct {
 	snap       *anim.Controller
 	snapFrom   float32
 	snapTo     float32
+
+	// Scrollbar fade: 1 right after scrolling, decaying to 0 when idle.
+	barFade float32
+	barTick scrollbarFade
 }
 
 type viewportRef struct{ box *layout.Viewport }
@@ -293,6 +297,8 @@ func (s *scrollState) Init(ctx Ctx) {
 	ctx.AddTicker(s.snap)
 	s.spin.s = s
 	ctx.AddTicker(&s.spin)
+	s.barTick.s = s
+	ctx.AddTicker(&s.barTick)
 	if c := s.W().Controller; c != nil {
 		c.s = s
 	}
@@ -303,6 +309,24 @@ func (s *scrollState) Dispose() {
 	s.ctx.RemoveTicker(s.glide)
 	s.ctx.RemoveTicker(s.snap)
 	s.ctx.RemoveTicker(&s.spin)
+	s.ctx.RemoveTicker(&s.barTick)
+}
+
+// scrollbarFade decays the scrollbar's opacity toward 0 when scrolling stops
+// (reportOffset resets it to 1 on each move), so the indicator shows during
+// scrolling and quietly fades out when idle.
+type scrollbarFade struct{ s *scrollState }
+
+func (b *scrollbarFade) Tick(dt float64) bool {
+	if b.s.barFade <= 0 {
+		return false
+	}
+	b.s.barFade -= float32(dt) / 0.7 // ~0.7s fade-out
+	if b.s.barFade < 0 {
+		b.s.barFade = 0
+	}
+	b.s.ctx.Invalidate()
+	return b.s.barFade > 0
 }
 
 func (s *scrollState) jumpTo(offset float32) {
@@ -334,6 +358,7 @@ func (s *scrollState) animateTo(offset float32, d time.Duration) {
 
 // reportOffset notifies OnOffset and fires OnEndReached near the bottom.
 func (s *scrollState) reportOffset() {
+	s.barFade = 1 // scrolling happened: show the scrollbar, then it fades
 	w := s.W()
 	var extent float32
 	if s.vp.box != nil {
@@ -412,9 +437,9 @@ type flinger struct {
 }
 
 const (
-	flingFriction  = 3.5 // 1/s decay rate
-	flingMinStart  = 80  // px/s needed to start a fling
-	flingMinSpeed  = 20  // px/s considered at rest
+	flingFriction = 3.5 // 1/s decay rate
+	flingMinStart = 80  // px/s needed to start a fling
+	flingMinSpeed = 20  // px/s considered at rest
 )
 
 func (f *flinger) Tick(dt float64) bool {
@@ -548,19 +573,78 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 		},
 		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Reverse: w.Reverse, Ref: s.vp, Child: w.Child},
 	}
-	if w.OnRefresh == nil {
-		return inner
-	}
-	// Layer the indicator in the revealed band above the content.
-	return Stack{Children: []Widget{
-		inner,
-		Align{X: 0.5, Y: 0, Child: refreshIndicator{
+	// Overlay the fading scroll indicator, and the pull-to-refresh spinner
+	// when enabled, above the content.
+	layers := []Widget{inner, scrollbar{s: s}}
+	if w.OnRefresh != nil {
+		layers = append(layers, Align{X: 0.5, Y: 0, Child: refreshIndicator{
 			extent:   s.overscroll,
 			progress: s.overscroll / refreshTrigger,
 			spinning: s.refreshing,
 			phase:    s.spin.phase,
-		}},
-	}}
+		}})
+	}
+	return Stack{Children: layers}
+}
+
+// scrollbar overlays a thin, fading position indicator on the scroll's
+// trailing edge — so scrollable regions are discoverable. It reads the live
+// scroll state each paint and never intercepts input.
+type scrollbar struct{ s *scrollState }
+
+func (b scrollbar) createBox(Ctx) layout.Box        { return &scrollbarBox{s: b.s} }
+func (b scrollbar) updateBox(_ Ctx, box layout.Box) { box.(*scrollbarBox).s = b.s }
+func (b scrollbar) childWidgets() []Widget          { return nil }
+func (b scrollbar) attach(layout.Box, []layout.Box) {}
+
+type scrollbarBox struct {
+	layout.Base
+	s    *scrollState
+	size geom.Size
+}
+
+func (b *scrollbarBox) Layout(cs layout.Constraints) geom.Size {
+	b.size = cs.Constrain(cs.Max) // fill the scroll area
+	return b.size
+}
+
+func (b *scrollbarBox) Size() geom.Size                { return b.size }
+func (b *scrollbarBox) AddHits(geom.Pt, *[]layout.Hit) {} // decorative only
+
+func (b *scrollbarBox) Paint(c paint.Canvas, at geom.Pt) {
+	s := b.s
+	if s == nil || s.vp.box == nil {
+		return
+	}
+	maxOff := s.vp.box.MaxOffset()
+	if maxOff <= 0 || s.barFade <= 0 {
+		return // not scrollable, or faded out
+	}
+	horiz := s.W().Axis == layout.Horizontal
+	extent := b.size.H
+	if horiz {
+		extent = b.size.W
+	}
+	content := extent + maxOff
+	frac := extent / content
+	thumbLen := extent * frac
+	if thumbLen < 28 {
+		thumbLen = 28
+	}
+	pos := (s.offset / maxOff) * (extent - thumbLen)
+	const th, pad = 4, 2
+	alpha := s.barFade
+	if alpha > 1 {
+		alpha = 1
+	}
+	col := paint.Color{R: 0.6, G: 0.6, B: 0.62, A: alpha * 0.6}
+	var r geom.Rect
+	if horiz {
+		r = geom.RectXYWH(at.X+pos, at.Y+b.size.H-th-pad, thumbLen, th)
+	} else {
+		r = geom.RectXYWH(at.X+b.size.W-th-pad, at.Y+pos, th, thumbLen)
+	}
+	c.FillRRect(r, th/2, col)
 }
 
 // refreshIndicator draws the spoke spinner centered in the pulled-open band.
