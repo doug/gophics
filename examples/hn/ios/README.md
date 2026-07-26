@@ -13,17 +13,36 @@ refuses without it. Install from the App Store, then:
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 ```
 
-## Build
+## Build & run (simulator)
+
+Reproducible, no manual Xcode GUI steps (needs `xcodegen`: `brew install
+xcodegen`). From `examples/hn/ios`:
 
 ```sh
-# From the repo root: builds Hnmobile.xcframework (device + simulator).
-gomobile bind -target=ios,iossimulator \
-  -o examples/hn/ios/Hnmobile.xcframework ./examples/hn/mobile
+# 1. Build the Go side into an xcframework (device + simulator slices).
+gomobile bind -target=ios,iossimulator -o Hnmobile.xcframework ../mobile
+
+# 2. Generate the Xcode project from project.yml and build for the sim.
+xcodegen generate
+xcodebuild -project GossamerHN.xcodeproj -scheme GossamerHN \
+  -sdk iphonesimulator -configuration Debug \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -derivedDataPath build build
+
+# 3. Boot, install, launch.
+xcrun simctl boot "iPhone 17"
+xcrun simctl install "iPhone 17" \
+  build/Build/Products/Debug-iphonesimulator/GossamerHN.app
+xcrun simctl launch "iPhone 17" dev.gossamer.hn
 ```
 
-Then create an iOS App project in Xcode (or via xcodegen), add
-`GossamerHN/GossamerApp.swift` and drag in `Hnmobile.xcframework`
-(Embed & Sign). Run on a simulator or device.
+For a device, build with `-sdk iphoneos` and a signing team, or open
+`GossamerHN.xcodeproj` in Xcode and run.
+
+Verified 2026-07-26 on iPhone 17 (iOS 26) simulator: live HN front page
+over the network, bold titles, safe-area insets under the status bar.
+Touch, keyboard, and navigation share the `shell/mobile.Bridge` proven
+live on Android and by `shell/mobile`'s headless tests.
 
 ## Notes
 

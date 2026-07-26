@@ -1,0 +1,28 @@
+name: GossamerHN
+options:
+  bundleIdPrefix: dev.gossamer
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  GossamerHN:
+    type: application
+    platform: iOS
+    sources:
+      - GossamerHN
+    dependencies:
+      - framework: Hnmobile.xcframework
+        embed: true
+    info:
+      path: GossamerHN/Info.plist
+      properties:
+        CFBundleDisplayName: gossamer HN
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gossamer.hn
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
