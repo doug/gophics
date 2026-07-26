@@ -62,9 +62,10 @@ type Core struct {
 	hovered    []*widget.InteractiveBox
 	pressed    *widget.InteractiveBox
 	longPress  *widget.InteractiveBox // box eligible for long-press
-	dragging   *widget.InteractiveBox
-	dragOrigin geom.Pt // window origin of the dragging box at press time
-	lastPos    geom.Pt
+	dragging       *widget.InteractiveBox
+	dragCandidates []hitInteractive // OnDrag boxes awaiting directional commit
+	dragOrigin     geom.Pt          // window origin of the dragging box at press time
+	lastPos        geom.Pt
 	downPos    geom.Pt
 	moved      bool
 	pressHeld  float64 // seconds the current press has been held, unmoved
@@ -373,12 +374,25 @@ func (c *Core) Pointer(e shell.Pointer) {
 		}
 		// Slop detection runs for any active press, so a move cancels a
 		// pending tap or long-press even on a widget with no drag handler.
-		if !c.moved && (c.pressed != nil || c.longPress != nil || c.dragging != nil) {
+		if !c.moved && (c.pressed != nil || c.longPress != nil || len(c.dragCandidates) > 0) {
 			d := e.Pos.Sub(c.downPos)
 			if d.X*d.X+d.Y*d.Y > tapSlop*tapSlop {
 				c.moved = true
 				c.pressed = nil
 				c.longPress = nil
+				// Commit the drag to the deepest candidate whose axis matches
+				// the drag's dominant direction (an unconstrained one always
+				// matches), so nested horizontal/vertical drags disambiguate.
+				for _, h := range c.dragCandidates {
+					if h.box.Handler.DragAxis.Accepts(d.X, d.Y) {
+						c.dragging = h.box
+						// h.local is the box-local point at press, so the box
+						// origin comes from downPos (not the current move pos).
+						c.dragOrigin = c.downPos.Sub(h.local)
+						break
+					}
+				}
+				c.dragCandidates = c.dragCandidates[:0]
 			}
 		}
 		if c.moved && c.dragging != nil && c.dragging.Handler.OnDrag != nil {
@@ -413,6 +427,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 		}
 		c.downPos, c.lastPos, c.moved = e.Pos, e.Pos, false
 		c.pressed, c.dragging, c.longPress = nil, nil, nil
+		c.dragCandidates = c.dragCandidates[:0]
 		c.pressHeld, c.longFired = 0, false
 		hits := c.interactivesAt(e.Pos)
 		for _, h := range hits {
@@ -425,9 +440,11 @@ func (c *Core) Pointer(e shell.Pointer) {
 			if c.longPress == nil && h.box.Handler.OnLongPress != nil {
 				c.longPress = h.box
 			}
-			if c.dragging == nil && h.box.Handler.OnDrag != nil {
-				c.dragging = h.box
-				c.dragOrigin = e.Pos.Sub(h.local)
+			// Defer drag commitment: collect every candidate (deepest first)
+			// and pick one by direction on the first slop-crossing move, so a
+			// horizontal Dismissible and a vertical Scroll can nest.
+			if h.box.Handler.OnDrag != nil {
+				c.dragCandidates = append(c.dragCandidates, h)
 			}
 		}
 		c.focusFrom(hits)
@@ -438,6 +455,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 		}
 		pressed, dragging := c.pressed, c.dragging
 		c.pressed, c.dragging, c.longPress = nil, nil, nil
+		c.dragCandidates = c.dragCandidates[:0]
 		if dragging != nil && dragging.Handler.OnRelease != nil {
 			dragging.Handler.OnRelease()
 		}

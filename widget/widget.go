@@ -175,6 +175,11 @@ type Handler struct {
 	// OnDrag receives pointer movement while pressed on this widget. Once a
 	// drag exceeds the tap slop, a pending tap is cancelled.
 	OnDrag func(pos, delta geom.Pt)
+	// DragAxis constrains which drag direction this handler claims, so a
+	// horizontal swipe (e.g. Dismissible) and a vertical scroll can nest:
+	// when a drag starts, the host picks the deepest candidate whose axis
+	// matches the drag's dominant direction. DragAny claims either.
+	DragAxis DragAxis
 	// OnRelease fires on pointer-up after this widget received the press
 	// (regardless of drag distance) — e.g. to start fling deceleration.
 	OnRelease func()
@@ -199,3 +204,31 @@ type Handler struct {
 }
 
 func (h *Handler) focusable() bool { return h.OnText != nil || h.OnKey != nil }
+
+// DragAxis constrains the direction a drag handler claims (see Handler.DragAxis).
+type DragAxis uint8
+
+const (
+	DragAny DragAxis = iota // claim a drag in either direction
+	DragHorizontal
+	DragVertical
+)
+
+// Accepts reports whether a drag whose dominant movement is dx,dy matches this
+// axis constraint.
+func (a DragAxis) Accepts(dx, dy float32) bool {
+	switch a {
+	case DragHorizontal:
+		return abs32(dx) >= abs32(dy)
+	case DragVertical:
+		return abs32(dy) >= abs32(dx)
+	}
+	return true
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}

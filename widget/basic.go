@@ -511,8 +511,13 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 		s.refreshing = false
 		s.animateOverscrollTo(0)
 	}
+	dragAxis := DragVertical
+	if w.Axis == layout.Horizontal {
+		dragAxis = DragHorizontal
+	}
 	inner := Interactive{
 		Handler: Handler{
+			DragAxis: dragAxis, // so a cross-axis swipe (Dismissible) can nest
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
 				s.contentDelta(s.mainDelta(d))

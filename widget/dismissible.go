@@ -113,6 +113,7 @@ func (s *dismissState) Build(ctx Ctx) Widget {
 	w := s.W()
 	slide := slideBox{dx: s.dx, out: &s.width, child: Interactive{
 		Handler: Handler{
+			DragAxis: DragHorizontal, // let a vertical scroll claim vertical drags
 			OnPress: func(geom.Pt) {
 				s.anim.Jump(1) // grab interrupts any spring/dismiss
 				s.velocity, s.lastDrag = 0, time.Now()
