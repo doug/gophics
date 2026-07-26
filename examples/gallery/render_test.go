@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/gobold"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/shell"
 )
 
 func harness(t *testing.T) (*app.Headless, *feedState) {
@@ -89,6 +91,31 @@ func TestGalleryHeroNavigation(t *testing.T) {
 	settle(h)
 	if colorful(h.Render(), 210, 100) {
 		t.Fatal("back on the feed the header area should be dark again")
+	}
+}
+
+func TestGallerySelectableBody(t *testing.T) {
+	h, _ := harness(t)
+	h.Tap(geom.Pt{X: 210, Y: 150}) // open detail
+	settle(h)
+
+	// Drag horizontally across the body paragraph and copy. The body sits
+	// below the 200px header, back chip, title and byline.
+	h.DragTo(geom.Pt{X: 20, Y: 345}, geom.Pt{X: 380, Y: 345})
+	h.Release(geom.Pt{X: 380, Y: 345})
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+
+	got := h.Core.Owner.Clipboard.(*app.MemClipboard).S
+	if got == "" {
+		t.Fatal("dragging across the detail body selected nothing")
+	}
+	// A single-line horizontal selection is a contiguous slice of the body.
+	body := bodyFor(makeCards(12, 0)[0])
+	if !strings.Contains(body, got) {
+		t.Fatalf("selection %q is not a substring of the body", got)
+	}
+	if len(got) < 8 {
+		t.Fatalf("selection %q suspiciously short for a full-width drag", got)
 	}
 }
 
