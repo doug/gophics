@@ -86,7 +86,9 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 		posted:     make(chan func(), 128),
 	}
 	c.Owner.Post = c.Post
-	c.Owner.SetRoot(root)
+	// Wrap the app in an OverlayHost so any widget can show dialogs, menus,
+	// and snackbars above the whole tree (widget.Overlay via Of).
+	c.Owner.SetRoot(widget.OverlayHost{Child: root})
 	return c, nil
 }
 
