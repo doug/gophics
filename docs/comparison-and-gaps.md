@@ -127,7 +127,10 @@ Remaining:
     `Refreshing`, rubber-band overscroll, spoke spinner; wired into the HN
     feed). ~~swipe-to-dismiss~~ (`Dismissible`: finger-follow, threshold/
     flick trigger, spring-back, revealed background panel; wired into the
-    todo example). ~~reverse/bottom-anchored lists~~ (`Scroll.Reverse` +
+    todo example; nests inside a vertical scroll via directional drag
+    disambiguation — the host defers drag commitment until the drag's
+    dominant axis is known, then routes to the deepest handler whose
+    `Handler.DragAxis` matches). ~~reverse/bottom-anchored lists~~ (`Scroll.Reverse` +
     `LazyList.Reverse`: end-anchored offset origin, so newest-at-bottom and
     stay-pinned-on-append fall out for free; virtualized; OnEndReached fires
     at the oldest end for history loading — the chat-log layout).
