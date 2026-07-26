@@ -137,6 +137,19 @@ Remaining:
     Still: hero transitions; on-device VoiceOver validation of the iOS a11y
     host.
 
+**Hero transitions — blocked on a prerequisite.** A shared-element flight
+must interpolate the element's *size* between routes, but `paint.Canvas`
+exposes only translation (the paint origin), no scale/transform. Landing
+heroes cleanly first needs one of: (a) a Canvas affine transform
+(push/pop matrix) threaded through the gg-backed canvas and the scene
+recorder, or (b) offscreen sub-tree snapshotting — render a hero to an
+`image.RGBA` and blit it through the already-scaling `Canvas.Image(img,
+dstRect)` during the flight. The Navigator hero coordination (per-page
+hero registries via `Provide`, source/dest rect capture, suppressing the
+real heroes mid-flight) is then straightforward on top. Treated as its
+own milestone rather than a follow-up, since a version without size
+interpolation would look wrong.
+
 All 12 originally-identified cross-cutting gaps are now addressed — the
 accessibility bridge landed on both platforms (Android verified on device
 via `uiautomator dump`, iOS building and running with the same Go a11y
