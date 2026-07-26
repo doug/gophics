@@ -49,6 +49,7 @@ type Core struct {
 	root       widget.Widget
 	size       geom.Size
 	debugPaint bool
+	inspect    bool // interactive widget inspector (highlights box under pointer)
 	frameTimes [60]float32 // ring of recent raster+record durations, ms
 	frameHead  int
 
@@ -215,6 +216,14 @@ func (c *Core) Paint(canvas paint.Canvas) {
 // SetDebugPaint toggles the box-bounds debug overlay at runtime.
 func (c *Core) SetDebugPaint(on bool) { c.debugPaint = on }
 
+// SetInspect toggles the interactive widget inspector: while on, the box
+// under the pointer is highlighted and labeled with its type and size (like
+// Flutter's widget inspector). Pairs with InspectTree for the full dump.
+func (c *Core) SetInspect(on bool) {
+	c.inspect = on
+	c.Owner.RequestFrameThreadSafe()
+}
+
 // InspectTree returns the current render tree as a flat, depth-ordered dump
 // (types, rects, semantics) — the data behind a widget inspector. Call
 // after a frame. Runs headless.
@@ -269,6 +278,9 @@ func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 		box.Paint(rec, geom.Pt{})
 		if c.debugPaint {
 			layout.DebugPaint(box, rec)
+		}
+		if c.inspect {
+			layout.InspectOverlay(box, c.lastPos, rec, c.Painter)
 		}
 	}
 
@@ -356,6 +368,9 @@ func (c *Core) Pointer(e shell.Pointer) {
 	case shell.PointerMove:
 		delta := e.Pos.Sub(c.lastPos)
 		c.lastPos = e.Pos
+		if c.inspect {
+			c.Owner.RequestFrameThreadSafe() // repaint so the highlight tracks
+		}
 		// Slop detection runs for any active press, so a move cancels a
 		// pending tap or long-press even on a widget with no drag handler.
 		if !c.moved && (c.pressed != nil || c.longPress != nil || c.dragging != nil) {

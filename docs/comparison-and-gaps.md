@@ -101,7 +101,9 @@ Done (cont.):
 
 10. ~~**Tooling**~~ — `Core.InspectTree` (render-tree dump), `Config.Debug`/
     `SetDebugPaint` (box-bounds overlay), `Core.FrameStats`/GOSSAMER_PACING
-    (frame timing). Still to do: a visual inspector UI on the dump.
+    (frame timing), and `Core.SetInspect` — an interactive widget inspector
+    that highlights the box under the pointer and labels it with type + size
+    (Flutter's inspector; `layout.DeepestAt`/`InspectOverlay`).
 12. ~~Group opacity~~ (`Opacity` + `AnimateFloat` fades), ~~double-tap~~
     (deferred single-tap disambiguation).
 9. ~~**Accessibility bridge**~~ — the semantics tree now flattens to a flat,
@@ -131,8 +133,9 @@ Remaining:
     at the oldest end for history loading — the chat-log layout).
     ~~selectable static text~~ (`SelectableText`: drag-select with glyph-
     midpoint hit testing, highlighted range, Cmd/Ctrl+C copy joining wrapped
-    lines). Still: hero transitions, visual inspector UI; on-device
-    VoiceOver validation of the iOS a11y host.
+    lines). ~~visual inspector UI~~ (`Core.SetInspect`, see tooling above).
+    Still: hero transitions; on-device VoiceOver validation of the iOS a11y
+    host.
 
 All 12 originally-identified cross-cutting gaps are now addressed — the
 accessibility bridge landed on both platforms (Android verified on device

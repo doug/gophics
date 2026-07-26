@@ -51,6 +51,49 @@ func Inspect(root Box) []InspectNode {
 
 func boxTypeName(b Box) string { return reflect.TypeOf(b).String() }
 
+// DeepestAt returns the smallest-area box whose bounds contain p (root
+// coordinates) and its rect — the target an interactive inspector highlights.
+func DeepestAt(root Box, p geom.Pt) (Box, geom.Rect, bool) {
+	var box Box
+	var rect geom.Rect
+	best := float32(1e18)
+	found := false
+	Walk(root, func(b Box, r geom.Rect, _ int) {
+		if b.Size().IsEmpty() || !r.Contains(p) {
+			return
+		}
+		if a := r.Dx() * r.Dy(); a <= best {
+			box, rect, best, found = b, r, a, true
+		}
+	})
+	return box, rect, found
+}
+
+// InspectOverlay draws the interactive inspector: it highlights the deepest
+// box under p and labels it with its type and size — Flutter's widget
+// inspector, drawn straight onto the frame after content.
+func InspectOverlay(root Box, p geom.Pt, c paint.Canvas, painter *paint.Painter) {
+	b, rect, ok := DeepestAt(root, p)
+	if !ok {
+		return
+	}
+	c.FillRect(rect, paint.Color{R: 0.36, G: 0.62, B: 0.98, A: 0.15})
+	c.StrokeRRect(rect, 0, 1, paint.Color{R: 0.36, G: 0.62, B: 0.98, A: 0.9})
+
+	label := fmt.Sprintf("%s  %.0f×%.0f", boxTypeName(b), rect.Dx(), rect.Dy())
+	const fs float32 = 11
+	chipW := painter.MeasureWidth(label, fs) + 8
+	chipH := fs + 6
+	y := rect.Min.Y - chipH // above the box, or inside if it would clip off-screen
+	if y < 0 {
+		y = rect.Min.Y
+	}
+	chip := geom.RectXYWH(rect.Min.X, y, chipW, chipH)
+	c.FillRRect(chip, 3, paint.Color{R: 0.09, G: 0.11, B: 0.15, A: 0.96})
+	c.Text(label, geom.Pt{X: chip.Min.X + 4, Y: chip.Min.Y + fs}, fs,
+		paint.Color{R: 0.9, G: 0.93, B: 0.96, A: 1})
+}
+
 // DebugPaint strokes every box's bounds over the frame (Flutter's
 // debugPaintSize). Nested boxes get progressively lighter hues so the
 // hierarchy reads at a glance. Draw it after the app content.
