@@ -65,7 +65,12 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: float32(x), Y: float32(y)}, Button: button(b)})
 	})
 	es.OnScroll(func(dx, dy float64) {
-		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{X: float32(dx), Y: float32(dy)}})
+		// gpucontext reports positive delta = scroll content down/right; the
+		// gossamer convention (matched by the web shell) is the negated
+		// platform delta, so forwarding it raw scrolled the wrong way. Negate
+		// to align, and to honor the OS natural-scroll setting the platform
+		// has already applied to these deltas.
+		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{X: -float32(dx), Y: -float32(dy)}})
 	})
 	es.OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		h.Event(w, shell.Key{Kind: shell.KeyPress, Code: keyCode(key), Mods: modBits(mods)})
