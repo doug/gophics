@@ -404,6 +404,21 @@ bottleneck; next levers are damage-rect blits through the bridge,
 ANativeWindow direct presentation, or GPU present. Measure on real
 hardware before optimizing further.
 
+Frame pacing measured 2026-07-26 (Core.FrameStats; GOSSAMER_PACING logs
+it; Core.SetDebugPaint overlays box bounds). Real M1 Ultra / Metal, a
+24-row text list at 480x800@2x:
+  - Localized change (one row): ~2.6 ms — the common case is smooth.
+  - Full-scene animation every frame (worst case, whole screen redrawn):
+    ~60 ms avg. Two costs stack here: full-surface CPU raster AND a full
+    ~6 MB texture upload every frame.
+The clearest lever is now visible: the present path uploads the WHOLE
+surface even when damage is tiny (the damage system bounds raster, not
+upload). Damage-rect texture upload — upload only the changed region and
+composite over the retained surface — would cut typical present cost
+dramatically; it needs gogpu partial-surface support (or the M5 GPU
+vector backend, which presents without a CPU round-trip). Full-scene
+continuous animation stays a CPU-raster-bound worst case until M5.
+
 
 Mobile embedding (lifecycle, surfaces, touch, IME, app-store packaging) is
 a whole platform team's worth of work in Flutter. Gossamer sequences it

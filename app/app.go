@@ -7,7 +7,9 @@ package app
 
 import (
 	"log"
+	"os"
 	"slices"
+	"time"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
@@ -26,6 +28,9 @@ type Config struct {
 	// FontFamilies registers named families (e.g. "bold", "mono"),
 	// selectable per text run via widget.Text.Font / layout.RichSpan.Font.
 	FontFamilies map[string][]byte
+	// Debug draws box-bounds outlines over the app (Flutter's
+	// debugPaintSize). Toggle at runtime via Core.SetDebugPaint.
+	Debug bool
 }
 
 // Core is the shell-independent runtime: element tree, layout, paint, and
@@ -43,6 +48,9 @@ type Core struct {
 	background paint.Color
 	root       widget.Widget
 	size       geom.Size
+	debugPaint bool
+	frameTimes [60]float32 // ring of recent raster+record durations, ms
+	frameHead  int
 
 	cur, prev     *scene.List
 	lastPaintSize geom.Size
@@ -114,6 +122,7 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 		posted:     make(chan func(), 128),
 	}
 	c.Owner.Post = c.Post
+	c.debugPaint = cfg.Debug
 	return c, nil
 }
 
@@ -168,6 +177,44 @@ func (c *Core) Paint(canvas paint.Canvas) {
 	}
 }
 
+// SetDebugPaint toggles the box-bounds debug overlay at runtime.
+func (c *Core) SetDebugPaint(on bool) { c.debugPaint = on }
+
+// InspectTree returns the current render tree as a flat, depth-ordered dump
+// (types, rects, semantics) — the data behind a widget inspector. Call
+// after a frame. Runs headless.
+func (c *Core) InspectTree() []layout.InspectNode {
+	box := c.Owner.RootBox()
+	if box == nil {
+		return nil
+	}
+	return layout.Inspect(box)
+}
+
+// FrameStats returns the average and worst raster+record time (ms) over the
+// last frames — the honest frame-pacing readout (PLAN.md §6.4).
+func (c *Core) FrameStats() (avg, worst float32) {
+	var sum, n float32
+	for _, t := range c.frameTimes {
+		if t > 0 {
+			sum += t
+			n++
+			if t > worst {
+				worst = t
+			}
+		}
+	}
+	if n > 0 {
+		avg = sum / n
+	}
+	return avg, worst
+}
+
+func (c *Core) recordFrameTime(ms float32) {
+	c.frameTimes[c.frameHead] = ms
+	c.frameHead = (c.frameHead + 1) % len(c.frameTimes)
+}
+
 // RecordScene records the current tree into a display list and diffs it
 // against the previous frame's. It reports whether rasterization is needed
 // and the (surface-clamped) damage rect. A size or scale change forces full
@@ -185,6 +232,9 @@ func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 	rec.FillRect(surface, bg)
 	if box := c.Owner.RootBox(); box != nil {
 		box.Paint(rec, geom.Pt{})
+		if c.debugPaint {
+			layout.DebugPaint(box, rec)
+		}
 	}
 
 	damage, changed = c.cur.Diff(c.prev, c.Painter)
@@ -440,8 +490,10 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	if h.core.Owner.TickAll(dt) || h.core.longPressPending() {
 		w.Invalidate() // animations or a held long-press: keep frames coming
 	}
+	t0 := time.Now()
 	h.core.Layout(f.Size())
-	if changed, damage := h.core.RecordScene(f.Size(), f.Scale()); changed {
+	changed, damage := h.core.RecordScene(f.Size(), f.Scale())
+	if changed {
 		canvas := h.core.Painter.Begin(f)
 		h.core.ReplayDamaged(canvas, damage)
 	}
@@ -449,6 +501,16 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// swapchain still needs this frame's image.
 	if err := h.core.Painter.End(f); err != nil {
 		log.Printf("gossamer: present: %v", err)
+	}
+	if changed {
+		// Full frame cost: layout + record + raster + upload + present.
+		h.core.recordFrameTime(float32(time.Since(t0).Seconds() * 1000))
+		// GOSSAMER_PACING logs a rolling frame-time summary each time the
+		// 60-frame ring wraps — the on-device pacing readout (PLAN §6.4).
+		if h.core.frameHead == 0 && os.Getenv("GOSSAMER_PACING") != "" {
+			avg, worst := h.core.FrameStats()
+			log.Printf("gossamer pacing: avg %.2f ms  worst %.2f ms (60 frames)", avg, worst)
+		}
 	}
 }
 
