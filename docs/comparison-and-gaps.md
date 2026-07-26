@@ -81,13 +81,16 @@ Done (2026-07-26):
    flight cache + placeholder/error). Surfaced and fixed two framework
    bugs: the loading→content reconciler swap and a mount-time Post race.
 
+Done (cont.):
+
+5. ~~**Scroll features**~~ — `Scroll`/`LazyList` `OnEndReached` (infinite
+   feeds) + `ScrollController` (JumpTo/AnimateTo, live offset). Still to
+   do: reverse/bottom-anchored, scrollbar, pull-to-refresh.
+6. ~~**Implicit animations**~~ — `Animated[T]` + `AnimateColor/Insets/
+   Float`, tween on value change. Still to do: hero transitions.
+
 Remaining:
 
-5. **Scroll features**: ScrollController (programmatic scroll, position,
-   onEndReached for infinite lists), reverse/bottom-anchored, scrollbar,
-   pull-to-refresh.
-6. **Implicit animations**: `Animated[Value]` that tweens on property
-   change; hero transitions. Broad polish.
 7. **Gestures**: long-press, double-tap, swipe/dismiss.
 8. **Text**: selectable static text, overflow ellipsis, max lines.
 9. **Accessibility bridge**: wire the existing semantics tree to
