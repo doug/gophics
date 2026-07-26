@@ -70,15 +70,19 @@ embedded UIs, server-side rendering — not where Flutter is strongest
 
 ## Cross-cutting gaps, prioritized
 
-1. **Overlay system** (dialogs, menus, tooltips, snackbars, bottom sheets).
-   Foundational — nearly every app needs it. Build an app-level overlay
-   layer + Dialog/Menu on top of the existing Stack. **← highest leverage**
-2. **Form controls**: Switch, Checkbox, Slider, Radio, SegmentedControl,
-   Dropdown. Table stakes for apps.
-3. **Layout primitives**: Grid, Wrap, AspectRatio, LayoutBuilder
-   (build-from-constraints = responsive), Positioned (in Stack), Spacer.
-4. **Async / network images**: load + decode (stdlib png/jpeg) + memory
-   cache + placeholder/error, off the UI goroutine via Post.
+Done (2026-07-26):
+
+1. ~~**Overlay system**~~ — `widget.OverlayHost` (auto-installed at the app
+   root) + `theme.ShowDialog`/`ShowMenu`, dismiss on scrim/Escape.
+2. ~~**Form controls**~~ — `theme.Switch/Checkbox/Slider/Radio`.
+3. ~~**Layout primitives**~~ — `Grid`, `Wrap`, `AspectRatio`, `Fill`,
+   `Stack`, `Spacer`. (`LayoutBuilder` for responsive still to do.)
+4. ~~**Async / network images**~~ — `widget.NetworkImage` (decode + single-
+   flight cache + placeholder/error). Surfaced and fixed two framework
+   bugs: the loading→content reconciler swap and a mount-time Post race.
+
+Remaining:
+
 5. **Scroll features**: ScrollController (programmatic scroll, position,
    onEndReached for infinite lists), reverse/bottom-anchored, scrollbar,
    pull-to-refresh.
@@ -89,5 +93,5 @@ embedded UIs, server-side rendering — not where Flutter is strongest
 9. **Accessibility bridge**: wire the existing semantics tree to
    VoiceOver/TalkBack/AccessKit.
 10. **Tooling**: widget inspector (semantics tree → browser), perf overlay.
-
-The plan below fixes 1–4 (the app-unblocking core); 5–10 follow.
+11. **Responsive**: `LayoutBuilder` (build from constraints) — one-frame
+    state-based version is easy; true layout-time build is the Flutter way.
