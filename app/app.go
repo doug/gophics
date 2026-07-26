@@ -192,10 +192,16 @@ func (c *Core) Semantics() []layout.SemNode {
 }
 
 // interactivesAt returns the InteractiveBoxes under p, topmost first.
+// Pending rebuilds are flushed AND laid out first: hit geometry (child
+// offsets, sizes) is only valid after layout, and events can arrive
+// between a state change and its frame.
 func (c *Core) interactivesAt(p geom.Pt) []hitInteractive {
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
+	}
+	if !c.size.IsEmpty() {
+		box.Layout(layout.Tight(c.size))
 	}
 	var out []hitInteractive
 	for _, h := range layout.HitTest(box, p) {
@@ -368,6 +374,12 @@ type shellHandler struct {
 	window shell.Window
 }
 
+// TextInputActive reports whether a widget currently accepts keyboard
+// input — embedded hosts use it to show/hide the on-screen keyboard.
+func (h *shellHandler) TextInputActive() bool {
+	return h.core.Owner.KeyboardTarget != nil
+}
+
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
 	h.core.Owner.Clipboard = w
@@ -400,6 +412,10 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		h.core.Pointer(e)
 	case shell.Text, shell.Key, shell.Composition:
 		h.core.Keyboard(e)
+	case shell.Insets:
+		h.core.Owner.SafeInsets = e.Insets
+		h.core.Owner.RebuildAll()
+		w.Invalidate()
 	case shell.Resize:
 		w.Invalidate()
 	}

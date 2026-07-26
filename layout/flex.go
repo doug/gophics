@@ -187,6 +187,9 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 
 func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
 	for i, ch := range f.Children {
+		if i >= len(f.offsets) {
+			break // children changed since last layout; skip until relaid
+		}
 		ch.Box.Paint(c, at.Add(f.offsets[i]))
 	}
 }
@@ -195,8 +198,10 @@ func (f *Flex) AddHits(p geom.Pt, hits *[]Hit) {
 	if !f.contains(p) {
 		return
 	}
-	// Reverse order: later children paint on top.
-	for i := len(f.Children) - 1; i >= 0; i-- {
+	// Reverse order: later children paint on top. Bounded by offsets in
+	// case children changed since the last layout.
+	n := min(len(f.Children), len(f.offsets))
+	for i := n - 1; i >= 0; i-- {
 		f.Children[i].Box.AddHits(p.Sub(f.offsets[i]), hits)
 	}
 	*hits = append(*hits, Hit{f, p})

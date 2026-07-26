@@ -397,6 +397,14 @@ This is a real, permanent DX gap vs Flutter and the plan says so honestly.
 
 ### 6.4 Mobile
 
+Status 2026-07-25: Android runs (Pixel 7 AVD, live HN app: touch, fling,
+navigation). Emulator frame pacing ~89ms avg under SwiftShader at
+1080x2400 full-screen blits - the CPU present path is the smoothness
+bottleneck; next levers are damage-rect blits through the bridge,
+ANativeWindow direct presentation, or GPU present. Measure on real
+hardware before optimizing further.
+
+
 Mobile embedding (lifecycle, surfaces, touch, IME, app-store packaging) is
 a whole platform team's worth of work in Flutter. Gossamer sequences it
 last (M9): by then the shell interface has three desktop + one web

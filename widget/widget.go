@@ -119,6 +119,10 @@ func (c Ctx) OpenURL(url string) error {
 // the tree, so reading it in Build stays fresh.
 func (c Ctx) DarkMode() bool { return c.el.owner.DarkMode }
 
+// SafeInsets are the platform-obstructed edges (status bar, notch,
+// on-screen keyboard) in logical pixels; pad content by them.
+func (c Ctx) SafeInsets() geom.Insets { return c.el.owner.SafeInsets }
+
 // Post schedules fn onto the UI goroutine before the next build. Use it to
 // deliver results from background goroutines (network fetches, file IO):
 //

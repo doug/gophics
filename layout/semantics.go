@@ -167,6 +167,9 @@ func (b *Decorated) VisitChildren(visit func(Box, geom.Pt)) {
 
 func (f *Flex) VisitChildren(visit func(Box, geom.Pt)) {
 	for i, c := range f.Children {
+		if i >= len(f.offsets) {
+			break
+		}
 		visit(c.Box, f.offsets[i])
 	}
 }

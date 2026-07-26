@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"sort"
 
+	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
 )
@@ -42,6 +43,10 @@ type Owner struct {
 	// OnBuildPanic observes recovered Build panics (default logs with a
 	// stack trace). The panicking subtree renders a BuildError instead.
 	OnBuildPanic func(recovered any)
+	// SafeInsets are platform-obstructed edges (status bars, notches,
+	// on-screen keyboards) in logical pixels, set by the runner; apps pad
+	// content by them (Ctx.SafeInsets).
+	SafeInsets geom.Insets
 
 	root    *element
 	dirty   []*element

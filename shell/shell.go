@@ -179,6 +179,10 @@ type Key struct {
 // Text is committed text input (post-IME).
 type Text struct{ S string }
 
+// Insets reports platform-obstructed edges (status bar, notch, on-screen
+// keyboard) in logical pixels.
+type Insets struct{ Insets geom.Insets }
+
 // CompositionKind discriminates Composition events.
 type CompositionKind uint8
 
@@ -200,6 +204,7 @@ type Composition struct {
 	Committed string
 }
 
+func (Insets) isEvent()      {}
 func (Resize) isEvent()      {}
 func (Closed) isEvent()      {}
 func (Focus) isEvent()       {}

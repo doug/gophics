@@ -72,3 +72,16 @@ func TakeOpenedURL() string { return bridge.TakeOpenedURL() }
 
 // Focused forwards app focus/visibility.
 func Focused(f bool) { bridge.Focused(f) }
+
+// SetInsets forwards safe-area insets in physical pixels.
+func SetInsets(top, right, bottom, left float64) {
+	bridge.SetInsets(float32(top), float32(right), float32(bottom), float32(left))
+}
+
+// TextInputActive reports whether the UI wants the on-screen keyboard.
+func TextInputActive() bool { return bridge.TextInputActive() }
+
+// Composition forwards IME preedit (kind: 0 start, 1 update, 2 end).
+func Composition(kind int, preedit string, cursor int, committed string) {
+	bridge.Composition(kind, preedit, cursor, committed)
+}

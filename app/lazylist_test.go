@@ -7,6 +7,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/shell"
 	"github.com/doug/gossamer/widget"
 )
 
@@ -68,4 +69,20 @@ func TestLazyListScrollRevealsAndPreserves(t *testing.T) {
 	if len(*built) > 600 {
 		t.Fatalf("too many items built while scrolling: %d", len(*built))
 	}
+}
+
+// Regression: a hit test arriving between a list-mutating rebuild and its
+// layout must not index stale flex offsets (Android fling crash).
+func TestHitTestAfterRebuildBeforeLayout(t *testing.T) {
+	h, _ := lazyHarness(t, 5000)
+	h.Render()
+	h.Move(geom.Pt{X: 100, Y: 150})
+	for range 30 {
+		// Scroll mutates the visible window (rebuild pending), then a raw
+		// pointer event hits immediately — no Render in between.
+		h.Core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{Y: -300}})
+		h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 150}})
+		h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 100, Y: 150}})
+	}
+	h.Render()
 }

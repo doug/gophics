@@ -53,14 +53,12 @@ func header(title string, lead widget.Widget) widget.Widget {
 	if lead == nil {
 		lead = widget.Text{S: "Y", Size: 15, Color: colOnBar}
 	}
-	return widget.Decorated{
-		Color: colBar,
-		Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 10),
-			Child: widget.Row(
-				lead,
-				widget.Sized{W: 10},
-				widget.Expand(widget.Text{S: title, Font: "bold", Size: 15, Color: colOnBar}),
-			)},
+	return widget.Padding{Insets: geom.InsetsSymmetric(12, 10),
+		Child: widget.Row(
+			lead,
+			widget.Sized{W: 10},
+			widget.Expand(widget.Text{S: title, Font: "bold", Size: 15, Color: colOnBar}),
+		),
 	}
 }
 
@@ -73,8 +71,20 @@ func backButton(ctx widget.Ctx) widget.Widget {
 	}
 }
 
-func page(headerW, body widget.Widget) widget.Widget {
-	col := widget.Column(headerW, widget.Expand(body))
+func page(ctx widget.Ctx, headerW, body widget.Widget) widget.Widget {
+	// Pad by the platform safe areas (status bar / notch / keyboard); the
+	// header bar's color extends behind the top inset.
+	in := ctx.SafeInsets()
+	col := widget.Column(
+		widget.Decorated{Color: colBar, Child: widget.Padding{
+			Insets: geom.Insets{Top: in.Top, Left: in.Left, Right: in.Right},
+			Child:  headerW,
+		}},
+		widget.Expand(widget.Padding{
+			Insets: geom.Insets{Left: in.Left, Right: in.Right, Bottom: in.Bottom},
+			Child:  body,
+		}),
+	)
 	col.CrossAlign = layout.CrossStretch
 	// Pages carry their own opaque background so slide transitions cover
 	// the page beneath.
@@ -140,7 +150,7 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 			Build:           func(i int) widget.Widget { return s.storyRow(nav, i) },
 		}
 	}
-	return page(header("Hacker News", nil), body)
+	return page(ctx, header("Hacker News", nil), body)
 }
 
 func (s *feedState) storyRow(nav widget.Nav, i int) widget.Widget {
@@ -211,7 +221,7 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 			},
 		}
 	}
-	return page(header(st.Title, backButton(ctx)), body)
+	return page(ctx, header(st.Title, backButton(ctx)), body)
 }
 
 func storyHeaderCell(st Item, openURL func(string)) widget.Widget {

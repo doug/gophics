@@ -21,6 +21,7 @@ android {
 }
 
 dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
     // Built by: gomobile bind -target=android -androidapi 24 \
     //   -o app/libs/hnmobile.aar github.com/doug/gossamer/examples/hn/mobile
     implementation files('libs/hnmobile.aar')

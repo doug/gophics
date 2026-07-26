@@ -124,6 +124,24 @@ func (b *Bridge) Touch(phase int, xPx, yPx float32) {
 // Text delivers committed text input from the on-screen keyboard.
 func (b *Bridge) Text(s string) { b.handler.Event(b, shell.Text{S: s}) }
 
+// SetInsets delivers safe-area insets in physical pixels (status bar,
+// gesture bars, keyboard).
+func (b *Bridge) SetInsets(topPx, rightPx, bottomPx, leftPx float32) {
+	s := b.scale
+	b.handler.Event(b, shell.Insets{Insets: geom.Insets{
+		Top: topPx / s, Right: rightPx / s, Bottom: bottomPx / s, Left: leftPx / s,
+	}})
+}
+
+// TextInputActive reports whether the UI wants keyboard input; the host
+// shows/hides the on-screen keyboard on transitions.
+func (b *Bridge) TextInputActive() bool {
+	if ta, ok := b.handler.(interface{ TextInputActive() bool }); ok {
+		return ta.TextInputActive()
+	}
+	return false
+}
+
 // Key delivers a key press by shell.KeyCode value (host maps its codes).
 func (b *Bridge) Key(code int, pressed bool) {
 	kind := shell.KeyRelease
