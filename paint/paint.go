@@ -339,12 +339,17 @@ func (p *Painter) Image() image.Image {
 	return p.dc.Image()
 }
 
-// End presents the frame to the shell's target.
+// End presents the frame to the shell's target. It is a no-op before the
+// first Begin (nothing has been rasterized yet).
 func (p *Painter) End(f shell.Frame) error {
+	if p.dc == nil {
+		return nil
+	}
 	switch t := f.Target().(type) {
 	case shell.GPUTarget:
-		// Empty damage rect = full compositor pass; damage-aware paths come
-		// with scene-level dirty tracking (PLAN.md §5).
+		// gg's GPU compositor path — usable only when the gg/gpu accelerator
+		// is registered (build tag gossamer_gpu). The default shells present
+		// via PixelTarget instead (M1 CPU-raster + blit; PLAN.md §5.1).
 		return p.dc.FlushGPUWithViewDamage(t.View, uint32(t.W), uint32(t.H), image.Rectangle{})
 	case shell.PixelTarget:
 		t.Put(asRGBA(p.dc.Image()))

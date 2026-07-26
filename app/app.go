@@ -6,6 +6,7 @@
 package app
 
 import (
+	"log"
 	"slices"
 
 	"github.com/doug/gossamer/geom"
@@ -401,7 +402,9 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	}
 	// Present even when skipped: the painter's surface is retained, and the
 	// swapchain still needs this frame's image.
-	_ = h.core.Painter.End(f)
+	if err := h.core.Painter.End(f); err != nil {
+		log.Printf("gossamer: present: %v", err)
+	}
 }
 
 func (h *shellHandler) Event(w shell.Window, e shell.Event) {

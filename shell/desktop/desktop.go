@@ -6,6 +6,8 @@ package desktop
 
 import (
 	"fmt"
+	"image"
+	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -208,7 +210,22 @@ func (f *frame) Scale() float32 {
 	return float32(pw) / float32(f.dc.Width())
 }
 
+// Target presents CPU-rasterized frames by uploading them as a GPU texture
+// and drawing it fullscreen (gogpu's universal PresentTexture path). This
+// is the M1 model — CPU rasterizer, blit to the surface — shared with the
+// web and mobile shells; it works on every backend (Metal/Vulkan/DX12 and
+// the software adapter). A real GPU vector backend (PLAN.md M5) would
+// present directly instead.
 func (f *frame) Target() shell.Target {
-	pw, ph := f.dc.FramebufferSize()
-	return shell.GPUTarget{View: f.dc.RenderTarget().SurfaceView(), W: pw, H: ph}
+	return shell.PixelTarget{Put: func(img *image.RGBA) {
+		tex, err := f.dc.Renderer().NewTextureFromImage(img)
+		if err != nil {
+			log.Printf("gossamer/desktop: upload frame: %v", err)
+			return
+		}
+		defer tex.Destroy()
+		if err := f.dc.PresentTexture(tex); err != nil {
+			log.Printf("gossamer/desktop: present: %v", err)
+		}
+	}}
 }
