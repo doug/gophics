@@ -89,12 +89,18 @@ Done (cont.):
 6. ~~**Implicit animations**~~ — `Animated[T]` + `AnimateColor/Insets/
    Float`, tween on value change. Still to do: hero transitions.
 
+Done (cont.):
+
+7. ~~**Gestures**~~ — `Handler.OnLongPress` (dt-driven, cancels tap).
+   Still to do: double-tap, swipe/dismiss.
+8. ~~**Text overflow**~~ — `MaxLines` + `Ellipsis` on Text/TextBox. Still
+   to do: selectable static text.
+11. ~~**Responsive**~~ — `LayoutBuilder` (state-based, one-frame settle).
+
 Remaining:
 
-7. **Gestures**: long-press, double-tap, swipe/dismiss.
-8. **Text**: selectable static text, overflow ellipsis, max lines.
 9. **Accessibility bridge**: wire the existing semantics tree to
    VoiceOver/TalkBack/AccessKit.
 10. **Tooling**: widget inspector (semantics tree → browser), perf overlay.
-11. **Responsive**: `LayoutBuilder` (build from constraints) — one-frame
-    state-based version is easy; true layout-time build is the Flutter way.
+12. **Follow-ups**: double-tap/swipe gestures, hero transitions, selectable
+    text, reverse/bottom-anchored lists, pull-to-refresh, group opacity.
