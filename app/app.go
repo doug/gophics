@@ -82,6 +82,10 @@ const doubleTapWindow = 0.30
 // tapSlop is the drag distance that cancels a pending tap, in logical px.
 const tapSlop = 4
 
+// debugNoDamage forces a full-surface repaint every frame (GOSSAMER_NO_DAMAGE),
+// bypassing damage culling — a diagnostic to isolate damage-tracking bugs.
+var debugNoDamage = os.Getenv("GOSSAMER_NO_DAMAGE") != ""
+
 // longPressSeconds is how long a still press must be held to fire OnLongPress.
 const longPressSeconds = 0.5
 
@@ -286,6 +290,9 @@ func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 	}
 
 	damage, changed = c.cur.Diff(c.prev, c.Painter)
+	if debugNoDamage && changed {
+		damage = surface // debug: force full repaint to isolate damage bugs
+	}
 	if size != c.lastPaintSize || scale != c.lastScale {
 		changed, damage = true, surface
 	}

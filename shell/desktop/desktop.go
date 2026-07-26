@@ -218,14 +218,21 @@ func (f *frame) Scale() float32 {
 // present directly instead.
 func (f *frame) Target() shell.Target {
 	return shell.PixelTarget{Put: func(img *image.RGBA) {
-		tex, err := f.dc.Renderer().NewTextureFromImage(img)
+		r := f.dc.Renderer()
+		tex, err := r.NewTextureFromImage(img)
 		if err != nil {
 			log.Printf("gossamer/desktop: upload frame: %v", err)
 			return
 		}
-		defer tex.Destroy()
+		// PresentTexture submits an async GPU draw that samples tex; the GPU
+		// may still be reading it after this returns. Destroying it now (the
+		// old `defer tex.Destroy()`) freed it mid-flight, so a moving frame
+		// sampled garbage — visible as trailing streaks, worst under slow
+		// motion (many frames). Defer to the next frame's BeginFrame, which
+		// runs after the GPU has consumed this frame.
 		if err := f.dc.PresentTexture(tex); err != nil {
 			log.Printf("gossamer/desktop: present: %v", err)
 		}
+		r.EnqueueDeferredDestroy(tex.Destroy)
 	}}
 }
