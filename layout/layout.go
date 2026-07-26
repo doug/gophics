@@ -329,8 +329,25 @@ func (b *Translated) VisitChildren(visit func(Box, geom.Pt)) {
 // translate/scale so pointers still land (rotation is ignored in hit tests).
 type Transformed struct {
 	Base
-	T     paint.Transform
-	Child Box
+	T paint.Transform
+	// Center overrides the transform's pivot with the child's center (known
+	// only at layout/paint time) — the natural origin for scale/rotate.
+	Center bool
+	Child  Box
+}
+
+// pivotFor resolves the transform for this box at paint origin `at`: shifting
+// the authored pivot into paint space, or using the child's center if Center.
+func (b *Transformed) pivotFor(at geom.Pt) paint.Transform {
+	t := b.T
+	if b.Center {
+		sz := b.Size()
+		t.PivotX, t.PivotY = at.X+sz.W/2, at.Y+sz.H/2
+	} else {
+		t.PivotX += at.X
+		t.PivotY += at.Y
+	}
+	return t
 }
 
 func (b *Transformed) Layout(cs Constraints) geom.Size {
@@ -350,10 +367,7 @@ func (b *Transformed) Paint(c paint.Canvas, at geom.Pt) {
 	// The transform is authored in this box's local space; shift it to the
 	// paint origin so a translate of (tx,ty) moves the child by that in local
 	// coordinates regardless of where the box sits.
-	t := b.T
-	t.PivotX += at.X
-	t.PivotY += at.Y
-	c.PushTransform(t)
+	c.PushTransform(b.pivotFor(at))
 	b.Child.Paint(c, at)
 	c.PopTransform()
 }
@@ -362,8 +376,10 @@ func (b *Transformed) AddHits(p geom.Pt, hits *[]Hit) {
 	if b.Child == nil {
 		return
 	}
-	// Invert translate + scale about the pivot (rotation ignored).
-	sx, sy := b.T.SX, b.T.SY
+	// Invert translate + scale about the pivot (rotation ignored). The pivot
+	// is in this box's local space, so pass a zero origin.
+	t := b.pivotFor(geom.Pt{})
+	sx, sy := t.SX, t.SY
 	if sx == 0 {
 		sx = 1
 	}
@@ -371,8 +387,8 @@ func (b *Transformed) AddHits(p geom.Pt, hits *[]Hit) {
 		sy = 1
 	}
 	local := geom.Pt{
-		X: b.T.PivotX + (p.X-b.T.TX-b.T.PivotX)/sx,
-		Y: b.T.PivotY + (p.Y-b.T.TY-b.T.PivotY)/sy,
+		X: t.PivotX + (p.X-t.TX-t.PivotX)/sx,
+		Y: t.PivotY + (p.Y-t.TY-t.PivotY)/sy,
 	}
 	b.Child.AddHits(local, hits)
 }

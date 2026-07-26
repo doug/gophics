@@ -46,19 +46,23 @@ func (o Opacity) attach(b layout.Box, kids []layout.Box) {
 // AnimateFloat to drive scale/rotate animations; the shared-element flight
 // (Hero) builds on it via paint.MapRect.
 type Transform struct {
-	T     paint.Transform
-	Child Widget
+	T paint.Transform
+	// Center pivots scale/rotate on the child's center instead of the
+	// transform's Pivot fields (which are relative to the child's top-left).
+	Center bool
+	Child  Widget
 }
 
-// Scale returns a Transform that scales child by factor about its center-ish
-// origin (pivot at top-left; wrap in Center for centered scaling).
+// Scale returns a Transform that scales child by factor about its top-left.
+// (Set Center or use AnimatedScale for centered scaling.)
 func Scale(factor float32, child Widget) Transform {
 	return Transform{T: paint.Transform{SX: factor, SY: factor}, Child: child}
 }
 
 func (t Transform) createBox(Ctx) layout.Box { return &layout.Transformed{} }
 func (t Transform) updateBox(_ Ctx, b layout.Box) {
-	b.(*layout.Transformed).T = t.T
+	tb := b.(*layout.Transformed)
+	tb.T, tb.Center = t.T, t.Center
 }
 func (t Transform) childWidgets() []Widget { return []Widget{t.Child} }
 func (t Transform) attach(b layout.Box, kids []layout.Box) {

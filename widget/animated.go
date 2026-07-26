@@ -89,6 +89,21 @@ func AnimateFloat(value float32, d time.Duration, build func(float32) Widget) Wi
 	return Animated[float32]{Value: value, Duration: orMS(d, 150), Lerp: geom.LerpFloat, Build: build}
 }
 
+// AnimatedScale smoothly scales child toward scale (about its center) whenever
+// scale changes — the tap-to-grow / pop affordance. Duration 0 means 150ms.
+func AnimatedScale(scale float32, d time.Duration, child Widget) Widget {
+	return AnimateFloat(scale, d, func(s float32) Widget {
+		return Transform{T: paint.Transform{SX: s, SY: s}, Center: true, Child: child}
+	})
+}
+
+// AnimatedRotation smoothly rotates child toward radians (about its center).
+func AnimatedRotation(radians float32, d time.Duration, child Widget) Widget {
+	return AnimateFloat(radians, d, func(r float32) Widget {
+		return Transform{T: paint.Transform{Rotation: r}, Center: true, Child: child}
+	})
+}
+
 func orMS(d time.Duration, ms int) time.Duration {
 	if d <= 0 {
 		return time.Duration(ms) * time.Millisecond
