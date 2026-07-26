@@ -77,6 +77,48 @@ func TestNavigatorPushPop(t *testing.T) {
 	}
 }
 
+func TestNavigatorEdgeSwipeBack(t *testing.T) {
+	var log []string
+	h, err := NewHeadless(widget.Navigator{Home: navHome{log: &log}},
+		Config{Size: geom.Size{W: 200, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	h.Tap(geom.Pt{X: 100, Y: 100}) // push detail
+	settle(h)
+	if r, _, _, _ := h.Render().At(100, 100).RGBA(); r < 0xB000 {
+		t.Fatalf("precondition: detail should cover, r=%x", r)
+	}
+
+	// Swipe in from the left edge, past the threshold → pop back home.
+	h.DragTo(geom.Pt{X: 4, Y: 100}, geom.Pt{X: 120, Y: 100})
+	h.Release(geom.Pt{X: 120, Y: 100})
+	settle(h)
+	if r, _, _, _ := h.Render().At(100, 100).RGBA(); r > 0x8000 {
+		t.Fatalf("edge-swipe should pop back to home, r=%x", r)
+	}
+}
+
+func TestNavigatorShortEdgeSwipeDoesNotPop(t *testing.T) {
+	var log []string
+	h, err := NewHeadless(widget.Navigator{Home: navHome{log: &log}},
+		Config{Size: geom.Size{W: 200, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	h.Tap(geom.Pt{X: 100, Y: 100})
+	settle(h)
+	// A short edge drag (under the threshold) must not pop.
+	h.DragTo(geom.Pt{X: 4, Y: 100}, geom.Pt{X: 40, Y: 100})
+	h.Release(geom.Pt{X: 40, Y: 100})
+	settle(h)
+	if r, _, _, _ := h.Render().At(100, 100).RGBA(); r < 0xB000 {
+		t.Fatalf("short edge swipe should not pop (detail still up), r=%x", r)
+	}
+}
+
 func TestNavigatorSlideAnimates(t *testing.T) {
 	var log []string
 	h, err := NewHeadless(widget.Navigator{Home: navHome{log: &log}},

@@ -53,6 +53,8 @@ type navState struct {
 	// gets its own registry (via Provide) so its heroes report rects and get
 	// suppressed while the flight overlay animates the shared element.
 	underReg, overReg *heroRegistry
+
+	edgeDx float32 // accumulated left-edge back-swipe distance
 }
 
 func (s *navState) Init(ctx Ctx) {
@@ -170,6 +172,26 @@ func (s *navState) Build(Ctx) Widget {
 		children = append(children, LayoutBuilder{Build: func(cs layout.Constraints) Widget {
 			return stackW{Children: s.buildFlights(cs.Max.W)}
 		}})
+	}
+	// Back-swipe: a left-edge, horizontal-only drag strip that pops when the
+	// swipe passes the threshold (iOS-style). Topmost so it wins the edge over
+	// a card's swipe-to-dismiss; DragHorizontal so vertical scrolls pass
+	// through. Only present when there's something to pop.
+	if len(s.stack) > 0 && s.trans == nil {
+		children = append(children, Interactive{
+			Handler: Handler{
+				DragAxis:  DragHorizontal,
+				OnPress:   func(geom.Pt) { s.edgeDx = 0 },
+				OnDrag:    func(_, d geom.Pt) { s.edgeDx += d.X },
+				OnRelease: func() {
+					if s.edgeDx > 64 {
+						s.pop()
+					}
+					s.edgeDx = 0
+				},
+			},
+			Child: Sized{W: 22, H: 1e6}, // a full-height left-edge strip (clamped)
+		})
 	}
 	return Provide[Nav]{Value: Nav{s: s}, Child: stackW{Children: children}}
 }
