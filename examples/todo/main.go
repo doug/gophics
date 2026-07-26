@@ -75,12 +75,23 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 			left++
 		}
 		i := i
-		rows = append(rows, widget.WithKey{Key: it.text, Child: todoRow{
-			Item:     it,
-			OnToggle: func() { s.SetState(func() { s.items[i].done = !s.items[i].done }) },
-			OnDelete: func() { s.SetState(func() { s.remove(i) }) },
-			OnHover:  func() { s.hover = i },
-			OnLeave:  func() { s.leave(i) },
+		rows = append(rows, widget.WithKey{Key: it.text, Child: widget.Dismissible{
+			OnDismissed: func() { s.SetState(func() { s.remove(i) }) },
+			Background: widget.Fill{Color: colDanger, Child: widget.Padding{
+				Insets: geom.Insets{Left: 16, Right: 16},
+				Child: widget.Row(
+					widget.Text{S: "delete", Size: 13, Color: colText},
+					widget.Expand(widget.Sized{}),
+					widget.Text{S: "delete", Size: 13, Color: colText},
+				),
+			}},
+			Child: todoRow{
+				Item:     it,
+				OnToggle: func() { s.SetState(func() { s.items[i].done = !s.items[i].done }) },
+				OnDelete: func() { s.SetState(func() { s.remove(i) }) },
+				OnHover:  func() { s.hover = i },
+				OnLeave:  func() { s.leave(i) },
+			},
 		}}, widget.Sized{H: 8})
 	}
 	list := widget.Column(rows...)
