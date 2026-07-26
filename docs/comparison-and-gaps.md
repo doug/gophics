@@ -97,10 +97,22 @@ Done (cont.):
    to do: selectable static text.
 11. ~~**Responsive**~~ — `LayoutBuilder` (state-based, one-frame settle).
 
+Done (cont.):
+
+10. ~~**Tooling**~~ — `Core.InspectTree` (render-tree dump), `Config.Debug`/
+    `SetDebugPaint` (box-bounds overlay), `Core.FrameStats`/GOSSAMER_PACING
+    (frame timing). Still to do: a visual inspector UI on the dump.
+12. ~~Group opacity~~ (`Opacity` + `AnimateFloat` fades), ~~double-tap~~
+    (deferred single-tap disambiguation).
+
 Remaining:
 
 9. **Accessibility bridge**: wire the existing semantics tree to
-   VoiceOver/TalkBack/AccessKit.
-10. **Tooling**: widget inspector (semantics tree → browser), perf overlay.
-12. **Follow-ups**: double-tap/swipe gestures, hero transitions, selectable
-    text, reverse/bottom-anchored lists, pull-to-refresh, group opacity.
+   VoiceOver/TalkBack/AccessKit. The biggest reach gap; platform-deep.
+13. **Follow-ups**: swipe-to-dismiss, hero transitions, selectable static
+    text, reverse/bottom-anchored lists, pull-to-refresh, inspector UI.
+
+Of the 12 originally-identified cross-cutting gaps, 11 are addressed; the
+accessibility platform bridge is the one big remaining piece, plus a
+polish tail. Gossamer now has the breadth to build the four app
+archetypes end to end.
