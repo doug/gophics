@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/doug/gossamer/anim"
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
@@ -186,29 +187,149 @@ type Scroll struct {
 	// OnOffset reports scroll offset changes with the viewport's main-axis
 	// extent (LazyList uses this to window its children).
 	OnOffset func(offset, viewportExtent float32)
+	// OnEndReached fires once when scrolling comes within EndThreshold of
+	// the bottom — for infinite feeds. Re-arms after scrolling back up.
+	OnEndReached func()
+	EndThreshold float32 // 0 → 400 logical px
+	// Controller, if set, exposes programmatic scrolling and the live
+	// offset to the app.
+	Controller *ScrollController
 }
 
 func (s Scroll) CreateState() State { return &scrollState{} }
 
+// ScrollController is a handle for reading and driving a Scroll's position
+// from outside it. Hold one in your state, pass it to Scroll.Controller.
+type ScrollController struct {
+	s *scrollState
+}
+
+// Offset is the current scroll offset (0 = start).
+func (c *ScrollController) Offset() float32 {
+	if c.s == nil {
+		return 0
+	}
+	return c.s.offset
+}
+
+// MaxOffset is the furthest scrollable offset as of the last layout.
+func (c *ScrollController) MaxOffset() float32 {
+	if c.s == nil || c.s.vp.box == nil {
+		return 0
+	}
+	return c.s.vp.box.MaxOffset()
+}
+
+// JumpTo sets the offset immediately (clamped).
+func (c *ScrollController) JumpTo(offset float32) {
+	if c.s != nil {
+		c.s.jumpTo(offset)
+	}
+}
+
+// AnimateTo scrolls smoothly to offset over the duration.
+func (c *ScrollController) AnimateTo(offset float32, d time.Duration) {
+	if c.s != nil {
+		c.s.animateTo(offset, d)
+	}
+}
+
 type scrollState struct {
 	StateBase[Scroll]
+	ctx    Ctx
 	offset float32
 	vp     *viewportRef
 
-	fling    flinger
-	velocity float32 // px/s along the main axis (drag direction)
-	lastDrag time.Time
+	fling      flinger
+	velocity   float32 // px/s along the main axis (drag direction)
+	lastDrag   time.Time
+	endArmed   bool
+	glide      *anim.Controller
+	glideFrom  float32
+	glideTo    float32
 }
 
 type viewportRef struct{ box *layout.Viewport }
 
 func (s *scrollState) Init(ctx Ctx) {
+	s.ctx = ctx
 	s.vp = &viewportRef{}
 	s.fling.s = s
+	s.endArmed = true
 	ctx.AddTicker(&s.fling)
+	s.glide = &anim.Controller{Curve: anim.EaseInOut, OnChange: func() {
+		s.SetState(func() { s.offset = geom.LerpFloat(s.glideFrom, s.glideTo, s.glide.Value()) })
+		s.reportOffset()
+	}}
+	ctx.AddTicker(s.glide)
+	if c := s.W().Controller; c != nil {
+		c.s = s
+	}
 }
 
-func (s *scrollState) Dispose() {}
+func (s *scrollState) Dispose() {
+	s.ctx.RemoveTicker(&s.fling)
+	s.ctx.RemoveTicker(s.glide)
+}
+
+func (s *scrollState) jumpTo(offset float32) {
+	s.fling.active = false
+	s.glide.Jump(1)
+	s.SetState(func() {
+		s.offset = offset
+		if s.vp.box != nil {
+			if m := s.vp.box.MaxOffset(); s.offset > m {
+				s.offset = m
+			}
+		}
+		if s.offset < 0 {
+			s.offset = 0
+		}
+	})
+	s.reportOffset()
+}
+
+func (s *scrollState) animateTo(offset float32, d time.Duration) {
+	s.fling.active = false
+	s.glideFrom = s.offset
+	s.glideTo = offset
+	s.glide.Duration = d
+	s.glide.Jump(0)
+	s.glide.Forward()
+	s.ctx.Invalidate()
+}
+
+// reportOffset notifies OnOffset and fires OnEndReached near the bottom.
+func (s *scrollState) reportOffset() {
+	w := s.W()
+	var extent float32
+	if s.vp.box != nil {
+		sz := s.vp.box.Size()
+		if w.Axis == layout.Horizontal {
+			extent = sz.W
+		} else {
+			extent = sz.H
+		}
+	}
+	if cb := w.OnOffset; cb != nil {
+		cb(s.offset, extent)
+	}
+	if w.OnEndReached != nil && s.vp.box != nil {
+		thr := w.EndThreshold
+		if thr <= 0 {
+			thr = 400
+		}
+		remaining := s.vp.box.MaxOffset() - s.offset
+		if remaining <= thr {
+			if s.endArmed {
+				s.endArmed = false
+				w.OnEndReached()
+			}
+		} else if remaining > thr*1.5 {
+			s.endArmed = true // re-arm after scrolling back up
+		}
+	}
+}
 
 func (s *scrollState) mainDelta(d geom.Pt) float32 {
 	if s.W().Axis == layout.Horizontal {
@@ -235,18 +356,7 @@ func (s *scrollState) scrollBy(delta float32) bool {
 			s.offset, clamped = 0, true
 		}
 	})
-	if cb := s.W().OnOffset; cb != nil {
-		var extent float32
-		if s.vp.box != nil {
-			sz := s.vp.box.Size()
-			if s.W().Axis == layout.Horizontal {
-				extent = sz.W
-			} else {
-				extent = sz.H
-			}
-		}
-		cb(s.offset, extent)
-	}
+	s.reportOffset()
 	return clamped
 }
 

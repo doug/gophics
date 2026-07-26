@@ -18,6 +18,11 @@ type LazyList struct {
 	Build func(i int) Widget
 	// EstimatedExtent is the assumed height of unmeasured items (0 → 48).
 	EstimatedExtent float32
+	// OnEndReached fires when the list is scrolled near its end — grow
+	// Count and rebuild for an infinite feed.
+	OnEndReached func()
+	// Controller exposes programmatic scrolling (jump/animate to offset).
+	Controller *ScrollController
 }
 
 func (l LazyList) estimate() float32 {
@@ -82,7 +87,9 @@ func (s *lazyState) Build(Ctx) Widget {
 	col := Column(children...)
 	col.CrossAlign = layout.CrossStretch
 	return Scroll{
-		Child: col,
+		Child:      col,
+		Controller: s.W().Controller,
+		OnEndReached: s.W().OnEndReached,
 		OnOffset: func(off, extent float32) {
 			s.SetState(func() { s.offset, s.viewH = off, extent })
 		},
