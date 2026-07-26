@@ -181,6 +181,10 @@ type Handler struct {
 	// OnLongPress fires once when the pointer is held on this widget past
 	// the long-press threshold without moving; it cancels the pending tap.
 	OnLongPress func()
+	// OnDoubleTap fires on two quick taps. When set, a single OnTap is
+	// deferred by the double-tap window (to disambiguate); a recognized
+	// double-tap cancels that pending OnTap.
+	OnDoubleTap func()
 	// OnScroll receives wheel/trackpad deltas while the pointer is over
 	// this widget.
 	OnScroll func(delta geom.Pt)

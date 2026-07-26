@@ -68,7 +68,12 @@ type Core struct {
 	moved      bool
 	pressHeld  float64 // seconds the current press has been held, unmoved
 	longFired  bool
+	pendingTap *widget.InteractiveBox // deferred single-tap awaiting a possible double
+	tapElapsed float64
 }
+
+// doubleTapWindow is how long a deferred single-tap waits for a second tap.
+const doubleTapWindow = 0.30
 
 // tapSlop is the drag distance that cancels a pending tap, in logical px.
 const tapSlop = 4
@@ -76,26 +81,54 @@ const tapSlop = 4
 // longPressSeconds is how long a still press must be held to fire OnLongPress.
 const longPressSeconds = 0.5
 
-// longPressPending reports whether a long-press timer is running (the shell
-// keeps frames coming while it is).
+// longPressPending reports whether a time-based gesture (long-press or a
+// deferred single-tap) is running — the shell keeps frames coming while it
+// is so the timers advance.
 func (c *Core) longPressPending() bool {
-	return c.longPress != nil && !c.moved && !c.longFired
+	return (c.longPress != nil && !c.moved && !c.longFired) || c.pendingTap != nil
 }
 
-// TickGestures advances time-based gestures (long-press) by dt seconds. The
-// frame loop calls it; it fires OnLongPress once for a held, unmoved press.
+// TickGestures advances time-based gestures by dt seconds: fires OnLongPress
+// for a held unmoved press, and flushes a deferred single-tap once the
+// double-tap window elapses.
 func (c *Core) TickGestures(dt float64) {
-	if c.longPress == nil || c.moved || c.longFired {
-		return
-	}
-	c.pressHeld += dt
-	if c.pressHeld >= longPressSeconds {
-		c.longFired = true
-		c.pressed = nil // long-press consumes the gesture; no tap on release
-		if c.longPress.Handler.OnLongPress != nil {
-			c.longPress.Handler.OnLongPress()
+	if c.longPress != nil && !c.moved && !c.longFired {
+		c.pressHeld += dt
+		if c.pressHeld >= longPressSeconds {
+			c.longFired = true
+			c.pressed = nil // long-press consumes the gesture; no tap
+			if c.longPress.Handler.OnLongPress != nil {
+				c.longPress.Handler.OnLongPress()
+			}
 		}
 	}
+	if c.pendingTap != nil {
+		c.tapElapsed += dt
+		if c.tapElapsed >= doubleTapWindow {
+			tap := c.pendingTap
+			c.pendingTap = nil
+			if tap.Handler.OnTap != nil {
+				tap.Handler.OnTap()
+			}
+		}
+	}
+}
+
+// fireTap handles a completed tap on box: immediate for a plain tap; for a
+// double-tap-capable box, either completes a double or defers the single.
+func (c *Core) fireTap(box *widget.InteractiveBox) {
+	if box.Handler.OnDoubleTap == nil {
+		if box.Handler.OnTap != nil {
+			box.Handler.OnTap()
+		}
+		return
+	}
+	if c.pendingTap == box {
+		c.pendingTap = nil // second tap in window: it's a double
+		box.Handler.OnDoubleTap()
+		return
+	}
+	c.pendingTap, c.tapElapsed = box, 0 // first tap: defer OnTap
 }
 
 // NewCore builds a runtime for the given root widget.
@@ -369,7 +402,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 			if h.box.Handler.OnPress != nil {
 				h.box.Handler.OnPress(h.local)
 			}
-			if c.pressed == nil && h.box.Handler.OnTap != nil {
+			if c.pressed == nil && (h.box.Handler.OnTap != nil || h.box.Handler.OnDoubleTap != nil) {
 				c.pressed = h.box
 			}
 			if c.longPress == nil && h.box.Handler.OnLongPress != nil {
@@ -392,7 +425,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 			dragging.Handler.OnRelease()
 		}
 		if pressed != nil && slices.Contains(boxes(c.interactivesAt(e.Pos)), pressed) {
-			pressed.Handler.OnTap()
+			c.fireTap(pressed)
 		}
 	}
 }
