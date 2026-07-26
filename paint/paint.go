@@ -11,6 +11,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 
 	"github.com/gogpu/gg"
 
@@ -139,7 +140,29 @@ type Painter struct {
 	shapes  map[shapeKey]text.Line
 	metrics map[metricsKey]TextMetrics
 	imgBufs map[image.Image]*gg.ImageBuf
+
+	// Rendering glyph outlines is ~80% of raster cost, so each distinct
+	// text run (font, string, size, color, scale) is rasterized once into a
+	// device-resolution image and blitted thereafter. Scrolling repeats the
+	// same runs frame to frame, giving near-total hit rate on the hot path.
+	runs map[runKey]*cachedRun
 }
+
+type runKey struct {
+	font  string
+	text  string
+	size  float32
+	col   Color
+	scale float32
+}
+
+type cachedRun struct {
+	buf        *gg.ImageBuf
+	dstW, dstH float32 // logical draw size (maps device image back 1:1)
+	offX, offY float32 // logical offset from the baseline-left draw point
+}
+
+const runCacheLimit = 4096
 
 type shapeKey struct {
 	font string
@@ -161,6 +184,7 @@ func NewPainter() *Painter {
 		shapes:   map[shapeKey]text.Line{},
 		metrics:  map[metricsKey]TextMetrics{},
 		imgBufs:  map[image.Image]*gg.ImageBuf{},
+		runs:     map[runKey]*cachedRun{},
 	}
 }
 
@@ -178,6 +202,7 @@ func (p *Painter) rebuildShapers() {
 		sh.SetFonts(chain...)
 	}
 	clear(p.shapes)
+	clear(p.runs)
 	clear(p.metrics)
 }
 
@@ -421,25 +446,71 @@ func (c *ggCanvas) Line(a, b geom.Pt, width float32, col Color) {
 }
 
 // Text shapes s (bidi, fallback, positional forms — see the text package)
-// and fills the glyph outlines as one path: correct scripts and identical
-// metrics between measurement and rendering, at gg's analytic AA quality.
-// (A glyph mask cache is a known follow-up if profiles demand it.)
+// and blits its cached device-resolution image (the run cache), which is
+// rasterized once by filling the glyph outlines — correct scripts,
+// measurement/rendering parity, gg's analytic AA quality.
 func (c *ggCanvas) Text(s string, pos geom.Pt, size float32, col Color) {
 	c.TextIn("", s, pos, size, col)
 }
 
 func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) {
-	line := c.p.ShapeIn(font, s, size)
-	if len(line.Glyphs) == 0 {
+	run := c.p.runFor(font, s, size, col)
+	if run == nil {
 		return
 	}
-	c.dc.SetColor(col.nrgba())
-	c.dc.ClearPath()
-	sink := ggSink{c.dc}
-	for _, g := range line.Glyphs {
-		g.Font.AppendGlyphPath(sink, g.GID, size, pos.X+g.X, pos.Y+g.Y)
+	c.dc.DrawImageEx(run.buf, gg.DrawImageOptions{
+		X: float64(pos.X + run.offX), Y: float64(pos.Y + run.offY),
+		DstWidth: float64(run.dstW), DstHeight: float64(run.dstH),
+	})
+}
+
+// runFor returns the cached image for a text run at the current device
+// scale, rasterizing it on first use. Glyph outlines are filled once at
+// device resolution into a tight image; subsequent frames blit it.
+func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
+	if s == "" {
+		return nil
 	}
-	c.dc.Fill()
+	scale := float32(p.scale)
+	if scale <= 0 {
+		scale = 1
+	}
+	k := runKey{font, s, size, col, scale}
+	if r, ok := p.runs[k]; ok {
+		return r
+	}
+	line := p.ShapeIn(font, s, size)
+	if len(line.Glyphs) == 0 {
+		return nil
+	}
+	m := p.MetricsIn(font, size)
+	const pad = 2 // device px, guards left/top glyph overhang
+	wDev := int(math.Ceil(float64(line.Width*scale))) + 2*pad
+	hDev := int(math.Ceil(float64((m.Ascent+m.Descent)*scale))) + 2*pad
+	if wDev <= 0 || hDev <= 0 {
+		return nil
+	}
+	scratch := gg.NewContext(wDev, hDev)
+	scratch.SetColor(col.nrgba())
+	scratch.ClearPath()
+	baseline := m.Ascent*scale + pad
+	sink := ggSink{scratch}
+	for _, g := range line.Glyphs {
+		g.Font.AppendGlyphPath(sink, g.GID, size*scale, g.X*scale+pad, baseline+g.Y*scale)
+	}
+	scratch.Fill()
+	r := &cachedRun{
+		buf:  gg.ImageBufFromImage(scratch.Image()),
+		dstW: float32(wDev) / scale,
+		dstH: float32(hDev) / scale,
+		offX: -pad / scale,
+		offY: -m.Ascent - pad/scale,
+	}
+	if len(p.runs) >= runCacheLimit {
+		clear(p.runs)
+	}
+	p.runs[k] = r
+	return r
 }
 
 // ggSink adapts a gg path builder to text.PathSink.
@@ -489,5 +560,6 @@ func (p *Painter) LoadSystemFonts() error {
 		}
 	}
 	clear(p.shapes)
+	clear(p.runs)
 	return nil
 }
