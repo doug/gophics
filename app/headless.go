@@ -62,6 +62,13 @@ func (h *Headless) SetDarkMode(dark bool) {
 	h.Core.Owner.RebuildAll()
 }
 
+// Resize changes the logical surface size (simulates a window resize) and
+// delivers a Resize event so the tree can react.
+func (h *Headless) Resize(size geom.Size) {
+	h.size = size
+	h.Core.Owner.RebuildAll()
+}
+
 // Step advances animations by dt seconds, reporting whether any are still
 // running. Deterministic replacement for vsync in tests.
 func (h *Headless) Step(dt float64) bool {
