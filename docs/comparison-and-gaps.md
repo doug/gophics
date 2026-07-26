@@ -128,8 +128,10 @@ Remaining:
     todo example). ~~reverse/bottom-anchored lists~~ (`Scroll.Reverse` +
     `LazyList.Reverse`: end-anchored offset origin, so newest-at-bottom and
     stay-pinned-on-append fall out for free; virtualized; OnEndReached fires
-    at the oldest end for history loading — the chat-log layout). Still:
-    hero transitions, selectable static text, visual inspector UI; on-device
+    at the oldest end for history loading — the chat-log layout).
+    ~~selectable static text~~ (`SelectableText`: drag-select with glyph-
+    midpoint hit testing, highlighted range, Cmd/Ctrl+C copy joining wrapped
+    lines). Still: hero transitions, visual inspector UI; on-device
     VoiceOver validation of the iOS a11y host.
 
 All 12 originally-identified cross-cutting gaps are now addressed — the
