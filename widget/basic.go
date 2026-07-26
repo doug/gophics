@@ -465,7 +465,16 @@ type canvasBox struct {
 }
 
 func (b *canvasBox) Layout(cs layout.Constraints) geom.Size {
-	b.size = cs.Constrain(geom.Size{W: b.w, H: b.h})
+	// A zero dimension fills the available space (bounded), so a Canvas can
+	// be a full-width control strip.
+	w, h := b.w, b.h
+	if w == 0 && cs.BoundedW() {
+		w = cs.Max.W
+	}
+	if h == 0 && cs.BoundedH() {
+		h = cs.Max.H
+	}
+	b.size = cs.Constrain(geom.Size{W: w, H: h})
 	return b.size
 }
 
