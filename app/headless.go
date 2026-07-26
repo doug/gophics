@@ -33,6 +33,7 @@ func NewHeadless(root widget.Widget, cfg Config, scale float32) (*Headless, erro
 		h.OpenedURLs = append(h.OpenedURLs, url)
 		return nil
 	}
+	core.mount() // hooks wired above; safe to mount (may launch Posters)
 	return h, nil
 }
 

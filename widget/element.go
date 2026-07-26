@@ -297,14 +297,37 @@ func (el *element) markBoxChainDirty() {
 	}
 }
 
-// rebuild re-runs Build for a dirty composite element.
+// rebuild re-runs Build for a dirty composite element (SetState path).
+// If the rebuild swaps the element's root render box — e.g. a Stateful
+// widget returning a placeholder one frame and content the next — the
+// nearest ancestor render box still holds the stale child pointer, so we
+// re-attach it. Without this, loading→content transitions never repaint.
 func (el *element) rebuild() {
 	el.dirty = false
+	before := el.renderBox()
 	switch w := el.widget.(type) {
 	case Stateful:
 		el.child = el.owner.updateChild(el, el.child, el.owner.safeBuild(func() Widget { return el.state.Build(el.ctx()) }))
 	case Stateless:
 		el.child = el.owner.updateChild(el, el.child, el.owner.safeBuild(func() Widget { return w.Build(el.ctx()) }))
+	}
+	if el.renderBox() != before {
+		el.reattachHost()
+	}
+}
+
+// reattachHost re-runs attach on the nearest ancestor render element so its
+// child-box slots pick up this composite's (possibly new) render box.
+func (el *element) reattachHost() {
+	for a := el.parent; a != nil; a = a.parent {
+		if a.box == nil {
+			continue
+		}
+		if rw, ok := a.widget.(renderWidget); ok {
+			a.attachKids(rw)
+		}
+		a.markBoxChainDirty()
+		return
 	}
 }
 

@@ -86,10 +86,18 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 		posted:     make(chan func(), 128),
 	}
 	c.Owner.Post = c.Post
+	return c, nil
+}
+
+// mount builds the widget tree. Callers wire all Owner hooks (RequestFrame,
+// Clipboard, OpenURL) BEFORE calling this: mounting runs Init, which can
+// launch goroutines that immediately Post (e.g. a cached NetworkImage), so
+// the hooks must already be in place — otherwise a background Post races
+// the caller still assigning them.
+func (c *Core) mount() {
 	// Wrap the app in an OverlayHost so any widget can show dialogs, menus,
 	// and snackbars above the whole tree (widget.Overlay via Of).
-	c.Owner.SetRoot(widget.OverlayHost{Child: root})
-	return c, nil
+	c.Owner.SetRoot(widget.OverlayHost{Child: c.root})
 }
 
 // Post schedules fn to run on the UI goroutine before the next frame's
@@ -369,6 +377,7 @@ func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
 			h.window.Invalidate()
 		}
 	}
+	core.mount() // hooks wired above; safe to mount (may launch Posters)
 	return h, nil
 }
 
