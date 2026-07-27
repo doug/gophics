@@ -553,6 +553,12 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 		return nil
 	}
 	scratch := gg.NewContext(wDev, hDev)
+	// Force CPU (analytic) rasterization for the glyph atlas: under the
+	// gossamer_gpu build a registered GPU accelerator would defer this fill,
+	// leaving scratch.Image() blank — so cached text runs would render as
+	// nothing. Glyphs are always CPU-rasterized into a bitmap and then blitted
+	// (on the GPU as a textured quad in the GPU build).
+	scratch.SetRasterizerMode(gg.RasterizerAnalytic)
 	scratch.SetColor(col.nrgba())
 	scratch.ClearPath()
 	baseline := m.Ascent*scale + pad
