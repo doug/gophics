@@ -23,25 +23,42 @@ func countOpaque(img image.Image) int {
 	return n
 }
 
-// TestGlyphScratchNotBlankWithAccelerator guards the fix in Painter.runFor:
-// with a GPU accelerator registered, a default (auto) gg.Context defers its
-// fill to the GPU, so Image() reads back blank — which would make every cached
-// text run render as nothing. Forcing RasterizerAnalytic keeps glyph
-// rasterization on the CPU so the bitmap is real (then blitted as a texture).
-func TestGlyphScratchNotBlankWithAccelerator(t *testing.T) {
+// TestGPUDisabledContextRastersOnCPU guards the fix that gossamer's CPU
+// contexts (the Painter surface and the glyph atlas) rely on: with a GPU
+// accelerator registered process-globally, a default context defers its fill
+// to the GPU and reads back blank — which made cached text runs and images
+// render as nothing under the GPU build. SetGPUDisabled(true) keeps the
+// context fully on the CPU (fills and image draws).
+func TestGPUDisabledContextRastersOnCPU(t *testing.T) {
+	// A default (auto) context defers to the GPU → blank readback headless.
 	auto := gg.NewContext(40, 40)
 	auto.SetRGB(1, 1, 1)
 	auto.DrawRectangle(5, 5, 30, 30)
 	_ = auto.Fill()
 	if countOpaque(auto.Image()) != 0 {
-		t.Skip("auto context not blank — GPU accelerator not deferring here; fix is moot")
+		t.Skip("auto context not blank — accelerator not deferring here; fix is moot")
 	}
-	an := gg.NewContext(40, 40)
-	an.SetRasterizerMode(gg.RasterizerAnalytic)
-	an.SetRGB(1, 1, 1)
-	an.DrawRectangle(5, 5, 30, 30)
-	_ = an.Fill()
-	if countOpaque(an.Image()) == 0 {
-		t.Fatal("RasterizerAnalytic produced a blank image under a registered accelerator; glyphs would vanish on the GPU backend")
+
+	// SetGPUDisabled keeps fills on the CPU.
+	fill := gg.NewContext(40, 40)
+	fill.SetGPUDisabled(true)
+	fill.SetRGB(1, 1, 1)
+	fill.DrawRectangle(5, 5, 30, 30)
+	_ = fill.Fill()
+	if countOpaque(fill.Image()) == 0 {
+		t.Fatal("SetGPUDisabled fill produced a blank image under a registered accelerator")
+	}
+
+	// SetGPUDisabled keeps image blits on the CPU too (was the NetworkImage bug).
+	src := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	for i := range src.Pix {
+		src.Pix[i] = 255
+	}
+	buf := gg.ImageBufFromImage(src)
+	blit := gg.NewContext(40, 40)
+	blit.SetGPUDisabled(true)
+	blit.DrawImageEx(buf, gg.DrawImageOptions{X: 5, Y: 5, DstWidth: 30, DstHeight: 30})
+	if countOpaque(blit.Image()) == 0 {
+		t.Fatal("SetGPUDisabled image blit produced a blank image under a registered accelerator")
 	}
 }
