@@ -407,6 +407,12 @@ func (p *Painter) begin(size geom.Size, scale float32) Canvas {
 	s := float64(scale)
 	if p.dc == nil || p.w != w || p.h != h || p.scale != s {
 		p.dc = gg.NewContextWithScale(w, h, s)
+		// gossamer chooses CPU vs GPU explicitly (this Painter surface is the
+		// CPU path; the GPU path uses a separate ggcanvas context). Opt this
+		// context out of the process-global accelerator — present under the
+		// gossamer_gpu build — so its fills and image blits never defer to a
+		// GPU and read back blank (Headless / CPU present).
+		p.dc.SetGPUDisabled(true)
 		p.w, p.h, p.scale = w, h, s
 	}
 	return &ggCanvas{p: p, dc: p.dc}
@@ -553,12 +559,11 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 		return nil
 	}
 	scratch := gg.NewContext(wDev, hDev)
-	// Force CPU (analytic) rasterization for the glyph atlas: under the
-	// gossamer_gpu build a registered GPU accelerator would defer this fill,
-	// leaving scratch.Image() blank — so cached text runs would render as
-	// nothing. Glyphs are always CPU-rasterized into a bitmap and then blitted
-	// (on the GPU as a textured quad in the GPU build).
-	scratch.SetRasterizerMode(gg.RasterizerAnalytic)
+	// Glyphs are always CPU-rasterized into a bitmap (then blitted, on the GPU
+	// as a textured quad in the GPU build). Opt out of the process-global
+	// accelerator so this fill isn't deferred to a GPU, which would leave
+	// scratch.Image() blank and make cached text runs render as nothing.
+	scratch.SetGPUDisabled(true)
 	scratch.SetColor(col.nrgba())
 	scratch.ClearPath()
 	baseline := m.Ascent*scale + pad
