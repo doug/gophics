@@ -10,13 +10,16 @@ import (
 )
 
 type dtApp struct{ hook func(*dtState) }
+
 func (a dtApp) CreateState() widget.State { s := &dtState{}; s.hook = a.hook; return s }
+
 type dtState struct {
 	widget.StateBase[dtApp]
 	hook    func(*dtState)
 	taps    int
 	doubles int
 }
+
 func (s *dtState) Init(widget.Ctx) { s.hook(s) }
 func (s *dtState) Build(widget.Ctx) widget.Widget {
 	return widget.Center(widget.Interactive{
@@ -32,7 +35,9 @@ func dtHarness(t *testing.T) (*Headless, *dtState) {
 	var st *dtState
 	h, err := NewHeadless(dtApp{hook: func(s *dtState) { st = s }},
 		Config{Size: geom.Size{W: 200, H: 200}, Font: goregular.TTF}, 1)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	h.Render()
 	return h, st
 }

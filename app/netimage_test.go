@@ -110,4 +110,3 @@ func TestNetworkImageLoadsAndCaches(t *testing.T) {
 		t.Fatalf("cache miss: server hits = %d, want 1", hits)
 	}
 }
-

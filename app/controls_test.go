@@ -19,10 +19,10 @@ func (a controlsApp) CreateState() widget.State { s := &controlsState{}; s.hook 
 
 type controlsState struct {
 	widget.StateBase[controlsApp]
-	hook            func(*controlsState)
-	sw, cb          bool
-	slider          float32
-	radio           int
+	hook   func(*controlsState)
+	sw, cb bool
+	slider float32
+	radio  int
 }
 
 func (s *controlsState) Init(widget.Ctx) { s.hook(s); s.slider = 0.3 }

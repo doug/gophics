@@ -21,10 +21,10 @@ type feedAppState = feedAppState2
 
 type feedAppState2 struct {
 	widget.StateBase[feedApp]
-	hook    func(*feedAppState2)
-	count   int
-	loads   int
-	ctrl    widget.ScrollController
+	hook  func(*feedAppState2)
+	count int
+	loads int
+	ctrl  widget.ScrollController
 }
 
 func (s *feedAppState2) Init(widget.Ctx) { s.hook(s); s.count = 20 }

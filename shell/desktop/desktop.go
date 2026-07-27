@@ -6,8 +6,6 @@ package desktop
 
 import (
 	"fmt"
-	"image"
-	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -39,7 +37,8 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	var dt float64
 	app.OnUpdate(func(d float64) { dt = d })
 	app.OnDraw(func(dc *gogpu.Context) {
-		h.Frame(w, &frame{dc: dc}, dt)
+		w.onFrameStart(dc) // GPU build lazily sets up the ggcanvas here
+		h.Frame(w, &frame{dc: dc, w: w}, dt)
 	})
 	app.OnResize(func(width, height int) {
 		h.Event(w, shell.Resize{
@@ -165,6 +164,7 @@ func modBits(m gpucontext.Modifiers) shell.Mods {
 
 type window struct {
 	app *gogpu.App
+	ggc any // *ggcanvas.Canvas under the gossamer_gpu build; nil otherwise
 }
 
 func (w *window) Invalidate()           { w.app.RequestRedraw() }
@@ -201,6 +201,7 @@ func (w *window) scale() float32 {
 
 type frame struct {
 	dc *gogpu.Context
+	w  *window
 }
 
 func (f *frame) Size() geom.Size {
@@ -215,29 +216,6 @@ func (f *frame) Scale() float32 {
 	return float32(pw) / float32(f.dc.Width())
 }
 
-// Target presents CPU-rasterized frames by uploading them as a GPU texture
-// and drawing it fullscreen (gogpu's universal PresentTexture path). This
-// is the M1 model — CPU rasterizer, blit to the surface — shared with the
-// web and mobile shells; it works on every backend (Metal/Vulkan/DX12 and
-// the software adapter). A real GPU vector backend (PLAN.md M5) would
-// present directly instead.
-func (f *frame) Target() shell.Target {
-	return shell.PixelTarget{Put: func(img *image.RGBA) {
-		r := f.dc.Renderer()
-		tex, err := r.NewTextureFromImage(img)
-		if err != nil {
-			log.Printf("gossamer/desktop: upload frame: %v", err)
-			return
-		}
-		// PresentTexture submits an async GPU draw that samples tex; the GPU
-		// may still be reading it after this returns. Destroying it now (the
-		// old `defer tex.Destroy()`) freed it mid-flight, so a moving frame
-		// sampled garbage — visible as trailing streaks, worst under slow
-		// motion (many frames). Defer to the next frame's BeginFrame, which
-		// runs after the GPU has consumed this frame.
-		if err := f.dc.PresentTexture(tex); err != nil {
-			log.Printf("gossamer/desktop: present: %v", err)
-		}
-		r.EnqueueDeferredDestroy(tex.Destroy)
-	}}
-}
+// frame.Target() and window.onFrameStart() are build-tagged: the default
+// build (present_cpu.go) presents CPU-rasterized pixels via PresentTexture;
+// the gossamer_gpu build (present_gpu.go) rasterizes on the GPU via ggcanvas.

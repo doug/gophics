@@ -15,10 +15,10 @@ func (a chatApp) CreateState() widget.State { s := &chatState{}; s.hook = a.hook
 
 type chatState struct {
 	widget.StateBase[chatApp]
-	hook    func(*chatState)
-	n       int // message count
-	tapped  int // index of the last tapped row
-	ctrl    widget.ScrollController
+	hook   func(*chatState)
+	n      int // message count
+	tapped int // index of the last tapped row
+	ctrl   widget.ScrollController
 }
 
 func (s *chatState) Init(widget.Ctx) { s.hook(s); s.n = 20; s.tapped = -1 }

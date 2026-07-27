@@ -11,12 +11,15 @@ import (
 )
 
 type respApp struct{ hook func(*respState) }
+
 func (a respApp) CreateState() widget.State { s := &respState{}; s.hook = a.hook; return s }
+
 type respState struct {
 	widget.StateBase[respApp]
 	hook func(*respState)
 	mode string
 }
+
 func (s *respState) Init(widget.Ctx) { s.hook(s) }
 func (s *respState) Build(widget.Ctx) widget.Widget {
 	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
@@ -33,7 +36,9 @@ func TestLayoutBuilderResponsive(t *testing.T) {
 	var st *respState
 	h, err := NewHeadless(respApp{hook: func(s *respState) { st = s }},
 		Config{Size: geom.Size{W: 400, H: 400}, Font: goregular.TTF}, 1)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	// First frame observes constraints; second builds with them.
 	h.Render()
 	h.Render()

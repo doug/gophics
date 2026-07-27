@@ -455,6 +455,12 @@ type ggCanvas struct {
 	dc *gg.Context
 }
 
+// GPUCanvas wraps an externally-owned gg.Context (e.g. a GPU-accelerated one
+// from ggcanvas) as a gossamer Canvas, so a recorded scene can be replayed
+// onto it. It shares the Painter's caches (glyph runs, image buffers). Used
+// by the GPU present path (M5); the Painter's own surface is untouched.
+func (p *Painter) GPUCanvas(dc *gg.Context) Canvas { return &ggCanvas{p: p, dc: dc} }
+
 func (c *ggCanvas) Clear(col Color) {
 	c.dc.SetColor(col.nrgba())
 	c.dc.Clear()

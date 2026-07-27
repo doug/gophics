@@ -49,7 +49,7 @@ type Core struct {
 	root       widget.Widget
 	size       geom.Size
 	debugPaint bool
-	inspect    bool // interactive widget inspector (highlights box under pointer)
+	inspect    bool        // interactive widget inspector (highlights box under pointer)
 	frameTimes [60]float32 // ring of recent raster+record durations, ms
 	frameHead  int
 
@@ -59,19 +59,19 @@ type Core struct {
 
 	posted chan func()
 
-	hovered    []*widget.InteractiveBox
-	pressed    *widget.InteractiveBox
-	longPress  *widget.InteractiveBox // box eligible for long-press
+	hovered        []*widget.InteractiveBox
+	pressed        *widget.InteractiveBox
+	longPress      *widget.InteractiveBox // box eligible for long-press
 	dragging       *widget.InteractiveBox
 	dragCandidates []hitInteractive // OnDrag boxes awaiting directional commit
 	dragOrigin     geom.Pt          // window origin of the dragging box at press time
 	lastPos        geom.Pt
-	downPos    geom.Pt
-	moved      bool
-	pressHeld  float64 // seconds the current press has been held, unmoved
-	longFired  bool
-	pendingTap *widget.InteractiveBox // deferred single-tap awaiting a possible double
-	tapElapsed float64
+	downPos        geom.Pt
+	moved          bool
+	pressHeld      float64 // seconds the current press has been held, unmoved
+	longFired      bool
+	pendingTap     *widget.InteractiveBox // deferred single-tap awaiting a possible double
+	tapElapsed     float64
 
 	a11y *a11yTree
 }
@@ -321,6 +321,13 @@ func (c *Core) ReplayDamaged(canvas paint.Canvas, damage geom.Rect) {
 	canvas.PushClip(damage)
 	c.prev.ReplayDamage(canvas, damage, c.Painter)
 	canvas.PopClip()
+}
+
+// ReplayScene replays the most recent recorded scene in full onto canvas. The
+// GPU present path rasterizes the whole frame on the GPU each frame, so it
+// uses this rather than damage-culled partial replay. Call after RecordScene.
+func (c *Core) ReplayScene(canvas paint.Canvas) {
+	c.prev.Replay(canvas)
 }
 
 // hitInteractive pairs an InteractiveBox with the hit position in its
@@ -581,15 +588,9 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	t0 := time.Now()
 	h.core.Layout(f.Size())
 	changed, damage := h.core.RecordScene(f.Size(), f.Scale())
-	if changed {
-		canvas := h.core.Painter.Begin(f)
-		h.core.ReplayDamaged(canvas, damage)
-	}
-	// Present even when skipped: the painter's surface is retained, and the
-	// swapchain still needs this frame's image.
-	if err := h.core.Painter.End(f); err != nil {
-		log.Printf("gossamer: present: %v", err)
-	}
+	// Present via the CPU rasterizer, or the GPU rasterizer under the
+	// gossamer_gpu build tag (see present_cpu.go / present_gpu.go).
+	h.present(f, changed, damage)
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.
 		h.core.recordFrameTime(float32(time.Since(t0).Seconds() * 1000))

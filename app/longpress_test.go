@@ -11,13 +11,16 @@ import (
 )
 
 type lpApp struct{ hook func(*lpState) }
+
 func (a lpApp) CreateState() widget.State { s := &lpState{}; s.hook = a.hook; return s }
+
 type lpState struct {
 	widget.StateBase[lpApp]
 	hook  func(*lpState)
 	taps  int
 	longs int
 }
+
 func (s *lpState) Init(widget.Ctx) { s.hook(s) }
 func (s *lpState) Build(widget.Ctx) widget.Widget {
 	return widget.Center(widget.Interactive{
@@ -34,7 +37,9 @@ func lpHarness(t *testing.T) (*Headless, *lpState) {
 	var st *lpState
 	h, err := NewHeadless(lpApp{hook: func(s *lpState) { st = s }},
 		Config{Size: geom.Size{W: 200, H: 200}, Font: goregular.TTF}, 1)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	h.Render()
 	return h, st
 }

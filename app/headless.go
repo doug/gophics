@@ -40,8 +40,8 @@ func NewHeadless(root widget.Widget, cfg Config, scale float32) (*Headless, erro
 // MemClipboard is the in-memory clipboard used by Headless.
 type MemClipboard struct{ S string }
 
-func (m *MemClipboard) ClipboardRead() (string, error)  { return m.S, nil }
-func (m *MemClipboard) ClipboardWrite(s string) error   { m.S = s; return nil }
+func (m *MemClipboard) ClipboardRead() (string, error) { return m.S, nil }
+func (m *MemClipboard) ClipboardWrite(s string) error  { m.S = s; return nil }
 
 // Render lays out and paints a frame through the damage-aware pipeline,
 // returning the physical-pixel image (retained across frames, so an
