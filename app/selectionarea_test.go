@@ -98,6 +98,43 @@ func TestSelectionAreaInLazyList(t *testing.T) {
 	}
 }
 
+// nestedSelApp offsets the SelectionArea by padding (like the HN app nests it
+// under a header + gutters), to exercise the origin/offset math that a
+// root-level area doesn't.
+type nestedSelApp struct{ text string }
+
+func (a nestedSelApp) CreateState() widget.State { return &nestedSelState{text: a.text} }
+
+type nestedSelState struct {
+	widget.StateBase[nestedSelApp]
+	text string
+}
+
+func (s *nestedSelState) Build(widget.Ctx) widget.Widget {
+	return widget.Padding{All: 40, Child: widget.SelectionArea{
+		Child: widget.Text{S: s.text, Size: 14},
+	}}
+}
+
+// TestSelectionAreaNestedOffset drags across text that starts 40px in, so the
+// registry origin and pointer coords must both account for the offset.
+func TestSelectionAreaNestedOffset(t *testing.T) {
+	h, err := NewHeadless(nestedSelApp{text: "offset me"},
+		Config{Size: geom.Size{W: 400, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	// Text baseline sits ~40+ from the top; drag across it there.
+	h.DragTo(geom.Pt{X: 41, Y: 48}, geom.Pt{X: 3000, Y: 48})
+	h.Release(geom.Pt{X: 3000, Y: 48})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got, want := clip(h), "offset me"; got != want {
+		t.Fatalf("copied %q, want %q", got, want)
+	}
+}
+
 // TestSelectionAreaSingleFragment selects within just the first line.
 func TestSelectionAreaSingleFragment(t *testing.T) {
 	h := selAreaHarness(t, "Hello", "World")
