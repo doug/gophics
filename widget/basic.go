@@ -40,6 +40,12 @@ func (t Text) updateBox(ctx Ctx, b layout.Box) {
 	tb.Text, tb.Font, tb.TextSize, tb.Color = t.S, t.Font, t.size(), t.Color
 	tb.Wrap, tb.Strike, tb.Underline = t.Wrap, t.Strike, t.Underline
 	tb.MaxLines, tb.Ellipsis = t.MaxLines, t.Ellipsis
+	// Inside a SelectionArea, register as a selectable fragment.
+	if reg, ok := Of[*selectionRegistry](ctx); ok {
+		tb.Selection = reg
+	} else {
+		tb.Selection = nil
+	}
 }
 func (t Text) childWidgets() []Widget          { return nil }
 func (t Text) attach(layout.Box, []layout.Box) {}

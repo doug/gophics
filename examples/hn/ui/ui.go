@@ -83,7 +83,7 @@ func page(ctx widget.Ctx, headerW, body widget.Widget) widget.Widget {
 		}},
 		widget.Expand(widget.Padding{
 			Insets: geom.Insets{Left: in.Left, Right: in.Right, Bottom: in.Bottom},
-			Child:  body,
+			Child:  widget.SelectionArea{Child: body},
 		}),
 	)
 	col.CrossAlign = layout.CrossStretch

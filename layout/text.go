@@ -29,6 +29,10 @@ type TextBox struct {
 	// Ellipsis truncates overflowing text with "…": a single line to the
 	// width, or a wrapped block at MaxLines.
 	Ellipsis bool
+	// Selection, when set (by a Text inside a widget.SelectionArea), makes this
+	// text a selectable fragment: it registers each frame and paints the
+	// selected runes' highlight.
+	Selection SelectionSink
 
 	lines    []string
 	baseline float32 // first-line baseline
@@ -90,8 +94,34 @@ func (b *TextBox) Layout(cs Constraints) geom.Size {
 }
 
 func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {
+	// Selection: register this fragment and get the rune range to highlight.
+	selLo, selHi := 0, 0
+	var selCol paint.Color
+	if b.Selection != nil {
+		selLo, selHi, selCol = b.Selection.RegisterText(TextFragment{
+			Origin: at, Lines: b.lines, Font: b.Font, Size: b.TextSize,
+			LineH: b.lineH, Ascent: b.baseline, Descent: b.descent, Painter: b.Painter,
+		})
+	}
+	lineOff := 0 // linear rune offset at this line's start
 	for i, ln := range b.lines {
 		base := at.Y + b.baseline + float32(i)*b.lineH
+		runes := []rune(ln)
+		// Selection highlight for this line, painted under the glyphs.
+		if selHi > selLo {
+			a := max(selLo-lineOff, 0)
+			z := min(selHi-lineOff, len(runes))
+			if a < z {
+				x0 := b.Painter.MeasureWidthIn(b.Font, string(runes[:a]), b.TextSize)
+				x1 := b.Painter.MeasureWidthIn(b.Font, string(runes[:z]), b.TextSize)
+				top := at.Y + float32(i)*b.lineH
+				c.FillRect(geom.Rect{
+					Min: geom.Pt{X: at.X + x0, Y: top},
+					Max: geom.Pt{X: at.X + x1, Y: top + b.lineH},
+				}, selCol)
+			}
+		}
+		lineOff += len(runes) + 1
 		c.TextIn(b.Font, ln, geom.Pt{X: at.X, Y: base}, b.TextSize, b.Color)
 		if !b.Strike && !b.Underline {
 			continue
