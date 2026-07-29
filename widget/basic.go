@@ -860,25 +860,42 @@ func (b *semBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	}
 }
 
-// Canvas is the custom-painting escape hatch: a fixed-size leaf that paints
-// itself with the given function. Draw is called with the widget's rect in
-// canvas coordinates.
+// Canvas is the custom-painting escape hatch — a leaf that paints itself with
+// Draw, the analog of Flutter's CustomPaint and the HTML <canvas>. Use it for
+// graphics that don't decompose into widgets: charts, gauges, sparklines,
+// generative art, game boards.
+//
+// Draw receives a paint.Canvas whose origin (0,0) is the surface's top-left,
+// and the surface's logical size. The same primitives the rest of the
+// framework paints with are available (fills, text, images, gradients, clips,
+// transforms); on the GPU build they run through the GPU rasterizer.
+//
+// Sizing: by default the surface fills the space its parent offers; set W
+// and/or H to request a fixed extent on that axis (0 = fill when the parent
+// bounds it, else collapse). Drawing may overflow the surface (like Flutter's
+// default) — set Clip to bound it. For pointer input, wrap in Interactive.
+//
+// Repainting: drawing is retained and re-recorded only when a frame is
+// produced. To animate, drive frames from an enclosing Stateful (SetState) or
+// a Ticker and read that state inside Draw.
 type Canvas struct {
 	W, H float32
-	Draw func(c paint.Canvas, r geom.Rect)
+	Clip bool // clip Draw to the surface bounds (default: no clip)
+	Draw func(c paint.Canvas, size geom.Size)
 }
 
 func (cw Canvas) createBox(Ctx) layout.Box { return &canvasBox{} }
 func (cw Canvas) updateBox(_ Ctx, b layout.Box) {
 	cb := b.(*canvasBox)
-	cb.w, cb.h, cb.draw = cw.W, cw.H, cw.Draw
+	cb.w, cb.h, cb.clip, cb.draw = cw.W, cw.H, cw.Clip, cw.Draw
 }
 func (cw Canvas) childWidgets() []Widget          { return nil }
 func (cw Canvas) attach(layout.Box, []layout.Box) {}
 
 type canvasBox struct {
 	w, h float32
-	draw func(c paint.Canvas, r geom.Rect)
+	clip bool
+	draw func(c paint.Canvas, size geom.Size)
 	size geom.Size
 }
 
@@ -898,9 +915,22 @@ func (b *canvasBox) Layout(cs layout.Constraints) geom.Size {
 
 func (b *canvasBox) Size() geom.Size { return b.size }
 
+// Paint translates so Draw works in local coordinates (0,0 = top-left) and,
+// when Clip is set, bounds drawing to the surface. The clip is pushed in parent
+// coordinates, before the transform, so it bounds the surface regardless of
+// what Draw does.
 func (b *canvasBox) Paint(c paint.Canvas, at geom.Pt) {
-	if b.draw != nil {
-		b.draw(c, geom.Rect{Min: at, Max: at.Add(b.size.Pt())})
+	if b.draw == nil || b.size.W <= 0 || b.size.H <= 0 {
+		return
+	}
+	if b.clip {
+		c.PushClip(geom.Rect{Min: at, Max: at.Add(b.size.Pt())})
+	}
+	c.PushTransform(paint.Transform{TX: at.X, TY: at.Y})
+	b.draw(c, b.size)
+	c.PopTransform()
+	if b.clip {
+		c.PopClip()
 	}
 }
 

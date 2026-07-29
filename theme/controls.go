@@ -51,7 +51,7 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 				f(!on)
 			}
 		}},
-		Child: widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, r geom.Rect) {
+		Child: widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
 			track := paint.Lerp(th.Border, th.Primary, t)
 			c.FillRRect(r, h/2, track)
 			cx := r.Min.X + h/2 + t*(w-h)
@@ -70,7 +70,7 @@ type Checkbox struct {
 
 func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	box := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, r geom.Rect) {
+	box := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
 		if cb.Checked {
 			c.FillRRect(r, 5, th.Primary)
 			c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, th.OnPrimary)
@@ -130,7 +130,7 @@ func (s *sliderState) Build(ctx widget.Ctx) widget.Widget {
 			OnPress: func(p geom.Pt) { s.set(p.X) },
 			OnDrag:  func(p, _ geom.Pt) { s.set(p.X) },
 		},
-		Child: widget.Canvas{H: 28, Draw: func(c paint.Canvas, r geom.Rect) {
+		Child: widget.Canvas{H: 28, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
 			s.width = r.Dx()
 			cy := r.Min.Y + r.Dy()/2
 			c.FillRRect(geom.RectXYWH(r.Min.X, cy-2, r.Dx(), 4), 2, th.Border)
@@ -152,7 +152,7 @@ type Radio struct {
 
 func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	dot := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, r geom.Rect) {
+	dot := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
 		ring := th.Border
 		if rd.Selected {
 			ring = th.Primary

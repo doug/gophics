@@ -234,7 +234,7 @@ func checkbox(done bool) widget.Widget {
 	if done {
 		return widget.Decorated{
 			Color: colAccent, Radius: 5,
-			Child: widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, r geom.Rect) {
+			Child: widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
 				c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, colBg)
 				c.Line(r.Min.Add(geom.Pt{X: 8, Y: 14}), r.Min.Add(geom.Pt{X: 16, Y: 5}), 2, colBg)
 			}},
