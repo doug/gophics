@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"github.com/gogpu/gg"
+	ggtext "github.com/gogpu/gg/text"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"
@@ -202,6 +203,17 @@ type Painter struct {
 	// device-resolution image and blitted thereafter. Scrolling repeats the
 	// same runs frame to frame, giving near-total hit rate on the hot path.
 	runs map[runKey]*cachedRun
+
+	// GPU text uses gg's glyph-mask tier, which needs a gg face built from the
+	// same font bytes (matching GIDs). Sources are created at load; faces are
+	// memoized per (family, size).
+	ggSources map[string]*ggtext.FontSource
+	ggFaces   map[ggFaceKey]ggtext.Face
+}
+
+type ggFaceKey struct {
+	family string
+	size   float32
 }
 
 type runKey struct {
@@ -241,6 +253,8 @@ func NewPainter() *Painter {
 		metrics:  map[metricsKey]TextMetrics{},
 		imgBufs:  map[image.Image]*gg.ImageBuf{},
 		runs:     map[runKey]*cachedRun{},
+		ggSources: map[string]*ggtext.FontSource{},
+		ggFaces:   map[ggFaceKey]ggtext.Face{},
 	}
 }
 
@@ -282,11 +296,56 @@ func (p *Painter) LoadFontFamily(name string, data []byte) error {
 		return err
 	}
 	p.families[name] = f
+	// Parallel gg source over the same bytes for the GPU glyph-mask tier
+	// (GIDs are font-file-intrinsic, so gg's parse matches gossamer's shaper).
+	if src, srcErr := ggtext.NewFontSource(data); srcErr == nil {
+		p.ggSources[name] = src
+		clear(p.ggFaces)
+	}
 	if _, ok := p.shapers[name]; !ok {
 		p.shapers[name] = text.NewShaper()
 	}
 	p.rebuildShapers()
 	return nil
+}
+
+// ggFaceFor returns the memoized gg face for a family at a logical size, or
+// nil if no gg source is registered for it.
+func (p *Painter) ggFaceFor(family string, size float32) ggtext.Face {
+	src, ok := p.ggSources[family]
+	if !ok {
+		src, ok = p.ggSources[""]
+		family = ""
+	}
+	if !ok {
+		return nil
+	}
+	k := ggFaceKey{family, size}
+	if f, ok := p.ggFaces[k]; ok {
+		return f
+	}
+	f := src.Face(float64(size))
+	p.ggFaces[k] = f
+	return f
+}
+
+// glyphsFromFamily reports whether every glyph came from the family's primary
+// font. Fallback-font glyphs carry GIDs from a different font, so the gg face
+// (built from the family bytes) would rasterize the wrong outlines for them.
+func (p *Painter) glyphsFromFamily(family string, glyphs []text.Glyph) bool {
+	primary, ok := p.families[family]
+	if !ok {
+		primary = p.families[""]
+	}
+	if primary == nil {
+		return false
+	}
+	for i := range glyphs {
+		if glyphs[i].Font != primary {
+			return false
+		}
+	}
+	return true
 }
 
 // LoadFallbackFont appends a fallback font used by every family (per-rune
@@ -609,6 +668,30 @@ func (c *ggCanvas) fillGlyphs(font, s string, pos geom.Pt, size float32, col Col
 		return
 	}
 	c.dc.SetColor(col.nrgba())
+
+	// Preferred: gg's glyph-mask GPU text tier. It rasterizes each glyph once
+	// into a device-resolution atlas (crisp AA, cached across frames) and
+	// batches the quads into the render pass. Needs a gg face with matching
+	// GIDs, so only when every glyph came from that family's font.
+	if face := c.p.ggFaceFor(font, size); face != nil && c.p.glyphsFromFamily(font, line.Glyphs) {
+		glyphs := make([]ggtext.ShapedGlyph, len(line.Glyphs))
+		for i, g := range line.Glyphs {
+			glyphs[i] = ggtext.ShapedGlyph{
+				GID:      ggtext.GlyphID(g.GID),
+				Cluster:  g.Cluster,
+				X:        float64(g.X),
+				Y:        float64(g.Y),
+				XAdvance: float64(g.Advance),
+			}
+		}
+		// DrawShapedGlyphs self-falls-back to outline fills if the mask tier is
+		// unavailable, so this is never worse than the manual path below.
+		c.dc.DrawShapedGlyphs(glyphs, face, float64(pos.X), float64(pos.Y))
+		return
+	}
+
+	// Fallback: fill the glyph outlines directly (resolution-independent, but
+	// re-tessellated per frame). Used for fallback-font runs (CJK, symbols).
 	c.dc.ClearPath()
 	sink := ggSink{c.dc}
 	for _, g := range line.Glyphs {
