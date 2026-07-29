@@ -90,7 +90,18 @@ func (p *presenter) setup() {
 		return
 	}
 	p.ggc = c
+
+	// Force the render-pass pipeline. Auto-selection routes complex scenes
+	// (the HN list is >50 shapes) to the Vello compute rasterizer, which reads
+	// its result back to a CPU pixmap and ignores the surface view — so nothing
+	// reaches the canvas. The render-pass path composites directly to the view.
+	if pma, ok := gg.Accelerator().(gg.PipelineModeAware); ok {
+		pma.SetPipelineMode(gg.PipelineModeRenderPass)
+	}
+
 	p.ready = true
+	log.Printf("gossamer/web: GPU ready (%s, %s, %dx%d @%gx)",
+		adapter.Info().Name, p.format, p.pw, p.ph, p.w.dpr)
 	p.w.Invalidate() // draw the first GPU frame now that we can present
 }
 

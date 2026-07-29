@@ -578,6 +578,16 @@ func (c *ggCanvas) Text(s string, pos geom.Pt, size float32, col Color) {
 }
 
 func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) {
+	if c.gpuActive() {
+		// GPU path: fill the shaped glyph outlines directly into the frame's
+		// shape queue (one fill per run) so text composites to the surface with
+		// every other shape in a single render pass. The bitmap-blit path below
+		// draws each run as a DrawImage, which forces a mid-frame accelerator
+		// flush that drops the queued shapes — fatal on the direct-surface path.
+		// Filling outlines is also resolution-independent (no per-scale raster).
+		c.fillGlyphs(font, s, pos, size, col)
+		return
+	}
 	run := c.p.runFor(font, s, size, col)
 	if run == nil {
 		return
@@ -586,6 +596,25 @@ func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) 
 		X: float64(pos.X + run.offX), Y: float64(pos.Y + run.offY),
 		DstWidth: float64(run.dstW), DstHeight: float64(run.dstH),
 	})
+}
+
+// fillGlyphs shapes s and fills its glyph outlines directly on the GPU-backed
+// context at logical coordinates (the context's device scale maps them to
+// physical pixels). pos.Y is the baseline. One Fill per run keeps the whole
+// run a single multi-contour path, which the analytic/SDF filler resolves with
+// nonzero winding — glyphs solid, gaps empty.
+func (c *ggCanvas) fillGlyphs(font, s string, pos geom.Pt, size float32, col Color) {
+	line := c.p.ShapeIn(font, s, size)
+	if len(line.Glyphs) == 0 {
+		return
+	}
+	c.dc.SetColor(col.nrgba())
+	c.dc.ClearPath()
+	sink := ggSink{c.dc}
+	for _, g := range line.Glyphs {
+		g.Font.AppendGlyphPath(sink, g.GID, size, pos.X+g.X, pos.Y+g.Y)
+	}
+	c.dc.Fill()
 }
 
 // runFor returns the cached image for a text run at the current device
