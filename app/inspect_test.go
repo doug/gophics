@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -85,5 +86,25 @@ func TestDebugPaintChangesOutput(t *testing.T) {
 	}
 	if diff == 0 {
 		t.Fatal("debug paint drew no outlines")
+	}
+}
+
+func TestInspectHTML(t *testing.T) {
+	h, err := NewHeadless(inspApp{}, Config{Size: geom.Size{W: 200, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	page := h.Core.InspectHTML()
+	for _, want := range []string{"<!doctype html>", "render-tree inspector", "Flex", "button", "Header", `class="node"`, `class="row"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("inspector HTML missing %q", want)
+		}
+	}
+	if out := os.Getenv("GOSSAMER_INSPECT_OUT"); out != "" {
+		if err := os.WriteFile(out, []byte(page), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %s", out)
 	}
 }
