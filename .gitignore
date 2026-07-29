@@ -5,3 +5,7 @@ examples/hn/android/app/libs/*.aar
 examples/hn/android/.gradle/
 examples/hn/android/app/build/
 examples/hn/android/local.properties
+
+# stray example binaries built at repo root
+/gallery
+examples/hn/ios/build/
