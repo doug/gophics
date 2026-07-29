@@ -1,17 +1,20 @@
 //go:build js && wasm
 
-// Package web implements shell in the browser: a full-window <canvas>
-// presented via 2D putImageData (the paint layer rasterizes on the CPU),
+// Package web implements shell in the browser: a full-window <canvas>,
 // frames driven by requestAnimationFrame, and DOM input events.
 //
-// Serve the wasm binary with wasm_exec.js (see examples/*/web). WebGPU
-// presentation can replace the 2D blit later without touching anything
-// above the shell.
+// Presentation is build-tag split. The default build rasterizes on the CPU
+// and blits with 2D putImageData (present_cpu.go). Building with
+// -tags gossamer_gpu rasterizes each frame on the GPU and presents to the
+// canvas's WebGPU surface directly (present_gpu.go) — no CPU readback. Both
+// satisfy the small presenter contract this file drives; nothing above the
+// shell changes.
+//
+// Serve the wasm binary with wasm_exec.js (see examples/*/web).
 package web
 
 import (
 	"errors"
-	"image"
 	"syscall/js"
 
 	"github.com/doug/gossamer/geom"
@@ -28,10 +31,10 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	canvas.Get("style").Set("cssText", "width:100vw;height:100vh;display:block;margin:0;cursor:default")
 	doc.Get("body").Get("style").Set("cssText", "margin:0;overflow:hidden")
 	doc.Get("body").Call("appendChild", canvas)
-	ctx2d := canvas.Call("getContext", "2d")
 
-	w := &window{canvas: canvas, ctx2d: ctx2d, doc: doc, handler: h}
+	w := &window{canvas: canvas, doc: doc, handler: h}
 	w.resize()
+	w.pres = newPresenter(w)
 
 	listen := func(target js.Value, event string, fn func(e js.Value)) {
 		target.Call("addEventListener", event, js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -152,18 +155,15 @@ func modBits(e js.Value) shell.Mods {
 }
 
 type window struct {
-	canvas, ctx2d, doc js.Value
-	handler            shell.Handler
+	canvas, doc js.Value
+	handler     shell.Handler
+	pres        *presenter // build-specific presentation (CPU blit or GPU surface)
 
 	logical    geom.Size
 	dpr        float64
 	rafPending bool
 	rafFunc    js.Func
 	lastNow    float64
-
-	buf       js.Value // Uint8ClampedArray cache
-	imageData js.Value
-	bufW, bufH int
 }
 
 func (w *window) resize() {
@@ -174,6 +174,9 @@ func (w *window) resize() {
 	w.logical = geom.Size{W: float32(lw), H: float32(lh)}
 	w.canvas.Set("width", int(lw*w.dpr))
 	w.canvas.Set("height", int(lh*w.dpr))
+	if w.pres != nil {
+		w.pres.onResize()
+	}
 }
 
 func (w *window) Invalidate() {
@@ -219,23 +222,13 @@ func (w *window) DarkMode() bool {
 	return m.Truthy() && m.Get("matches").Bool()
 }
 
-func (w *window) put(img *image.RGBA) {
-	pw, ph := img.Rect.Dx(), img.Rect.Dy()
-	if w.buf.IsUndefined() || w.bufW != pw || w.bufH != ph {
-		w.buf = js.Global().Get("Uint8ClampedArray").New(len(img.Pix))
-		w.imageData = js.Global().Get("ImageData").New(w.buf, pw, ph)
-		w.bufW, w.bufH = pw, ph
-	}
-	js.CopyBytesToJS(w.buf, img.Pix)
-	w.ctx2d.Call("putImageData", w.imageData, 0, 0)
-}
-
 type frame struct {
 	w *window
 }
 
 func (f *frame) Size() geom.Size { return f.w.logical }
 func (f *frame) Scale() float32  { return float32(f.w.dpr) }
-func (f *frame) Target() shell.Target {
-	return shell.PixelTarget{Put: f.w.put}
-}
+
+// Target delegates to the build-specific presenter: a CPU PixelTarget
+// (present_cpu.go) or a GPU surface target (present_gpu.go).
+func (f *frame) Target() shell.Target { return f.w.pres.target() }

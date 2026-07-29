@@ -1,4 +1,4 @@
-//go:build gossamer_gpu
+//go:build gossamer_gpu && !js
 
 package app
 
