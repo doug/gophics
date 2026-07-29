@@ -18,6 +18,10 @@ type Headless struct {
 
 	size  geom.Size
 	scale float32
+
+	// gpu holds the lazily-created headless GPU renderer used by RenderGPU
+	// (gossamer_gpu build only); typed any so this file stays tag-agnostic.
+	gpu any
 }
 
 // NewHeadless builds a headless app at the given logical size and scale.

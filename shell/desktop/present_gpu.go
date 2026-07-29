@@ -8,9 +8,7 @@
 package desktop
 
 import (
-	"image/png"
 	"log"
-	"os"
 
 	"github.com/gogpu/gg"
 	_ "github.com/gogpu/gg/gpu" // registers gg's GPU accelerator (SDF/tiled raster)
@@ -18,14 +16,6 @@ import (
 	"github.com/gogpu/gogpu"
 
 	"github.com/doug/gossamer/shell"
-)
-
-// GOSSAMER_GPU_DUMP=<path>: after a few frames, read the GPU-rendered frame
-// back to the CPU and save it as a PNG (then present normally). A debugging
-// aid for GPU rasterization issues where the display can't be captured.
-var (
-	gpuDumpPath  = os.Getenv("GOSSAMER_GPU_DUMP")
-	gpuFrameSeen int
 )
 
 // onFrameStart lazily creates the GPU canvas once the surface exists (the
@@ -71,23 +61,6 @@ func (f *frame) Target() shell.Target {
 // composites the result to the swapchain.
 func (t gpuTarget) RenderGPU(replay func(*gg.Context)) {
 	_ = t.ggc.Draw(func(cc *gg.Context) { replay(cc) })
-
-	if gpuDumpPath != "" {
-		gpuFrameSeen++
-		if gpuFrameSeen == 8 { // let the first frames settle, then read back
-			cc := t.ggc.Context()
-			if err := cc.FlushGPU(); err != nil { // no view → render + CPU readback into pixmap
-				log.Printf("gossamer/desktop: gpu dump flush: %v", err)
-			}
-			if f, err := os.Create(gpuDumpPath); err == nil {
-				_ = png.Encode(f, cc.Image())
-				_ = f.Close()
-				log.Printf("gossamer/desktop: wrote GPU frame readback to %s", gpuDumpPath)
-			}
-			return // skip present this one frame (ops were consumed by FlushGPU)
-		}
-	}
-
 	if err := t.ggc.Render(t.dc.RenderTarget()); err != nil {
 		log.Printf("gossamer/desktop: gpu render: %v", err)
 	}

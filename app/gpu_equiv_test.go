@@ -1,0 +1,207 @@
+//go:build gossamer_gpu
+
+package app
+
+// GPU-vs-CPU equivalence and benchmarks (M5 exit criterion). Renders the same
+// recorded scene through the CPU rasterizer and the GPU rasterizer (headless
+// readback) and asserts they agree within tolerance, and measures raster time.
+//
+//	go test -tags gossamer_gpu ./app -run TestGPUMatchesCPU -v
+//	go test -tags gossamer_gpu ./app -run x -bench BenchmarkRaster -benchmem
+
+import (
+	"image"
+	"image/png"
+	"os"
+	"testing"
+
+	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/paint"
+	"github.com/doug/gossamer/widget"
+)
+
+// equivScene draws the primitives the two backends must agree on: fills, rounded
+// rects, a gradient, a stroke, a clipped fill, and text at two sizes.
+func equivScene() widget.Widget {
+	white := paint.RGB(1, 1, 1)
+	black := paint.RGB(0, 0, 0)
+	return widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+		c.Clear(white)
+		c.FillRect(geom.RectXYWH(20, 20, 100, 60), paint.RGB(0.85, 0.2, 0.2))
+		c.FillRRect(geom.RectXYWH(140, 20, 120, 60), 16, paint.RGB(0.2, 0.4, 0.85))
+		c.FillRRectGradient(geom.RectXYWH(20, 100, 240, 60), 12,
+			paint.RGB(0.2, 0.85, 0.9), paint.RGB(0.9, 0.3, 0.55), true)
+		c.StrokeRRect(geom.RectXYWH(20, 180, 240, 50), 10, 3, paint.RGB(0.1, 0.6, 0.2))
+		c.PushClipRRect(geom.RectXYWH(20, 250, 240, 80), 20)
+		c.FillRect(geom.RectXYWH(20, 250, 240, 80), paint.RGB(0.5, 0.3, 0.75))
+		c.PopClip()
+		c.Text("Equivalence", geom.Pt{X: 20, Y: 380}, 28, black)
+		c.Text("gpu == cpu?", geom.Pt{X: 20, Y: 412}, 16, paint.RGB(0.4, 0.4, 0.45))
+	}}
+}
+
+func equivHarness(t *testing.T) *Headless {
+	t.Helper()
+	h, err := NewHeadless(equivScene(), Config{Size: geom.Size{W: 300, H: 440}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+func TestGPUMatchesCPU(t *testing.T) {
+	h := equivHarness(t)
+	cpu := toRGBA(h.Render())
+	gpuImg := h.RenderGPU()
+	if gpuImg == nil {
+		t.Skip("no headless GPU adapter")
+	}
+	gpu := toRGBA(gpuImg)
+
+	if cpu.Bounds() != gpu.Bounds() {
+		t.Fatalf("size mismatch: cpu %v vs gpu %v", cpu.Bounds(), gpu.Bounds())
+	}
+	if os.Getenv("GOSSAMER_GPU_DUMP") != "" {
+		dumpPNG(t, "/tmp/equiv_cpu.png", cpu)
+		dumpPNG(t, "/tmp/equiv_gpu.png", gpu)
+	}
+
+	// Compare per pixel. Rasterizers differ slightly at anti-aliased edges, so
+	// allow a small fraction of pixels to differ by a moderate amount; the bulk
+	// (flat interiors, text coverage, clip boundaries) must match closely.
+	const chanTol = 32 // per-channel abs difference tolerated per pixel
+	var diffPixels, total int
+	var maxDiff int
+	b := cpu.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			o := cpu.PixOffset(x, y)
+			d := 0
+			for k := 0; k < 4; k++ {
+				dd := int(cpu.Pix[o+k]) - int(gpu.Pix[o+k])
+				if dd < 0 {
+					dd = -dd
+				}
+				if dd > d {
+					d = dd
+				}
+			}
+			if d > maxDiff {
+				maxDiff = d
+			}
+			if d > chanTol {
+				diffPixels++
+			}
+			total++
+		}
+	}
+	frac := float64(diffPixels) / float64(total)
+	t.Logf("differing pixels (>%d/chan): %d/%d = %.3f%%; max channel diff %d",
+		chanTol, diffPixels, total, frac*100, maxDiff)
+	if frac > 0.05 {
+		t.Errorf("GPU and CPU disagree on %.2f%% of pixels (want <5%%)", frac*100)
+	}
+}
+
+// TestGPUGradientInterpolates verifies the GPU backend renders a linear
+// gradient as an actual gradient (via clipped solid strips), not a flat fill:
+// the left and right of a horizontal cyan→magenta band must differ, and a
+// mid-band sample must sit between the two endpoints.
+func TestGPUGradientInterpolates(t *testing.T) {
+	from, to := paint.RGB(0.1, 0.9, 0.9), paint.RGB(0.9, 0.2, 0.5)
+	scene := widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+		c.Clear(paint.RGB(1, 1, 1))
+		c.FillRRectGradient(geom.RectXYWH(10, 10, 200, 60), 0, from, to, true)
+	}}
+	h, err := NewHeadless(scene, Config{Size: geom.Size{W: 220, H: 80}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gimg := h.RenderGPU()
+	if gimg == nil {
+		t.Skip("no headless GPU adapter")
+	}
+	gpu := toRGBA(gimg)
+	left := gpu.RGBAAt(20, 40)
+	mid := gpu.RGBAAt(110, 40)
+	right := gpu.RGBAAt(200, 40)
+	d := absi(int(left.R)-int(right.R)) + absi(int(left.G)-int(right.G)) + absi(int(left.B)-int(right.B))
+	t.Logf("gradient band L=%v M=%v R=%v endpoint diff=%d", left, mid, right, d)
+	if d < 150 {
+		t.Errorf("GPU gradient not interpolating: L↔R diff only %d", d)
+	}
+	// The midpoint red channel should lie strictly between the endpoints'
+	// (cyan R≈26 → magenta R≈229), confirming a genuine ramp.
+	if !(int(left.R) < int(mid.R) && int(mid.R) < int(right.R)) {
+		t.Errorf("midpoint not between endpoints: L.R=%d M.R=%d R.R=%d", left.R, mid.R, right.R)
+	}
+}
+
+func absi(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func toRGBA(img image.Image) *image.RGBA {
+	if r, ok := img.(*image.RGBA); ok {
+		return r
+	}
+	b := img.Bounds()
+	r := image.NewRGBA(b)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r.Set(x, y, img.At(x, y))
+		}
+	}
+	return r
+}
+
+// BenchmarkRasterCPU measures a full-scene CPU rasterization (record once, then
+// replay+raster each iteration).
+func BenchmarkRasterCPU(b *testing.B) {
+	h, err := NewHeadless(equivScene(), Config{Size: geom.Size{W: 300, H: 440}, Font: goregular.TTF}, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	h.Core.Layout(h.size)
+	h.Core.RecordScene(h.size, h.scale)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c := h.Core.Painter.BeginOffscreen(h.size, h.scale)
+		h.Core.ReplayScene(c)
+		_ = h.Core.Painter.Image()
+	}
+}
+
+// BenchmarkRasterGPU measures the headless GPU path. NOTE: this includes a
+// full texture→CPU readback each iteration, which on-screen presentation does
+// not do — so it overstates GPU cost and is a loose upper bound, not the
+// on-screen number.
+func BenchmarkRasterGPU(b *testing.B) {
+	h, err := NewHeadless(equivScene(), Config{Size: geom.Size{W: 300, H: 440}, Font: goregular.TTF}, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if h.RenderGPU() == nil {
+		b.Skip("no headless GPU adapter")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h.RenderGPU()
+	}
+}
+
+func dumpPNG(t *testing.T, path string, img image.Image) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	_ = png.Encode(f, img)
+	t.Logf("wrote %s", path)
+}

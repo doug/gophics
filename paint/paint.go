@@ -468,8 +468,17 @@ type ggCanvas struct {
 func (p *Painter) GPUCanvas(dc *gg.Context) Canvas { return &ggCanvas{p: p, dc: dc} }
 
 func (c *ggCanvas) Clear(col Color) {
+	// gg's Context.Clear clears the CPU pixmap to transparent, which the GPU
+	// backend never sees (it composites via its own target) — so a colored
+	// clear is lost there and reads as transparent on the CPU path too. Paint
+	// the whole surface instead: a device-space filled rect goes through
+	// whichever rasterizer is active, so the background is correct on both.
+	c.dc.Push()
+	c.dc.Identity() // device space: ignore the current scale/transform
 	c.dc.SetColor(col.nrgba())
-	c.dc.Clear()
+	c.dc.DrawRectangle(0, 0, float64(c.dc.Width()), float64(c.dc.Height()))
+	_ = c.dc.Fill()
+	c.dc.Pop()
 }
 
 func (c *ggCanvas) FillRect(r geom.Rect, col Color) {
@@ -484,7 +493,17 @@ func (c *ggCanvas) FillRRect(r geom.Rect, radius float32, col Color) {
 	c.dc.Fill()
 }
 
+// FillRRectGradient fills a rounded rect with a linear gradient. On the CPU
+// backend it uses gg's analytic gradient brush (one smooth fill). On the GPU
+// backend, whose tile rasterizer only understands a single solid brush color,
+// it falls back to compositing thin interpolated solid strips clipped to the
+// rounded rect — which the GPU does support — so gradients render correctly on
+// both. (A native GPU gradient shader would remove the strip overdraw; tracked.)
 func (c *ggCanvas) FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool) {
+	if c.gpuActive() {
+		c.gradientStrips(r, radius, from, to, horizontal)
+		return
+	}
 	var brush gg.Brush
 	if horizontal {
 		brush = gg.LinearGradient(from.ggRGBA(), to.ggRGBA(),
@@ -498,6 +517,43 @@ func (c *ggCanvas) FillRRectGradient(r geom.Rect, radius float32, from, to Color
 	c.dc.Fill()
 	c.dc.SetColor(color.NRGBA{A: 255}) // reset brush to solid
 }
+
+// gpuActive reports whether this canvas rasterizes on the GPU: a process-global
+// accelerator is registered and this context isn't opted out of it. The CPU
+// present path (and the default build, with no accelerator) returns false.
+func (c *ggCanvas) gpuActive() bool {
+	return gg.Accelerator() != nil && !c.dc.GPUDisabled()
+}
+
+// gradientStrips approximates a two-stop linear gradient as a run of solid
+// strips clipped to the rounded rect. gradientStripCount strips over a UI-sized
+// band put each strip well under a pixel of color step, so banding is not
+// visible; the rrect clip keeps the corners crisp.
+func (c *ggCanvas) gradientStrips(r geom.Rect, radius float32, from, to Color, horizontal bool) {
+	const n = gradientStripCount
+	c.dc.Push()
+	c.dc.ClipRoundRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
+	span := r.Dy()
+	if horizontal {
+		span = r.Dx()
+	}
+	step := span / n
+	for i := 0; i < n; i++ {
+		t := (float32(i) + 0.5) / n
+		c.dc.SetColor(Lerp(from, to, t).nrgba())
+		if horizontal {
+			c.dc.DrawRectangle(float64(r.Min.X+float32(i)*step), float64(r.Min.Y), float64(step)+1, float64(r.Dy()))
+		} else {
+			c.dc.DrawRectangle(float64(r.Min.X), float64(r.Min.Y+float32(i)*step), float64(r.Dx()), float64(step)+1)
+		}
+		c.dc.Fill()
+	}
+	c.dc.Pop() // restores the pre-clip state
+}
+
+// gradientStripCount is the number of solid strips a GPU gradient is composited
+// from — high enough that the color step is sub-pixel for typical UI bands.
+const gradientStripCount = 64
 
 func (c *ggCanvas) StrokeRRect(r geom.Rect, radius, width float32, col Color) {
 	c.dc.SetColor(col.nrgba())
@@ -564,6 +620,13 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 	// accelerator so this fill isn't deferred to a GPU, which would leave
 	// scratch.Image() blank and make cached text runs render as nothing.
 	scratch.SetGPUDisabled(true)
+	// Force the analytic scanline filler. A glyph run is a dense multi-contour
+	// path; RasterizerAuto routes complex paths to the tile-based CoverageFiller
+	// whenever gg's GPU accelerator is imported (GetCoverageFiller != nil), and
+	// that filler mishandles multi-contour winding — filling the gaps between
+	// glyphs solid, so text renders as an opaque block. AnalyticFiller is the
+	// correct path for multi-contour fills (gg's own software.go says so).
+	scratch.SetRasterizerMode(gg.RasterizerAnalytic)
 	scratch.SetColor(col.nrgba())
 	scratch.ClearPath()
 	baseline := m.Ascent*scale + pad
