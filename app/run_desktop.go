@@ -1,4 +1,4 @@
-//go:build !js && !android && !ios
+//go:build !js && !android && !ios && !gossamer_term
 
 package app
 
