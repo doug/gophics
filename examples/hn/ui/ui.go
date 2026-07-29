@@ -28,6 +28,7 @@ var (
 	colOnBar  = paint.RGB(1, 1, 1)
 	colAccent = paint.RGB(1.00, 0.40, 0.00)
 	colLink   = paint.RGB(0.05, 0.35, 0.75)
+	colGutter = paint.RGB(0.85, 0.85, 0.83) // backdrop beside the centered column on wide viewports
 
 	commentStyle = spanStyle{Text: colTitle, Link: colLink, Emph: colMeta}
 )
@@ -88,7 +89,24 @@ func page(ctx widget.Ctx, headerW, body widget.Widget) widget.Widget {
 	col.CrossAlign = layout.CrossStretch
 	// Pages carry their own opaque background so slide transitions cover
 	// the page beneath.
-	return widget.Decorated{Color: colBg, Child: col}
+	content := widget.Decorated{Color: colBg, Child: col}
+
+	// Responsive: on a wide viewport (desktop browser, large window, wide
+	// terminal) center a comfortable reading column with gutters; on a narrow
+	// one (phone, mobile web) fill the width unchanged.
+	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		const maxW = 720
+		if !cs.BoundedW() || cs.Max.W <= maxW+96 {
+			return content
+		}
+		row := widget.Row(
+			widget.Expand(widget.Sized{}),
+			widget.Sized{W: maxW, Child: content},
+			widget.Expand(widget.Sized{}),
+		)
+		row.CrossAlign = layout.CrossStretch
+		return widget.Decorated{Color: colGutter, Child: row}
+	}}
 }
 
 // feedPage lists top stories.
