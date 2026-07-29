@@ -394,16 +394,28 @@ func (c *Core) Pointer(e shell.Pointer) {
 				c.moved = true
 				c.pressed = nil
 				c.longPress = nil
-				// Commit the drag to the deepest candidate whose axis matches
-				// the drag's dominant direction (an unconstrained one always
-				// matches), so nested horizontal/vertical drags disambiguate.
+				// A priority candidate (e.g. a text selection whose press landed
+				// on text) grabs the drag regardless of depth or axis, so it
+				// beats a deeper scroll. Otherwise commit to the deepest
+				// candidate whose axis matches the drag's dominant direction (an
+				// unconstrained one always matches), so nested
+				// horizontal/vertical drags disambiguate.
 				for _, h := range c.dragCandidates {
-					if h.box.Handler.DragAxis.Accepts(d.X, d.Y) {
+					if h.box.Handler.DragPriority != nil && h.box.Handler.DragPriority() {
 						c.dragging = h.box
-						// h.local is the box-local point at press, so the box
-						// origin comes from downPos (not the current move pos).
 						c.dragOrigin = c.downPos.Sub(h.local)
 						break
+					}
+				}
+				if c.dragging == nil {
+					for _, h := range c.dragCandidates {
+						if h.box.Handler.DragAxis.Accepts(d.X, d.Y) {
+							c.dragging = h.box
+							// h.local is the box-local point at press, so the box
+							// origin comes from downPos (not the current move pos).
+							c.dragOrigin = c.downPos.Sub(h.local)
+							break
+						}
 					}
 				}
 				c.dragCandidates = c.dragCandidates[:0]

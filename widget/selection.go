@@ -46,14 +46,16 @@ func (s *selectionAreaState) Build(ctx Ctx) Widget {
 	r.selColor = col
 	return Provide[*selectionRegistry]{Value: r, Child: Interactive{
 		Handler: Handler{
-			// DragAny: on a vertical scroll, the deeper scroll claims vertical
-			// drags (so the list still scrolls) and this claims the rest; on a
-			// non-scrolling subtree it claims every drag for selection.
+			// A drag that begins on text grabs the gesture (DragPriority) so it
+			// extends the selection in any direction, beating a deeper scroll; a
+			// drag that begins on empty space falls through to the scroll. This
+			// is the desktop convention (drag selects, wheel scrolls).
+			DragPriority: func() bool { return r.pressedText },
 			OnPress: func(p geom.Pt) {
 				if pt, ok := r.locate(p); ok {
-					s.SetState(func() { r.anchor, r.focus, r.has = pt, pt, true })
+					s.SetState(func() { r.anchor, r.focus, r.has, r.pressedText = pt, pt, true, true })
 				} else {
-					s.SetState(func() { r.has = false })
+					s.SetState(func() { r.has, r.pressedText = false, false })
 				}
 			},
 			OnDrag: func(pos, _ geom.Pt) {
@@ -102,6 +104,7 @@ type selectionRegistry struct {
 	frags         []*selFrag // rebuilt every paint, in paint (reading) order
 	anchor, focus selPoint
 	has           bool
+	pressedText   bool // last press landed on text → drag should select, not scroll
 	selColor      paint.Color
 }
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
@@ -132,6 +133,33 @@ func TestSelectionAreaNestedOffset(t *testing.T) {
 	h.KeyMod(shell.KeyC, shell.ModSuper)
 	if got, want := clip(h), "offset me"; got != want {
 		t.Fatalf("copied %q, want %q", got, want)
+	}
+}
+
+// TestSelectionAreaVerticalDragOverScroll checks that a vertical drag which
+// begins on text extends the selection down across items instead of being
+// claimed by the list's vertical scroll (the DragPriority path — the (a) fix).
+func TestSelectionAreaVerticalDragOverScroll(t *testing.T) {
+	h, err := NewHeadless(listSelApp{items: []string{"alpha", "beta", "gamma", "delta"}},
+		Config{Size: geom.Size{W: 400, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	// Press on the first item's text, drag straight DOWN past the third item.
+	// Items are ~20px tall: item 0 ~y8, item 2 ~y48.
+	h.DragTo(geom.Pt{X: 1, Y: 6}, geom.Pt{X: 3000, Y: 50})
+	h.Release(geom.Pt{X: 3000, Y: 50})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	// Should span multiple items — at minimum reach "gamma" — rather than
+	// scrolling and selecting nothing beyond "alpha".
+	got := clip(h)
+	if got == "" || got == "alpha" {
+		t.Fatalf("vertical drag on text did not extend selection across items: copied %q", got)
+	}
+	if !strings.Contains(got, "alpha") || !strings.Contains(got, "gamma") {
+		t.Fatalf("selection should span alpha..gamma; copied %q", got)
 	}
 }
 

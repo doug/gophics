@@ -180,6 +180,12 @@ type Handler struct {
 	// when a drag starts, the host picks the deepest candidate whose axis
 	// matches the drag's dominant direction. DragAny claims either.
 	DragAxis DragAxis
+	// DragPriority, when non-nil and returning true at drag-commit time, makes
+	// this handler win the drag regardless of depth or axis — it beats a deeper
+	// scroll. A SelectionArea uses it so a drag that begins on text extends the
+	// selection (any direction) instead of scrolling; a drag on empty space
+	// falls through to the scroll. Evaluated after OnPress, before commit.
+	DragPriority func() bool
 	// OnRelease fires on pointer-up after this widget received the press
 	// (regardless of drag distance) — e.g. to start fling deceleration.
 	OnRelease func()
