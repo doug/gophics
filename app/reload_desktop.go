@@ -17,6 +17,14 @@ import (
 // plugin swap recompiles the app's types, giving them new identities, so the
 // reconciler treats them as new and app State resets. Framework/host state
 // (and everything the app keeps outside its widget State) persists.
+//
+// TODO(hot-reload, if we ever need true state preservation): drive this same
+// boundary from a Go interpreter (e.g. Yaegi) instead of a plugin — the UI code
+// runs in a persistent VM whose type identities are stable across reloads, so
+// app State would survive, like Flutter. Deferred deliberately: Yaegi is a
+// heavy dependency and slower than compiled code, against the minimal-deps
+// stance. The boundary here is the integration point when that trade-off is
+// worth making; nothing else would change.
 func RunReloadable(build func() widget.Widget, cfg Config, reload <-chan func() widget.Widget) error {
 	cell := &reloadCell{build: build}
 	h, err := NewHandler(reloadHost{cell}, cfg)
