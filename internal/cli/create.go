@@ -31,12 +31,23 @@ func cmdCreate(args []string) error {
 			return err
 		}
 	}
-	// Best-effort module setup; network failures just leave a TODO for the user.
-	_ = run(name, nil, "go", "mod", "init", module)
-	if err := run(name, nil, "go", "get", "github.com/doug/gossamer@latest"); err != nil {
-		fmt.Fprintln(os.Stderr, "gossamer: (couldn't `go get` — run it yourself once online)")
+	// Initialize the module. We intentionally do NOT `go get` gossamer here: it
+	// isn't published yet (and uses local replace forks), so that would hang or
+	// fail. The user wires the dependency themselves (see printed guidance).
+	if err := run(name, nil, "go", "mod", "init", module); err != nil {
+		return fmt.Errorf("go mod init: %w", err)
 	}
-	fmt.Printf("created %s\n\nNext:\n  cd %s\n  gossamer dev -p web      # fastest loop\n  gossamer run -p desktop   # native window\n", name, name)
+	fmt.Printf(`created %s
+
+Next:
+  cd %s
+  # add the gossamer dependency (not yet published), e.g. a replace to a local checkout:
+  #   go mod edit -require=github.com/doug/gossamer@v0.0.0
+  #   go mod edit -replace=github.com/doug/gossamer=/path/to/gossamer
+  #   go mod tidy
+  gossamer dev -p web       # fastest loop
+  gossamer run -p desktop    # native window
+`, name, name)
 	return nil
 }
 
