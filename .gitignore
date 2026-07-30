@@ -9,3 +9,6 @@ examples/hn/android/local.properties
 # stray example binaries built at repo root
 /gallery
 examples/hn/ios/build/
+
+# gossamer CLI build output
+/build/
