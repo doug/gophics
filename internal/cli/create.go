@@ -66,6 +66,9 @@ var scaffold = map[string]string{
 
 const mainTmpl = `// Command {{.Name}} is a gossamer app. One codebase runs on desktop, web,
 // terminal, and mobile; the shell is chosen by build tags at compile time.
+//
+// Root and Config are exported so ` + "`gossamer dev --hot`" + ` can build this
+// package as a plugin and hot-reload the widget tree.
 package main
 
 import (
@@ -75,17 +78,25 @@ import (
 
 	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/widget"
 
 	"{{.Module}}/ui"
 )
 
-func main() {
-	err := app.Run(ui.Root(), app.Config{
+// Root returns the app's root widget.
+func Root() widget.Widget { return ui.Root() }
+
+// Config returns the app's window/runtime configuration.
+func Config() app.Config {
+	return app.Config{
 		Title: "{{.Name}}",
 		Size:  geom.Size{W: 480, H: 720},
 		Font:  goregular.TTF,
-	})
-	if err != nil {
+	}
+}
+
+func main() {
+	if err := app.Run(Root(), Config()); err != nil {
 		log.Fatal(err)
 	}
 }
