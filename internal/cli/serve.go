@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 )
@@ -10,6 +11,9 @@ import (
 // reload always gets the current wasm). If b is non-nil, it also mounts a
 // Server-Sent Events endpoint and injects a tiny reload client into
 // index.html — the dev live-reload channel.
+//
+// It binds the requested port, or the next free one if it's taken, so
+// `gossamer dev -p web` never dies on a busy 8080.
 func serve(dir string, port int, b *broadcaster) error {
 	mux := http.NewServeMux()
 	if b != nil {
@@ -24,7 +28,26 @@ func serve(dir string, port int, b *broadcaster) error {
 		}
 		files.ServeHTTP(w, r)
 	})
-	addr := fmt.Sprintf(":%d", port)
+	ln, addr, err := listenFrom(port)
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(os.Stderr, "gossamer: serving %s at http://localhost%s/\n", dir, addr)
-	return http.ListenAndServe(addr, mux)
+	return http.Serve(ln, mux)
+}
+
+// listenFrom binds :port, or the next free port up to port+20, returning the
+// listener and the ":N" it bound.
+func listenFrom(port int) (net.Listener, string, error) {
+	for p := port; p < port+20; p++ {
+		addr := fmt.Sprintf(":%d", p)
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			if p != port {
+				fmt.Fprintf(os.Stderr, "gossamer: port %d in use — using %d\n", port, p)
+			}
+			return ln, addr, nil
+		}
+	}
+	return nil, "", fmt.Errorf("no free port in %d..%d", port, port+19)
 }
