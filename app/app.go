@@ -67,6 +67,7 @@ type Core struct {
 	dragOrigin     geom.Pt          // window origin of the dragging box at press time
 	lastPos        geom.Pt
 	downPos        geom.Pt
+	downTouch      bool // the current press came from a touch device
 	moved          bool
 	pressHeld      float64 // seconds the current press has been held, unmoved
 	longFired      bool
@@ -401,7 +402,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 				// unconstrained one always matches), so nested
 				// horizontal/vertical drags disambiguate.
 				for _, h := range c.dragCandidates {
-					if h.box.Handler.DragPriority != nil && h.box.Handler.DragPriority() {
+					if h.box.Handler.DragPriority != nil && h.box.Handler.DragPriority(c.downTouch) {
 						c.dragging = h.box
 						c.dragOrigin = c.downPos.Sub(h.local)
 						break
@@ -452,6 +453,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 			return
 		}
 		c.downPos, c.lastPos, c.moved = e.Pos, e.Pos, false
+		c.downTouch = e.Source == shell.SourceTouch
 		c.pressed, c.dragging, c.longPress = nil, nil, nil
 		c.dragCandidates = c.dragCandidates[:0]
 		c.pressHeld, c.longFired = 0, false

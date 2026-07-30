@@ -116,7 +116,20 @@ type Pointer struct {
 	Pos    geom.Pt
 	Button uint8   // 0=primary, 1=secondary, 2=middle (valid for Down/Up)
 	Scroll geom.Pt // valid for PointerScroll, in logical pixels
+	// Source is the input device: mouse, touch, or pen. It lets gestures adapt
+	// to modality (e.g. drag selects text with a mouse but scrolls on touch,
+	// where selection is long-press-initiated). Zero value is a mouse.
+	Source PointerSource
 }
+
+// PointerSource is the input device behind a Pointer event.
+type PointerSource uint8
+
+const (
+	SourceMouse PointerSource = iota
+	SourceTouch
+	SourcePen
+)
 
 // KeyKind discriminates Key events.
 type KeyKind uint8

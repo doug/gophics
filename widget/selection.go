@@ -46,16 +46,34 @@ func (s *selectionAreaState) Build(ctx Ctx) Widget {
 	r.selColor = col
 	return Provide[*selectionRegistry]{Value: r, Child: Interactive{
 		Handler: Handler{
-			// A drag that begins on text grabs the gesture (DragPriority) so it
-			// extends the selection in any direction, beating a deeper scroll; a
-			// drag that begins on empty space falls through to the scroll. This
-			// is the desktop convention (drag selects, wheel scrolls).
-			DragPriority: func() bool { return r.pressedText },
+			// Modality-aware drag ownership (Flutter parity):
+			//   - mouse: a drag that begins on text selects (any direction),
+			//     beating a deeper scroll; a drag on empty space scrolls.
+			//   - touch: a drag scrolls, UNLESS a long-press already started a
+			//     selection — then the drag extends it.
+			DragPriority: func(touch bool) bool {
+				if touch {
+					return r.selecting
+				}
+				return r.pressedText
+			},
 			OnPress: func(p geom.Pt) {
+				// Record the caret and clear any prior selection; the drag (mouse)
+				// or long-press (touch) turns it into a visible selection.
 				if pt, ok := r.locate(p); ok {
-					s.SetState(func() { r.anchor, r.focus, r.has, r.pressedText = pt, pt, true, true })
+					s.SetState(func() {
+						r.anchor, r.focus, r.has, r.pressedText, r.selecting = pt, pt, true, true, false
+					})
 				} else {
-					s.SetState(func() { r.has, r.pressedText = false, false })
+					s.SetState(func() { r.has, r.pressedText, r.selecting = false, false, false })
+				}
+			},
+			// Long-press starts a selection at the word under the pointer (the
+			// touch entry point; on desktop it's a harmless bonus). A subsequent
+			// drag then extends it via DragPriority.
+			OnLongPress: func() {
+				if r.pressedText {
+					s.SetState(func() { r.selectWord(); r.has, r.selecting = true, true })
 				}
 			},
 			OnDrag: func(pos, _ geom.Pt) {
@@ -105,7 +123,19 @@ type selectionRegistry struct {
 	anchor, focus selPoint
 	has           bool
 	pressedText   bool // last press landed on text → drag should select, not scroll
+	selecting     bool // a touch long-press has started a selection (drag extends it)
 	selColor      paint.Color
+}
+
+// selectWord expands the current caret (anchor) to the word around it — the
+// touch long-press entry point.
+func (r *selectionRegistry) selectWord() {
+	if r.anchor.frag < 0 || r.anchor.frag >= len(r.frags) {
+		return
+	}
+	lo, hi := r.frags[r.anchor.frag].wordAt(r.anchor.off)
+	r.anchor = selPoint{r.anchor.frag, lo}
+	r.focus = selPoint{r.anchor.frag, hi}
 }
 
 // beginFrame resets the per-frame fragment list. Called by the anchor box at
@@ -240,6 +270,29 @@ func (fr *selFrag) offsetAt(p geom.Pt) int {
 		}
 	}
 	return fr.lineStart[li] + col
+}
+
+// wordAt returns the linear range of the whitespace-delimited word containing
+// the offset (for long-press word selection).
+func (fr *selFrag) wordAt(off int) (int, int) {
+	for li := len(fr.lines) - 1; li >= 0; li-- {
+		start := fr.lineStart[li]
+		if off < start {
+			continue
+		}
+		runes := []rune(fr.lines[li])
+		col := min(off-start, len(runes))
+		word := func(r rune) bool { return r != ' ' && r != '\t' }
+		lo, hi := col, col
+		for lo > 0 && word(runes[lo-1]) {
+			lo--
+		}
+		for hi < len(runes) && word(runes[hi]) {
+			hi++
+		}
+		return start + lo, start + hi
+	}
+	return off, off
 }
 
 // textRange returns the runes in [lo, hi) across the fragment's lines, joined

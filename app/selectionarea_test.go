@@ -163,6 +163,63 @@ func TestSelectionAreaVerticalDragOverScroll(t *testing.T) {
 	}
 }
 
+// touchDown/touchMove dispatch touch-sourced pointer events (the harness
+// helpers default to a mouse).
+func touchDown(h *Headless, p geom.Pt) {
+	h.Core.Layout(geom.Size{W: 400, H: 200})
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p, Source: shell.SourceTouch})
+}
+func touchMove(h *Headless, p geom.Pt) {
+	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: shell.SourceTouch})
+}
+
+// TestSelectionAreaTouchDragScrolls verifies that on touch, a plain drag (no
+// long-press) does NOT select — it falls through to the scroll — so a
+// text-heavy list stays scrollable by touch.
+func TestSelectionAreaTouchDragScrolls(t *testing.T) {
+	h, err := NewHeadless(listSelApp{items: []string{"alpha", "beta", "gamma", "delta"}},
+		Config{Size: geom.Size{W: 400, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	touchDown(h, geom.Pt{X: 1, Y: 6}) // on "alpha"
+	touchMove(h, geom.Pt{X: 5, Y: 60}) // drag down immediately (no hold)
+	h.Release(geom.Pt{X: 5, Y: 60})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "" {
+		t.Fatalf("touch drag without long-press should scroll, not select; copied %q", got)
+	}
+}
+
+// TestSelectionAreaTouchLongPressSelects verifies the touch entry point: a
+// long-press selects the word under it, and a following drag extends the
+// selection.
+func TestSelectionAreaTouchLongPressSelects(t *testing.T) {
+	h, err := NewHeadless(listSelApp{items: []string{"alpha", "beta", "gamma", "delta"}},
+		Config{Size: geom.Size{W: 400, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	touchDown(h, geom.Pt{X: 10, Y: 6}) // on "alpha"
+	h.Step(longPressSeconds + 0.05)    // hold → long-press fires, selects the word
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "alpha" {
+		t.Fatalf("long-press should select the word; copied %q", got)
+	}
+	// Now drag down to extend across items.
+	touchMove(h, geom.Pt{X: 3000, Y: 60})
+	h.Release(geom.Pt{X: 3000, Y: 60})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); !strings.Contains(got, "alpha") || !strings.Contains(got, "gamma") {
+		t.Fatalf("long-press then drag should extend across items; copied %q", got)
+	}
+}
+
 // TestSelectionAreaSingleFragment selects within just the first line.
 func TestSelectionAreaSingleFragment(t *testing.T) {
 	h := selAreaHarness(t, "Hello", "World")

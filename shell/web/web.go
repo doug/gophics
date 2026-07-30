@@ -28,7 +28,10 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		doc.Set("title", cfg.Title)
 	}
 	canvas := doc.Call("createElement", "canvas")
-	canvas.Get("style").Set("cssText", "width:100vw;height:100vh;display:block;margin:0;cursor:default")
+	// touch-action:none routes touch drags to pointer events instead of the
+	// browser's own scroll/zoom, so the app owns them (and can distinguish a
+	// scroll drag from a selection long-press).
+	canvas.Get("style").Set("cssText", "width:100vw;height:100vh;display:block;margin:0;cursor:default;touch-action:none")
 	doc.Get("body").Get("style").Set("cssText", "margin:0;overflow:hidden")
 	doc.Get("body").Call("appendChild", canvas)
 
@@ -49,14 +52,31 @@ func Run(h shell.Handler, cfg shell.Config) error {
 			Y: float32(e.Get("clientY").Float()),
 		}
 	}
-	listen(canvas, "mousemove", func(e js.Value) {
-		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: pos(e)})
+	// Pointer Events unify mouse/touch/pen and carry pointerType, so gestures
+	// can adapt to the input device (mouse-drag selects; touch-drag scrolls).
+	src := func(e js.Value) shell.PointerSource {
+		switch e.Get("pointerType").String() {
+		case "touch":
+			return shell.SourceTouch
+		case "pen":
+			return shell.SourcePen
+		default:
+			return shell.SourceMouse
+		}
+	}
+	listen(canvas, "pointermove", func(e js.Value) {
+		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: pos(e), Source: src(e)})
 	})
-	listen(canvas, "mousedown", func(e js.Value) {
-		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: pos(e), Button: uint8(e.Get("button").Int())})
+	listen(canvas, "pointerdown", func(e js.Value) {
+		// Capture the pointer so drags keep delivering move/up even if the
+		// finger/cursor leaves the canvas.
+		if id := e.Get("pointerId"); !id.IsUndefined() {
+			canvas.Call("setPointerCapture", id)
+		}
+		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: pos(e), Button: uint8(e.Get("button").Int()), Source: src(e)})
 	})
-	listen(canvas, "mouseup", func(e js.Value) {
-		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: pos(e), Button: uint8(e.Get("button").Int())})
+	listen(canvas, "pointerup", func(e js.Value) {
+		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: pos(e), Button: uint8(e.Get("button").Int()), Source: src(e)})
 	})
 	listen(canvas, "wheel", func(e js.Value) {
 		e.Call("preventDefault")

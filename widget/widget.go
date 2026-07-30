@@ -182,10 +182,11 @@ type Handler struct {
 	DragAxis DragAxis
 	// DragPriority, when non-nil and returning true at drag-commit time, makes
 	// this handler win the drag regardless of depth or axis — it beats a deeper
-	// scroll. A SelectionArea uses it so a drag that begins on text extends the
-	// selection (any direction) instead of scrolling; a drag on empty space
-	// falls through to the scroll. Evaluated after OnPress, before commit.
-	DragPriority func() bool
+	// scroll. touch reports whether the gesture came from a touch device, so
+	// the handler can adapt (a SelectionArea grabs a mouse drag that began on
+	// text, but on touch only grabs once a long-press has started a selection —
+	// otherwise a touch drag scrolls). Evaluated after OnPress, before commit.
+	DragPriority func(touch bool) bool
 	// OnRelease fires on pointer-up after this widget received the press
 	// (regardless of drag distance) — e.g. to start fling deceleration.
 	OnRelease func()
