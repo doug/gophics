@@ -22,7 +22,7 @@ Usage:
 Commands:
   run       build and run the app for a platform
   build     build release artifacts for a platform
-  dev       run with hot reload (web live-reload, native hot-restart, or --hot)
+  dev       iterate with live-reload (web) or rebuild + hot-restart (native)
   create    scaffold a new cross-platform gossamer app
   doctor    check the toolchain for each platform
   version   print the gossamer CLI version

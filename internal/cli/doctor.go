@@ -15,8 +15,6 @@ func cmdDoctor(_ []string) error {
 	check("ios/android: gomobile", have("gomobile"), "optional — go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init")
 	check("ios project: xcodegen", have("xcodegen"), "optional — brew install xcodegen")
 	check("android: gradle", have("gradle"), "optional — install via Android Studio")
-	hotOK := runtime.GOOS == "linux" || runtime.GOOS == "darwin"
-	check("hot reload (--hot)", hotOK, altText("supported on "+runtime.GOOS, "plugin hot reload is linux/macOS only"))
 
 	fmt.Println()
 	if ok {

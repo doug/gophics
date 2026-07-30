@@ -35,25 +35,6 @@ func have(bin string) bool {
 	return err == nil
 }
 
-// goList returns `go list -f <format> <pkg>`.
-func goList(format, pkg string) (string, error) {
-	out, err := exec.Command("go", "list", "-f", format, pkg).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// writeFileAtomic writes data to path via a temp file + rename, so a concurrent
-// reader never sees a half-written file.
-func writeFileAtomic(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
 // wasmExecJS returns the path to the active toolchain's wasm_exec.js, so the
 // copy served to the browser always matches the compiler (a version mismatch
 // silently breaks the wasm). Go 1.24+ keeps it under lib/wasm; older releases

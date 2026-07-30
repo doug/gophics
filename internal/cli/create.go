@@ -69,17 +69,17 @@ func writeTemplate(path, tmpl string, data any) error {
 
 // scaffold maps output paths to templates for a new cross-platform app.
 var scaffold = map[string]string{
-	"main.go":     mainTmpl,
-	"ui/app.go":   uiTmpl,
-	"README.md":   readmeTmpl,
-	".gitignore":  "/build/\n*.wasm\n",
+	"main.go":    mainTmpl,
+	"ui/app.go":  uiTmpl,
+	"README.md":  readmeTmpl,
+	".gitignore": "/build/\n*.wasm\n",
 }
 
 const mainTmpl = `// Command {{.Name}} is a gossamer app. One codebase runs on desktop, web,
 // terminal, and mobile; the shell is chosen by build tags at compile time.
 //
-// Root and Config are exported so ` + "`gossamer dev --hot`" + ` can build this
-// package as a plugin and hot-reload the widget tree.
+// Root and Config are split out so the widget tree stays easy to test and
+// import independently of the shell entry point.
 package main
 
 import (
@@ -140,9 +140,8 @@ web, terminal, and mobile.
 
 ## Develop
 
-    gossamer dev -p web        # live-reload in the browser (fastest)
-    gossamer dev -p desktop    # native window, hot-restart on save
-    gossamer dev -p desktop --hot   # experimental: state-preserving hot reload (linux/macOS)
+    gossamer dev -p web        # live-reload in the browser (fastest loop)
+    gossamer dev -p desktop    # native window, rebuild + hot-restart on save
 
 ## Build
 

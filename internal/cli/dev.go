@@ -18,19 +18,26 @@ func cmdDev(args []string) error {
 	var hot bool
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web dev-server port")
-	fs.BoolVar(&hot, "hot", false, "experimental plugin hot reload with state preservation (linux/macOS desktop)")
+	fs.BoolVar(&hot, "hot", false, "(retired) accepted for compatibility; falls back to hot-restart — see note")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if err := o.resolve(fs, platName); err != nil {
 		return err
 	}
-	switch {
-	case o.platform.name == "web":
+	if hot {
+		// Retired: Go's plugin loader refuses to load a second plugin that
+		// contains a different version of an already-loaded package
+		// ("plugin was built with a different version of package X"), which is
+		// exactly what an edited UI package is. There is no plugin-based path to
+		// state-preserving in-place reload. Steer to the loops that do work.
+		fmt.Fprintln(os.Stderr, "gossamer: --hot (plugin reload) is retired — Go plugins can't reload an edited package in place.")
+		fmt.Fprintln(os.Stderr, "gossamer: using desktop hot-restart instead. For the fastest loop use `gossamer dev -p web`.")
+	}
+	switch o.platform.name {
+	case "web":
 		return devWeb(o, port)
-	case hot:
-		return devHot(o)
-	case o.platform.name == "ios" || o.platform.name == "android":
+	case "ios", "android":
 		return fmt.Errorf("dev hot reload isn't supported for %s; iterate on web/desktop and use `build` for device tests", o.platform.name)
 	default:
 		return devRestart(o)
