@@ -19,7 +19,7 @@ func cmdDev(args []string) error {
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web dev-server port")
 	fs.BoolVar(&hot, "hot", false, "experimental plugin hot reload with state preservation (linux/macOS desktop)")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if err := o.resolve(fs, platName); err != nil {

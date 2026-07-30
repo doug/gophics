@@ -13,7 +13,7 @@ func cmdRun(args []string) error {
 	var port int
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web server port (web platform)")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if err := o.resolve(fs, platName); err != nil {

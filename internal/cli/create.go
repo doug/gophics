@@ -12,7 +12,7 @@ func cmdCreate(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 	var module string
 	fs.StringVar(&module, "module", "", "Go module path (default: the app name)")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {

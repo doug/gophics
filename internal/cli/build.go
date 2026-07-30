@@ -12,7 +12,7 @@ func cmdBuild(args []string) error {
 	var o buildOpts
 	var platName string
 	addBuildFlags(fs, &o, &platName)
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if err := o.resolve(fs, platName); err != nil {
