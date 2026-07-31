@@ -1,6 +1,6 @@
 // Command hn is the desktop/web entry point for the HN app. The widget tree,
-// Root, and Config live in the importable examples/hn/ui package, so
-// `gossamer dev --hot ./examples/hn/ui` can hot-reload them.
+// Root, and Config live in the importable examples/hn/ui package, keeping the
+// entry point trivial and the UI easy to test and reuse.
 package main
 
 import (

@@ -8,9 +8,9 @@ import (
 	"github.com/doug/gossamer/geom"
 )
 
-// Config returns the app's window/runtime configuration. It lives in this
-// importable package (alongside Root) so `gossamer dev --hot ./examples/hn/ui`
-// can build a wrapper plugin around Root and Config.
+// Config returns the app's window/runtime configuration. It lives alongside
+// Root in this importable package so both are reusable and testable apart from
+// the entry point.
 func Config() app.Config {
 	return app.Config{
 		Title:        "gossamer · hn",
