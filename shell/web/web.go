@@ -96,6 +96,11 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		// Printable input: single-rune keys without command modifiers.
 		// (IME composition events come with the M7 text input work.)
 		if len([]rune(key)) == 1 && !e.Get("ctrlKey").Bool() && !e.Get("metaKey").Bool() {
+			// The app owns text input, so suppress the browser's default action
+			// for the key — most importantly Space (which otherwise scrolls the
+			// page) and "/" (quick-find). Without this, typing a space in a
+			// focused field scrolls instead of advancing the caret.
+			e.Call("preventDefault")
 			h.Event(w, shell.Text{S: key})
 		}
 	})
