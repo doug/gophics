@@ -39,3 +39,61 @@ callbacks (audio taps, camera completion) to the UI thread first.
   `RECORD_AUDIO` at runtime before `StartRecording`.
 
 `gossamer create` should inject these into the scaffolded projects.
+
+## GPU rendering (optional, recommended)
+
+By default the Bridge returns CPU-rasterized pixels each frame (`RenderFrame` →
+bytes) and the host blits them. To render on the GPU instead — the same path as
+web/desktop — the host hands the Bridge a **native render surface**; the Bridge
+then rasterizes straight to it (no CPU readback, no per-frame upload). It's
+backward-compatible: a host that never calls `SetSurface` stays on the CPU blit.
+
+Contract:
+- `bridge.SetSurface(displayHandle, windowHandle, widthPx, heightPx, scale)` —
+  hand over the surface (see per-platform handles below). Call again on
+  resize/rotation; `bridge.ClearSurface()` when the surface is destroyed
+  (backgrounding). On any GPU-setup failure the Bridge silently stays on CPU.
+- In GPU mode **`RenderFrame` returns nil** (it presented directly to the
+  surface) — the host must skip its blit when the result is nil. The existing
+  CPU host loops already `guard`/null-check the frame, so they keep working.
+
+### iOS (Metal)
+Back the view with a `CAMetalLayer` (or use an `MTKView`/`CAMetalLayer`-backed
+`UIView`). After layout, pass the layer:
+```swift
+let layer = self.layer as! CAMetalLayer          // or metalView.layer
+layer.contentsScale = UIScreen.main.scale
+let ptr = Int64(Int(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
+bridge.setSurface(0, windowHandle: ptr,
+                  widthPx: Int(bounds.width * scale), heightPx: Int(bounds.height * scale),
+                  scale: Float(scale))
+```
+In the `CADisplayLink` loop, `RenderFrame(dt)` now presents to the layer and
+returns nil — drop the `CGImage` blit path when it does.
+
+### Android (Vulkan)
+Use a `SurfaceView`; in `surfaceCreated`, get the `ANativeWindow*` from the
+`Surface`. Java can't produce that pointer, so include a tiny JNI/NDK helper:
+```c
+// nativeWindowPtr.c — returns the ANativeWindow* as a jlong.
+#include <android/native_window_jni.h>
+JNIEXPORT jlong JNICALL
+Java_dev_gossamer_NativeSurface_ptr(JNIEnv* env, jclass c, jobject surface) {
+    return (jlong)(uintptr_t) ANativeWindow_fromSurface(env, surface);
+}
+```
+```kotlin
+override fun surfaceCreated(holder: SurfaceHolder) {
+    val win = NativeSurface.ptr(holder.surface)   // the JNI helper above
+    bridge.setSurface(0, win, width.toLong(), height.toLong(), resources.displayMetrics.density)
+}
+override fun surfaceDestroyed(holder: SurfaceHolder) { bridge.clearSurface() }
+```
+In the `Choreographer` loop, when `RenderFrame` returns null the GPU already
+presented — skip `copyPixelsFromBuffer`/`drawBitmap`.
+
+**Status:** the Go side is built and API-validated on host (it compiles against
+the real wgpu/ggcanvas). On-device GPU is **unverified** — it depends on gogpu's
+Metal (iOS) / Vulkan+ANativeWindow (Android) HALs under gomobile, and needs a
+device to prove. The CPU blit path remains the guaranteed fallback.
+

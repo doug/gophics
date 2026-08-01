@@ -44,6 +44,7 @@ type Bridge struct {
 	opened []string // OpenURL requests for the host to perform
 	clip   string
 	media  *mediaBridge // camera/audio capability plumbing (see media.go)
+	gpu    *mobileGPU   // GPU surface present when the host provides one (see gpu.go)
 }
 
 // NewBridge wraps a shell.Handler (see app.NewHandler).
@@ -62,6 +63,9 @@ func (b *Bridge) Resize(widthPx, heightPx int, scale float32) {
 		scale = 1
 	}
 	b.widthPx, b.heightPx, b.scale = widthPx, heightPx, scale
+	if b.gpu != nil {
+		b.gpu.resize(widthPx, heightPx, float64(scale))
+	}
 	b.handler.Event(b, shell.Resize{Size: b.logicalSize(), Scale: scale})
 	b.dirty.Store(true)
 }
@@ -343,6 +347,13 @@ type frame struct{ b *Bridge }
 
 func (f *frame) Size() geom.Size { return f.b.logicalSize() }
 func (f *frame) Scale() float32  { return f.b.scale }
+
+// Target presents on the GPU when the host handed over a surface (SetSurface),
+// otherwise returns CPU pixels for the host to blit. Selection is per-frame, so
+// losing/regaining the surface flips the path with no other changes.
 func (f *frame) Target() shell.Target {
+	if f.b.gpu != nil {
+		return mobileGPUTarget{f.b.gpu}
+	}
 	return shell.PixelTarget{Put: func(img *image.RGBA) { f.b.frame = img }}
 }
