@@ -32,7 +32,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	gcfg.VSync = true
 
 	app := gogpu.NewApp(gcfg)
-	w := &window{app: app}
+	w := &window{app: app, renderer: cfg.Renderer}
 
 	var dt float64
 	app.OnUpdate(func(d float64) { dt = d })
@@ -163,8 +163,9 @@ func modBits(m gpucontext.Modifiers) shell.Mods {
 }
 
 type window struct {
-	app *gogpu.App
-	ggc any // *ggcanvas.Canvas under the gossamer_gpu build; nil otherwise
+	app      *gogpu.App
+	renderer shell.RendererMode // resolved backend for this run
+	ggc      any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
 }
 
 func (w *window) Invalidate()           { w.app.RequestRedraw() }
@@ -216,6 +217,7 @@ func (f *frame) Scale() float32 {
 	return float32(pw) / float32(f.dc.Width())
 }
 
-// frame.Target() and window.onFrameStart() are build-tagged: the default
-// build (present_cpu.go) presents CPU-rasterized pixels via PresentTexture;
-// the gossamer_gpu build (present_gpu.go) rasterizes on the GPU via ggcanvas.
+// frame.Target() and window.onFrameStart() pick the backend at runtime from
+// window.renderer (see present.go): the GPU path rasterizes via ggcanvas and
+// composites to the swapchain; the CPU path presents rasterized pixels via
+// PresentTexture.

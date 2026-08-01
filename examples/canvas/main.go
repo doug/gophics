@@ -3,11 +3,11 @@
 // It draws an interference field of pulsing dots — hundreds of fills plus live
 // text, re-recorded every frame — entirely inside one Canvas.Draw callback, in
 // local coordinates. It exercises the custom-paint surface end to end through
-// whichever rasterizer the build selects: the CPU rasterizer by default, or the
-// GPU rasterizer under `-tags gossamer_gpu` (the on-screen readout says which).
+// whichever rasterizer is resolved at runtime — GPU by default, CPU as a
+// fallback or when forced (the on-screen readout says which).
 //
-//	go run ./examples/canvas                    # CPU
-//	go run -tags gossamer_gpu ./examples/canvas # GPU
+//	go run ./examples/canvas                        # GPU (default), CPU if none
+//	GOSSAMER_RENDERER=cpu go run ./examples/canvas  # force CPU
 package main
 
 import (
@@ -87,7 +87,7 @@ func (s *fieldState) Build(widget.Ctx) widget.Widget {
 		// Title and a live readout, drawn into the same surface — this is the
 		// text path that renders correctly on the GPU build.
 		c.Text("gossamer · canvas", geom.Pt{X: 28, Y: 50}, 30, colTxt)
-		c.Text(fmt.Sprintf("generative interference field — %.1fs — %s rasterizer", t, backend),
+		c.Text(fmt.Sprintf("generative interference field — %.1fs — %s rasterizer", t, rasterizer()),
 			geom.Pt{X: 28, Y: 76}, 14, colDim)
 	}}
 }

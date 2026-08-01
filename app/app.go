@@ -33,7 +33,21 @@ type Config struct {
 	// Debug draws box-bounds outlines over the app (Flutter's
 	// debugPaintSize). Toggle at runtime via Core.SetDebugPaint.
 	Debug bool
+	// Renderer selects the rasterization backend: Auto (default) prefers the
+	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
+	// rasterizer. The GOSSAMER_RENDERER env var overrides this at startup.
+	Renderer RendererMode
 }
+
+// RendererMode selects the rasterization backend; see the Renderer* constants.
+type RendererMode = shell.RendererMode
+
+// Renderer backends (re-exported from shell for app.Config.Renderer).
+const (
+	RendererAuto = shell.RendererAuto
+	RendererGPU  = shell.RendererGPU
+	RendererCPU  = shell.RendererCPU
+)
 
 // Core is the shell-independent runtime: element tree, layout, paint, and
 // input dispatch. All methods run on the UI goroutine.
@@ -571,7 +585,13 @@ func Run(root widget.Widget, cfg Config) error {
 	if sh, ok := h.(*shellHandler); ok {
 		setupDevState(sh) // no-op unless running under `gossamer dev`
 	}
-	return desktopRun(h, shell.Config{Title: cfg.Title, Size: cfg.Size, Resizable: true})
+	// Resolve the renderer (env override wins) and, when CPU is selected, drop
+	// the GPU accelerator so nothing offloads to it.
+	renderer := shell.ResolveRenderer(cfg.Renderer)
+	if renderer == shell.RendererCPU {
+		paint.UseCPU()
+	}
+	return desktopRun(h, shell.Config{Title: cfg.Title, Size: cfg.Size, Resizable: true, Renderer: renderer})
 }
 
 // NewHandler builds the app's shell.Handler without attaching a shell —
@@ -664,8 +684,8 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	t0 := time.Now()
 	h.core.Layout(f.Size())
 	changed, damage := h.core.RecordScene(f.Size(), f.Scale())
-	// Present via the CPU rasterizer, or the GPU rasterizer under the
-	// gossamer_gpu build tag (see present_cpu.go / present_gpu.go).
+	// Present via the GPU rasterizer or the CPU rasterizer, chosen per frame
+	// from the frame's Target (see present.go).
 	h.present(f, changed, damage)
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.

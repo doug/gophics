@@ -468,8 +468,8 @@ func (p *Painter) begin(size geom.Size, scale float32) Canvas {
 		p.dc = gg.NewContextWithScale(w, h, s)
 		// gossamer chooses CPU vs GPU explicitly (this Painter surface is the
 		// CPU path; the GPU path uses a separate ggcanvas context). Opt this
-		// context out of the process-global accelerator — present under the
-		// gossamer_gpu build — so its fills and image blits never defer to a
+		// context out of the process-global accelerator — registered by default
+		// (see paint/accel.go) — so its fills and image blits never defer to a
 		// GPU and read back blank (Headless / CPU present).
 		p.dc.SetGPUDisabled(true)
 		p.w, p.h, p.scale = w, h, s
@@ -493,9 +493,9 @@ func (p *Painter) End(f shell.Frame) error {
 	}
 	switch t := f.Target().(type) {
 	case shell.GPUTarget:
-		// gg's GPU compositor path — usable only when the gg/gpu accelerator
-		// is registered (build tag gossamer_gpu). The default shells present
-		// via PixelTarget instead (M1 CPU-raster + blit; PLAN.md §5.1).
+		// gg's GPU compositor path — usable when the gg/gpu accelerator is
+		// registered (the default; see paint/accel.go). Shells fall back to a
+		// PixelTarget (CPU-raster + blit) when the GPU is unavailable.
 		return p.dc.FlushGPUWithViewDamage(t.View, uint32(t.W), uint32(t.H), image.Rectangle{})
 	case shell.PixelTarget:
 		t.Put(asRGBA(p.dc.Image()))

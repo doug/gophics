@@ -33,7 +33,7 @@ func buildWasm() (string, error) {
 	buildMu.Lock()
 	defer buildMu.Unlock()
 	start := time.Now()
-	cmd := exec.Command("go", "build", "-tags", "gossamer_gpu", "-o", webDir+"/hn.wasm", pkg)
+	cmd := exec.Command("go", "build", "-o", webDir+"/hn.wasm", pkg)
 	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return string(out), err

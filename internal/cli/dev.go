@@ -101,7 +101,7 @@ func devRestart(o buildOpts) error {
 			return
 		}
 		proc = exec.Command(bin)
-		proc.Env = append(os.Environ(), stateEnv)
+		proc.Env = append(append(os.Environ(), stateEnv), o.rendererEnv()...)
 		proc.Stdout, proc.Stderr, proc.Stdin = os.Stdout, os.Stderr, os.Stdin
 		if err := proc.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "gossamer: launch error: %v\n", err)

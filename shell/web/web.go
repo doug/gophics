@@ -3,12 +3,11 @@
 // Package web implements shell in the browser: a full-window <canvas>,
 // frames driven by requestAnimationFrame, and DOM input events.
 //
-// Presentation is build-tag split. The default build rasterizes on the CPU
-// and blits with 2D putImageData (present_cpu.go). Building with
-// -tags gossamer_gpu rasterizes each frame on the GPU and presents to the
-// canvas's WebGPU surface directly (present_gpu.go) — no CPU readback. Both
-// satisfy the small presenter contract this file drives; nothing above the
-// shell changes.
+// Presentation is chosen at runtime (see present.go): by default it rasterizes
+// each frame on the GPU and presents to the canvas's WebGPU surface directly —
+// no CPU readback — and falls back to a 2D putImageData blit when WebGPU is
+// unavailable or the CPU renderer is forced (Config.Renderer). A <canvas> can
+// bind only one context type for its lifetime, so the choice is committed once.
 //
 // Serve the wasm binary with wasm_exec.js (see examples/*/web).
 package web
@@ -40,7 +39,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	doc.Get("body").Get("style").Set("cssText", "margin:0;overflow:hidden")
 	doc.Get("body").Call("appendChild", canvas)
 
-	w := &window{canvas: canvas, doc: doc, handler: h}
+	w := &window{canvas: canvas, doc: doc, handler: h, renderer: cfg.Renderer}
 	w.resize()
 	w.pres = newPresenter(w)
 
@@ -198,7 +197,8 @@ func modBits(e js.Value) shell.Mods {
 type window struct {
 	canvas, doc js.Value
 	handler     shell.Handler
-	pres        *presenter // build-specific presentation (CPU blit or GPU surface)
+	renderer    shell.RendererMode // resolved backend for this run
+	pres        *presenter         // runtime-selected presentation (CPU blit or GPU surface)
 
 	logical    geom.Size
 	dpr        float64

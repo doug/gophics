@@ -38,6 +38,6 @@ func launch(o buildOpts, out string, port int) error {
 			"(gossamer create scaffolds it).\n", o.platform.name, out)
 		return nil
 	default: // desktop, terminal — hand the terminal to the app
-		return run("", nil, out)
+		return run("", o.rendererEnv(), out)
 	}
 }

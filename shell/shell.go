@@ -17,11 +17,46 @@ package shell
 
 import (
 	"image"
+	"os"
+	"strings"
 
 	"github.com/gogpu/gpucontext"
 
 	"github.com/doug/gossamer/geom"
 )
+
+// RendererMode selects the rasterization + presentation backend. The zero
+// value (Auto) prefers the GPU and falls back to the CPU rasterizer when no
+// GPU is available.
+type RendererMode uint8
+
+const (
+	// RendererAuto prefers the GPU, falling back to CPU when unavailable.
+	RendererAuto RendererMode = iota
+	// RendererGPU forces the GPU path (still falls back to CPU if the platform
+	// truly has no GPU, since a blank window is never the right answer).
+	RendererGPU
+	// RendererCPU forces the deterministic CPU rasterizer.
+	RendererCPU
+)
+
+// ResolveRenderer applies the GOSSAMER_RENDERER environment override (values
+// "auto", "gpu", or "cpu"; case-insensitive) on top of the mode a program
+// requested, so a build can be flipped to CPU/GPU without recompiling. An
+// unset or unrecognized variable leaves the requested mode unchanged. (On the
+// web os.Getenv is empty, so the requested mode wins there.)
+func ResolveRenderer(requested RendererMode) RendererMode {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("GOSSAMER_RENDERER"))) {
+	case "cpu":
+		return RendererCPU
+	case "gpu":
+		return RendererGPU
+	case "auto":
+		return RendererAuto
+	default:
+		return requested
+	}
+}
 
 // Config describes the initial window configuration.
 type Config struct {
@@ -29,6 +64,9 @@ type Config struct {
 	// Size is the initial logical size. Zero means a platform default.
 	Size      geom.Size
 	Resizable bool
+	// Renderer selects the rasterization backend (default Auto: GPU with CPU
+	// fallback). Shells resolve GPU availability at runtime.
+	Renderer RendererMode
 }
 
 // Window is the running platform window, usable from the UI goroutine.

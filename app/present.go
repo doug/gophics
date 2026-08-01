@@ -1,5 +1,3 @@
-//go:build gossamer_gpu
-
 package app
 
 import (
@@ -13,18 +11,22 @@ import (
 
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs
 // the scene replay against a GPU-backed gg.Context, then composites the result
-// to the surface. The desktop shell's GPU build returns one.
+// to the surface. A shell whose resolved renderer is GPU returns one once its
+// GPU canvas is ready; otherwise it returns a CPU PixelTarget and present()
+// takes the CPU path below. Selection is per-frame, so a shell can serve CPU
+// frames while its GPU device is still initializing, then switch over.
 type gpuCanvasTarget interface {
 	RenderGPU(replay func(*gg.Context))
 }
 
-// present rasterizes on the GPU when the frame offers a GPU target (M5),
-// otherwise falls back to the CPU rasterizer. Built only with -tags
-// gossamer_gpu; the default build uses present_cpu.go.
+// present rasterizes the recorded scene for one frame. When the frame offers a
+// GPU target the whole scene is replayed on the GPU each frame; otherwise the
+// CPU rasterizer paints the damaged region and hands finished pixels to the
+// shell.
 func (h *shellHandler) present(f shell.Frame, changed bool, damage geom.Rect) {
 	if gt, ok := f.Target().(gpuCanvasTarget); ok {
 		gt.RenderGPU(func(cc *gg.Context) {
-			// GPU rasterizes the whole frame each time; replay in full.
+			// The GPU rasterizes the whole frame each time; replay in full.
 			h.core.ReplayScene(h.core.Painter.GPUCanvas(cc))
 		})
 		return
@@ -33,6 +35,8 @@ func (h *shellHandler) present(f shell.Frame, changed bool, damage geom.Rect) {
 		canvas := h.core.Painter.Begin(f)
 		h.core.ReplayDamaged(canvas, damage)
 	}
+	// Present even when skipped: the painter's surface is retained, and the
+	// swapchain still needs this frame's image.
 	if err := h.core.Painter.End(f); err != nil {
 		log.Printf("gossamer: present: %v", err)
 	}

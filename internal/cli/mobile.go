@@ -27,7 +27,7 @@ func buildMobile(o buildOpts) (string, error) {
 		target, out = "android", filepath.Join(dir, "app.aar")
 	}
 	args := []string{"bind", "-target", target, "-o", out}
-	if t := tagList(o.platform, o.gpu, o.tags); t != "" {
+	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
 	}
 	args = append(args, o.pkg)

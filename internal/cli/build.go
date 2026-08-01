@@ -53,7 +53,7 @@ func buildNative(o buildOpts) (string, error) {
 	}
 	bin := filepath.Join(dir, "app")
 	args := []string{"build", "-o", bin}
-	if t := tagList(o.platform, o.gpu, o.tags); t != "" {
+	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
 	}
 	args = append(args, o.pkg)
@@ -71,7 +71,7 @@ func buildWeb(o buildOpts) (string, error) {
 		return "", err
 	}
 	args := []string{"build", "-o", filepath.Join(dir, "app.wasm")}
-	if t := tagList(o.platform, o.gpu, o.tags); t != "" {
+	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
 	}
 	args = append(args, o.pkg)
