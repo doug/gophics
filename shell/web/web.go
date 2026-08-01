@@ -21,6 +21,11 @@ import (
 	"github.com/doug/gossamer/shell"
 )
 
+// wheelLineHeight is the logical pixels a single line-mode wheel step scrolls.
+// Browsers that report deltaMode=1 give deltas in lines; ~40px per line matches
+// the amount Chrome synthesizes for an equivalent notch in pixel mode.
+const wheelLineHeight = 40
+
 // Run attaches a canvas to the document body and drives h forever.
 func Run(h shell.Handler, cfg shell.Config) error {
 	doc := js.Global().Get("document")
@@ -80,9 +85,20 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	})
 	listen(canvas, "wheel", func(e js.Value) {
 		e.Call("preventDefault")
+		// deltaMode reports the unit of deltaX/Y: 0 = pixels (trackpads and most
+		// mice on macOS), 1 = lines (some mouse wheels, notably on Firefox), 2 =
+		// pages. Convert lines/pages to logical pixels so a line-mode wheel
+		// scrolls a sane amount instead of a few pixels per notch.
+		sx, sy := float32(1), float32(1)
+		switch e.Get("deltaMode").Int() {
+		case 1: // lines
+			sx, sy = wheelLineHeight, wheelLineHeight
+		case 2: // pages
+			sx, sy = w.logical.W, w.logical.H
+		}
 		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{
-			X: -float32(e.Get("deltaX").Float()),
-			Y: -float32(e.Get("deltaY").Float()),
+			X: -float32(e.Get("deltaX").Float()) * sx,
+			Y: -float32(e.Get("deltaY").Float()) * sy,
 		}})
 	})
 	listen(doc, "keydown", func(e js.Value) {

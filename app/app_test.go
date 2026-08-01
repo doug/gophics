@@ -131,12 +131,25 @@ func TestScrollWidget(t *testing.T) {
 		t.Fatalf("clamped offset = %v, want 200", vp.Offset)
 	}
 
-	// Drag-to-scroll works too.
+	// Drag up at the bottom edge: the offset stays clamped (the content can't
+	// scroll further) but the content rubber-bands into a bottom overscroll.
 	h.Drag(geom.Pt{X: 50, Y: 80}, geom.Pt{X: 50, Y: 30})
 	h.Render()
 	if vp.Offset != 200 {
 		t.Fatalf("drag up at bottom stays clamped, got %v", vp.Offset)
 	}
+	if vp.Lead >= 0 {
+		t.Fatalf("drag up at bottom did not rubber-band (Lead = %v, want < 0)", vp.Lead)
+	}
+	// Released, the elastic band springs back to rest over a few frames.
+	for i := 0; i < 120 && vp.Lead != 0; i++ {
+		h.Step(0.016)
+		h.Render()
+	}
+	if vp.Lead != 0 {
+		t.Fatalf("overscroll did not settle: Lead = %v", vp.Lead)
+	}
+	// With the band settled, a downward drag scrolls the content normally.
 	h.Drag(geom.Pt{X: 50, Y: 30}, geom.Pt{X: 50, Y: 80})
 	h.Render()
 	if vp.Offset != 150 {

@@ -88,6 +88,12 @@ type textFieldState struct {
 	// caret navigation and hit testing.
 	lastWidth float32
 
+	// reveal is the enclosing Scroll's caret-into-view service (nil when the
+	// field is not inside a Scroll); revealPending asks the next paint to scroll
+	// the caret into view after a user edit or caret move.
+	reveal        *scrollReveal
+	revealPending bool
+
 	// IME preedit state: composing text displayed inline at the caret
 	// (underlined) until committed or cancelled.
 	preedit       string
@@ -236,6 +242,8 @@ func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
 
 func (s *textFieldState) Build(ctx Ctx) Widget {
 	f := s.W()
+	// The nearest enclosing Scroll's caret-into-view service, if any.
+	s.reveal, _ = Of[*scrollReveal](ctx)
 	if f.Value != s.ed.Text() {
 		s.ed.SetText(f.Value)
 		s.ed.End(false)
@@ -245,7 +253,8 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		if k.Kind != shell.KeyPress {
 			return
 		}
-		s.activity() // keep the caret solid while interacting
+		s.activity()          // keep the caret solid while interacting
+		s.revealPending = true // a key press moves or edits the caret: keep it visible
 		shift := k.Mods&shell.ModShift != 0
 		switch k.Code {
 		case shell.KeyLeft:
@@ -332,6 +341,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		}
 		if t != "" {
 			s.ed.Insert(t)
+			s.revealPending = true // typing moves the caret: keep it visible
 			s.change(ctx)
 		}
 	}
@@ -468,6 +478,24 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 
 func (b *fieldBox) Size() geom.Size { return b.size }
 
+// doReveal asks the enclosing Scroll to bring the caret into view. absX is the
+// caret's absolute x; [absTop, absBot] its absolute vertical span. It maps to
+// the scroll's content space via the anchor origin and scrolls the smaller of
+// the two axes' need per the scroll's axis. Clears the pending flag.
+func (b *fieldBox) doReveal(absX, absTop, absBot float32) {
+	s := b.state
+	s.revealPending = false
+	if s.reveal == nil || !s.reveal.have {
+		return
+	}
+	if s.reveal.horizontal() {
+		cx := absX - s.reveal.origin.X
+		s.reveal.reveal(cx, cx)
+		return
+	}
+	s.reveal.reveal(absTop-s.reveal.origin.Y, absBot-s.reveal.origin.Y)
+}
+
 func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.state.W().Multiline {
 		b.paintMultiline(c, at)
@@ -518,6 +546,10 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 
 	c.PopClip()
+
+	if b.state.revealPending {
+		b.doReveal(origin.X+line.CaretX(b.state.ed.Caret), at.Y, at.Y+b.size.H)
+	}
 }
 
 // paintMultiline draws wrapped lines with per-line selection rects and the
@@ -566,6 +598,17 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 	}
 
 	c.PopClip()
+
+	if b.state.revealPending {
+		if len(lines) > 0 {
+			li := lineOf(lines, b.state.ed.Caret)
+			x := at.X + lines[li].CaretX(b.state.ed.Caret-lines[li].Start)
+			top := at.Y + float32(li)*lineH
+			b.doReveal(x, top, top+lineH)
+		} else {
+			b.state.revealPending = false
+		}
+	}
 }
 
 // Semantics reports the field's value and focus for assistive technology.

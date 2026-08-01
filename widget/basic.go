@@ -271,10 +271,17 @@ type scrollState struct {
 	glideFrom float32
 	glideTo   float32
 
-	// Pull-to-refresh state.
-	overscroll float32 // logical px the content is pulled past the top
-	refreshing bool    // latched true from trigger until the app clears it
-	spin       spinner // continuous rotation ticker for the indicator
+	// Overscroll / rubber-band state. overscroll is the signed lead the content
+	// is displaced past an edge (positive = pulled past the leading edge/top,
+	// negative = past the trailing edge/bottom); it drives the viewport Lead and,
+	// at the top with OnRefresh set, the pull-to-refresh indicator. overRaw is
+	// the raw (un-rubber-banded) drag distance behind it, so the elastic mapping
+	// stays consistent frame to frame.
+	overscroll float32
+	overRaw    float32
+	overSpring overspring // critically-damped spring that settles overscroll to 0
+	refreshing bool       // latched true from trigger until the app clears it
+	spin       spinner    // continuous rotation ticker for the indicator
 	snap       *anim.Controller
 	snapFrom   float32
 	snapTo     float32
@@ -282,6 +289,68 @@ type scrollState struct {
 	// Scrollbar fade: 1 right after scrolling, decaying to 0 when idle.
 	barFade float32
 	barTick scrollbarFade
+
+	// reveal lets a focused descendant (a TextField caret) ask to be scrolled
+	// into view; provided to the child subtree and captured at paint.
+	reveal *scrollReveal
+}
+
+// scrollReveal is the "scroll a descendant into view" service a Scroll provides
+// to its subtree (gossamer's analog of Flutter's Scrollable.ensureVisible). The
+// content origin is captured each paint by revealAnchor; descendants convert a
+// caret rect to this content space and call reveal, which nudges the offset the
+// least amount needed to bring the rect inside the viewport (with a small
+// margin). Working in content space keeps it stable across offset changes.
+type scrollReveal struct {
+	s      *scrollState
+	origin geom.Pt // content origin (absolute), captured at paint
+	have   bool
+}
+
+func (r *scrollReveal) beginContent(at geom.Pt) { r.origin, r.have = at, true }
+
+// horizontal reports whether the owning scroll's main axis is horizontal.
+func (r *scrollReveal) horizontal() bool { return r.s.W().Axis == layout.Horizontal }
+
+// revealContentMargin is the gap kept between the revealed rect and the
+// viewport edge, so the caret never sits flush against the border.
+const revealContentMargin = 8
+
+// reveal scrolls the least amount needed to bring the content-space main-axis
+// span [lo, hi] within the viewport (leaving revealContentMargin at the edge).
+// It no-ops when the span is already visible or there is nothing to scroll.
+func (r *scrollReveal) reveal(lo, hi float32) {
+	if r.s.vp.box == nil {
+		return
+	}
+	ext := r.s.mainExtent()
+	if ext <= 0 {
+		return
+	}
+	off := r.s.offset
+	target := off
+	switch {
+	case lo < off+revealContentMargin:
+		target = lo - revealContentMargin
+	case hi > off+ext-revealContentMargin:
+		target = hi - ext + revealContentMargin
+		// Don't scroll so far that the top of the rect leaves the viewport —
+		// for a rect taller than the viewport, prefer showing its top.
+		if target > lo-revealContentMargin {
+			target = lo - revealContentMargin
+		}
+	default:
+		return
+	}
+	if m := r.s.vp.box.MaxOffset(); target > m {
+		target = m
+	}
+	if target < 0 {
+		target = 0
+	}
+	if target != off {
+		r.s.jumpTo(target)
+	}
 }
 
 type viewportRef struct{ box *layout.Viewport }
@@ -303,8 +372,11 @@ func (s *scrollState) Init(ctx Ctx) {
 	ctx.AddTicker(s.snap)
 	s.spin.s = s
 	ctx.AddTicker(&s.spin)
+	s.overSpring.s = s
+	ctx.AddTicker(&s.overSpring)
 	s.barTick.s = s
 	ctx.AddTicker(&s.barTick)
+	s.reveal = &scrollReveal{s: s}
 	if c := s.W().Controller; c != nil {
 		c.s = s
 	}
@@ -315,6 +387,7 @@ func (s *scrollState) Dispose() {
 	s.ctx.RemoveTicker(s.glide)
 	s.ctx.RemoveTicker(s.snap)
 	s.ctx.RemoveTicker(&s.spin)
+	s.ctx.RemoveTicker(&s.overSpring)
 	s.ctx.RemoveTicker(&s.barTick)
 }
 
@@ -402,26 +475,103 @@ func (s *scrollState) mainDelta(d geom.Pt) float32 {
 	return d.Y
 }
 
-// scrollBy moves the content by delta (positive scrolls further down/right)
-// and reports whether the offset hit an edge.
-func (s *scrollState) scrollBy(delta float32) bool {
+// pushOffset moves the offset by delta (offset space: positive scrolls further
+// down/right) clamped to [0, MaxOffset], and returns the unapplied overflow
+// (want − clamped): >0 past the trailing edge, <0 past the leading edge, 0 when
+// the whole delta landed inside the range.
+func (s *scrollState) pushOffset(delta float32) float32 {
 	if delta == 0 {
-		return false
+		return 0
 	}
-	clamped := false
+	var overflow float32
 	s.SetState(func() {
-		s.offset += delta
+		want := s.offset + delta
+		hi := float32(math.MaxFloat32)
 		if s.vp.box != nil {
-			if m := s.vp.box.MaxOffset(); s.offset > m {
-				s.offset, clamped = m, true
-			}
+			hi = s.vp.box.MaxOffset()
 		}
-		if s.offset < 0 {
-			s.offset, clamped = 0, true
+		switch {
+		case want < 0:
+			overflow, s.offset = want, 0
+		case want > hi:
+			overflow, s.offset = want-hi, hi
+		default:
+			s.offset = want
 		}
 	})
 	s.reportOffset()
-	return clamped
+	return overflow
+}
+
+// scrollBy moves the content by delta (positive scrolls further down/right)
+// and reports whether the offset hit an edge.
+func (s *scrollState) scrollBy(delta float32) bool {
+	return s.pushOffset(delta) != 0
+}
+
+// mainExtent is the viewport's length along the scroll axis.
+func (s *scrollState) mainExtent() float32 {
+	if s.vp.box == nil {
+		return 0
+	}
+	sz := s.vp.box.Size()
+	if s.W().Axis == layout.Horizontal {
+		return sz.W
+	}
+	return sz.H
+}
+
+// rubberBand maps a raw past-the-edge drag distance to the displayed elastic
+// displacement, matching the asymptotic resistance of an NSScrollView: the
+// first pixels move nearly 1:1 (·rubberC), then the band stiffens and tends
+// toward the viewport extent so it never runs away. Sign is preserved.
+func rubberBand(dist, extent float32) float32 {
+	if extent <= 0 {
+		return dist
+	}
+	sign := float32(1)
+	if dist < 0 {
+		sign, dist = -1, -dist
+	}
+	return sign * (1 - 1/(dist*rubberC/extent+1)) * extent
+}
+
+// inverseRubberBand recovers the raw drag distance behind a displayed elastic
+// displacement — used when a gesture resumes mid-spring so continued dragging
+// picks up from the right place on the curve.
+func inverseRubberBand(disp, extent float32) float32 {
+	if extent <= 0 {
+		return disp
+	}
+	sign := float32(1)
+	if disp < 0 {
+		sign, disp = -1, -disp
+	}
+	if disp >= extent {
+		disp = extent * 0.999
+	}
+	return sign * extent * disp / (rubberC * (extent - disp))
+}
+
+// setOverscroll updates the displayed elastic displacement and repaints.
+func (s *scrollState) setOverscroll(v float32) {
+	s.SetState(func() { s.overscroll = v })
+}
+
+// scrollFinger consumes a finger/fling delta dm (down/right positive) into the
+// offset, honoring Reverse, and returns the leftover finger delta that ran off
+// an edge (same sign convention as dm, so a positive leftover is a pull past
+// the leading edge).
+func (s *scrollState) scrollFinger(dm float32) float32 {
+	od := -dm
+	if s.W().Reverse {
+		od = dm
+	}
+	over := s.pushOffset(od)
+	if s.W().Reverse {
+		return over
+	}
+	return -over
 }
 
 // contentDelta moves the content to follow a finger/wheel/fling delta dm
@@ -434,26 +584,36 @@ func (s *scrollState) contentDelta(dm float32) bool {
 	return s.scrollBy(-dm)
 }
 
-// flinger decelerates the scroll after release: exponential friction,
-// stopping at rest or at an edge.
+// flinger decelerates the scroll after release: exponential friction, handing
+// off to an elastic bounce when it runs into an edge with speed to spare.
 type flinger struct {
 	s      *scrollState
-	v      float32 // px/s
+	v      float32 // px/s (finger space: down/right positive)
 	active bool
 }
 
 const (
-	flingFriction = 3.5 // 1/s decay rate
-	flingMinStart = 80  // px/s needed to start a fling
-	flingMinSpeed = 20  // px/s considered at rest
+	// flingFriction is the per-second exponential velocity decay. macOS's
+	// "normal" NSScrollView deceleration rate is ~0.998 per millisecond, i.e.
+	// v(t) = v0·0.998^(1000t) = v0·e^(−2.0t): friction ≈ −1000·ln(0.998) ≈ 2.0.
+	flingFriction = 2.0 // 1/s decay rate — tuned to NSScrollView; feel-test
+	flingMinStart = 80   // px/s needed to start a fling
+	flingMinSpeed = 20   // px/s considered at rest
+
+	// Rubber-band + bounce tuning (see rubberBand / overspring).
+	rubberC       = 0.55 // elastic resistance factor (macOS ≈ 0.55)
+	overStiffness = 220  // spring constant for the settle-to-zero bounce
+	maxBounceVel  = 2000 // px/s cap on velocity fed into an edge bounce
 )
 
 func (f *flinger) Tick(dt float64) bool {
 	if !f.active {
 		return false
 	}
-	if f.s.contentDelta(f.v * float32(dt)) {
-		f.active = false // edge reached
+	if f.s.scrollFinger(f.v*float32(dt)) != 0 {
+		// Hit an edge with velocity left over: bounce instead of dead-stopping.
+		f.active = false
+		f.s.startSpringBack(f.v)
 		return false
 	}
 	f.v *= float32(math.Exp(-flingFriction * dt))
@@ -463,35 +623,88 @@ func (f *flinger) Tick(dt float64) bool {
 	return f.active
 }
 
+// overspring is a critically-damped spring that settles the elastic overscroll
+// back to zero. It is seeded with an initial velocity — the leftover fling
+// speed at an edge, or the finger speed at drag release — so the band shoots
+// out and eases back the way a native scroll view rebounds.
+type overspring struct {
+	s      *scrollState
+	v      float32 // px/s of the overscroll displacement
+	active bool
+}
+
+func (o *overspring) Tick(dt float64) bool {
+	if !o.active {
+		return false
+	}
+	x := o.s.overscroll
+	const k = overStiffness
+	d := 2 * float32(math.Sqrt(k)) // critical damping: c = 2√k
+	// Semi-implicit Euler (velocity first) stays stable at 60Hz.
+	o.v += (-k*x - d*o.v) * float32(dt)
+	x += o.v * float32(dt)
+	if x > -0.4 && x < 0.4 && o.v > -6 && o.v < 6 {
+		x, o.v, o.active = 0, 0, false
+	}
+	o.s.setOverscroll(x)
+	o.s.ctx.Invalidate()
+	return o.active
+}
+
+// startSpringBack settles the elastic overscroll back to zero, seeded with
+// velocity v (capped): the leftover fling speed for an edge bounce, or the
+// finger's release velocity for a pulled-then-let-go rebound.
+func (s *scrollState) startSpringBack(v float32) {
+	if v > maxBounceVel {
+		v = maxBounceVel
+	} else if v < -maxBounceVel {
+		v = -maxBounceVel
+	}
+	s.overRaw = 0
+	s.overSpring.v = v
+	s.overSpring.active = true
+	s.ctx.Invalidate()
+}
+
 // Pull-to-refresh tuning (logical px).
 const (
-	overscrollResist = 0.5 // rubber-band factor while pulling past the top
-	refreshTrigger   = 64  // pull distance that fires OnRefresh on release
-	refreshRest      = 56  // indicator height held while a refresh runs
+	refreshTrigger = 64 // pull distance that fires OnRefresh on release
+	refreshRest    = 56 // indicator height held while a refresh runs
 )
 
-// dragMain applies one main-axis finger delta (down = positive). While
-// pull-to-refresh is enabled and the content is at the top, downward drag
-// feeds a rubber-banded overscroll instead of scrolling.
+// dragMain applies one main-axis finger delta (down = positive). Dragging
+// within the content scrolls; dragging past either edge feeds a rubber-banded
+// overscroll (the top edge, with OnRefresh set, also drives pull-to-refresh).
 func (s *scrollState) dragMain(dm float32) {
-	w := s.W()
-	if w.OnRefresh != nil && !s.refreshing {
-		if s.overscroll > 0 {
-			ns := s.overscroll + dm*overscrollResist
-			if ns <= 0 {
-				s.SetState(func() { s.overscroll = 0 })
-				s.scrollBy(-(ns / overscrollResist)) // spend the leftover on scroll
-			} else {
-				s.SetState(func() { s.overscroll = ns })
+	// While a refresh is running the indicator band is held open; just scroll
+	// the content underneath and leave the band alone.
+	if s.refreshing {
+		s.scrollFinger(dm)
+		return
+	}
+	ext := s.mainExtent()
+	// Already past an edge: advance the raw distance and re-map elastically.
+	// Crossing back through the edge spends the remainder on real scrolling.
+	if s.overRaw != 0 {
+		raw := s.overRaw + dm
+		if (s.overRaw > 0) != (raw > 0) && raw != 0 {
+			s.overRaw = 0
+			s.setOverscroll(0)
+			if left := s.scrollFinger(raw); left != 0 {
+				s.overRaw = left
+				s.setOverscroll(rubberBand(left, ext))
 			}
 			return
 		}
-		if s.offset <= 0 && dm > 0 {
-			s.SetState(func() { s.overscroll = dm * overscrollResist })
-			return
-		}
+		s.overRaw = raw
+		s.setOverscroll(rubberBand(raw, ext))
+		return
 	}
-	s.contentDelta(dm)
+	// Inside the content: scroll, routing any edge overrun into overscroll.
+	if left := s.scrollFinger(dm); left != 0 {
+		s.overRaw = left
+		s.setOverscroll(rubberBand(left, ext))
+	}
 }
 
 // animateOverscrollTo springs the overscroll to a resting value.
@@ -502,18 +715,22 @@ func (s *scrollState) animateOverscrollTo(to float32) {
 	s.ctx.Invalidate()
 }
 
-// releaseRefresh decides, on drag release, whether the pull was far enough
-// to trigger a refresh (hold the indicator) or should spring back.
-func (s *scrollState) releaseRefresh() {
-	if s.overscroll <= 0 {
+// releaseOverscroll decides, on drag release, whether a top-edge pull was far
+// enough to trigger a refresh (hold the indicator) or the band should spring
+// back. Bottom-edge (and non-refresh) overscroll always springs back.
+func (s *scrollState) releaseOverscroll() {
+	s.overRaw = 0
+	if s.overscroll == 0 {
 		return
 	}
 	if s.W().OnRefresh != nil && !s.refreshing && s.overscroll >= refreshTrigger {
 		s.refreshing = true
 		s.animateOverscrollTo(refreshRest)
 		s.W().OnRefresh()
-	} else if !s.refreshing {
-		s.animateOverscrollTo(0)
+		return
+	}
+	if !s.refreshing {
+		s.startSpringBack(s.velocity)
 	}
 }
 
@@ -551,10 +768,21 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			DragAxis: dragAxis, // so a cross-axis swipe (Dismissible) can nest
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
+				if s.overSpring.active || s.overscroll != 0 {
+					s.overSpring.active = false
+					s.overRaw = 0
+					s.setOverscroll(0)
+				}
 				s.contentDelta(s.mainDelta(d))
 			},
 			OnPress: func(geom.Pt) {
-				s.fling.active = false // grab stops the fling
+				s.fling.active = false      // grab stops the fling
+				s.overSpring.active = false // ...and any in-flight bounce
+				// Grabbing mid-bounce: re-derive the raw drag distance from the
+				// displayed band so continued dragging resumes on the curve.
+				if s.overscroll != 0 && !s.refreshing {
+					s.overRaw = inverseRubberBand(s.overscroll, s.mainExtent())
+				}
 				s.velocity, s.lastDrag = 0, time.Now()
 			},
 			OnDrag: func(_, d geom.Pt) {
@@ -569,15 +797,20 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				}
 			},
 			OnRelease: func() {
-				s.releaseRefresh()
-				if s.velocity > flingMinStart || s.velocity < -flingMinStart {
+				s.releaseOverscroll()
+				// Only fling from inside the content; a released overscroll is
+				// already handled by its spring-back.
+				if s.overscroll == 0 && (s.velocity > flingMinStart || s.velocity < -flingMinStart) {
 					s.fling.v = s.velocity
 					s.fling.active = true
 					ctx.Invalidate()
 				}
 			},
 		},
-		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Reverse: w.Reverse, Ref: s.vp, Child: w.Child},
+		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Reverse: w.Reverse, Ref: s.vp,
+			// revealAnchor captures the content origin each paint; Provide exposes
+			// the reveal service to descendants (TextField caret-into-view).
+			Child: Provide[*scrollReveal]{Value: s.reveal, Child: revealAnchor{reveal: s.reveal, child: w.Child}}},
 	}
 	// Overlay the fading scroll indicator, and the pull-to-refresh spinner
 	// when enabled, above the content.
@@ -591,6 +824,56 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 		}})
 	}
 	return Stack{Children: layers}
+}
+
+// revealAnchor is a single-child render widget whose box records the scroll
+// content's absolute origin at the start of each paint, so a descendant can map
+// its caret into content space for scrollReveal.
+type revealAnchor struct {
+	reveal *scrollReveal
+	child  Widget
+}
+
+func (w revealAnchor) createBox(Ctx) layout.Box          { return &revealAnchorBox{reveal: w.reveal} }
+func (w revealAnchor) updateBox(_ Ctx, b layout.Box)     { b.(*revealAnchorBox).reveal = w.reveal }
+func (w revealAnchor) childWidgets() []Widget            { return []Widget{w.child} }
+func (w revealAnchor) attach(b layout.Box, k []layout.Box) { b.(*revealAnchorBox).child = first(k) }
+
+type revealAnchorBox struct {
+	layout.Base
+	reveal *scrollReveal
+	child  layout.Box
+}
+
+func (b *revealAnchorBox) Layout(cs layout.Constraints) geom.Size {
+	var sz geom.Size
+	if b.child != nil {
+		sz = b.child.Layout(cs)
+	} else {
+		sz = cs.Constrain(geom.Size{})
+	}
+	return b.Done(cs, sz)
+}
+
+func (b *revealAnchorBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.reveal != nil {
+		b.reveal.beginContent(at)
+	}
+	if b.child != nil {
+		b.child.Paint(c, at)
+	}
+}
+
+func (b *revealAnchorBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
+	if b.child != nil {
+		b.child.AddHits(p, hits)
+	}
+}
+
+func (b *revealAnchorBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
+	if b.child != nil {
+		visit(b.child, geom.Pt{})
+	}
 }
 
 // scrollbar overlays a thin, fading position indicator on the scroll's
