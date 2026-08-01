@@ -127,17 +127,18 @@ func (b *Bridge) FrameHeight() int {
 // (Multi-touch gestures — pinch — arrive with the gesture milestone.)
 func (b *Bridge) Touch(phase int, xPx, yPx float32) {
 	p := geom.Pt{X: xPx / b.scale, Y: yPx / b.scale}
+	const touch = shell.SourceTouch // so gestures adapt to modality (drag scrolls, long-press selects)
 	switch phase {
 	case TouchDown:
 		// Synthesize a move first so hover/hit state sees the position.
-		b.handler.Event(b, shell.Pointer{Kind: shell.PointerMove, Pos: p})
-		b.handler.Event(b, shell.Pointer{Kind: shell.PointerDown, Pos: p})
+		b.handler.Event(b, shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: touch})
+		b.handler.Event(b, shell.Pointer{Kind: shell.PointerDown, Pos: p, Source: touch})
 	case TouchMove:
-		b.handler.Event(b, shell.Pointer{Kind: shell.PointerMove, Pos: p})
+		b.handler.Event(b, shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: touch})
 	case TouchUp:
-		b.handler.Event(b, shell.Pointer{Kind: shell.PointerUp, Pos: p})
+		b.handler.Event(b, shell.Pointer{Kind: shell.PointerUp, Pos: p, Source: touch})
 	case TouchCancel:
-		b.handler.Event(b, shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: -1e6, Y: -1e6}})
+		b.handler.Event(b, shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: -1e6, Y: -1e6}, Source: touch})
 	}
 }
 

@@ -718,5 +718,13 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		w.Invalidate()
 	case shell.Resize:
 		w.Invalidate()
+	case shell.Focus:
+		// Losing focus mid-interaction (alt-tab while dragging) must not leave a
+		// gesture stuck down: cancel any in-progress press/drag. (Held-key state,
+		// which also needs clearing here, arrives with the input package.)
+		if !e.Focused {
+			h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: -1e6, Y: -1e6}})
+		}
+		w.Invalidate()
 	}
 }
