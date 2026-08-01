@@ -37,6 +37,11 @@ func mount(t *testing.T, seed int64) (*app.Headless, *gameState) {
 	if st == nil {
 		t.Fatal("game state not mounted")
 	}
+	// Let the deal animation finish so tests interact with a settled board.
+	for i := 0; i < 40 && st.dealing; i++ {
+		h.Step(0.05)
+		h.Render()
+	}
 	return h, st
 }
 
@@ -201,6 +206,10 @@ func TestPersistResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	h1.Render()
+	for i := 0; i < 60 && st1.dealing; i++ { // let the deal finish before interacting
+		h1.Step(0.05)
+		h1.Render()
+	}
 	h1.Tap(center(Layout(testSize, st1.g).Stock))
 	h1.Render()
 	if len(st1.g.Waste()) != 1 {
@@ -217,5 +226,31 @@ func TestPersistResume(t *testing.T) {
 	}
 	if len(st2.g.Waste()) != 1 || st2.g.MoveCount() != 1 {
 		t.Fatalf("session 2 did not resume: waste=%d moves=%d", len(st2.g.Waste()), st2.g.MoveCount())
+	}
+}
+
+func TestDealAnimates(t *testing.T) {
+	makeStore = func() store { return &memStore{} }
+	var st *gameState
+	stateHook = func(s *gameState) { st = s }
+	cfg := app.Config{Size: testSize, Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}
+	h, err := app.NewHeadless(Solitaire{Seed: 1}, cfg, 1)
+	stateHook = nil
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	if !st.dealing {
+		t.Fatal("a fresh game should animate the deal")
+	}
+	for i := 0; i < 60 && st.dealing; i++ {
+		h.Step(0.05)
+		h.Render()
+	}
+	if st.dealing {
+		t.Fatal("deal animation did not settle")
+	}
+	if len(st.g.Stock()) != 24 {
+		t.Fatalf("after the deal, stock = %d, want 24", len(st.g.Stock()))
 	}
 }

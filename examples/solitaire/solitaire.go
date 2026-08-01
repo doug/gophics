@@ -47,13 +47,18 @@ type gameState struct {
 	snapping         bool
 	snapCtrl         *anim.Controller
 	snapFrom, snapTo geom.Pt
+
+	// Deal: a fresh game flies its tableau cards in from the stock, staggered.
+	dealing  bool
+	dealCtrl *anim.Controller
 }
 
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.deal = s.W().Seed
 	s.store = makeStore()
-	s.g = s.loadOrNew()
+	g, resumed := s.loadOrNew()
+	s.g = g
 	s.won = s.g.Won()
 	s.snapCtrl = &anim.Controller{Duration: 170 * time.Millisecond, Curve: anim.EaseOut, OnChange: func() {
 		s.SetState(nil)
@@ -64,26 +69,47 @@ func (s *gameState) Init(ctx widget.Ctx) {
 		}
 	}}
 	ctx.AddTicker(s.snapCtrl)
+	s.dealCtrl = &anim.Controller{Duration: 650 * time.Millisecond, Curve: anim.Linear, OnChange: func() {
+		s.SetState(nil)
+		if s.dealCtrl.Value() >= 1 {
+			s.dealing = false
+		}
+	}}
+	ctx.AddTicker(s.dealCtrl)
+	if !resumed {
+		s.startDeal() // animate a fresh deal, but not a resumed game
+	}
 	if stateHook != nil {
 		stateHook(s)
 	}
 }
 
-func (s *gameState) Dispose() { s.ctx.RemoveTicker(s.snapCtrl) }
+func (s *gameState) Dispose() {
+	s.ctx.RemoveTicker(s.snapCtrl)
+	s.ctx.RemoveTicker(s.dealCtrl)
+}
 
-// loadOrNew resumes the saved game, or deals a fresh one if there's no valid save.
-func (s *gameState) loadOrNew() *klondike.Game {
+func (s *gameState) startDeal() {
+	s.dealing = true
+	s.dealCtrl.Jump(0)
+	s.dealCtrl.Forward()
+	s.ctx.Invalidate()
+}
+
+// loadOrNew resumes the saved game (resumed=true), or deals a fresh one if
+// there's no valid save.
+func (s *gameState) loadOrNew() (g *klondike.Game, resumed bool) {
 	if s.store != nil {
 		if data, ok := s.store.load(); ok {
 			var snap klondike.Snapshot
 			if json.Unmarshal(data, &snap) == nil {
 				if g := klondike.Restore(snap); fullDeck(g) {
-					return g
+					return g, true
 				}
 			}
 		}
 	}
-	return klondike.New(s.deal, 1)
+	return klondike.New(s.deal, 1), false
 }
 
 // persist autosaves the current game (called after every state change).
@@ -100,6 +126,10 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 	board := widget.Interactive{
 		Handler: widget.Handler{
 			OnPress: func(p geom.Pt) {
+				if s.dealing { // ignore board input while the deal animates in
+					s.pressOK = false
+					return
+				}
 				s.pressHit, s.pressIdx, s.pressOK = s.board.Hit(p)
 				s.pressStart, s.dragging = p, false
 			},
@@ -187,6 +217,7 @@ func (s *gameState) newGame() {
 	s.g = klondike.New(s.deal, 1)
 	s.won = false
 	s.persist()
+	s.startDeal()
 	s.SetState(nil)
 }
 
@@ -312,14 +343,31 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 			drawEmpty(c, b.Foundations[i])
 		}
 	}
+	total := 0
+	for j := 0; j < 7; j++ {
+		total += len(s.g.Tableau(j))
+	}
+	di := 0
 	for j := 0; j < 7; j++ {
 		col := s.g.Tableau(j)
 		if len(col) == 0 {
 			drawEmpty(c, b.Slot[j])
 		}
 		for k := range col {
+			idx := di
+			di++
 			if s.hidingRun() && s.dragPile.Kind == klondike.Tableau && s.dragPile.Index == j && k >= s.dragIdx {
 				break // being dragged / snapped
+			}
+			if s.dealing {
+				if lt, flying := dealProgress(s.dealCtrl.Value(), idx, total); lt < 0 {
+					continue // still in the deck (drawn as the stock back)
+				} else if flying {
+					x := b.Stock.Min.X + (b.Tableaus[j][k].Min.X-b.Stock.Min.X)*lt
+					y := b.Stock.Min.Y + (b.Tableaus[j][k].Min.Y-b.Stock.Min.Y)*lt
+					drawCard(c, geom.RectXYWH(x, y, b.CardW, b.CardH), col[k])
+					continue
+				}
 			}
 			drawCard(c, b.Tableaus[j][k], col[k])
 		}
@@ -335,6 +383,25 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 	if s.won {
 		c.FillRRect(geom.RectXYWH(size.W*0.5-size.W*0.22, size.H*0.42, size.W*0.44, size.H*0.14), 16, colFeltHi)
 		c.TextIn("bold", "You win!", geom.Pt{X: size.W*0.5 - size.W*0.16, Y: size.H * 0.52}, size.W*0.08, colFace)
+	}
+}
+
+// dealProgress maps the global deal timeline t (0..1) to card idx's flight:
+// lt < 0 means still in the deck, 0..1 means in flight, and flying is true only
+// during that window (lt >= 1 means arrived — draw it at its final spot).
+func dealProgress(t float32, idx, total int) (lt float32, flying bool) {
+	if total < 1 {
+		total = 1
+	}
+	const fly = 0.5
+	lt = (t - float32(idx)*(0.5/float32(total))) / fly
+	switch {
+	case lt < 0:
+		return lt, false
+	case lt >= 1:
+		return 1, false
+	default:
+		return lt, true
 	}
 }
 
