@@ -66,12 +66,12 @@ func New(seed int64, drawN int) *Game {
 }
 
 // Accessors (read-only views for rendering and tests).
-func (g *Game) DrawCount() int           { return g.drawN }
-func (g *Game) Stock() []Card            { return g.stock }
-func (g *Game) Waste() []Card            { return g.waste }
-func (g *Game) Foundation(i int) []Card  { return g.found[i] }
-func (g *Game) Tableau(i int) []Card     { return g.tab[i] }
-func (g *Game) MoveCount() int           { return len(g.history) }
+func (g *Game) DrawCount() int          { return g.drawN }
+func (g *Game) Stock() []Card           { return g.stock }
+func (g *Game) Waste() []Card           { return g.waste }
+func (g *Game) Foundation(i int) []Card { return g.found[i] }
+func (g *Game) Tableau(i int) []Card    { return g.tab[i] }
+func (g *Game) MoveCount() int          { return len(g.history) }
 
 func (g *Game) pile(p Pile) *[]Card {
 	switch p.Kind {

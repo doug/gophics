@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/doug/gossamer/anim"
@@ -24,6 +25,7 @@ type gameState struct {
 	widget.StateBase[Solitaire]
 	ctx   widget.Ctx
 	g     *klondike.Game
+	store store
 	board Board
 	deal  int64 // current deal's seed; bumped by New game
 	won   bool
@@ -50,7 +52,9 @@ type gameState struct {
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.deal = s.W().Seed
-	s.g = klondike.New(s.deal, 1)
+	s.store = makeStore()
+	s.g = s.loadOrNew()
+	s.won = s.g.Won()
 	s.snapCtrl = &anim.Controller{Duration: 170 * time.Millisecond, Curve: anim.EaseOut, OnChange: func() {
 		s.SetState(nil)
 		// Finalize on completion (Value hits 1) — not on the initial Jump(0),
@@ -66,6 +70,31 @@ func (s *gameState) Init(ctx widget.Ctx) {
 }
 
 func (s *gameState) Dispose() { s.ctx.RemoveTicker(s.snapCtrl) }
+
+// loadOrNew resumes the saved game, or deals a fresh one if there's no valid save.
+func (s *gameState) loadOrNew() *klondike.Game {
+	if s.store != nil {
+		if data, ok := s.store.load(); ok {
+			var snap klondike.Snapshot
+			if json.Unmarshal(data, &snap) == nil {
+				if g := klondike.Restore(snap); fullDeck(g) {
+					return g
+				}
+			}
+		}
+	}
+	return klondike.New(s.deal, 1)
+}
+
+// persist autosaves the current game (called after every state change).
+func (s *gameState) persist() {
+	if s.store == nil {
+		return
+	}
+	if data, err := json.Marshal(s.g.Save()); err == nil {
+		s.store.save(data)
+	}
+}
 
 func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 	board := widget.Interactive{
@@ -95,6 +124,7 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 				if s.tryDrop() {
 					s.dragging, s.dragCards = false, nil
 					s.won = s.g.Won()
+					s.persist()
 				} else {
 					s.startSnapBack()
 				}
@@ -111,6 +141,7 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 					s.g.AutoToFoundation(s.pressHit)
 				}
 				s.won = s.g.Won()
+				s.persist()
 				s.SetState(nil)
 			},
 		},
@@ -141,6 +172,7 @@ func (s *gameState) undo() {
 	s.cancelInteraction()
 	s.g.Undo()
 	s.won = s.g.Won()
+	s.persist()
 	s.SetState(nil)
 }
 
@@ -149,6 +181,7 @@ func (s *gameState) newGame() {
 	s.deal++
 	s.g = klondike.New(s.deal, 1)
 	s.won = false
+	s.persist()
 	s.SetState(nil)
 }
 

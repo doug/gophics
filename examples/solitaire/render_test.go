@@ -13,8 +13,15 @@ import (
 
 var testSize = geom.Size{W: 800, H: 600}
 
+// memStore is an in-memory save slot, so tests never touch the real config dir.
+type memStore struct{ data []byte }
+
+func (m *memStore) save(d []byte)        { m.data = append([]byte(nil), d...) }
+func (m *memStore) load() ([]byte, bool) { return m.data, m.data != nil }
+
 func mount(t *testing.T, seed int64) (*app.Headless, *gameState) {
 	t.Helper()
+	makeStore = func() store { return &memStore{} } // fresh slot → deterministic new deal
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }
 	defer func() { stateHook = nil }()
@@ -175,5 +182,40 @@ func TestSnapBackSettles(t *testing.T) {
 	}
 	if st.snapping || st.dragging {
 		t.Fatal("snap-back did not settle")
+	}
+}
+
+func TestPersistResume(t *testing.T) {
+	shared := &memStore{}
+	makeStore = func() store { return shared }
+	t.Cleanup(func() { makeStore = platformStore })
+
+	cfg := app.Config{Size: testSize, Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}
+
+	// Session 1: draw a card (autosaves to the shared store).
+	var st1 *gameState
+	stateHook = func(s *gameState) { st1 = s }
+	h1, err := app.NewHeadless(Solitaire{Seed: 1}, cfg, 1)
+	stateHook = nil
+	if err != nil {
+		t.Fatal(err)
+	}
+	h1.Render()
+	h1.Tap(center(Layout(testSize, st1.g).Stock))
+	h1.Render()
+	if len(st1.g.Waste()) != 1 {
+		t.Fatalf("session 1: expected a drawn card, got waste=%d", len(st1.g.Waste()))
+	}
+
+	// Session 2 with the same store resumes the drawn state, not a fresh deal.
+	var st2 *gameState
+	stateHook = func(s *gameState) { st2 = s }
+	_, err = app.NewHeadless(Solitaire{Seed: 1}, cfg, 1)
+	stateHook = nil
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st2.g.Waste()) != 1 || st2.g.MoveCount() != 1 {
+		t.Fatalf("session 2 did not resume: waste=%d moves=%d", len(st2.g.Waste()), st2.g.MoveCount())
 	}
 }
