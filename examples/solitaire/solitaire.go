@@ -150,7 +150,12 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 
 	// The board fills the window (so board coordinates are window coordinates);
 	// the controls float over the felt at the bottom-right, on top of it.
-	controls := widget.Row(chip("Undo", s.undo), widget.Sized{W: 8}, chip("New", s.newGame))
+	var items []widget.Widget
+	if s.g.CanAutoComplete() {
+		items = append(items, chip("Finish", s.finish), widget.Sized{W: 8})
+	}
+	items = append(items, chip("Undo", s.undo), widget.Sized{W: 8}, chip("New", s.newGame))
+	controls := widget.Row(items...)
 	controls.CrossAlign = layout.CrossCenter
 	return widget.Stack{Children: []widget.Widget{
 		board,
@@ -181,6 +186,16 @@ func (s *gameState) newGame() {
 	s.deal++
 	s.g = klondike.New(s.deal, 1)
 	s.won = false
+	s.persist()
+	s.SetState(nil)
+}
+
+// finish auto-plays the rest of the game to the foundations (shown only when
+// s.g.CanAutoComplete()).
+func (s *gameState) finish() {
+	s.cancelInteraction()
+	s.g.AutoComplete()
+	s.won = s.g.Won()
 	s.persist()
 	s.SetState(nil)
 }
