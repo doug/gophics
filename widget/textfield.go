@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"math"
 	"strings"
 
 	"github.com/doug/gossamer/geom"
@@ -76,8 +77,13 @@ func (f TextField) CreateState() State { return &textFieldState{} }
 type textFieldState struct {
 	StateBase[TextField]
 	ed      text.Editor
+	ctx     Ctx // captured at Init, for ticker teardown
 	focused bool
 	scrollX float32
+	// blink is seconds since the caret last moved or the field gained focus.
+	// The caret shows for the first half of each period, so it stays solid
+	// right after any activity, then blinks.
+	blink float64
 	// lastWidth is the box width from the last layout, used by multiline
 	// caret navigation and hit testing.
 	lastWidth float32
@@ -105,10 +111,56 @@ func (s *textFieldState) display() (str string, preStart, preEnd int) {
 }
 
 func (s *textFieldState) change(ctx Ctx) {
+	s.activity()
 	if f := s.W(); f.OnChange != nil {
 		f.OnChange(s.ed.Text())
 	}
 	s.SetState(nil)
+}
+
+// caretPeriod is the full blink cycle in seconds (~530ms per half — a common
+// desktop cadence).
+const caretPeriod = 1.06
+
+// caretBlink advances the blink clock while the field is focused and motion is
+// allowed, requesting its own repaints so the caret toggles. It reports
+// inactive (returns false) so it does NOT count as a settling animation — a
+// blinking caret must not make the app read as "perpetually animating" (that
+// would spin any settle loop forever). When unfocused or under reduce-motion it
+// stops requesting frames entirely and the caret is solid.
+type caretBlink struct{ s *textFieldState }
+
+func (c caretBlink) Tick(dt float64) bool {
+	if !c.s.focused || c.s.ctx.ReduceMotion() {
+		return false
+	}
+	c.s.blink += dt
+	c.s.ctx.Invalidate() // keep frames coming for the blink, without claiming to animate
+	return false
+}
+
+func (s *textFieldState) Init(ctx Ctx) {
+	s.ctx = ctx
+	ctx.AddTicker(caretBlink{s})
+}
+
+func (s *textFieldState) Dispose() { s.ctx.RemoveTicker(caretBlink{s}) }
+
+// activity resets the blink so the caret is solid right after typing or moving,
+// then resumes blinking after an idle half-period.
+func (s *textFieldState) activity() { s.blink = 0 }
+
+// caretVisible reports whether to draw the caret this frame: only when focused
+// without a selection; solid under reduce-motion, else on for the first half of
+// each blink period.
+func (s *textFieldState) caretVisible() bool {
+	if !s.focused || s.ed.HasSelection() {
+		return false
+	}
+	if s.ctx.ReduceMotion() {
+		return true
+	}
+	return math.Mod(s.blink, caretPeriod) < caretPeriod/2
 }
 
 func (s *textFieldState) line(ctx Ctx) text.Line {
@@ -193,6 +245,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		if k.Kind != shell.KeyPress {
 			return
 		}
+		s.activity() // keep the caret solid while interacting
 		shift := k.Mods&shell.ModShift != 0
 		switch k.Code {
 		case shell.KeyLeft:
@@ -221,6 +274,13 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		case shell.KeyDelete:
 			s.ed.DeleteForward()
 			s.change(ctx)
+		case shell.KeyTab:
+			// Multiline fields indent; single-line Tab is reserved for focus
+			// traversal (not yet implemented), so it's a no-op there.
+			if f.Multiline {
+				s.ed.Insert("\t")
+				s.change(ctx)
+			}
 		case shell.KeyEnter:
 			if f.Multiline && !k.Mods.Command() {
 				s.ed.Insert("\n")
@@ -296,10 +356,12 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	return Interactive{
 		Handler: Handler{
 			OnPress: func(p geom.Pt) {
+				s.activity()
 				s.ed.MoveTo(s.indexAtPt(ctx, p), false)
 				s.SetState(nil)
 			},
 			OnDrag: func(p, _ geom.Pt) {
+				s.activity()
 				s.ed.MoveTo(s.indexAtPt(ctx, p), true)
 				s.SetState(nil)
 			},
@@ -308,6 +370,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			OnComposition: onComposition,
 			OnFocus: func(v bool) {
 				s.focused = v
+				s.activity() // caret solid on focus, then blinks
 				if f.OnFocus != nil {
 					f.OnFocus(v)
 				}
@@ -438,7 +501,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		c.Line(geom.Pt{X: x0, Y: y}, geom.Pt{X: x1, Y: y}, 1.5, caretC)
 	}
 
-	if b.state.focused && !b.state.ed.HasSelection() {
+	if b.state.caretVisible() {
 		caretIdx := b.state.ed.Caret
 		if composing {
 			caretIdx = preStart + b.state.preeditCursor
@@ -488,7 +551,7 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 		c.Text(f.Placeholder, geom.Pt{X: at.X, Y: at.Y + m.Ascent}, sz, phC)
 	}
 
-	if b.state.focused && !b.state.ed.HasSelection() && len(lines) > 0 {
+	if b.state.caretVisible() && len(lines) > 0 {
 		li := lineOf(lines, b.state.ed.Caret)
 		x := at.X + lines[li].CaretX(b.state.ed.Caret-lines[li].Start)
 		top := at.Y + float32(li)*lineH

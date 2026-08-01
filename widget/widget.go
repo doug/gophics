@@ -119,6 +119,10 @@ func (c Ctx) OpenURL(url string) error {
 // the tree, so reading it in Build stays fresh.
 func (c Ctx) DarkMode() bool { return c.el.owner.DarkMode }
 
+// ReduceMotion reports the platform "reduce motion" accessibility preference.
+// Non-essential animations (e.g. the text caret blink) go solid when true.
+func (c Ctx) ReduceMotion() bool { return c.el.owner.ReduceMotion }
+
 // SafeInsets are the platform-obstructed edges (status bar, notch,
 // on-screen keyboard) in logical pixels; pad content by them.
 func (c Ctx) SafeInsets() geom.Insets { return c.el.owner.SafeInsets }

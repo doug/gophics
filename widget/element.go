@@ -40,6 +40,10 @@ type Owner struct {
 	// DarkMode reflects the platform color-scheme preference (kept fresh by
 	// the app runner; a change rebuilds the whole tree).
 	DarkMode bool
+	// ReduceMotion reflects the platform "reduce motion" accessibility
+	// preference (set by the app runner; default false). Non-essential
+	// animations — like the text caret blink — should go solid when set.
+	ReduceMotion bool
 	// OnBuildPanic observes recovered Build panics (default logs with a
 	// stack trace). The panicking subtree renders a BuildError instead.
 	OnBuildPanic func(recovered any)
