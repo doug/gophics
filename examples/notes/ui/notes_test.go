@@ -132,6 +132,74 @@ func TestNotesEditSaveWritesDisk(t *testing.T) {
 	}
 }
 
+func TestNotesSearchFilters(t *testing.T) {
+	dir := t.TempDir()
+	writeNote(t, dir, "Alpha.md", "# Alpha\n\njust alpha")
+	writeNote(t, dir, "Beta.md", "# Beta\n\nmentions unicorn")
+
+	h, st := mountNotes(t, dir)
+	if !hasLabel(h, "Alpha") || !hasLabel(h, "Beta") {
+		t.Fatalf("both notes should list initially; labels=%v", labels(h))
+	}
+	// Query matches Beta by body only.
+	st.SetState(func() { st.Query = "unicorn" })
+	h.Render()
+	if hasLabel(h, "Alpha") {
+		t.Errorf("Alpha should be filtered out; labels=%v", labels(h))
+	}
+	if !hasLabel(h, "Beta") {
+		t.Errorf("Beta should match body search; labels=%v", labels(h))
+	}
+}
+
+func TestNotesBacklinks(t *testing.T) {
+	dir := t.TempDir()
+	alpha := writeNote(t, dir, "Alpha.md", "# Alpha\n\nsee [[Beta]]")
+	beta := writeNote(t, dir, "Beta.md", "# Beta\n")
+
+	h, st := mountNotes(t, dir)
+
+	st.open(beta) // Beta is linked from Alpha
+	h.Render()
+	if !hasLabel(h, "Linked references") {
+		t.Fatalf("Beta should show backlinks; labels=%v", labels(h))
+	}
+
+	st.open(alpha) // nothing links to Alpha
+	h.Render()
+	if hasLabel(h, "Linked references") {
+		t.Errorf("Alpha should have no backlinks; labels=%v", labels(h))
+	}
+}
+
+func TestNotesOutline(t *testing.T) {
+	dir := t.TempDir()
+	path := writeNote(t, dir, "Doc.md", "# Top\n\nbody\n\n## Sub\n\nmore")
+	h, st := mountNotes(t, dir)
+	st.open(path)
+	h.Render()
+	if !hasLabel(h, "OUTLINE") {
+		t.Fatalf("outline panel not shown; labels=%v", labels(h))
+	}
+}
+
+func TestExtractHeadingsAndWikilinks(t *testing.T) {
+	hs := extractHeadings("# A\n## B\n```\n# not a heading\n```\ntext\n### C")
+	want := []headingItem{{1, "A"}, {2, "B"}, {3, "C"}}
+	if len(hs) != len(want) {
+		t.Fatalf("headings = %v, want %v", hs, want)
+	}
+	for i := range want {
+		if hs[i] != want[i] {
+			t.Errorf("heading %d = %v, want %v", i, hs[i], want[i])
+		}
+	}
+	tgts := wikilinkTargets("see [[Beta]] and also [[Ideas Note]] here")
+	if len(tgts) != 2 || tgts[0] != "Beta" || tgts[1] != "Ideas Note" {
+		t.Errorf("wikilinkTargets = %v, want [Beta, Ideas Note]", tgts)
+	}
+}
+
 func TestNotesSessionRestore(t *testing.T) {
 	dir := t.TempDir()
 	writeNote(t, dir, "Alpha.md", "# Alpha Heading\n")

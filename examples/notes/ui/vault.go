@@ -81,3 +81,36 @@ func (v *Vault) ByName(name string) (Note, bool) {
 	}
 	return Note{}, false
 }
+
+// Search returns the notes matching query (case-insensitive substring in name
+// or body); an empty query returns every note. Order is preserved.
+func (v *Vault) Search(query string) []Note {
+	q := strings.TrimSpace(strings.ToLower(query))
+	if q == "" {
+		return v.Notes
+	}
+	var out []Note
+	for _, n := range v.Notes {
+		if strings.Contains(strings.ToLower(n.Name), q) || strings.Contains(strings.ToLower(n.Body), q) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// Backlinks returns the notes that link to name via a [[wikilink]].
+func (v *Vault) Backlinks(name string) []Note {
+	var out []Note
+	for _, n := range v.Notes {
+		if strings.EqualFold(n.Name, name) {
+			continue
+		}
+		for _, tgt := range wikilinkTargets(n.Body) {
+			if strings.EqualFold(tgt, name) {
+				out = append(out, n)
+				break
+			}
+		}
+	}
+	return out
+}

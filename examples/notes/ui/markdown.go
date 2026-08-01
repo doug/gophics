@@ -79,6 +79,52 @@ func renderMarkdown(src string, sty mdStyle, onLink func(url string)) []widget.W
 	return blocks
 }
 
+// headingItem is one entry in a note's outline.
+type headingItem struct {
+	Level int
+	Text  string
+}
+
+// extractHeadings returns the note's ATX headings in order, skipping fenced
+// code blocks (so a "# comment" inside code is not mistaken for a heading).
+func extractHeadings(src string) []headingItem {
+	var out []headingItem
+	inFence := false
+	for _, line := range strings.Split(src, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		if lvl := headingLevel(t); lvl > 0 {
+			out = append(out, headingItem{Level: lvl, Text: strings.TrimSpace(t[lvl:])})
+		}
+	}
+	return out
+}
+
+// wikilinkTargets returns the names referenced by [[wikilinks]] in src.
+func wikilinkTargets(src string) []string {
+	var out []string
+	for i := 0; ; {
+		j := strings.Index(src[i:], "[[")
+		if j < 0 {
+			break
+		}
+		start := i + j + 2
+		end := strings.Index(src[start:], "]]")
+		if end < 0 {
+			break
+		}
+		out = append(out, strings.TrimSpace(src[start:start+end]))
+		i = start + end + 2
+	}
+	return out
+}
+
 func headingLevel(t string) int {
 	n := 0
 	for n < len(t) && t[n] == '#' {

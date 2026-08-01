@@ -78,25 +78,45 @@ type workspaceState struct {
 	OpenPath string // open note's absolute path
 	Editing  bool   // edit vs read mode
 	Draft    string // unsaved edit buffer
+	Query    string // sidebar search filter
 }
 
 func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
 	v := s.W().Vault
-	row := widget.Row(
+	children := []widget.Widget{
 		widget.Sized{W: 240, Child: s.sidebar(v)},
 		widget.Sized{W: 1, Child: widget.Decorated{Color: colBorder}},
 		widget.Expand(s.pane(ctx, v)),
-	)
+	}
+	// Outline is a third column, shown in read mode when the open note has
+	// headings. It lives at the top level (not nested in the pane) so it shares
+	// the proven outer split layout.
+	if note, ok := v.Get(s.OpenPath); ok && !s.Editing && len(extractHeadings(note.Body)) > 0 {
+		children = append(children,
+			widget.Sized{W: 1, Child: widget.Decorated{Color: colBorder}},
+			widget.Sized{W: 200, Child: outlinePanel(note)},
+		)
+	}
+	row := widget.Row(children...)
 	row.CrossAlign = layout.CrossStretch
 	return widget.Decorated{Color: colBg, Child: row}
 }
 
 func (s *workspaceState) sidebar(v *Vault) widget.Widget {
-	items := []widget.Widget{
-		widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 16, Bottom: 8},
-			Child: widget.Text{S: "NOTES", Font: "bold", Size: 12, Color: colMeta}},
-	}
-	for _, n := range v.Notes {
+	search := widget.Padding{Insets: geom.InsetsSymmetric(12, 10), Child: widget.Decorated{
+		Color: colBg, Radius: 6, BorderColor: colBorder, BorderWidth: 1,
+		Child: widget.Padding{Insets: geom.InsetsSymmetric(10, 7), Child: widget.TextField{
+			Value:            s.Query,
+			Placeholder:      "Search notes…",
+			Size:             13,
+			TextColor:        colText,
+			PlaceholderColor: colMeta,
+			OnChange:         func(t string) { s.SetState(func() { s.Query = t }) },
+		}},
+	}}
+
+	items := []widget.Widget{search}
+	for _, n := range v.Search(s.Query) {
 		n := n
 		bg := colSidebar
 		if n.Path == s.OpenPath {
@@ -127,7 +147,7 @@ func (s *workspaceState) pane(ctx widget.Ctx, v *Vault) widget.Widget {
 		body = s.editorSplit(ctx, v)
 	} else {
 		action = s.button("Edit", func() { s.startEdit(note) })
-		body = scrollPad(s.markdown(note.Body, ctx, v))
+		body = s.reader(ctx, v, note)
 	}
 
 	bar := widget.Row(
@@ -175,6 +195,59 @@ func (s *workspaceState) markdown(src string, ctx widget.Ctx, v *Vault) widget.W
 	col := widget.Column(renderMarkdown(src, mdTheme(), func(url string) { s.onLink(ctx, v, url) })...)
 	col.CrossAlign = layout.CrossStart
 	return col
+}
+
+// reader is the read view: the rendered note followed by its backlinks section.
+func (s *workspaceState) reader(ctx widget.Ctx, v *Vault, note Note) widget.Widget {
+	blocks := renderMarkdown(note.Body, mdTheme(), func(url string) { s.onLink(ctx, v, url) })
+	blocks = append(blocks, s.backlinks(v, note)...)
+	body := widget.Column(blocks...)
+	body.CrossAlign = layout.CrossStart
+	return scrollPad(body)
+}
+
+// backlinks renders the "Linked references" section — the notes that [[link]]
+// to this one — appended beneath the note body. Empty when there are none.
+func (s *workspaceState) backlinks(v *Vault, note Note) []widget.Widget {
+	refs := v.Backlinks(note.Name)
+	if len(refs) == 0 {
+		return nil
+	}
+	out := []widget.Widget{
+		block(widget.Padding{Insets: geom.Insets{Top: 12, Bottom: 8}, Child: widget.Sized{H: 1, Child: widget.Decorated{Color: colBorder}}}),
+		block(widget.Text{S: "Linked references", Font: "bold", Size: 13, Color: colMeta}),
+	}
+	for _, n := range refs {
+		n := n
+		out = append(out, block(widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.open(n.Path) }},
+			Child:   widget.Text{S: "← " + n.Name, Size: 14, Color: colLink},
+		}))
+	}
+	return out
+}
+
+// outlinePanel lists the note's headings, indented by level — a live document
+// map. (Click-to-scroll awaits a public scroll-to-position API in the framework.)
+func outlinePanel(note Note) widget.Widget {
+	items := []widget.Widget{
+		widget.Padding{Insets: geom.Insets{Left: 14, Right: 14, Top: 16, Bottom: 8},
+			Child: widget.Text{S: "OUTLINE", Font: "bold", Size: 12, Color: colMeta}},
+	}
+	hs := extractHeadings(note.Body)
+	if len(hs) == 0 {
+		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(14, 4),
+			Child: widget.Text{S: "No headings", Size: 13, Color: colMeta}})
+	}
+	for _, h := range hs {
+		items = append(items, widget.Padding{
+			Insets: geom.Insets{Left: 14 + float32(h.Level-1)*12, Right: 12, Top: 3, Bottom: 3},
+			Child:  widget.Text{S: h.Text, Size: 13, Color: colText, Wrap: true},
+		})
+	}
+	col := widget.Column(items...)
+	col.CrossAlign = layout.CrossStart
+	return widget.Decorated{Color: colSidebar, Child: widget.Scroll{Child: col}}
 }
 
 // scrollPad wraps content in a scroll view with the standard reading padding.
