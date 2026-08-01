@@ -161,3 +161,60 @@ func unmarshalState(s State, data json.RawMessage) {
 	}
 	_ = json.Unmarshal(data, s) // into the State pointer: sets exported fields
 }
+
+// --- widget registry: serializing State that holds child Widgets ------------
+//
+// Some State keeps live Widget values, not plain data — most importantly a
+// Navigator's page stack. To snapshot those, the concrete Widget types must be
+// registered so they can be rebuilt from JSON. Register each once at startup
+// (e.g. your route/page types); an unregistered type is simply skipped, like an
+// unknown route.
+
+type widgetMaker func(json.RawMessage) (Widget, bool)
+
+var snapshotTypes = map[string]widgetMaker{}
+
+// RegisterSnapshotType registers Widget type T so it can be captured inside a
+// StateSnapshot and rebuilt on restore. T's exported fields are its serialized
+// form, so a page like `StoryPage{ID: 123}` round-trips by value. Register
+// value types (the form you push); call before any snapshot/restore.
+func RegisterSnapshotType[T Widget]() {
+	var zero T
+	snapshotTypes[typeName(zero)] = func(data json.RawMessage) (Widget, bool) {
+		var v T
+		if json.Unmarshal(data, &v) != nil {
+			return nil, false
+		}
+		return v, true
+	}
+}
+
+// SerializedWidget is a type-tagged widget blob: its concrete type name plus
+// its JSON form. It is the serialized element of a Navigator's stack.
+type SerializedWidget struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
+
+// MarshalWidget captures w if its concrete type was registered.
+func MarshalWidget(w Widget) (SerializedWidget, bool) {
+	name := typeName(w)
+	if _, ok := snapshotTypes[name]; !ok {
+		return SerializedWidget{}, false
+	}
+	data, err := json.Marshal(w)
+	if err != nil {
+		return SerializedWidget{}, false
+	}
+	return SerializedWidget{Type: name, Data: data}, true
+}
+
+// UnmarshalWidget rebuilds a widget captured by MarshalWidget, or reports false
+// if its type is no longer registered.
+func UnmarshalWidget(b SerializedWidget) (Widget, bool) {
+	mk, ok := snapshotTypes[b.Type]
+	if !ok {
+		return nil, false
+	}
+	return mk(b.Data)
+}

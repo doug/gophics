@@ -8,11 +8,6 @@ package ui
 import (
 	"fmt"
 
-
-
-
-
-
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
@@ -47,7 +42,20 @@ func (h HN) pageSize() int {
 }
 
 func (h HN) Build(widget.Ctx) widget.Widget {
-	return widget.Navigator{Home: feedPage{API: h.API, N: h.pageSize()}}
+	// Provide the API down the tree instead of threading it through every page.
+	// Pages then carry only data (which story), so they're plain serializable
+	// values — which is what lets `gossamer dev` restore your navigation on a
+	// hot-restart (see threadPage's registration below).
+	return widget.Provide[API]{
+		Value: h.API,
+		Child: widget.Navigator{Home: feedPage{N: h.pageSize()}},
+	}
+}
+
+func init() {
+	// Register the pushable page(s) so the Navigator's stack survives a
+	// state-preserving hot-restart.
+	widget.RegisterSnapshotType[threadPage]()
 }
 
 func header(title string, lead widget.Widget) widget.Widget {
@@ -109,10 +117,9 @@ func page(ctx widget.Ctx, headerW, body widget.Widget) widget.Widget {
 	}}
 }
 
-// feedPage lists top stories.
+// feedPage lists top stories. It carries only data; the API comes from context.
 type feedPage struct {
-	API API
-	N   int
+	N int
 }
 
 func (f feedPage) CreateState() widget.State { return &feedState{} }
@@ -140,19 +147,20 @@ func (s *feedState) Init(ctx widget.Ctx) {
 // Used for the initial load and for pull-to-refresh.
 func (s *feedState) fetch(ctx widget.Ctx) {
 	post := ctx.Post()
-	f := s.W()
+	api := widget.MustOf[API](ctx)
+	n := s.W().N
 	go func() {
-		ids, err := f.API.TopStories()
+		ids, err := api.TopStories()
 		if err != nil {
 			post(func() { s.SetState(func() { s.loading, s.refreshing, s.err = false, false, err.Error() }) })
 			return
 		}
-		if len(ids) > f.N {
-			ids = ids[:f.N]
+		if len(ids) > n {
+			ids = ids[:n]
 		}
 		stories := make([]Item, 0, len(ids))
 		for _, id := range ids {
-			if it, err := f.API.Item(id); err == nil && it.Title != "" {
+			if it, err := api.Item(id); err == nil && it.Title != "" {
 				stories = append(stories, it)
 			}
 		}
@@ -196,21 +204,21 @@ func (s *feedState) storyRow(nav widget.Nav, i int) widget.Widget {
 	)
 	title.CrossAlign = layout.CrossStart
 	row := widget.Row(
-		widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d.", i + 1), Size: 13, Color: colMeta}},
+		widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d.", i+1), Size: 13, Color: colMeta}},
 		widget.Expand(title),
 	)
 	row.CrossAlign = layout.CrossStart
-	api := s.W().API
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Push(threadPage{API: api, Story: st}) }},
+		Handler: widget.Handler{OnTap: func() { nav.Push(threadPage{Story: st}) }},
 		Child: widget.Decorated{Color: colCard,
 			Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 10), Child: row}},
 	}
 }
 
-// threadPage shows one story's comments.
+// threadPage shows one story's comments. It carries only the story (plain
+// serializable data); the API comes from context. That makes it registerable
+// so a hot-restart can rebuild it and land you back on the same thread.
 type threadPage struct {
-	API   API
 	Story Item
 }
 
@@ -225,9 +233,10 @@ type threadState struct {
 func (s *threadState) Init(ctx widget.Ctx) {
 	s.loading = true
 	post := ctx.Post()
-	t := s.W()
+	api := widget.MustOf[API](ctx)
+	story := s.W().Story
 	go func() {
-		comments := loadComments(t.API, t.Story, 80)
+		comments := loadComments(api, story, 80)
 		post(func() { s.SetState(func() { s.comments, s.loading = comments, false }) })
 	}()
 }
