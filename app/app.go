@@ -74,6 +74,7 @@ type Core struct {
 	pressHeld      float64 // seconds the current press has been held, unmoved
 	longFired      bool
 	pendingTap     *widget.InteractiveBox // deferred single-tap awaiting a possible double
+	pendingTapPos  geom.Pt                // where the deferred tap landed (double must be nearby)
 	tapElapsed     float64
 
 	a11y *a11yTree
@@ -125,21 +126,32 @@ func (c *Core) TickGestures(dt float64) {
 	}
 }
 
-// fireTap handles a completed tap on box: immediate for a plain tap; for a
-// double-tap-capable box, either completes a double or defers the single.
-func (c *Core) fireTap(box *widget.InteractiveBox) {
+// doubleTapSlop is how far (logical px) the second tap may land from the first
+// and still count as a double-tap — a double-click is at ~one spot, not across
+// the widget.
+const doubleTapSlop = 8
+
+// fireTap handles a completed tap on box at pos: immediate for a plain tap; for
+// a double-tap-capable box, completes a double only if the second tap is near
+// the first, else defers the single.
+func (c *Core) fireTap(box *widget.InteractiveBox, pos geom.Pt) {
 	if box.Handler.OnDoubleTap == nil {
 		if box.Handler.OnTap != nil {
 			box.Handler.OnTap()
 		}
 		return
 	}
-	if c.pendingTap == box {
-		c.pendingTap = nil // second tap in window: it's a double
+	if c.pendingTap == box && near(pos, c.pendingTapPos, doubleTapSlop) {
+		c.pendingTap = nil // second tap in window and place: it's a double
 		box.Handler.OnDoubleTap()
 		return
 	}
-	c.pendingTap, c.tapElapsed = box, 0 // first tap: defer OnTap
+	c.pendingTap, c.pendingTapPos, c.tapElapsed = box, pos, 0 // first tap: defer OnTap
+}
+
+func near(a, b geom.Pt, slop float32) bool {
+	dx, dy := a.X-b.X, a.Y-b.Y
+	return dx*dx+dy*dy <= slop*slop
 }
 
 // NewCore builds a runtime for the given root widget.
@@ -500,7 +512,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 			dragging.Handler.OnRelease()
 		}
 		if pressed != nil && slices.Contains(boxes(c.interactivesAt(e.Pos)), pressed) {
-			c.fireTap(pressed)
+			c.fireTap(pressed, e.Pos)
 		}
 	}
 }

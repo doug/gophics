@@ -365,6 +365,13 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				s.ed.MoveTo(s.indexAtPt(ctx, p), true)
 				s.SetState(nil)
 			},
+			OnDoubleTap: func() {
+				// OnPress already placed the caret at the click; select the word
+				// around it.
+				s.activity()
+				s.ed.SelectWordAt(s.ed.Caret)
+				s.SetState(nil)
+			},
 			OnText:        onText,
 			OnKey:         onKey,
 			OnComposition: onComposition,

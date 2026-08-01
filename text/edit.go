@@ -1,6 +1,10 @@
 package text
 
-import "github.com/go-text/typesetting/segmenter"
+import (
+	"unicode"
+
+	"github.com/go-text/typesetting/segmenter"
+)
 
 // Editor is a single-line text editing model: content, caret, and
 // selection. It is pure state — widgets own one and render from it.
@@ -118,6 +122,38 @@ func (e *Editor) End(extend bool)  { e.MoveTo(len(e.runes), extend) }
 func (e *Editor) SelectAll() {
 	e.Anchor = 0
 	e.Caret = len(e.runes)
+}
+
+// SelectWordAt selects the word (run of letters/digits/underscore) containing
+// idx — the double-click-to-select behavior. If idx isn't on a word character,
+// it selects the single character there, matching common editor behavior.
+func (e *Editor) SelectWordAt(idx int) {
+	n := len(e.runes)
+	if n == 0 {
+		return
+	}
+	if idx > n {
+		idx = n
+	}
+	lo, hi := idx, idx
+	for lo > 0 && isWordRune(e.runes[lo-1]) {
+		lo--
+	}
+	for hi < n && isWordRune(e.runes[hi]) {
+		hi++
+	}
+	if lo == hi { // not on a word char — select the single character
+		if idx < n {
+			hi = idx + 1
+		} else if idx > 0 {
+			lo = idx - 1
+		}
+	}
+	e.Anchor, e.Caret = lo, hi
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
 // prevBoundary returns the grapheme boundary before idx.

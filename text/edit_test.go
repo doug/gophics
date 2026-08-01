@@ -116,3 +116,16 @@ func TestCaretGeometryRoundTrip(t *testing.T) {
 		t.Fatalf("IndexAt past end = %d, want %d", got, n)
 	}
 }
+
+func TestSelectWordAt(t *testing.T) {
+	e := &Editor{}
+	e.SetText("hello world_foo bar")
+	e.SelectWordAt(2)
+	if got := e.SelectedText(); got != "hello" {
+		t.Errorf("word at 2 = %q, want \"hello\"", got)
+	}
+	e.SelectWordAt(10) // inside world_foo (underscore is a word char)
+	if got := e.SelectedText(); got != "world_foo" {
+		t.Errorf("word at 10 = %q, want \"world_foo\"", got)
+	}
+}
