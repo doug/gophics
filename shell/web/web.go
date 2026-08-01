@@ -199,6 +199,8 @@ type window struct {
 	handler     shell.Handler
 	renderer    shell.RendererMode // resolved backend for this run
 	pres        *presenter         // runtime-selected presentation (CPU blit or GPU surface)
+	cam         *webCamera         // lazily created still-capture capability
+	aud         *webAudio          // lazily created audio capability
 
 	logical    geom.Size
 	dpr        float64

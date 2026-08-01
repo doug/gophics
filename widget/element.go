@@ -10,6 +10,7 @@ import (
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
+	"github.com/doug/gossamer/shell"
 )
 
 // renderWidget is the internal bridge from widgets to layout boxes.
@@ -51,6 +52,10 @@ type Owner struct {
 	// on-screen keyboards) in logical pixels, set by the runner; apps pad
 	// content by them (Ctx.SafeInsets).
 	SafeInsets geom.Insets
+	// Camera and Audio are optional media-capture capabilities, set by the app
+	// runner from the platform window (nil when unsupported). See shell/media.go.
+	Camera shell.Camera
+	Audio  shell.Audio
 
 	root    *element
 	dirty   []*element

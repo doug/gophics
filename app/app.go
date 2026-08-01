@@ -670,6 +670,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	}
 	h.core.Owner.Clipboard = w
 	h.core.Owner.OpenURL = w.OpenURL
+	h.wireMedia(w)
 	if dark := w.DarkMode(); dark != h.core.Owner.DarkMode {
 		h.core.Owner.DarkMode = dark
 		h.core.Owner.RebuildAll()
@@ -702,6 +703,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 	h.window = w
 	h.core.Owner.Clipboard = w
+	h.wireMedia(w)
 	switch e := e.(type) {
 	case shell.Pointer:
 		h.core.Pointer(e)

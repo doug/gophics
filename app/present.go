@@ -9,6 +9,15 @@ import (
 	"github.com/doug/gossamer/shell"
 )
 
+// wireMedia publishes the window's optional media-capture capabilities (camera,
+// audio) to the widget tree, or leaves them nil when the platform lacks them.
+func (h *shellHandler) wireMedia(w shell.Window) {
+	if mw, ok := w.(shell.MediaWindow); ok {
+		h.core.Owner.Camera = mw.Camera()
+		h.core.Owner.Audio = mw.Audio()
+	}
+}
+
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs
 // the scene replay against a GPU-backed gg.Context, then composites the result
 // to the surface. A shell whose resolved renderer is GPU returns one once its

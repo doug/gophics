@@ -106,6 +106,14 @@ type Clipboard interface {
 // provides one.
 func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
 
+// Camera returns the platform still-capture capability, or nil when the running
+// platform can't provide one (e.g. desktop today, or an unsupported browser).
+func (c Ctx) Camera() shell.Camera { return c.el.owner.Camera }
+
+// Audio returns the platform audio record/playback capability, or nil when
+// unavailable. See shell/media.go.
+func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
+
 // OpenURL opens url in the system browser (no-op before the runner
 // provides the hook).
 func (c Ctx) OpenURL(url string) error {
