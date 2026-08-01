@@ -240,3 +240,63 @@ func TestNotesSessionRestore(t *testing.T) {
 		t.Errorf("restored draft lost unsaved edit: %q", st2.Draft)
 	}
 }
+
+func hasMonoSpan(blocks []widget.Widget) bool {
+	found := false
+	var walk func(w widget.Widget)
+	walk = func(w widget.Widget) {
+		switch x := w.(type) {
+		case widget.Rich:
+			for _, sp := range x.Spans {
+				if sp.Font == "mono" {
+					found = true
+				}
+			}
+		case widget.Padding:
+			walk(x.Child)
+		case widget.Decorated:
+			walk(x.Child)
+		}
+	}
+	for _, b := range blocks {
+		walk(b)
+	}
+	return found
+}
+
+func TestCodeBlocksRenderMono(t *testing.T) {
+	if !hasMonoSpan(renderMarkdown("t\n\n```\nfenced\n```\n", mdTheme(), nil)) {
+		t.Error("fenced code block should render mono")
+	}
+	if !hasMonoSpan(renderMarkdown("t\n\n    indented code\n", mdTheme(), nil)) {
+		t.Error("indented code block should render mono")
+	}
+}
+
+func TestNotesCreateAndDelete(t *testing.T) {
+	dir := t.TempDir()
+	h, st := mountNotes(t, dir)
+	v := st.W().Vault
+
+	st.SetState(func() { st.newName = "My New Note" })
+	st.createNote(v)
+	h.Render()
+
+	path := filepath.Join(dir, "My New Note.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("note file not created: %v", err)
+	}
+	if st.OpenPath != path || !st.Editing {
+		t.Errorf("new note should open in edit mode; OpenPath=%q Editing=%v", st.OpenPath, st.Editing)
+	}
+
+	st.confirmDelete = true
+	st.deleteNote(v)
+	h.Render()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("note file should be deleted from disk")
+	}
+	if st.OpenPath != "" {
+		t.Errorf("pane should clear after delete, OpenPath=%q", st.OpenPath)
+	}
+}

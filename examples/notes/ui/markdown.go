@@ -63,6 +63,14 @@ func renderMarkdown(src string, sty mdStyle, onLink func(url string)) []widget.W
 				i++
 			}
 			blocks = append(blocks, block(widget.Column(items...)))
+		case isIndentedCode(lines[i]):
+			// A run of lines indented by a tab or 4+ spaces is a code block.
+			var code []string
+			for i < len(lines) && (isIndentedCode(lines[i]) || strings.TrimSpace(lines[i]) == "") {
+				code = append(code, dedentCode(lines[i]))
+				i++
+			}
+			blocks = append(blocks, codeBlock(strings.TrimRight(strings.Join(code, "\n"), "\n"), sty))
 		default:
 			var para []string
 			for i < len(lines) {
@@ -138,6 +146,26 @@ func headingLevel(t string) int {
 
 func isBullet(t string) bool {
 	return len(t) >= 2 && (t[0] == '-' || t[0] == '*' || t[0] == '+') && t[1] == ' '
+}
+
+// isIndentedCode reports whether a raw line is an indented code line: a leading
+// tab or 4+ spaces, with actual content.
+func isIndentedCode(line string) bool {
+	if strings.TrimSpace(line) == "" {
+		return false
+	}
+	return strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "    ")
+}
+
+// dedentCode strips one level of code indentation (a tab or four spaces).
+func dedentCode(line string) string {
+	switch {
+	case strings.HasPrefix(line, "\t"):
+		return line[1:]
+	case strings.HasPrefix(line, "    "):
+		return line[4:]
+	}
+	return line
 }
 
 // block adds the standard gap beneath a rendered block.

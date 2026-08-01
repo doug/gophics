@@ -27,6 +27,7 @@ var (
 	colCodeBG  = paint.RGB(0.955, 0.955, 0.965)
 	colAccent  = paint.RGB(0.20, 0.45, 0.95)
 	colOnAcc   = paint.RGB(1, 1, 1)
+	colDanger  = paint.RGB(0.85, 0.24, 0.24)
 	colBorder  = paint.RGB(0.89, 0.89, 0.91)
 )
 
@@ -79,6 +80,11 @@ type workspaceState struct {
 	Editing  bool   // edit vs read mode
 	Draft    string // unsaved edit buffer
 	Query    string // sidebar search filter
+
+	// Transient (unexported → not persisted): note-management UI.
+	creating      bool   // the new-note name input is showing
+	newName       string // name being typed for a new note
+	confirmDelete bool   // delete is armed (second click confirms)
 }
 
 func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
@@ -103,19 +109,38 @@ func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
 }
 
 func (s *workspaceState) sidebar(v *Vault) widget.Widget {
-	search := widget.Padding{Insets: geom.InsetsSymmetric(12, 10), Child: widget.Decorated{
-		Color: colBg, Radius: 6, BorderColor: colBorder, BorderWidth: 1,
-		Child: widget.Padding{Insets: geom.InsetsSymmetric(10, 7), Child: widget.TextField{
-			Value:            s.Query,
-			Placeholder:      "Search notes…",
+	head := widget.Row(
+		widget.Expand(widget.Text{S: "NOTES", Font: "bold", Size: 12, Color: colMeta}),
+		widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.creating = true; s.newName = "" }) }},
+			Child:   widget.Text{S: "+ New", Size: 12, Color: colAccent},
+		},
+	)
+	head.CrossAlign = layout.CrossCenter
+
+	items := []widget.Widget{
+		widget.Padding{Insets: geom.Insets{Left: 16, Right: 12, Top: 14, Bottom: 6}, Child: head},
+	}
+	if s.creating {
+		items = append(items, widget.Padding{Insets: geom.Insets{Left: 12, Right: 12, Bottom: 6}, Child: inputBox(widget.TextField{
+			Value:            s.newName,
+			Placeholder:      "Name, then Enter…",
 			Size:             13,
 			TextColor:        colText,
 			PlaceholderColor: colMeta,
-			OnChange:         func(t string) { s.SetState(func() { s.Query = t }) },
-		}},
-	}}
+			OnChange:         func(t string) { s.SetState(func() { s.newName = t }) },
+			OnSubmit:         func(string) { s.createNote(v) },
+		})})
+	}
+	items = append(items, widget.Padding{Insets: geom.Insets{Left: 12, Right: 12, Bottom: 6}, Child: inputBox(widget.TextField{
+		Value:            s.Query,
+		Placeholder:      "Search notes…",
+		Size:             13,
+		TextColor:        colText,
+		PlaceholderColor: colMeta,
+		OnChange:         func(t string) { s.SetState(func() { s.Query = t }) },
+	})})
 
-	items := []widget.Widget{search}
 	for _, n := range v.Search(s.Query) {
 		n := n
 		bg := colSidebar
@@ -146,7 +171,10 @@ func (s *workspaceState) pane(ctx widget.Ctx, v *Vault) widget.Widget {
 		action = s.button("Save", func() { s.save(v) })
 		body = s.editorSplit(ctx, v)
 	} else {
-		action = s.button("Edit", func() { s.startEdit(note) })
+		edit := s.button("Edit", func() { s.startEdit(note) })
+		row := widget.Row(s.deleteControl(v), widget.Sized{W: 8}, edit)
+		row.CrossAlign = layout.CrossCenter
+		action = row
 		body = s.reader(ctx, v, note)
 	}
 
@@ -256,7 +284,7 @@ func scrollPad(child widget.Widget) widget.Widget {
 }
 
 func (s *workspaceState) open(path string) {
-	s.SetState(func() { s.OpenPath, s.Editing, s.Draft = path, false, "" })
+	s.SetState(func() { s.OpenPath, s.Editing, s.Draft, s.confirmDelete = path, false, "", false })
 }
 
 func (s *workspaceState) startEdit(n Note) {
@@ -283,6 +311,32 @@ func (s *workspaceState) followNote(v *Vault, name string) {
 	}
 }
 
+// inputBox wraps a TextField in the standard bordered input chrome.
+func inputBox(tf widget.TextField) widget.Widget {
+	return widget.Decorated{
+		Color: colBg, Radius: 6, BorderColor: colBorder, BorderWidth: 1,
+		Child: widget.Padding{Insets: geom.InsetsSymmetric(10, 7), Child: tf},
+	}
+}
+
+// createNote creates the note named in the new-note input and opens it in edit
+// mode; a blank name just cancels.
+func (s *workspaceState) createNote(v *Vault) {
+	n, err := v.Create(s.newName)
+	s.SetState(func() {
+		s.creating, s.newName = false, ""
+		if err == nil {
+			s.OpenPath, s.Editing, s.Draft, s.confirmDelete = n.Path, true, n.Body, false
+		}
+	})
+}
+
+// deleteNote deletes the open note from disk and clears the pane.
+func (s *workspaceState) deleteNote(v *Vault) {
+	_ = v.Delete(s.OpenPath)
+	s.SetState(func() { s.OpenPath, s.Editing, s.Draft, s.confirmDelete = "", false, "", false })
+}
+
 func (s *workspaceState) button(label string, onTap func()) widget.Widget {
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: onTap},
@@ -291,4 +345,29 @@ func (s *workspaceState) button(label string, onTap func()) widget.Widget {
 			Child:  widget.Text{S: label, Size: 14, Color: colOnAcc},
 		}},
 	}
+}
+
+// deleteControl is a two-click delete: the first click arms it (turning into a
+// red "Delete?" with a Cancel), the second removes the note.
+func (s *workspaceState) deleteControl(v *Vault) widget.Widget {
+	if !s.confirmDelete {
+		return widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.confirmDelete = true }) }},
+			Child:   widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Delete", Size: 14, Color: colMeta}},
+		}
+	}
+	cancel := widget.Interactive{
+		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.confirmDelete = false }) }},
+		Child:   widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Cancel", Size: 14, Color: colMeta}},
+	}
+	confirm := widget.Interactive{
+		Handler: widget.Handler{OnTap: func() { s.deleteNote(v) }},
+		Child: widget.Decorated{Color: colDanger, Radius: 7, Child: widget.Padding{
+			Insets: geom.InsetsSymmetric(14, 8),
+			Child:  widget.Text{S: "Delete?", Size: 14, Color: colOnAcc},
+		}},
+	}
+	r := widget.Row(cancel, widget.Sized{W: 4}, confirm)
+	r.CrossAlign = layout.CrossCenter
+	return r
 }

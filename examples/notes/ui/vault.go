@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -56,6 +57,45 @@ func (v *Vault) Save(path, body string) error {
 		if v.Notes[i].Path == path {
 			v.Notes[i].Body = body
 			return nil
+		}
+	}
+	return nil
+}
+
+// Create adds a new note named name (a "# name" stub), writes it to disk, and
+// returns it. If a note by that name already exists, it is returned unchanged.
+// Returns an error for an empty or unsafe name.
+func (v *Vault) Create(name string) (Note, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Note{}, errors.New("note name is empty")
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return Note{}, errors.New("note name cannot contain path separators")
+	}
+	if n, ok := v.ByName(name); ok {
+		return n, nil
+	}
+	body := "# " + name + "\n\n"
+	path := filepath.Join(v.Dir, name+".md")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return Note{}, err
+	}
+	n := Note{Path: path, Name: name, Body: body}
+	v.Notes = append(v.Notes, n)
+	sort.Slice(v.Notes, func(i, j int) bool { return v.Notes[i].Name < v.Notes[j].Name })
+	return n, nil
+}
+
+// Delete removes the note at path from disk and from the vault.
+func (v *Vault) Delete(path string) error {
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	for i := range v.Notes {
+		if v.Notes[i].Path == path {
+			v.Notes = append(v.Notes[:i], v.Notes[i+1:]...)
+			break
 		}
 	}
 	return nil
