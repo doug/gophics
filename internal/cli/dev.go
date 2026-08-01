@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -57,18 +58,41 @@ func devWeb(o buildOpts, port int) error {
 }
 
 // devRestart rebuilds and relaunches the native binary on every change — hot
-// restart (state is lost, but it's fast and works on every OS).
+// restart. It's fast and works on every OS. UI state is preserved across the
+// restart: the exiting process snapshots serializable state to a file (keyed by
+// tree location) and the relaunched process restores it, so you land back at
+// the same page/scroll/field. State a widget doesn't expose (see
+// widget.Snapshottable) resets; a structural edit above a widget drops its
+// state. The app opts in automatically — it just calls app.Run.
 func devRestart(o buildOpts) error {
 	changes, stop := watchSource(".", 250*time.Millisecond)
 	defer stop()
 
+	// Hand-off file for state-preserving restart. Clear any snapshot from a
+	// previous session so this one starts fresh; the app reads/writes it via
+	// the GOSSAMER_DEV_STATE env var.
+	statePath, _ := filepath.Abs(filepath.Join("build", "dev-state.json"))
+	_ = os.MkdirAll(filepath.Dir(statePath), 0o755)
+	_ = os.Remove(statePath)
+	stateEnv := "GOSSAMER_DEV_STATE=" + statePath
+
 	var proc *exec.Cmd
 	kill := func() {
-		if proc != nil && proc.Process != nil {
-			_ = proc.Process.Signal(syscall.SIGTERM)
-			_ = proc.Wait()
-			proc = nil
+		if proc == nil || proc.Process == nil {
+			return
 		}
+		// SIGTERM asks the app to snapshot and exit; wait for it, but don't let
+		// a wedged child freeze the loop — force-kill after a grace period.
+		_ = proc.Process.Signal(syscall.SIGTERM)
+		done := make(chan error, 1)
+		go func() { done <- proc.Wait() }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = proc.Process.Kill()
+			<-done
+		}
+		proc = nil
 	}
 	launch := func() {
 		bin, err := buildNative(o)
@@ -77,6 +101,7 @@ func devRestart(o buildOpts) error {
 			return
 		}
 		proc = exec.Command(bin)
+		proc.Env = append(os.Environ(), stateEnv)
 		proc.Stdout, proc.Stderr, proc.Stdin = os.Stdout, os.Stderr, os.Stdin
 		if err := proc.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "gossamer: launch error: %v\n", err)
@@ -88,7 +113,7 @@ func devRestart(o buildOpts) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	fmt.Fprintln(os.Stderr, "gossamer: native dev — edit & save to rebuild+restart (Ctrl-C to stop)")
+	fmt.Fprintln(os.Stderr, "gossamer: native dev — edit & save to rebuild+restart, state preserved (Ctrl-C to stop)")
 	launch()
 	for {
 		select {

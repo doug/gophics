@@ -6,9 +6,11 @@
 package app
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/doug/gossamer/geom"
@@ -544,6 +546,9 @@ func Run(root widget.Widget, cfg Config) error {
 	if err != nil {
 		return err
 	}
+	if sh, ok := h.(*shellHandler); ok {
+		setupDevState(sh) // no-op unless running under `gossamer dev`
+	}
 	return desktopRun(h, shell.Config{Title: cfg.Title, Size: cfg.Size, Resizable: true})
 }
 
@@ -568,6 +573,28 @@ func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
 type shellHandler struct {
 	core   *Core
 	window shell.Window
+
+	// Dev-mode state-preserving hot-restart (set only under `gossamer dev` via
+	// setupDevState; zero/no-op in a shipped binary). On a restart signal the
+	// handler snapshots UI state to devStatePath so the relaunched process can
+	// restore it, landing back at the same place. See devstate_desktop.go.
+	devStatePath string
+	devQuit      atomic.Bool
+	devSaved     bool
+}
+
+// writeDevSnapshot serializes snap to path via a temp file + rename, so the
+// relaunched process never reads a half-written file.
+func writeDevSnapshot(path string, snap widget.StateSnapshot) error {
+	data, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // TextInputActive reports whether a widget currently accepts keyboard
@@ -586,6 +613,19 @@ func (h *shellHandler) A11yHitTest(x, y int, scale float32) int {
 
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	h.window = w
+	// Dev hot-restart: a restart signal arrived. Snapshot UI state on the UI
+	// goroutine (safe here — no frame is mid-flight), hand it to the successor
+	// process, and ask the shell to close. Guarded so it runs once.
+	if h.devStatePath != "" && h.devQuit.Load() && !h.devSaved {
+		h.devSaved = true
+		if snap := h.core.Owner.SnapshotState(); len(snap) > 0 {
+			if err := writeDevSnapshot(h.devStatePath, snap); err != nil {
+				log.Printf("gossamer dev: snapshot state: %v", err)
+			}
+		}
+		w.Close()
+		return
+	}
 	h.core.Owner.Clipboard = w
 	h.core.Owner.OpenURL = w.OpenURL
 	if dark := w.DarkMode(); dark != h.core.Owner.DarkMode {
