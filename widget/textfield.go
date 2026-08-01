@@ -46,6 +46,31 @@ func (f TextField) size() float32 {
 	return f.Size
 }
 
+// resolvedColors fills unset (fully transparent) colors with sensible defaults,
+// so a TextField is usable without configuring every color. In particular the
+// caret defaults to the text color — otherwise an unset CaretColor is invisible
+// and the field appears to have no cursor.
+func (f TextField) resolvedColors() (text, caret, sel, placeholder paint.Color) {
+	text = f.TextColor
+	if text.A == 0 {
+		text = paint.Color{A: 1} // opaque black
+	}
+	caret = f.CaretColor
+	if caret.A == 0 {
+		caret = text
+	}
+	sel = f.SelectionColor
+	if sel.A == 0 {
+		sel = paint.Color{R: 0.60, G: 0.78, B: 1.0, A: 0.45}
+	}
+	placeholder = f.PlaceholderColor
+	if placeholder.A == 0 {
+		placeholder = text
+		placeholder.A = 0.45
+	}
+	return
+}
+
 func (f TextField) CreateState() State { return &textFieldState{} }
 
 type textFieldState struct {
@@ -379,6 +404,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		return
 	}
 	f := b.state.W()
+	txC, caretC, selC, phC := f.resolvedColors()
 	sz := f.size()
 	m := b.painter.Metrics(sz)
 	display, preStart, preEnd := b.state.display()
@@ -395,13 +421,13 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		c.FillRect(geom.Rect{
 			Min: geom.Pt{X: x0, Y: at.Y},
 			Max: geom.Pt{X: x1, Y: at.Y + b.size.H},
-		}, f.SelectionColor)
+		}, selC)
 	}
 
 	if len(display) == 0 && f.Placeholder != "" {
-		c.Text(f.Placeholder, geom.Pt{X: origin.X, Y: baseline}, sz, f.PlaceholderColor)
+		c.Text(f.Placeholder, geom.Pt{X: origin.X, Y: baseline}, sz, phC)
 	} else {
-		c.Text(display, geom.Pt{X: origin.X, Y: baseline}, sz, f.TextColor)
+		c.Text(display, geom.Pt{X: origin.X, Y: baseline}, sz, txC)
 	}
 
 	if composing {
@@ -409,7 +435,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		x0 := origin.X + line.CaretX(preStart)
 		x1 := origin.X + line.CaretX(preEnd)
 		y := baseline + m.Descent*0.6
-		c.Line(geom.Pt{X: x0, Y: y}, geom.Pt{X: x1, Y: y}, 1.5, f.CaretColor)
+		c.Line(geom.Pt{X: x0, Y: y}, geom.Pt{X: x1, Y: y}, 1.5, caretC)
 	}
 
 	if b.state.focused && !b.state.ed.HasSelection() {
@@ -418,7 +444,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 			caretIdx = preStart + b.state.preeditCursor
 		}
 		x := origin.X + line.CaretX(caretIdx)
-		c.Line(geom.Pt{X: x, Y: at.Y}, geom.Pt{X: x, Y: at.Y + b.size.H}, 1.5, f.CaretColor)
+		c.Line(geom.Pt{X: x, Y: at.Y}, geom.Pt{X: x, Y: at.Y + b.size.H}, 1.5, caretC)
 	}
 
 	c.PopClip()
@@ -429,6 +455,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 // the committed-text path; inline preedit arrives with focused IME work.)
 func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 	f := b.state.W()
+	txC, caretC, selC, phC := f.resolvedColors()
 	sz := f.size()
 	m := b.painter.Metrics(sz)
 	txt := b.state.ed.Text()
@@ -450,22 +477,22 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 			c.FillRect(geom.Rect{
 				Min: geom.Pt{X: x0, Y: top},
 				Max: geom.Pt{X: x1, Y: top + lineH},
-			}, f.SelectionColor)
+			}, selC)
 		}
 
 		lineText := strings.TrimRight(string(runes[l.Start:l.End]), "\n")
-		c.Text(lineText, geom.Pt{X: at.X, Y: baseline}, sz, f.TextColor)
+		c.Text(lineText, geom.Pt{X: at.X, Y: baseline}, sz, txC)
 	}
 
 	if len(runes) == 0 && f.Placeholder != "" {
-		c.Text(f.Placeholder, geom.Pt{X: at.X, Y: at.Y + m.Ascent}, sz, f.PlaceholderColor)
+		c.Text(f.Placeholder, geom.Pt{X: at.X, Y: at.Y + m.Ascent}, sz, phC)
 	}
 
 	if b.state.focused && !b.state.ed.HasSelection() && len(lines) > 0 {
 		li := lineOf(lines, b.state.ed.Caret)
 		x := at.X + lines[li].CaretX(b.state.ed.Caret-lines[li].Start)
 		top := at.Y + float32(li)*lineH
-		c.Line(geom.Pt{X: x, Y: top}, geom.Pt{X: x, Y: top + lineH}, 1.5, f.CaretColor)
+		c.Line(geom.Pt{X: x, Y: top}, geom.Pt{X: x, Y: top + lineH}, 1.5, caretC)
 	}
 
 	c.PopClip()
