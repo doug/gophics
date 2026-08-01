@@ -11,12 +11,12 @@ import (
 	"github.com/gogpu/wgpu"
 )
 
-// GPU presentation for the mobile Bridge. The default path returns CPU pixels
-// for the host to blit (see mobile.go); when the host hands over a native
-// render surface via SetSurface — an iOS CAMetalLayer or an Android
-// ANativeWindow — the Bridge rasterizes each frame on the GPU straight to that
-// surface (gg's accelerator → ggcanvas.RenderDirect), the same model as the web
-// and desktop GPU present. Any setup failure falls back to the CPU blit.
+// GPU presentation for the mobile Bridge. The host hands over a native render
+// surface via SetSurface — an iOS CAMetalLayer or an Android ANativeWindow — and
+// the Bridge rasterizes each frame on the GPU straight to it (gg's accelerator →
+// ggcanvas.RenderDirect), the same model as the web and desktop GPU present.
+// This is the only live-rendering path (Snapshot renders offscreen on the CPU
+// for tests/screenshots).
 
 // mobileGPU owns the wgpu device, the host surface, and the gg GPU canvas.
 type mobileGPU struct {
@@ -28,13 +28,13 @@ type mobileGPU struct {
 	scale   float64
 }
 
-// SetSurface gives the Bridge a native render surface so it presents on the GPU
-// instead of returning CPU pixels. displayHandle/windowHandle are the platform's
-// raw handles as int64 (iOS: 0, CAMetalLayer/UIView*; Android: 0,
-// ANativeWindow*); widthPx/heightPx are the surface's physical size and scale
-// its density. Safe to call again after a rotation/resize (it rebuilds). On any
-// failure the Bridge stays on the CPU blit path (RenderFrame keeps returning
-// pixels), so rendering always works.
+// SetSurface gives the Bridge the native render surface to present to.
+// displayHandle/windowHandle are the platform's raw handles as int64 (iOS: 0,
+// CAMetalLayer*; Android: 0, ANativeWindow*); widthPx/heightPx are the surface's
+// physical size and scale its density. Safe to call again after a
+// rotation/resize (it rebuilds). On failure the surface is left unset and
+// RenderFrame no-ops until a surface is provided — there is no CPU host
+// fallback for live rendering (Snapshot stays available for offscreen).
 func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx int, scale float32) {
 	b.ClearSurface()
 	if scale <= 0 {
@@ -50,8 +50,8 @@ func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx
 }
 
 // ClearSurface tears down the GPU surface (call when the host surface is
-// destroyed — backgrounding, rotation — before handing over a new one). The
-// Bridge reverts to the CPU blit path until SetSurface is called again.
+// destroyed — backgrounding, rotation — before handing over a new one).
+// RenderFrame no-ops until SetSurface is called again.
 func (b *Bridge) ClearSurface() {
 	if b.gpu != nil {
 		b.gpu.release()
@@ -181,8 +181,12 @@ type mobileProvider struct {
 	format  gputypes.TextureFormat
 }
 
-func (p *mobileProvider) Device() gpucontext.Device { return gpucontext.NewDevice(unsafe.Pointer(p.device)) }
-func (p *mobileProvider) Queue() gpucontext.Queue   { return gpucontext.NewQueue(unsafe.Pointer(p.queue)) }
+func (p *mobileProvider) Device() gpucontext.Device {
+	return gpucontext.NewDevice(unsafe.Pointer(p.device))
+}
+func (p *mobileProvider) Queue() gpucontext.Queue {
+	return gpucontext.NewQueue(unsafe.Pointer(p.queue))
+}
 func (p *mobileProvider) SurfaceFormat() gputypes.TextureFormat { return p.format }
 func (p *mobileProvider) Adapter() gpucontext.Adapter {
 	return gpucontext.NewAdapter(unsafe.Pointer(p.adapter))

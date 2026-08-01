@@ -43,12 +43,26 @@ func Resize(widthPx, heightPx int, scale float64) {
 // NeedsFrame reports whether the UI wants a repaint (poll each vsync).
 func NeedsFrame() bool { return bridge.NeedsFrame() }
 
-// RenderFrame renders and returns RGBA8888 pixels; the frame's exact
-// dimensions are FrameWidth×FrameHeight (may differ from the surface by a
-// rounding pixel).
-func RenderFrame(dtSeconds float64) []byte { return bridge.RenderFrame(dtSeconds) }
+// SetSurface hands over the host's native render surface so rendering runs on
+// the GPU (iOS: displayHandle 0, windowHandle = CAMetalLayer*; Android:
+// displayHandle 0, windowHandle = ANativeWindow*). Call after the surface is
+// created and on every resize/rotation.
+func SetSurface(displayHandle, windowHandle int64, widthPx, heightPx int, scale float64) {
+	bridge.SetSurface(displayHandle, windowHandle, widthPx, heightPx, float32(scale))
+}
 
-// FrameWidth / FrameHeight are the pixel dimensions of the last frame.
+// ClearSurface releases the GPU surface (call when the host surface is destroyed).
+func ClearSurface() { bridge.ClearSurface() }
+
+// RenderFrame renders one frame on the GPU to the surface set by SetSurface;
+// call each vsync while NeedsFrame is true.
+func RenderFrame(dtSeconds float64) { bridge.RenderFrame(dtSeconds) }
+
+// Snapshot renders one frame offscreen and returns RGBA8888 pixels
+// (FrameWidth×FrameHeight) — for screenshots/tests, not the live loop.
+func Snapshot(dtSeconds float64) []byte { return bridge.Snapshot(dtSeconds) }
+
+// FrameWidth / FrameHeight are the pixel dimensions of the last Snapshot.
 func FrameWidth() int  { return bridge.FrameWidth() }
 func FrameHeight() int { return bridge.FrameHeight() }
 
@@ -88,19 +102,19 @@ func Composition(kind int, preedit string, cursor int, committed string) {
 
 // Accessibility: the host refreshes then reads the flat node tree and
 // activates by ID. Rects are physical pixels.
-func A11yRefresh() int              { return bridge.A11yRefresh() }
-func A11yID(i int) int              { return bridge.A11yID(i) }
-func A11yParent(i int) int          { return bridge.A11yParent(i) }
-func A11yRole(i int) string         { return bridge.A11yRole(i) }
-func A11yLabel(i int) string        { return bridge.A11yLabel(i) }
-func A11yValue(i int) string        { return bridge.A11yValue(i) }
-func A11yHint(i int) string         { return bridge.A11yHint(i) }
-func A11yX(i int) int               { return bridge.A11yX(i) }
-func A11yY(i int) int               { return bridge.A11yY(i) }
-func A11yW(i int) int               { return bridge.A11yW(i) }
-func A11yH(i int) int               { return bridge.A11yH(i) }
-func A11yTappable(i int) bool       { return bridge.A11yTappable(i) }
-func A11yChildCount(i int) int      { return bridge.A11yChildCount(i) }
-func A11yChild(i int, j int) int    { return bridge.A11yChild(i, j) }
-func A11yActivate(id int)           { bridge.A11yActivate(id) }
-func A11yHitTest(xPx, yPx int) int  { return bridge.A11yHitTest(xPx, yPx) }
+func A11yRefresh() int             { return bridge.A11yRefresh() }
+func A11yID(i int) int             { return bridge.A11yID(i) }
+func A11yParent(i int) int         { return bridge.A11yParent(i) }
+func A11yRole(i int) string        { return bridge.A11yRole(i) }
+func A11yLabel(i int) string       { return bridge.A11yLabel(i) }
+func A11yValue(i int) string       { return bridge.A11yValue(i) }
+func A11yHint(i int) string        { return bridge.A11yHint(i) }
+func A11yX(i int) int              { return bridge.A11yX(i) }
+func A11yY(i int) int              { return bridge.A11yY(i) }
+func A11yW(i int) int              { return bridge.A11yW(i) }
+func A11yH(i int) int              { return bridge.A11yH(i) }
+func A11yTappable(i int) bool      { return bridge.A11yTappable(i) }
+func A11yChildCount(i int) int     { return bridge.A11yChildCount(i) }
+func A11yChild(i int, j int) int   { return bridge.A11yChild(i, j) }
+func A11yActivate(id int)          { bridge.A11yActivate(id) }
+func A11yHitTest(xPx, yPx int) int { return bridge.A11yHitTest(xPx, yPx) }

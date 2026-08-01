@@ -63,12 +63,13 @@ class MainActivity : Activity() {
 class GossamerView(private val activity: Activity) :
     SurfaceView(activity), SurfaceHolder.Callback, Choreographer.FrameCallback {
 
-    private var bitmap: Bitmap? = null
     private var lastNanos = 0L
     private var running = false
     private var imeShown = false
     private var frameCount = 0
     private var frameTimeSum = 0.0
+    private var nativeWin = 0L    // ANativeWindow*, from NativeSurface
+    private var surfaceSet = false
 
     init {
         holder.addCallback(this)
@@ -138,17 +139,28 @@ class GossamerView(private val activity: Activity) :
         val dark = (resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         Hnmobile.setDarkMode(dark)
+        nativeWin = NativeSurface.acquire(holder.surface) // ANativeWindow* for the GPU
         Choreographer.getInstance().postFrameCallback(this)
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {
-        Hnmobile.resize(w.toLong(), h.toLong(), resources.displayMetrics.density.toDouble())
-        bitmap = null // recreated at the frame's exact pixel size
+        val d = resources.displayMetrics.density.toDouble()
+        // Hand the surface to the Go side once it has a size; the GPU renders
+        // directly to it. Resize thereafter reconfigures the surface.
+        if (!surfaceSet && nativeWin != 0L) {
+            Hnmobile.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
+            surfaceSet = true
+        }
+        Hnmobile.resize(w.toLong(), h.toLong(), d)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         running = false
         Choreographer.getInstance().removeFrameCallback(this)
+        Hnmobile.clearSurface()
+        NativeSurface.release(nativeWin)
+        nativeWin = 0L
+        surfaceSet = false
     }
 
     override fun doFrame(frameNanos: Long) {
@@ -158,22 +170,7 @@ class GossamerView(private val activity: Activity) :
 
         if (Hnmobile.needsFrame()) {
             val t0 = System.nanoTime()
-            val pixels = Hnmobile.renderFrame(dt)
-            val fw = Hnmobile.frameWidth().toInt()
-            val fh = Hnmobile.frameHeight().toInt()
-            if (pixels != null && fw > 0 && fh > 0) {
-                var bmp = bitmap
-                if (bmp == null || bmp.width != fw || bmp.height != fh) {
-                    bmp = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
-                    bitmap = bmp
-                }
-                bmp.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
-                val canvas: Canvas? = holder.lockCanvas()
-                if (canvas != null) {
-                    canvas.drawBitmap(bmp, null, Rect(0, 0, width, height), null)
-                    holder.unlockCanvasAndPost(canvas)
-                }
-            }
+            Hnmobile.renderFrame(dt) // GPU-presents directly to the ANativeWindow
             // Frame pacing: log a rolling average every 60 rendered frames.
             frameTimeSum += (System.nanoTime() - t0) / 1e6
             if (++frameCount == 60) {

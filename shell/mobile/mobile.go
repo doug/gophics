@@ -1,15 +1,14 @@
 // Package mobile implements shell for embedded hosts (Android/iOS): the
 // host platform owns the surface and event loop and drives a Bridge —
-// pushing input in, pulling RGBA frames out. This is the M9 embedding
+// pushing input in, presenting frames out. This is the M9 embedding
 // model (PLAN.md §6.4): Go as a library inside a thin native shell.
 //
-// The Bridge is pure Go and platform-agnostic, so the entire mobile
-// contract is testable headless; the platform-specific part is only the
-// host project forwarding calls (see examples/hn/android).
-//
-// Presentation is CPU pixels (like shell/web): the host blits the returned
-// frame into its surface. A GPU surface path can replace the blit later
-// without changing anything above shell.
+// Rendering is GPU-first: the host hands over a native render surface
+// (SetSurface — iOS CAMetalLayer / Android ANativeWindow) and RenderFrame
+// rasterizes straight to it via gg's accelerator (see gpu.go), matching the
+// web/desktop GPU present. Snapshot renders a frame offscreen on the CPU for
+// headless tests and screenshots, so the Bridge contract stays fully testable
+// without a device. See examples/hn/{ios,android} for host wiring.
 package mobile
 
 import (
@@ -37,14 +36,15 @@ type Bridge struct {
 	widthPx, heightPx int
 	scale             float32
 
-	frame  *image.RGBA
-	dirty  atomic.Bool
-	dark   bool
-	a11y   []app.A11yNode
-	opened []string // OpenURL requests for the host to perform
-	clip   string
-	media  *mediaBridge // camera/audio capability plumbing (see media.go)
-	gpu    *mobileGPU   // GPU surface present when the host provides one (see gpu.go)
+	frame        *image.RGBA
+	dirty        atomic.Bool
+	dark         bool
+	a11y         []app.A11yNode
+	opened       []string // OpenURL requests for the host to perform
+	clip         string
+	media        *mediaBridge // camera/audio capability plumbing (see media.go)
+	gpu          *mobileGPU   // GPU surface the host renders to (see gpu.go)
+	snapshotting bool         // force a CPU offscreen frame (Snapshot)
 }
 
 // NewBridge wraps a shell.Handler (see app.NewHandler).
@@ -78,25 +78,37 @@ func (b *Bridge) logicalSize() geom.Size {
 // thread; the host checks each vsync).
 func (b *Bridge) NeedsFrame() bool { return b.dirty.Load() }
 
-// RenderFrame runs one frame and returns the surface as RGBA8888 pixels
-// (widthPx*heightPx*4, row-major), or nil if the surface has no size.
-// dtSeconds is the time since the previous frame.
-func (b *Bridge) RenderFrame(dtSeconds float64) []byte {
-	if b.widthPx == 0 || b.heightPx == 0 {
-		return nil
+// RenderFrame runs one frame and presents it on the GPU to the host surface
+// (provided via SetSurface). Call it each vsync while NeedsFrame is true.
+// Rendering is GPU-only; before a surface is set it is a no-op.
+func (b *Bridge) RenderFrame(dtSeconds float64) {
+	if b.gpu == nil || b.widthPx == 0 || b.heightPx == 0 {
+		return
 	}
 	b.dirty.Store(false)
 	b.handler.Frame(b, &frame{b: b}, dtSeconds)
+}
+
+// Snapshot renders one frame offscreen on the CPU and returns it as RGBA8888
+// pixels (FrameWidth*FrameHeight*4, row-major) — for headless tests and
+// screenshots, independent of the live GPU surface. nil if the surface has no
+// size.
+func (b *Bridge) Snapshot(dtSeconds float64) []byte {
+	if b.widthPx == 0 || b.heightPx == 0 {
+		return nil
+	}
+	b.snapshotting = true
+	b.dirty.Store(false)
+	b.handler.Frame(b, &frame{b: b}, dtSeconds)
+	b.snapshotting = false
 	if b.frame == nil {
 		return nil
 	}
 	return b.frame.Pix
 }
 
-// FrameWidth and FrameHeight are the pixel dimensions of the frame
-// returned by RenderFrame — they can differ from the surface size by a
-// rounding pixel (logical sizes are integral); hosts size their bitmap to
-// these and scale the blit.
+// FrameWidth and FrameHeight are the pixel dimensions of the last Snapshot
+// (they can differ from the surface size by a rounding pixel).
 func (b *Bridge) FrameWidth() int {
 	if b.frame == nil {
 		return 0
@@ -348,11 +360,10 @@ type frame struct{ b *Bridge }
 func (f *frame) Size() geom.Size { return f.b.logicalSize() }
 func (f *frame) Scale() float32  { return f.b.scale }
 
-// Target presents on the GPU when the host handed over a surface (SetSurface),
-// otherwise returns CPU pixels for the host to blit. Selection is per-frame, so
-// losing/regaining the surface flips the path with no other changes.
+// Target presents on the GPU surface for a live frame; a Snapshot forces a CPU
+// offscreen target instead (tests/screenshots).
 func (f *frame) Target() shell.Target {
-	if f.b.gpu != nil {
+	if !f.b.snapshotting && f.b.gpu != nil {
 		return mobileGPUTarget{f.b.gpu}
 	}
 	return shell.PixelTarget{Put: func(img *image.RGBA) { f.b.frame = img }}

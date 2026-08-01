@@ -33,8 +33,10 @@ class GossamerView: UIView, UIKeyInput {
     private var displayLink: CADisplayLink?
     private var lastTime: CFTimeInterval = 0
     private var keyboardVisible = false
+    private var surfaceSet = false
 
-    override class var layerClass: AnyClass { CALayer.self }
+    // The Go side renders on the GPU straight to this CAMetalLayer.
+    override class var layerClass: AnyClass { CAMetalLayer.self }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -48,7 +50,20 @@ class GossamerView: UIView, UIKeyInput {
     override func layoutSubviews() {
         super.layoutSubviews()
         let scale = window?.screen.scale ?? 2
-        HnmobileResize(Int(bounds.width * scale), Int(bounds.height * scale), Double(scale))
+        let wPx = Int(bounds.width * scale), hPx = Int(bounds.height * scale)
+        guard wPx > 0, hPx > 0 else { return }
+
+        // Hand the CAMetalLayer to the Go side once it has a size; the GPU
+        // renders directly to it. Resize thereafter reconfigures the surface.
+        let metal = layer as! CAMetalLayer
+        metal.contentsScale = scale
+        metal.drawableSize = CGSize(width: wPx, height: hPx)
+        if !surfaceSet {
+            let ptr = Int64(Int(bitPattern: Unmanaged.passUnretained(metal).toOpaque()))
+            HnmobileSetSurface(0, ptr, wPx, hPx, Double(scale))
+            surfaceSet = true
+        }
+        HnmobileResize(wPx, hPx, Double(scale))
         let i = safeAreaInsets
         HnmobileSetInsets(Double(i.top * scale), Double(i.right * scale),
                           Double(i.bottom * scale), Double(i.left * scale))
@@ -58,19 +73,7 @@ class GossamerView: UIView, UIKeyInput {
         let dt = lastTime == 0 ? 1.0 / 60 : link.timestamp - lastTime
         lastTime = link.timestamp
         guard HnmobileNeedsFrame() else { syncKeyboard(); return }
-        guard let pixels = HnmobileRenderFrame(dt) else { return }
-        let w = HnmobileFrameWidth(), h = HnmobileFrameHeight()
-        guard w > 0, h > 0 else { return }
-
-        pixels.withUnsafeBytes { (buf: UnsafeRawBufferPointer) in
-            let ctx = CGContext(data: UnsafeMutableRawPointer(mutating: buf.baseAddress),
-                                width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                space: CGColorSpaceCreateDeviceRGB(),
-                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-            if let img = ctx?.makeImage() {
-                layer.contents = img
-            }
-        }
+        HnmobileRenderFrame(dt) // renders on the GPU straight to the CAMetalLayer
         while true {
             let url = HnmobileTakeOpenedURL()
             if url.isEmpty { break }

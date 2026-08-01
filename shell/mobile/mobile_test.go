@@ -49,7 +49,7 @@ func TestBridgeEndToEnd(t *testing.T) {
 	if !b.NeedsFrame() {
 		t.Fatal("fresh bridge must want a frame")
 	}
-	pix := b.RenderFrame(0.016)
+	pix := b.Snapshot(0.016)
 	if len(pix) != 400*600*4 {
 		t.Fatalf("frame bytes = %d, want %d", len(pix), 400*600*4)
 	}
@@ -64,7 +64,7 @@ func TestBridgeEndToEnd(t *testing.T) {
 	if !b.NeedsFrame() {
 		t.Fatal("tap must invalidate")
 	}
-	pix = b.RenderFrame(0.016)
+	pix = b.Snapshot(0.016)
 	if r := pix[0]; r < 100 {
 		t.Fatalf("expected red after tap, got r=%d", r)
 	}
@@ -81,7 +81,7 @@ func TestBridgeEndToEnd(t *testing.T) {
 
 	// Resize re-renders at the new physical size.
 	b.Resize(200, 200, 1)
-	pix = b.RenderFrame(0.016)
+	pix = b.Snapshot(0.016)
 	if len(pix) != 200*200*4 {
 		t.Fatalf("resized frame bytes = %d", len(pix))
 	}
