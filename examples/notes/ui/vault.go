@@ -2,69 +2,98 @@ package ui
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
 
 // Note is one markdown file in the vault.
 type Note struct {
-	Path string // absolute path on disk
+	Path string // stable identity: the file path on desktop, the note name on web
 	Name string // base name without .md (display + [[wikilink]] target)
 	Body string // file contents
 }
 
+// store persists a vault's notes. Desktop/terminal use the OS filesystem
+// (store_os.go); web uses the File System Access API against a user-picked
+// folder (store_fsa.go). Everything else about a Vault is pure in-memory logic
+// that works identically on every platform.
+type store interface {
+	List() ([]Note, error)                 // load every note
+	Write(name, body string) (Note, error) // create or overwrite; returns the note with its Path
+	Remove(n Note) error                   // delete the note's file
+	Label() string                         // folder path/name, for display
+}
+
 // Vault is a folder of .md notes — the app's whole data model, held in memory
-// and written back to disk on save. Deliberately plain data.
+// and written back through its store. Deliberately plain data.
 type Vault struct {
-	Dir   string
+	store store
 	Notes []Note
 }
 
-// LoadVault reads every .md file in dir (non-recursive), sorted by name.
-func LoadVault(dir string) (*Vault, error) {
-	entries, err := os.ReadDir(dir)
+// OpenVault loads all notes from s. A nil store yields an empty vault — the web
+// starting state, before the user opens a folder.
+func OpenVault(s store) (*Vault, error) {
+	v := &Vault{store: s}
+	if s == nil {
+		return v, nil
+	}
+	notes, err := s.List()
 	if err != nil {
-		return nil, err
+		return v, err
 	}
-	v := &Vault{Dir: dir}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".md") {
-			continue
-		}
-		p := filepath.Join(dir, e.Name())
-		data, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		v.Notes = append(v.Notes, Note{
-			Path: p,
-			Name: strings.TrimSuffix(e.Name(), ".md"),
-			Body: string(data),
-		})
-	}
-	sort.Slice(v.Notes, func(i, j int) bool { return v.Notes[i].Name < v.Notes[j].Name })
+	v.Notes = notes
+	sortNotes(v.Notes)
 	return v, nil
 }
 
-// Save writes body to the note at path and updates the in-memory copy.
+// HasStore reports whether a backing folder is open — always true on desktop,
+// false on web until the user opens one.
+func (v *Vault) HasStore() bool { return v.store != nil }
+
+// Label is the open folder's path or name, for display.
+func (v *Vault) Label() string {
+	if v.store == nil {
+		return ""
+	}
+	return v.store.Label()
+}
+
+// adopt swaps in a freshly opened store and its notes (the web open-folder flow).
+func (v *Vault) adopt(s store, notes []Note) {
+	v.store = s
+	v.Notes = notes
+	sortNotes(v.Notes)
+}
+
+func sortNotes(ns []Note) {
+	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
+}
+
+// Save writes body to the note identified by path and updates the in-memory copy.
 func (v *Vault) Save(path, body string) error {
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if v.store == nil {
+		return errors.New("no folder open")
+	}
+	n, ok := v.Get(path)
+	if !ok {
+		return errors.New("note not found")
+	}
+	if _, err := v.store.Write(n.Name, body); err != nil {
 		return err
 	}
 	for i := range v.Notes {
 		if v.Notes[i].Path == path {
 			v.Notes[i].Body = body
-			return nil
+			break
 		}
 	}
 	return nil
 }
 
-// Create adds a new note named name (a "# name" stub), writes it to disk, and
-// returns it. If a note by that name already exists, it is returned unchanged.
-// Returns an error for an empty or unsafe name.
+// Create adds a new note named name (a "# name" stub), writes it, and returns
+// it. An existing note by that name is returned unchanged. Returns an error for
+// an empty or unsafe name, or when no folder is open.
 func (v *Vault) Create(name string) (Note, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -76,20 +105,28 @@ func (v *Vault) Create(name string) (Note, error) {
 	if n, ok := v.ByName(name); ok {
 		return n, nil
 	}
-	body := "# " + name + "\n\n"
-	path := filepath.Join(v.Dir, name+".md")
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if v.store == nil {
+		return Note{}, errors.New("no folder open")
+	}
+	n, err := v.store.Write(name, "# "+name+"\n\n")
+	if err != nil {
 		return Note{}, err
 	}
-	n := Note{Path: path, Name: name, Body: body}
 	v.Notes = append(v.Notes, n)
-	sort.Slice(v.Notes, func(i, j int) bool { return v.Notes[i].Name < v.Notes[j].Name })
+	sortNotes(v.Notes)
 	return n, nil
 }
 
-// Delete removes the note at path from disk and from the vault.
+// Delete removes the note identified by path from its folder and the vault.
 func (v *Vault) Delete(path string) error {
-	if err := os.Remove(path); err != nil {
+	if v.store == nil {
+		return errors.New("no folder open")
+	}
+	n, ok := v.Get(path)
+	if !ok {
+		return errors.New("note not found")
+	}
+	if err := v.store.Remove(n); err != nil {
 		return err
 	}
 	for i := range v.Notes {
@@ -101,7 +138,7 @@ func (v *Vault) Delete(path string) error {
 	return nil
 }
 
-// Get returns the note at path (by absolute path).
+// Get returns the note with the given identity path.
 func (v *Vault) Get(path string) (Note, bool) {
 	for _, n := range v.Notes {
 		if n.Path == path {

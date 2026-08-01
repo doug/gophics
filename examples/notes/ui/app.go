@@ -6,7 +6,6 @@
 package ui
 
 import (
-	"os"
 	"strings"
 
 	"github.com/doug/gossamer/geom"
@@ -39,22 +38,10 @@ func mdTheme() mdStyle {
 // $NOTES_DIR, else ./examples/notes/vault (when run from the repo root), else
 // ./vault.
 func Root() widget.Widget {
-	dir := vaultDir()
-	v, err := LoadVault(dir)
-	if err != nil {
-		v = &Vault{Dir: dir}
-	}
+	// defaultStore is the OS filesystem on desktop (a folder is always open) and
+	// nil on web (the user opens a folder via the sidebar; see openFolder).
+	v, _ := OpenVault(defaultStore())
 	return Workspace{Vault: v}
-}
-
-func vaultDir() string {
-	if d := os.Getenv("NOTES_DIR"); d != "" {
-		return d
-	}
-	if _, err := os.Stat("examples/notes/vault"); err == nil {
-		return "examples/notes/vault"
-	}
-	return "vault"
 }
 
 // Workspace is the whole UI: a note list beside a reader/editor pane.
@@ -85,6 +72,7 @@ type workspaceState struct {
 	creating      bool   // the new-note name input is showing
 	newName       string // name being typed for a new note
 	confirmDelete bool   // delete is armed (second click confirms)
+	storeErr      string // last folder-open error (web), shown in the sidebar
 }
 
 func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
@@ -109,6 +97,11 @@ func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
 }
 
 func (s *workspaceState) sidebar(v *Vault) widget.Widget {
+	// Web: no folder is open until the user picks one (File System Access needs
+	// a user gesture). Desktop always has a folder, so this never shows there.
+	if !v.HasStore() {
+		return s.folderPrompt()
+	}
 	head := widget.Row(
 		widget.Expand(widget.Text{S: "NOTES", Font: "bold", Size: 12, Color: colMeta}),
 		widget.Interactive{
@@ -160,10 +153,35 @@ func (s *workspaceState) sidebar(v *Vault) widget.Widget {
 	return widget.Decorated{Color: colSidebar, Child: widget.Scroll{Child: col}}
 }
 
+// folderPrompt is the web starting state: invite the user to open a folder,
+// which the File System Access API can only do from a click (openFolder).
+func (s *workspaceState) folderPrompt() widget.Widget {
+	items := []widget.Widget{
+		widget.Padding{Insets: geom.Insets{Left: 16, Right: 12, Top: 14, Bottom: 10},
+			Child: widget.Text{S: "NOTES", Font: "bold", Size: 12, Color: colMeta}},
+		widget.Padding{Insets: geom.InsetsSymmetric(12, 4),
+			Child: s.button("Open folder…", func() { openFolder(s) })},
+		widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
+			Child: widget.Text{S: "Pick a folder of .md files to read and edit them locally.",
+				Size: 12, Color: colMeta, Wrap: true}},
+	}
+	if s.storeErr != "" {
+		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
+			Child: widget.Text{S: s.storeErr, Size: 12, Color: colDanger, Wrap: true}})
+	}
+	col := widget.Column(items...)
+	col.CrossAlign = layout.CrossStart
+	return widget.Decorated{Color: colSidebar, Child: col}
+}
+
 func (s *workspaceState) pane(ctx widget.Ctx, v *Vault) widget.Widget {
 	note, ok := v.Get(s.OpenPath)
 	if !ok {
-		return widget.Center(widget.Text{S: "Select a note", Color: colMeta})
+		msg := "Select a note"
+		if !v.HasStore() {
+			msg = "Open a folder to start"
+		}
+		return widget.Center(widget.Text{S: msg, Color: colMeta})
 	}
 
 	var action, body widget.Widget
