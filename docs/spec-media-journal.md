@@ -77,11 +77,11 @@ camera: real camera UI on mobile, file dialog on desktop) — a live `getUserMed
 preview is later polish; the interface (`Capture → image`) is unchanged.
 
 **Decisions**
-- Audio format: **M1 web keeps the browser's `MediaRecorder` blob** (`audio/webm`)
-  since playback is web too (`decodeAudioData` handles it). Cross-platform interop
-  (record on web, play on mobile) is revisited at M2/M3 — likely a common **PCM16
-  WAV** so desktop/mobile decode trivially. Clip carries `Data`+`Mime`, so the API
-  doesn't change when the format does.
+- Audio format: **portable PCM16 WAV everywhere** (resolved at M1.5). The web
+  recorder captures raw PCM via a ScriptProcessorNode and encodes WAV with the
+  pure-Go codec (`shell/wav.go`), so a web recording plays back unchanged on
+  desktop/mobile once those shells land — no format schism. `Clip` still carries
+  `Data`+`Mime` in case a platform later prefers another codec.
 - Capability discovery: **nil-return** from `ctx.Camera()`/`ctx.Audio()` (not error).
 - Desktop camera: **file-pick fallback** first; native capture deferred.
 
@@ -154,7 +154,10 @@ those controls and stays text-only.
       audio record via getUserMedia + MediaRecorder + AnalyserNode, playback via Web Audio
 - [x] M1 demo app (`examples/journal`) — compose photo + voice memo, live meter,
       waveform playback, in-memory timeline; text-only where capabilities are nil
+- [x] M1.5 portable audio format — pure-Go WAV codec (`shell/wav.go`, tested); web
+      recorder captures PCM → WAV so clips are cross-platform
 - [ ] browser smoke test (localhost, Chrome) — needs manual run
-- Known M1 limits: photos decode JPEG/PNG only (iOS HEIC not yet); audio clip is the
-  browser's webm/opus (web-only playback until the WAV format decision at M2/M3); no
+- [ ] M1.5 blob persistence (photos/audio + entries via the store) — not started
+- Known limits: photos decode JPEG/PNG only (iOS HEIC not yet); web audio uses the
+  deprecated-but-universal ScriptProcessorNode (AudioWorklet is a later upgrade); no
   live camera preview (input-capture UI instead).

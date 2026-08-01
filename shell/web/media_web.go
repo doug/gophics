@@ -12,15 +12,27 @@ package web
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"image"
 	_ "image/jpeg" // register decoders for captured photos
 	_ "image/png"
+	"math"
 	"syscall/js"
 	"time"
 
 	"github.com/doug/gossamer/shell"
 )
+
+// audioContextCtor returns the AudioContext constructor (or the webkit-prefixed
+// one on older Safari), or undefined when Web Audio is unavailable.
+func audioContextCtor() js.Value {
+	c := js.Global().Get("AudioContext")
+	if c.IsUndefined() {
+		c = js.Global().Get("webkitAudioContext")
+	}
+	return c
+}
 
 // Camera returns the still-capture capability (always available on web via the
 // file/camera input).
@@ -32,10 +44,10 @@ func (w *window) Camera() shell.Camera {
 }
 
 // Audio returns the audio capability, or nil when the browser lacks
-// getUserMedia/MediaRecorder (e.g. an insecure context).
+// getUserMedia or Web Audio (e.g. an insecure context).
 func (w *window) Audio() shell.Audio {
 	md := js.Global().Get("navigator").Get("mediaDevices")
-	if md.IsUndefined() || md.IsNull() || js.Global().Get("MediaRecorder").IsUndefined() {
+	if md.IsUndefined() || md.IsNull() || audioContextCtor().IsUndefined() {
 		return nil
 	}
 	if w.aud == nil {
@@ -118,7 +130,7 @@ func (a *webAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, error
 }
 
 func (a *webAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
-	ctx := js.Global().Get("AudioContext").New()
+	ctx := audioContextCtor().New()
 	u8 := bytesToJS(clip.Data)
 	go func() {
 		buf, err := await(ctx.Call("decodeAudioData", u8.Get("buffer")))
@@ -134,46 +146,58 @@ func (a *webAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
 	}()
 }
 
-// webRecorder wraps a MediaRecorder (for the clip) plus an AnalyserNode (for the
-// live level and the display envelope).
+// webRecorder captures raw PCM from the mic via a ScriptProcessorNode and
+// encodes it to a portable WAV clip on stop — so a web recording plays back
+// unchanged on desktop/mobile once those shells land.
 type webRecorder struct {
-	stream, recorder, audioCtx, analyser js.Value
-	chunks                               js.Value // JS Array of Blob chunks
-	timeData                             js.Value // reused Uint8Array for the analyser
-	onData                               js.Func
-	start                                time.Time
-	envelope                             []float32
-	stopped                              bool
-	mime                                 string
+	stream, audioCtx, source, proc js.Value
+	onProc                         js.Func
+	sampleRate                     int
+	samples                        []int16
+	level                          float32
+	envelope                       []float32
+	start                          time.Time
+	stopped                        bool
 }
 
 func newWebRecorder(stream js.Value) *webRecorder {
 	r := &webRecorder{stream: stream, start: time.Now()}
-	r.recorder = js.Global().Get("MediaRecorder").New(stream)
-	r.mime = r.recorder.Get("mimeType").String()
-	if r.mime == "" {
-		r.mime = "audio/webm"
-	}
-	r.chunks = js.Global().Get("Array").New()
-	r.onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) > 0 {
-			if d := args[0].Get("data"); d.Get("size").Int() > 0 {
-				r.chunks.Call("push", d)
+	r.audioCtx = audioContextCtor().New()
+	r.sampleRate = r.audioCtx.Get("sampleRate").Int()
+	r.source = r.audioCtx.Call("createMediaStreamSource", stream)
+	r.proc = r.audioCtx.Call("createScriptProcessor", 4096, 1, 1)
+	r.onProc = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if r.stopped || len(args) == 0 {
+			return nil
+		}
+		in := args[0].Get("inputBuffer").Call("getChannelData", 0) // Float32Array
+		n := in.Length()
+		raw := make([]byte, n*4)
+		js.CopyBytesToGo(raw, js.Global().Get("Uint8Array").New(in.Get("buffer"), in.Get("byteOffset"), n*4))
+		var peak float32
+		for i := 0; i < n; i++ {
+			f := math.Float32frombits(binary.LittleEndian.Uint32(raw[i*4:]))
+			if f > 1 {
+				f = 1
+			} else if f < -1 {
+				f = -1
+			}
+			r.samples = append(r.samples, int16(f*32767))
+			if af := f; af < 0 {
+				if -af > peak {
+					peak = -af
+				}
+			} else if af > peak {
+				peak = af
 			}
 		}
+		r.level = peak
+		r.envelope = append(r.envelope, peak) // one bucket per audio block
 		return nil
 	})
-	r.recorder.Call("addEventListener", "dataavailable", r.onData)
-	r.recorder.Call("start")
-
-	// AnalyserNode taps the stream for level metering (not connected to output,
-	// so there's no monitoring feedback).
-	r.audioCtx = js.Global().Get("AudioContext").New()
-	src := r.audioCtx.Call("createMediaStreamSource", stream)
-	r.analyser = r.audioCtx.Call("createAnalyser")
-	r.analyser.Set("fftSize", 1024)
-	src.Call("connect", r.analyser)
-	r.timeData = js.Global().Get("Uint8Array").New(r.analyser.Get("fftSize").Int())
+	r.proc.Set("onaudioprocess", r.onProc)
+	r.source.Call("connect", r.proc)
+	r.proc.Call("connect", r.audioCtx.Get("destination")) // required to run; emits silence
 	return r
 }
 
@@ -181,20 +205,7 @@ func (r *webRecorder) Level() float32 {
 	if r.stopped {
 		return 0
 	}
-	r.analyser.Call("getByteTimeDomainData", r.timeData)
-	n := r.timeData.Length()
-	var peak float32
-	for i := 0; i < n; i++ {
-		v := float32(r.timeData.Index(i).Int()-128) / 128
-		if v < 0 {
-			v = -v
-		}
-		if v > peak {
-			peak = v
-		}
-	}
-	r.envelope = append(r.envelope, peak) // per-poll envelope for the waveform view
-	return peak
+	return r.level
 }
 
 func (r *webRecorder) Elapsed() time.Duration { return time.Since(r.start) }
@@ -204,47 +215,32 @@ func (r *webRecorder) Stop(done func(shell.Clip, error)) {
 		done(shell.Clip{}, errors.New("already stopped"))
 		return
 	}
-	r.stopped = true
-	elapsed := time.Since(r.start)
-	var onStop js.Func
-	onStop = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		blob := js.Global().Get("Blob").New(r.chunks, map[string]any{"type": r.mime})
-		go func() {
-			defer func() { onStop.Release(); r.onData.Release() }()
-			buf, err := await(blob.Call("arrayBuffer"))
-			r.teardown()
-			if err != nil {
-				done(shell.Clip{}, err)
-				return
-			}
-			done(shell.Clip{
-				Data:     jsToBytes(js.Global().Get("Uint8Array").New(buf)),
-				Mime:     r.mime,
-				Duration: elapsed,
-				Envelope: r.envelope,
-			}, nil)
-		}()
-		return nil
-	})
-	r.recorder.Call("addEventListener", "stop", onStop)
-	r.recorder.Call("stop")
+	samples, rate, envelope := r.samples, r.sampleRate, r.envelope
+	r.teardown()
+	var dur time.Duration
+	if rate > 0 {
+		dur = time.Duration(len(samples)) * time.Second / time.Duration(rate)
+	}
+	done(shell.Clip{
+		Data:     shell.EncodeWAV(samples, rate),
+		Mime:     "audio/wav",
+		Duration: dur,
+		Envelope: envelope,
+	}, nil)
 }
 
-func (r *webRecorder) Cancel() {
+func (r *webRecorder) Cancel() { r.teardown() }
+
+func (r *webRecorder) teardown() {
 	if r.stopped {
 		return
 	}
 	r.stopped = true
-	r.recorder.Call("stop")
-	r.onData.Release()
-	r.teardown()
-}
-
-func (r *webRecorder) teardown() {
+	r.proc.Call("disconnect")
+	r.source.Call("disconnect")
+	r.audioCtx.Call("close")
 	stopTracks(r.stream)
-	if !r.audioCtx.IsUndefined() {
-		r.audioCtx.Call("close")
-	}
+	r.onProc.Release()
 }
 
 // webPlayback drives one decoded clip through a BufferSource. Web Audio has no
