@@ -206,7 +206,17 @@ func (c *Core) drainPosted() {
 func (c *Core) Layout(size geom.Size) layout.Box {
 	c.size = size
 	box := c.Owner.RootBox()
-	if box != nil {
+	if box == nil {
+		return nil
+	}
+	box.Layout(layout.Tight(size))
+	// A LayoutBuilder only learns its constraints during layout, then marks
+	// itself dirty to rebuild its child from them. Settle those rebuilds within
+	// this same frame — re-flush and re-lay-out until stable — so a responsive
+	// region is never blank for a frame. Bounded to guard a pathological Build
+	// whose output keeps changing the constraints it sees.
+	for i := 0; i < 4 && c.Owner.NeedsBuild(); i++ {
+		box = c.Owner.RootBox() // FlushBuilds picks up the LayoutBuilder rebuild
 		box.Layout(layout.Tight(size))
 	}
 	return box

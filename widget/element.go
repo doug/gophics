@@ -118,6 +118,11 @@ func (o *Owner) RootBox() layout.Box {
 	return o.root.renderBox()
 }
 
+// NeedsBuild reports whether any element is awaiting a rebuild — e.g. a
+// LayoutBuilder that captured new constraints during layout and must rebuild
+// its child before the frame is presented.
+func (o *Owner) NeedsBuild() bool { return len(o.dirty) > 0 }
+
 // FlushBuilds rebuilds all dirty elements, parents before children.
 func (o *Owner) FlushBuilds() {
 	for len(o.dirty) > 0 {
@@ -139,10 +144,10 @@ type element struct {
 	parent  *element
 	depth   int
 	widget  Widget
-	state   State        // non-nil for stateful
-	box     layout.Box   // non-nil for render widgets
-	child   *element     // composite (stateless/stateful) child
-	kids    []*element   // render-widget children
+	state   State      // non-nil for stateful
+	box     layout.Box // non-nil for render widgets
+	child   *element   // composite (stateless/stateful) child
+	kids    []*element // render-widget children
 	dirty   bool
 	mounted bool
 }
