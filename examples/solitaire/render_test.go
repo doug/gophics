@@ -125,3 +125,55 @@ func TestDragPerformsLegalMove(t *testing.T) {
 		t.Fatalf("drag did not perform the move %+v", act)
 	}
 }
+
+func TestUndoAndNewGame(t *testing.T) {
+	h, st := mount(t, 1)
+	b := Layout(testSize, st.g)
+
+	h.Tap(center(b.Stock)) // draw one to the waste
+	h.Render()
+	if len(st.g.Waste()) != 1 {
+		t.Fatalf("expected a card on the waste, got %d", len(st.g.Waste()))
+	}
+	st.undo()
+	if len(st.g.Waste()) != 0 || st.g.MoveCount() != 0 {
+		t.Fatalf("undo failed: waste=%d moves=%d", len(st.g.Waste()), st.g.MoveCount())
+	}
+
+	h.Tap(center(b.Stock))
+	h.Tap(center(b.Stock))
+	h.Render()
+	st.newGame()
+	if st.g.MoveCount() != 0 || len(st.g.Stock()) != 24 || len(st.g.Waste()) != 0 {
+		t.Fatalf("new game not fresh: moves=%d stock=%d waste=%d",
+			st.g.MoveCount(), len(st.g.Stock()), len(st.g.Waste()))
+	}
+}
+
+func TestSnapBackSettles(t *testing.T) {
+	h, st := mount(t, 1)
+	b := Layout(testSize, st.g)
+
+	// Drag the face-up top of column 6 onto the stock — never a legal target.
+	col := b.Tableaus[6]
+	from := center(col[len(col)-1])
+	to := center(b.Stock)
+	before := st.g.MoveCount()
+	h.DragTo(from, to)
+	h.Release(to)
+	h.Render()
+
+	if st.g.MoveCount() != before {
+		t.Fatalf("illegal drop changed the game (moves %d→%d)", before, st.g.MoveCount())
+	}
+	if !st.snapping {
+		t.Fatal("an illegal drop should start a snap-back animation")
+	}
+	for i := 0; i < 40 && (st.snapping || st.dragging); i++ {
+		h.Step(0.016)
+		h.Render()
+	}
+	if st.snapping || st.dragging {
+		t.Fatal("snap-back did not settle")
+	}
+}

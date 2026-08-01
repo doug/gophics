@@ -1,8 +1,12 @@
 package main
 
 import (
+	"time"
+
+	"github.com/doug/gossamer/anim"
 	"github.com/doug/gossamer/examples/solitaire/klondike"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/widget"
 )
@@ -21,6 +25,7 @@ type gameState struct {
 	ctx   widget.Ctx
 	g     *klondike.Game
 	board Board
+	deal  int64 // current deal's seed; bumped by New game
 	won   bool
 
 	// Press/drag transient state.
@@ -35,30 +40,46 @@ type gameState struct {
 	dragCards []klondike.Card
 	grabOff   geom.Pt // pointer offset within the grabbed top card
 	pointer   geom.Pt // live pointer during a drag
+
+	// Snap-back: an illegal drop glides the run home instead of vanishing.
+	snapping         bool
+	snapCtrl         *anim.Controller
+	snapFrom, snapTo geom.Pt
 }
 
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
-	s.g = klondike.New(s.W().Seed, 1)
+	s.deal = s.W().Seed
+	s.g = klondike.New(s.deal, 1)
+	s.snapCtrl = &anim.Controller{Duration: 170 * time.Millisecond, Curve: anim.EaseOut, OnChange: func() {
+		s.SetState(nil)
+		// Finalize on completion (Value hits 1) — not on the initial Jump(0),
+		// which also leaves the controller not-Running but at Value 0.
+		if s.snapping && s.snapCtrl.Value() >= 1 {
+			s.snapping, s.dragCards = false, nil
+		}
+	}}
+	ctx.AddTicker(s.snapCtrl)
 	if stateHook != nil {
 		stateHook(s)
 	}
 }
 
+func (s *gameState) Dispose() { s.ctx.RemoveTicker(s.snapCtrl) }
+
 func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
-	return widget.Interactive{
+	board := widget.Interactive{
 		Handler: widget.Handler{
 			OnPress: func(p geom.Pt) {
 				s.pressHit, s.pressIdx, s.pressOK = s.board.Hit(p)
-				s.pressStart = p
-				s.dragging = false
+				s.pressStart, s.dragging = p, false
 			},
 			OnDrag: func(pos, _ geom.Pt) {
 				if !s.pressOK {
 					return
 				}
 				if !s.dragging {
-					if !s.grab(s.pressHit, s.pressIdx, s.pressStart) {
+					if s.snapping || !s.grab(s.pressHit, s.pressIdx, s.pressStart) {
 						s.pressOK = false
 						return
 					}
@@ -68,13 +89,16 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 				s.SetState(nil)
 			},
 			OnRelease: func() {
-				if s.dragging {
-					s.drop()
-					s.dragging = false
-					s.dragCards = nil
-					s.won = s.g.Won()
-					s.SetState(nil)
+				if !s.dragging {
+					return
 				}
+				if s.tryDrop() {
+					s.dragging, s.dragCards = false, nil
+					s.won = s.g.Won()
+				} else {
+					s.startSnapBack()
+				}
+				s.SetState(nil)
 			},
 			OnTap: func() {
 				if !s.pressOK || s.dragging {
@@ -92,6 +116,45 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 		},
 		Child: widget.Canvas{Clip: true, Draw: s.draw},
 	}
+
+	// The board fills the window (so board coordinates are window coordinates);
+	// the controls float over the felt at the bottom-right, on top of it.
+	controls := widget.Row(chip("Undo", s.undo), widget.Sized{W: 8}, chip("New", s.newGame))
+	controls.CrossAlign = layout.CrossCenter
+	return widget.Stack{Children: []widget.Widget{
+		board,
+		widget.Align{X: 1, Y: 1, Child: widget.Padding{All: 14, Child: controls}},
+	}}
+}
+
+func chip(label string, onTap func()) widget.Widget {
+	return widget.Interactive{
+		Handler: widget.Handler{OnTap: onTap},
+		Child: widget.Decorated{Color: colBack2, Radius: 8, Child: widget.Padding{
+			Insets: geom.InsetsSymmetric(14, 7),
+			Child:  widget.Text{S: label, Size: 14, Color: colFace},
+		}},
+	}
+}
+
+func (s *gameState) undo() {
+	s.cancelInteraction()
+	s.g.Undo()
+	s.won = s.g.Won()
+	s.SetState(nil)
+}
+
+func (s *gameState) newGame() {
+	s.cancelInteraction()
+	s.deal++
+	s.g = klondike.New(s.deal, 1)
+	s.won = false
+	s.SetState(nil)
+}
+
+func (s *gameState) cancelInteraction() {
+	s.dragging, s.snapping, s.dragCards, s.pressOK = false, false, nil, false
+	s.snapCtrl.Jump(0)
 }
 
 // grab sets up the run being dragged from pile at idx, or returns false.
@@ -128,9 +191,9 @@ func (s *gameState) grab(pile klondike.Pile, idx int, p geom.Pt) bool {
 	return false
 }
 
-// drop lands the dragged run on the legal target it overlaps most, or leaves the
-// game untouched (a snap-back, since the drag never mutated it).
-func (s *gameState) drop() {
+// tryDrop lands the dragged run on the legal target it overlaps most and reports
+// whether it moved (false → the caller snaps it back).
+func (s *gameState) tryDrop() bool {
 	topRect := geom.RectXYWH(s.pointer.X-s.grabOff.X, s.pointer.Y-s.grabOff.Y, s.board.CardW, s.board.CardH)
 	best := -1
 	var bestArea float32
@@ -144,62 +207,97 @@ func (s *gameState) drop() {
 		}
 	}
 	if best >= 0 && bestArea > 0 {
-		s.g.Move(s.dragPile, s.dragIdx, targets[best].Pile)
+		return s.g.Move(s.dragPile, s.dragIdx, targets[best].Pile)
 	}
+	return false
 }
+
+// startSnapBack animates the dragged run from the release point back to where it
+// was grabbed, then clears it (the game was never mutated).
+func (s *gameState) startSnapBack() {
+	s.snapFrom = geom.Pt{X: s.pointer.X - s.grabOff.X, Y: s.pointer.Y - s.grabOff.Y}
+	s.snapTo = s.sourceTop()
+	s.dragging, s.snapping = false, true
+	s.snapCtrl.Jump(0)
+	s.snapCtrl.Forward()
+	s.ctx.Invalidate()
+}
+
+func (s *gameState) sourceTop() geom.Pt {
+	switch s.dragPile.Kind {
+	case klondike.Waste:
+		return s.board.Waste.Min
+	case klondike.Foundation:
+		return s.board.Foundations[s.dragPile.Index].Min
+	case klondike.Tableau:
+		return s.board.Tableaus[s.dragPile.Index][s.dragIdx].Min
+	}
+	return geom.Pt{}
+}
+
+// hidingRun reports whether the source cards of the active run should be hidden
+// (they are being dragged or snapped back and drawn as an overlay).
+func (s *gameState) hidingRun() bool { return s.dragging || s.snapping }
 
 func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 	s.board = Layout(size, s.g)
 	b := s.board
 	c.Clear(colFelt)
 
-	// Stock (face-down back) / empty.
 	if len(s.g.Stock()) > 0 {
 		drawCard(c, b.Stock, klondike.Card{})
 	} else {
 		drawEmpty(c, b.Stock)
 	}
-	// Waste top (hidden while its top card is being dragged).
 	w := s.g.Waste()
-	draggingWaste := s.dragging && s.dragPile.Kind == klondike.Waste
-	if len(w) > 0 && !draggingWaste {
+	if len(w) > 0 && !(s.hidingRun() && s.dragPile.Kind == klondike.Waste) {
 		drawCard(c, b.Waste, w[len(w)-1])
 	} else {
 		drawEmpty(c, b.Waste)
 	}
-	// Foundations.
 	for i := 0; i < 4; i++ {
 		f := s.g.Foundation(i)
-		hiding := s.dragging && s.dragPile.Kind == klondike.Foundation && s.dragPile.Index == i
+		hiding := s.hidingRun() && s.dragPile.Kind == klondike.Foundation && s.dragPile.Index == i
 		if len(f) > 0 && !hiding {
 			drawCard(c, b.Foundations[i], f[len(f)-1])
 		} else {
 			drawEmpty(c, b.Foundations[i])
 		}
 	}
-	// Tableaus.
 	for j := 0; j < 7; j++ {
 		col := s.g.Tableau(j)
 		if len(col) == 0 {
 			drawEmpty(c, b.Slot[j])
 		}
 		for k := range col {
-			if s.dragging && s.dragPile.Kind == klondike.Tableau && s.dragPile.Index == j && k >= s.dragIdx {
-				break // these cards are being dragged
+			if s.hidingRun() && s.dragPile.Kind == klondike.Tableau && s.dragPile.Index == j && k >= s.dragIdx {
+				break // being dragged / snapped
 			}
 			drawCard(c, b.Tableaus[j][k], col[k])
 		}
 	}
-	// The dragged run, on top, following the pointer.
-	if s.dragging {
-		x, y := s.pointer.X-s.grabOff.X, s.pointer.Y-s.grabOff.Y
+
+	// The active run (dragged, or gliding home), on top.
+	if rx, ry, ok := s.runOrigin(); ok {
 		fan := b.CardH * 0.30
 		for i, card := range s.dragCards {
-			drawCard(c, geom.RectXYWH(x, y+float32(i)*fan, b.CardW, b.CardH), card)
+			drawCard(c, geom.RectXYWH(rx, ry+float32(i)*fan, b.CardW, b.CardH), card)
 		}
 	}
 	if s.won {
 		c.FillRRect(geom.RectXYWH(size.W*0.5-size.W*0.22, size.H*0.42, size.W*0.44, size.H*0.14), 16, colFeltHi)
 		c.TextIn("bold", "You win!", geom.Pt{X: size.W*0.5 - size.W*0.16, Y: size.H * 0.52}, size.W*0.08, colFace)
 	}
+}
+
+// runOrigin returns the top-left of the active run and whether one is showing.
+func (s *gameState) runOrigin() (float32, float32, bool) {
+	switch {
+	case s.dragging:
+		return s.pointer.X - s.grabOff.X, s.pointer.Y - s.grabOff.Y, true
+	case s.snapping:
+		t := s.snapCtrl.Value()
+		return s.snapFrom.X + (s.snapTo.X-s.snapFrom.X)*t, s.snapFrom.Y + (s.snapTo.Y-s.snapFrom.Y)*t, true
+	}
+	return 0, 0, false
 }
