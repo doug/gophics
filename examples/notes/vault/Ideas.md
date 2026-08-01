@@ -2,7 +2,7 @@
 
 A scratch note for things to try next.
 
-- Live split preview (editor beside rendered output)
+- ~~Live split preview (editor beside rendered output)~~ — done
 - Full-text search across the vault
 - A backlinks panel: which notes link here via [[wikilinks]]
 - Outline from headings

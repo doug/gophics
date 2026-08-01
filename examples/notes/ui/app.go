@@ -124,19 +124,10 @@ func (s *workspaceState) pane(ctx widget.Ctx, v *Vault) widget.Widget {
 	var action, body widget.Widget
 	if s.Editing {
 		action = s.button("Save", func() { s.save(v) })
-		body = widget.TextField{
-			Value:     s.Draft,
-			Multiline: true,
-			Size:      15,
-			TextColor: colText,
-			OnChange:  func(t string) { s.SetState(func() { s.Draft = t }) },
-		}
+		body = s.editorSplit(ctx, v)
 	} else {
 		action = s.button("Edit", func() { s.startEdit(note) })
-		blocks := renderMarkdown(note.Body, mdTheme(), func(url string) { s.onLink(ctx, v, url) })
-		col := widget.Column(blocks...)
-		col.CrossAlign = layout.CrossStart
-		body = col
+		body = scrollPad(s.markdown(note.Body, ctx, v))
 	}
 
 	bar := widget.Row(
@@ -148,10 +139,47 @@ func (s *workspaceState) pane(ctx widget.Ctx, v *Vault) widget.Widget {
 	content := widget.Column(
 		widget.Padding{Insets: geom.InsetsSymmetric(20, 12), Child: bar},
 		widget.Sized{H: 1, Child: widget.Decorated{Color: colBorder}},
-		widget.Expand(widget.Scroll{Child: widget.Padding{Insets: geom.InsetsSymmetric(20, 12), Child: body}}),
+		widget.Expand(body),
 	)
 	content.CrossAlign = layout.CrossStretch
 	return content
+}
+
+// editorSplit is the live-preview editor: a plain-text pane beside the rendered
+// markdown, re-rendering as you type (OnChange updates Draft, which rebuilds).
+// On a narrow pane it collapses to the editor alone.
+func (s *workspaceState) editorSplit(ctx widget.Ctx, v *Vault) widget.Widget {
+	editor := scrollPad(widget.TextField{
+		Value:     s.Draft,
+		Multiline: true,
+		Size:      15,
+		TextColor: colText,
+		OnChange:  func(t string) { s.SetState(func() { s.Draft = t }) },
+	})
+	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		if cs.BoundedW() && cs.Max.W < 560 {
+			return editor // too narrow to split
+		}
+		row := widget.Row(
+			widget.Expand(editor),
+			widget.Sized{W: 1, Child: widget.Decorated{Color: colBorder}},
+			widget.Expand(scrollPad(s.markdown(s.Draft, ctx, v))),
+		)
+		row.CrossAlign = layout.CrossStretch
+		return row
+	}}
+}
+
+// markdown renders src to a left-aligned Column of block widgets.
+func (s *workspaceState) markdown(src string, ctx widget.Ctx, v *Vault) widget.Widget {
+	col := widget.Column(renderMarkdown(src, mdTheme(), func(url string) { s.onLink(ctx, v, url) })...)
+	col.CrossAlign = layout.CrossStart
+	return col
+}
+
+// scrollPad wraps content in a scroll view with the standard reading padding.
+func scrollPad(child widget.Widget) widget.Widget {
+	return widget.Scroll{Child: widget.Padding{Insets: geom.InsetsSymmetric(20, 12), Child: child}}
 }
 
 func (s *workspaceState) open(path string) {

@@ -85,6 +85,26 @@ func TestNotesOpenRenderAndWikilink(t *testing.T) {
 	}
 }
 
+func TestNotesLivePreview(t *testing.T) {
+	dir := t.TempDir()
+	path := writeNote(t, dir, "Note.md", "# Note\n")
+
+	h, st := mountNotes(t, dir)
+	st.open(path)
+	note, _ := st.W().Vault.Get(path)
+	st.startEdit(note)
+	h.Render()
+
+	// Type markdown with a wikilink. The rendered preview strips the brackets
+	// ("Go to Beta now"); that text can only come from live-rendering the draft,
+	// not the raw editor, so it proves the preview updates as you type.
+	st.SetState(func() { st.Draft = "# Live\n\nGo to [[Beta]] now" })
+	h.Render()
+	if !hasLabel(h, "Go to Beta now") {
+		t.Fatalf("preview did not render the draft live; labels=%v", labels(h))
+	}
+}
+
 func TestNotesEditSaveWritesDisk(t *testing.T) {
 	dir := t.TempDir()
 	path := writeNote(t, dir, "Note.md", "# Note\n\noriginal body")
