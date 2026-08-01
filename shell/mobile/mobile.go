@@ -43,12 +43,14 @@ type Bridge struct {
 	a11y   []app.A11yNode
 	opened []string // OpenURL requests for the host to perform
 	clip   string
+	media  *mediaBridge // camera/audio capability plumbing (see media.go)
 }
 
 // NewBridge wraps a shell.Handler (see app.NewHandler).
 func NewBridge(h shell.Handler) *Bridge {
 	b := &Bridge{scale: 1}
 	b.handler = h
+	b.media = newMediaBridge(b)
 	b.dirty.Store(true)
 	return b
 }

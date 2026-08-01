@@ -156,8 +156,15 @@ those controls and stays text-only.
       waveform playback, in-memory timeline; text-only where capabilities are nil
 - [x] M1.5 portable audio format — pure-Go WAV codec (`shell/wav.go`, tested); web
       recorder captures PCM → WAV so clips are cross-platform
+- [x] M3 Go side — `shell/mobile.Bridge` implements `shell.MediaWindow` via a native
+      `MediaHost` (request/deliver by reqID); camera + record→WAV + playback fully
+      tested headless with a faked host (`shell/mobile/media_test.go`)
+- [x] M3 native reference shims — iOS Swift + Android Kotlin `MediaHost` +
+      permission notes (`shell/mobile/native/`), to verify on device
 - [ ] browser smoke test (localhost, Chrome) — needs manual run
-- [ ] M1.5 blob persistence (photos/audio + entries via the store) — not started
+- [ ] M3 on-device verification (gomobile bind + host project wiring)
+- [ ] M2 desktop audio (needs a backend dep decision: purego vs CGo)
+- [ ] blob persistence (photos/audio + entries via the store)
 - Known limits: photos decode JPEG/PNG only (iOS HEIC not yet); web audio uses the
   deprecated-but-universal ScriptProcessorNode (AudioWorklet is a later upgrade); no
   live camera preview (input-capture UI instead).
