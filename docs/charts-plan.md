@@ -217,10 +217,10 @@ Each stage ends runnable and golden-tested; mirrors the `games-plan` discipline.
   (Linear + Band), `Mark` interface, `BarMark`, the `Chart` widget with
   painter-measured insets and axis rendering; scale unit tests + render tests.
 - **C1 — The "today" library. ✅ DONE.** `LineMark`, `PointMark`, `RuleMark` (dashed),
-  `AreaMark`, `RectMark` heatmap + `ColorScale`, axes (grid, tick formatting), `Band` /
-  `Time` (calendar-nice) scales, **legend + grouped multi-series bars**, dark-mode
-  palettes, **press-to-inspect selection + crosshair/tooltip**, and mount animation.
-  *Deferred:* `RangeMark` (min–max/candlestick), `Log` scale.
+  `AreaMark`, `RectMark` heatmap + `ColorScale`, `RangeMark`, `CandleMark`
+  (candlestick), axes (grid, tick formatting), `Band` / `Time` (calendar-nice) / `Log`
+  scales, **legend + grouped multi-series bars**, dark-mode palettes, **press-to-inspect
+  selection + crosshair/tooltip**, mount animation, and a **screen-reader summary label**.
 - **C2 — `paint.Path` marks. ✅ DONE.** Landed `paint.Path` + `FillPath` + `StrokePath`
   in `paint` (with the `gpu_equiv_test.go` parity guard), then **`SectorMark`
   (pie/donut)** and **`LineMark.Smooth`** (Catmull-Rom). `AreaMark` shipped in C1 via
@@ -228,9 +228,9 @@ Each stage ends runnable and golden-tested; mirrors the `games-plan` discipline.
 - **C3 — Ledger dashboard. ✅ DONE (sample data).** The example app: balance line+area
   with a date axis + budget rule, a "Where it goes" donut, weekly bars, card layout,
   render test. *Deferred:* real CSV/OFX import + local-file persistence.
-- **Polish (remaining).** `RangeMark` (min–max, candlestick); `Log` scale; accessibility
-  `Semantics` overlay; `Ctx.DevicePixelRatio()` for hairline gridlines; real CSV/OFX
-  import in Ledger.
+- **Polish (remaining, minor).** Positional a11y (per-datum `Semantics` nodes; today
+  it's a single summary label); `Ctx.DevicePixelRatio()` for hairline gridlines; real
+  CSV/OFX import in Ledger (currently deterministic sample data).
 
 **Framework changes required:** only **`paint.Path`/`FillPath`/`StrokePath`** — now
 built (also serves games). Everything else rode on primitives that already existed
