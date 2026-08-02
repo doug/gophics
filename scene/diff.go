@@ -102,6 +102,8 @@ func opBounds(o op, m Measurer) geom.Rect {
 		return inflate(r, o.width)
 	case imageOp:
 		return o.dst
+	case fillPathOp:
+		return inflate(o.p.Bounds(), 1) // +1px for fill AA
 	case textOp:
 		w := m.MeasureWidthIn(o.font, o.s, o.size)
 		mt := m.MetricsIn(o.font, o.size)

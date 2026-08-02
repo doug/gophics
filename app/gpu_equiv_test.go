@@ -23,7 +23,7 @@ import (
 )
 
 // equivScene draws the primitives the two backends must agree on: fills, rounded
-// rects, a gradient, a stroke, a clipped fill, and text at two sizes.
+// rects, a gradient, a stroke, a clipped fill, a filled path, and text at two sizes.
 func equivScene() widget.Widget {
 	white := paint.RGB(1, 1, 1)
 	black := paint.RGB(0, 0, 0)
@@ -37,6 +37,11 @@ func equivScene() widget.Widget {
 		c.PushClipRRect(geom.RectXYWH(20, 250, 240, 80), 20)
 		c.FillRect(geom.RectXYWH(20, 250, 240, 80), paint.RGB(0.5, 0.3, 0.75))
 		c.PopClip()
+		tri := paint.NewPath()
+		tri.MoveTo(geom.Pt{X: 150, Y: 330})
+		tri.LineTo(geom.Pt{X: 250, Y: 330})
+		tri.LineTo(geom.Pt{X: 200, Y: 252})
+		c.FillPath(tri.Close(), paint.RGB(0.95, 0.55, 0.1))
 		c.Text("Equivalence", geom.Pt{X: 20, Y: 380}, 28, black)
 		c.Text("gpu == cpu?", geom.Pt{X: 20, Y: 412}, 16, paint.RGB(0.4, 0.4, 0.45))
 	}}

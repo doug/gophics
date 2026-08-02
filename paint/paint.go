@@ -79,6 +79,9 @@ type Canvas interface {
 	// top/left to 'to' at the bottom/right (by axis).
 	FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool)
 	StrokeRRect(r geom.Rect, radius, width float32, c Color)
+	// FillPath fills a retained path (non-zero winding). Pass the same *Path
+	// across frames so scene diffing can compare it by identity.
+	FillPath(p *Path, c Color)
 	Line(a, b geom.Pt, width float32, c Color)
 	// Text draws s with its baseline-left at pos, in the default family.
 	Text(s string, pos geom.Pt, size float32, c Color)
@@ -247,12 +250,12 @@ const shapeCacheLimit = 1 << 13
 
 func NewPainter() *Painter {
 	return &Painter{
-		families: map[string]*text.Font{},
-		shapers:  map[string]*text.Shaper{"": text.NewShaper()},
-		shapes:   map[shapeKey]text.Line{},
-		metrics:  map[metricsKey]TextMetrics{},
-		imgBufs:  map[image.Image]*gg.ImageBuf{},
-		runs:     map[runKey]*cachedRun{},
+		families:  map[string]*text.Font{},
+		shapers:   map[string]*text.Shaper{"": text.NewShaper()},
+		shapes:    map[shapeKey]text.Line{},
+		metrics:   map[metricsKey]TextMetrics{},
+		imgBufs:   map[image.Image]*gg.ImageBuf{},
+		runs:      map[runKey]*cachedRun{},
 		ggSources: map[string]*ggtext.FontSource{},
 		ggFaces:   map[ggFaceKey]ggtext.Face{},
 	}
@@ -613,6 +616,27 @@ func (c *ggCanvas) gradientStrips(r geom.Rect, radius float32, from, to Color, h
 // gradientStripCount is the number of solid strips a GPU gradient is composited
 // from — high enough that the color step is sub-pixel for typical UI bands.
 const gradientStripCount = 64
+
+func (c *ggCanvas) FillPath(p *Path, col Color) {
+	if p == nil || len(p.verbs) == 0 {
+		return
+	}
+	c.dc.SetColor(col.nrgba())
+	j := 0
+	for _, v := range p.verbs {
+		switch v {
+		case verbMove:
+			c.dc.MoveTo(float64(p.pts[j].X), float64(p.pts[j].Y))
+			j++
+		case verbLine:
+			c.dc.LineTo(float64(p.pts[j].X), float64(p.pts[j].Y))
+			j++
+		case verbClose:
+			c.dc.ClosePath()
+		}
+	}
+	c.dc.Fill()
+}
 
 func (c *ggCanvas) StrokeRRect(r geom.Rect, radius, width float32, col Color) {
 	c.dc.SetColor(col.nrgba())

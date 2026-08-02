@@ -72,6 +72,15 @@ type lineOp struct {
 	col   paint.Color
 }
 
+// fillPathOp holds a retained path by pointer plus the generation captured at
+// record time, so opEqual (a == b) compares identity + gen + color — safe
+// because a *paint.Path pointer is comparable where the path's slices are not.
+type fillPathOp struct {
+	p   *paint.Path
+	gen uint64
+	col paint.Color
+}
+
 type textOp struct {
 	font string
 	s    string
@@ -108,10 +117,11 @@ func (o rrectOp) replay(c paint.Canvas) { c.FillRRect(o.r, o.radius, o.col) }
 func (o rrectGradientOp) replay(c paint.Canvas) {
 	c.FillRRectGradient(o.r, o.radius, o.from, o.to, o.horizontal)
 }
-func (o strokeRRectOp) replay(c paint.Canvas) { c.StrokeRRect(o.r, o.radius, o.width, o.col) }
-func (o lineOp) replay(c paint.Canvas)        { c.Line(o.a, o.b, o.width, o.col) }
-func (o textOp) replay(c paint.Canvas)        { c.TextIn(o.font, o.s, o.pos, o.size, o.col) }
-func (o imageOp) replay(c paint.Canvas)       { c.Image(o.img, o.dst) }
+func (o strokeRRectOp) replay(c paint.Canvas)   { c.StrokeRRect(o.r, o.radius, o.width, o.col) }
+func (o lineOp) replay(c paint.Canvas)          { c.Line(o.a, o.b, o.width, o.col) }
+func (o fillPathOp) replay(c paint.Canvas)      { c.FillPath(o.p, o.col) }
+func (o textOp) replay(c paint.Canvas)          { c.TextIn(o.font, o.s, o.pos, o.size, o.col) }
+func (o imageOp) replay(c paint.Canvas)         { c.Image(o.img, o.dst) }
 func (o pushClipOp) replay(c paint.Canvas)      { c.PushClip(o.r) }
 func (o pushClipRRectOp) replay(c paint.Canvas) { c.PushClipRRect(o.r, o.radius) }
 func (o popClipOp) replay(c paint.Canvas)       { c.PopClip() }
@@ -142,6 +152,13 @@ func (r recorder) StrokeRRect(rect geom.Rect, radius, width float32, col paint.C
 
 func (r recorder) Line(a, b geom.Pt, width float32, col paint.Color) {
 	r.l.ops = append(r.l.ops, lineOp{a, b, width, col})
+}
+
+func (r recorder) FillPath(p *paint.Path, col paint.Color) {
+	if p == nil || p.Empty() {
+		return
+	}
+	r.l.ops = append(r.l.ops, fillPathOp{p, p.Gen(), col})
 }
 
 func (r recorder) Text(s string, pos geom.Pt, size float32, col paint.Color) {
