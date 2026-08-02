@@ -216,11 +216,11 @@ Each stage ends runnable and golden-tested; mirrors the `games-plan` discipline.
 - **C0 — Skeleton + measurement + golden. ✅ DONE.** `chart` package: `Scale`
   (Linear + Band), `Mark` interface, `BarMark`, the `Chart` widget with
   painter-measured insets and axis rendering; scale unit tests + render tests.
-- **C1 — The "today" library. ✅ DONE** (except a few deferred items). `LineMark`,
-  `PointMark`, `RuleMark` (dashed), `AreaMark`, axes (grid, tick formatting), **legend
-  + grouped multi-series bars**, dark-mode palettes, **press-to-inspect selection +
-  crosshair/tooltip**, and mount animation. *Deferred:* `RectMark` heatmap, `RangeMark`,
-  `Time`/`Log`/`ColorScale`.
+- **C1 — The "today" library. ✅ DONE.** `LineMark`, `PointMark`, `RuleMark` (dashed),
+  `AreaMark`, `RectMark` heatmap + `ColorScale`, axes (grid, tick formatting), `Band` /
+  `Time` (calendar-nice) scales, **legend + grouped multi-series bars**, dark-mode
+  palettes, **press-to-inspect selection + crosshair/tooltip**, and mount animation.
+  *Deferred:* `RangeMark` (min–max/candlestick), `Log` scale.
 - **C2 — `paint.Path` marks. ✅ DONE.** Landed `paint.Path` + `FillPath` + `StrokePath`
   in `paint` (with the `gpu_equiv_test.go` parity guard), then **`SectorMark`
   (pie/donut)** and **`LineMark.Smooth`** (Catmull-Rom). `AreaMark` shipped in C1 via
@@ -228,9 +228,9 @@ Each stage ends runnable and golden-tested; mirrors the `games-plan` discipline.
 - **C3 — Ledger dashboard. ✅ DONE (sample data).** The example app: balance line+area
   with a date axis + budget rule, a "Where it goes" donut, weekly bars, card layout,
   render test. *Deferred:* real CSV/OFX import + local-file persistence.
-- **Polish (remaining).** `Time` scale (Ledger uses a `Format` callback for now);
-  accessibility `Semantics` overlay; `Ctx.DevicePixelRatio()` for hairline gridlines;
-  heatmap/range marks.
+- **Polish (remaining).** `RangeMark` (min–max, candlestick); `Log` scale; accessibility
+  `Semantics` overlay; `Ctx.DevicePixelRatio()` for hairline gridlines; real CSV/OFX
+  import in Ledger.
 
 **Framework changes required:** only **`paint.Path`/`FillPath`/`StrokePath`** — now
 built (also serves games). Everything else rode on primitives that already existed
