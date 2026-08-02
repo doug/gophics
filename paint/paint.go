@@ -92,6 +92,9 @@ type Canvas interface {
 	// Image draws img scaled into dst (bilinear). Pass the same image
 	// value across frames — scene diffing compares by identity.
 	Image(img image.Image, dst geom.Rect)
+	// DrawSprite blits a source region of atlas into Dst (see Sprite). Pass the
+	// same atlas value across calls to share one cached texture.
+	DrawSprite(atlas image.Image, s Sprite)
 	// PushClip clips subsequent drawing to r; balance with PopClip.
 	// Nested clips intersect.
 	PushClip(r geom.Rect)
@@ -826,10 +829,9 @@ func (s ggSink) CubeTo(c1x, c1y, c2x, c2y, x, y float32) {
 }
 func (s ggSink) Close() { s.dc.ClosePath() }
 
-func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
-	if img == nil || dst.IsEmpty() {
-		return
-	}
+// imgBuf returns the cached gg texture for img (shared by Image and
+// DrawSprite), building it on first use.
+func (c *ggCanvas) imgBuf(img image.Image) *gg.ImageBuf {
 	buf, ok := c.p.imgBufs[img]
 	if !ok {
 		if len(c.p.imgBufs) > 256 {
@@ -838,6 +840,46 @@ func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
 		buf = gg.ImageBufFromImage(img)
 		c.p.imgBufs[img] = buf
 	}
+	return buf
+}
+
+func (c *ggCanvas) DrawSprite(atlas image.Image, s Sprite) {
+	if atlas == nil || s.Dst.IsEmpty() || s.Src.Empty() {
+		return
+	}
+	interp := gg.InterpBilinear
+	if s.Nearest {
+		interp = gg.InterpNearest
+	}
+	alpha := s.Alpha
+	if alpha == 0 {
+		alpha = 1
+	}
+	src := s.Src
+	opts := gg.DrawImageOptions{
+		X: float64(s.Dst.Min.X), Y: float64(s.Dst.Min.Y),
+		DstWidth: float64(s.Dst.Dx()), DstHeight: float64(s.Dst.Dy()),
+		SrcRect: &src, Interpolation: interp, Opacity: float64(alpha), BlendMode: gg.BlendNormal,
+	}
+	buf := c.imgBuf(atlas)
+	if s.FlipX {
+		cx := float64(s.Dst.Min.X) + float64(s.Dst.Dx())/2
+		c.dc.Push()
+		c.dc.Translate(cx, 0)
+		c.dc.Scale(-1, 1)
+		c.dc.Translate(-cx, 0)
+		c.dc.DrawImageEx(buf, opts)
+		c.dc.Pop()
+		return
+	}
+	c.dc.DrawImageEx(buf, opts)
+}
+
+func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
+	if img == nil || dst.IsEmpty() {
+		return
+	}
+	buf := c.imgBuf(img)
 	c.dc.DrawImageEx(buf, gg.DrawImageOptions{
 		X: float64(dst.Min.X), Y: float64(dst.Min.Y),
 		DstWidth: float64(dst.Dx()), DstHeight: float64(dst.Dy()),

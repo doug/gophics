@@ -101,6 +101,13 @@ type imageOp struct {
 	dst geom.Rect
 }
 
+// drawSpriteOp blits a source region of a shared atlas. The atlas image and the
+// Sprite value are both comparable, so opEqual's == holds.
+type drawSpriteOp struct {
+	atlas image.Image
+	s     paint.Sprite
+}
+
 type pushClipOp struct{ r geom.Rect }
 
 type pushClipRRectOp struct {
@@ -130,6 +137,7 @@ func (o fillPathOp) replay(c paint.Canvas)      { c.FillPath(o.p, o.col) }
 func (o strokePathOp) replay(c paint.Canvas)    { c.StrokePath(o.p, o.width, o.col) }
 func (o textOp) replay(c paint.Canvas)          { c.TextIn(o.font, o.s, o.pos, o.size, o.col) }
 func (o imageOp) replay(c paint.Canvas)         { c.Image(o.img, o.dst) }
+func (o drawSpriteOp) replay(c paint.Canvas)    { c.DrawSprite(o.atlas, o.s) }
 func (o pushClipOp) replay(c paint.Canvas)      { c.PushClip(o.r) }
 func (o pushClipRRectOp) replay(c paint.Canvas) { c.PushClipRRect(o.r, o.radius) }
 func (o popClipOp) replay(c paint.Canvas)       { c.PopClip() }
@@ -186,6 +194,13 @@ func (r recorder) TextIn(font, s string, pos geom.Pt, size float32, col paint.Co
 
 func (r recorder) Image(img image.Image, dst geom.Rect) {
 	r.l.ops = append(r.l.ops, imageOp{img, dst})
+}
+
+func (r recorder) DrawSprite(atlas image.Image, s paint.Sprite) {
+	if atlas == nil || s.Dst.IsEmpty() {
+		return
+	}
+	r.l.ops = append(r.l.ops, drawSpriteOp{atlas, s})
 }
 
 func (r recorder) PushClip(rect geom.Rect) { r.l.ops = append(r.l.ops, pushClipOp{rect}) }

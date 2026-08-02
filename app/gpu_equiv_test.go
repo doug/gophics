@@ -11,6 +11,7 @@ package app
 
 import (
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"testing"
@@ -21,6 +22,20 @@ import (
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/widget"
 )
+
+// testAtlas is a 16×16 image with four solid 8×8 color quadrants.
+func testAtlas() *image.RGBA {
+	a := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	quad := [4]color.RGBA{
+		{220, 60, 60, 255}, {60, 160, 220, 255}, {80, 190, 110, 255}, {230, 190, 60, 255},
+	}
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			a.Set(x, y, quad[(y/8)*2+(x/8)])
+		}
+	}
+	return a
+}
 
 // equivScene draws the primitives the two backends must agree on: fills, rounded
 // rects, a gradient, a stroke, a clipped fill, a filled path, and text at two sizes.
@@ -46,6 +61,9 @@ func equivScene() widget.Widget {
 		zig.MoveTo(geom.Pt{X: 20, Y: 300}).LineTo(geom.Pt{X: 70, Y: 260}).
 			LineTo(geom.Pt{X: 110, Y: 300}).LineTo(geom.Pt{X: 140, Y: 262})
 		c.StrokePath(zig, 5, paint.RGB(0.1, 0.5, 0.7))
+		atlas := testAtlas()
+		c.DrawSprite(atlas, paint.Sprite{Src: image.Rect(8, 0, 16, 8), Dst: geom.RectXYWH(150, 300, 16, 16)})
+		c.DrawSprite(atlas, paint.Sprite{Src: image.Rect(0, 8, 8, 16), Dst: geom.RectXYWH(170, 300, 16, 16), FlipX: true})
 		c.Text("Equivalence", geom.Pt{X: 20, Y: 380}, 28, black)
 		c.Text("gpu == cpu?", geom.Pt{X: 20, Y: 412}, 16, paint.RGB(0.4, 0.4, 0.45))
 	}}

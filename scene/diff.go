@@ -102,6 +102,8 @@ func opBounds(o op, m Measurer) geom.Rect {
 		return inflate(r, o.width)
 	case imageOp:
 		return o.dst
+	case drawSpriteOp:
+		return o.s.Dst
 	case fillPathOp:
 		return inflate(o.p.Bounds(), 1) // +1px for fill AA
 	case strokePathOp:
