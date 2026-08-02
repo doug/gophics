@@ -82,6 +82,8 @@ type Plot struct {
 	Canvas paint.Canvas
 	th     theme
 	series int     // this mark's series index (for the default color)
+	group  int     // this bar series' index among grouped bars
+	groups int     // total grouped bar series (1 = ungrouped)
 	T      float32 // animation progress; 1 when settled
 }
 
@@ -98,3 +100,6 @@ type Mark interface {
 	yDomain() (lo, hi float64)
 	draw(p Plot)
 }
+
+// named marks contribute an entry to the legend (empty name → omitted).
+type named interface{ markName() string }

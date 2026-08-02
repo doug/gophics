@@ -59,6 +59,15 @@ func TestChartShot(t *testing.T) {
 	}}
 	shot(t, dir+"/line.png", geom.Size{W: 720, H: 420}, white, line)
 
+	grouped := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
+		Marks: []Mark{
+			BarMark{Name: "Budget", Data: Values("Rent", 1800, "Food", 600, "Fun", 300, "Transit", 200)},
+			BarMark{Name: "Actual", Data: Values("Rent", 1850, "Food", 720, "Fun", 240, "Transit", 180)},
+		},
+		Legend: true,
+	}}
+	shot(t, dir+"/grouped.png", geom.Size{W: 720, H: 440}, white, grouped)
+
 	// Selection tooltip: mount, press a point, then render.
 	size := geom.Size{W: 720, H: 420}
 	h, err := app.NewHeadless(widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{

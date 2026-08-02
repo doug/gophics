@@ -10,6 +10,7 @@ import (
 // they're centered on X and sized to the smallest gap.
 type BarMark struct {
 	Data   []Datum
+	Name   string      // legend label (optional)
 	Color  paint.Color // zero → series color
 	Corner float32     // top corner radius in px; 0 → a small default
 	Width  float32     // 0..1 fraction of the slot; 0 → 0.7
@@ -38,10 +39,16 @@ func (b BarMark) draw(p Plot) {
 		frac = 0.7
 	}
 	slot := slotWidth(b.Data, p)
-	bw := slot * frac
+	groups := p.groups
+	if groups < 1 {
+		groups = 1
+	}
+	sub := slot / float32(groups)                         // one series' share of the slot
+	off := (float32(p.group) - float32(groups-1)/2) * sub // this series' offset within the band
+	bw := sub * frac
 	y0 := p.py(0)
 	for _, d := range b.Data {
-		cx := p.px(d.X)
+		cx := p.px(d.X) + off
 		yTop := y0 + (p.py(d.Y)-y0)*p.T // grow from the baseline
 		top, bot := yTop, y0
 		if top > bot {
@@ -110,3 +117,5 @@ func abs(v float32) float32 {
 
 func (b BarMark) seriesData() []Datum    { return b.Data }
 func (b BarMark) baseColor() paint.Color { return b.Color }
+
+func (b BarMark) markName() string { return b.Name }

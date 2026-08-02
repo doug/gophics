@@ -10,6 +10,7 @@ import (
 // line series.
 type PointMark struct {
 	Data  []Datum
+	Name  string      // legend label (optional)
 	Color paint.Color // zero → series color
 	Size  float32     // diameter in px; 0 → 7
 }
@@ -46,3 +47,5 @@ func (m PointMark) draw(p Plot) {
 
 func (m PointMark) seriesData() []Datum    { return m.Data }
 func (m PointMark) baseColor() paint.Color { return m.Color }
+
+func (m PointMark) markName() string { return m.Name }

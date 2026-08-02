@@ -17,7 +17,14 @@ type Chart struct {
 	X, Y    Scale // optional; inferred from the marks when nil
 	XAxis   Axis
 	YAxis   Axis
+	Legend  bool // show a color key for named marks
 	Animate bool // grow marks in on mount (skipped under reduce-motion)
+}
+
+// legendEntry is one color-key row.
+type legendEntry struct {
+	label string
+	color paint.Color
 }
 
 func (Chart) CreateState() widget.State { return &chartState{} }
@@ -39,6 +46,7 @@ type chartState struct {
 	area    geom.Rect
 	primary []Datum
 	selCol  paint.Color
+	legend  []legendEntry
 }
 
 func (s *chartState) Init(ctx widget.Ctx) {
@@ -68,18 +76,27 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	xs, ys := resolveScales(w)
 	th := themeFor(ctx.DarkMode())
 	p := ctx.Painter()
-	m := margins(p, w, ys)
 	s.xs, s.ys = xs, ys
 
 	// The primary series is the first data-bearing mark — the one a press
-	// selects against.
-	s.primary, s.selCol = nil, paint.Color{}
+	// selects against. Meanwhile collect legend entries and count grouped bars.
+	s.primary, s.selCol, s.legend = nil, paint.Color{}, nil
+	barGroups := 0
 	for i, mk := range w.Marks {
-		if sd, ok := mk.(selectable); ok && len(sd.seriesData()) > 0 {
+		if sd, ok := mk.(selectable); ok && len(sd.seriesData()) > 0 && s.primary == nil {
 			s.primary = sd.seriesData()
 			s.selCol = th.color(i, sd.baseColor())
-			break
 		}
+		if _, ok := mk.(BarMark); ok {
+			barGroups++
+		}
+		if n, ok := mk.(named); ok && n.markName() != "" {
+			s.legend = append(s.legend, legendEntry{n.markName(), markColor(mk, th, i)})
+		}
+	}
+	m := margins(p, w, ys)
+	if w.Legend && len(s.legend) > 0 {
+		m.Top += p.Metrics(legendSize).LineHeight() + 12
 	}
 
 	canvas := widget.Canvas{Clip: false, Draw: func(c paint.Canvas, size geom.Size) {
@@ -91,16 +108,26 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		drawYAxis(c, area, ys, w.YAxis, th, p)
 		drawXAxis(c, area, xs, w.XAxis, th, p)
 
-		pl := Plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t}
+		pl := Plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
 		c.PushClip(area)
+		gi := 0
 		for i, mk := range w.Marks {
 			pl.series = i
+			if _, ok := mk.(BarMark); ok {
+				pl.group, pl.groups = gi, barGroups
+				gi++
+			} else {
+				pl.group, pl.groups = 0, 1
+			}
 			mk.draw(pl)
 		}
 		c.PopClip()
 
 		if s.sel >= 0 && s.sel < len(s.primary) {
 			drawSelection(c, area, xs, ys, s.primary[s.sel], s.selCol, w.YAxis, th, p)
+		}
+		if w.Legend && len(s.legend) > 0 {
+			drawLegend(c, area, s.legend, th, p)
 		}
 	}}
 

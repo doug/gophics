@@ -50,6 +50,18 @@ func TestEmptyChart(t *testing.T) {
 	renderChart(t, Chart{})
 }
 
+// TestGroupedLegend renders grouped bars with a legend.
+func TestGroupedLegend(t *testing.T) {
+	renderChart(t, Chart{
+		Marks: []Mark{
+			BarMark{Name: "A", Data: Values("x", 3, "y", 5, "z", 2)},
+			BarMark{Name: "B", Data: Values("x", 4, "y", 2, "z", 6)},
+		},
+		Legend:  true,
+		Animate: true,
+	})
+}
+
 // TestSelection drives presses on a bar chart and checks the nearest datum is
 // selected (rightward press → higher index than a leftward one).
 func TestSelection(t *testing.T) {

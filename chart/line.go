@@ -11,6 +11,7 @@ import (
 // draws on left-to-right (via a reveal clip) when the chart animates.
 type LineMark struct {
 	Data   []Datum
+	Name   string      // legend label (optional)
 	Color  paint.Color // zero → series color
 	Width  float32     // px; 0 → 2
 	Points bool        // also draw a dot at each vertex
@@ -64,3 +65,5 @@ func dot(c paint.Canvas, x, y, d float32, col paint.Color) {
 
 func (l LineMark) seriesData() []Datum    { return l.Data }
 func (l LineMark) baseColor() paint.Color { return l.Color }
+
+func (l LineMark) markName() string { return l.Name }

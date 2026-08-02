@@ -12,6 +12,7 @@ import (
 // primitive; set Line to also stroke the top edge.
 type AreaMark struct {
 	Data  []Datum
+	Name  string      // legend label (optional)
 	Color paint.Color // zero → series color
 	Alpha float32     // fill opacity; 0 → 0.16
 	Line  float32     // top-edge stroke width in px; 0 → none
@@ -91,3 +92,5 @@ func clamp(v, lo, hi float32) float32 {
 	}
 	return v
 }
+
+func (a AreaMark) markName() string { return a.Name }
