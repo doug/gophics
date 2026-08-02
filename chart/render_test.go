@@ -50,6 +50,21 @@ func TestEmptyChart(t *testing.T) {
 	renderChart(t, Chart{})
 }
 
+// TestHeatmapRenders draws a small RectMark grid.
+func TestHeatmapRenders(t *testing.T) {
+	var cells []Cell
+	for x := 0; x < 8; x++ {
+		for y := 0; y < 5; y++ {
+			cells = append(cells, Cell{X: x, Y: y, V: float64((x + y) % 4)})
+		}
+	}
+	renderChart(t, Chart{
+		Marks: []Mark{RectMark{Cells: cells, Scale: ColorScale{Lo: 0, Hi: 3}}},
+		XAxis: Axis{Hide: true}, YAxis: Axis{Hide: true},
+		Animate: true,
+	})
+}
+
 // TestGroupedLegend renders grouped bars with a legend.
 func TestGroupedLegend(t *testing.T) {
 	renderChart(t, Chart{

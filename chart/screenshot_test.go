@@ -59,6 +59,18 @@ func TestChartShot(t *testing.T) {
 	}}
 	shot(t, dir+"/line.png", geom.Size{W: 720, H: 420}, white, line)
 
+	var cells []Cell
+	for x := 0; x < 20; x++ {
+		for y := 0; y < 7; y++ {
+			cells = append(cells, Cell{X: x, Y: y, V: float64((x*3 + y*5 + x*y) % 6)})
+		}
+	}
+	heat := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
+		Marks: []Mark{RectMark{Cells: cells, Cols: 20, Rows: 7, Scale: ColorScale{Lo: 0, Hi: 5}}},
+		XAxis: Axis{Hide: true}, YAxis: Axis{Hide: true},
+	}}
+	shot(t, dir+"/heatmap.png", geom.Size{W: 720, H: 300}, white, heat)
+
 	smooth := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
 		Marks: []Mark{
 			AreaMark{Data: XY(0, 20, 1, 35, 2, 22, 3, 55, 4, 40, 5, 72, 6, 58, 7, 85), Alpha: 0.14},
