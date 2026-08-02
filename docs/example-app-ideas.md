@@ -150,6 +150,11 @@ the menu; that doc is the build plan).
   per-game animation + a stats/heatmap screen**; naturally grows one minigame at a
   time.
 - **2048**, **Minesweeper** — grid + simple rules; classic quick wins.
+- **Tile roguelike / dungeon crawler** — *shipped* (`examples/roguelike`): the
+  driver for `paint.DrawSprite`. Procedural tileset generated in Go (one shared
+  atlas, no assets), room/corridor dungeon, LOS fog-of-war, a minimal d20 combat
+  core. Bitmap/atlas showcase (vs. solitaire's vector cards). Deeper rules could
+  build on the CC-BY SRD 5.2 later.
 
 ## F. Simple mobile utilities
 

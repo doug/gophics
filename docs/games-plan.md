@@ -452,13 +452,15 @@ way: **idle must cost zero raster** — battery, not throughput.
 
 ### The API: four methods, not sixteen
 
-> **UPDATE:** the path half of this is **built** — the chart workstream landed
-> `paint.Path` + `Canvas.FillPath` (`75a6c96`) and `Canvas.StrokePath` (`9f7a5d5`),
-> exactly as a *retained `*paint.Path`* (pointer + `Gen()` in the scene op, so
-> `opEqual`'s `==` stays valid and `opBounds` uses `Bounds()`), CPU==GPU verified.
-> The current signatures are simpler than sketched below (`FillPath(p, col)`,
-> `StrokePath(p, width, col)` — no explicit `FillRule`/`Stroke` yet; round caps/joins).
-> `DrawSprite`/`DrawSprites` remain to do.
+> **UPDATE:** most of this is **built**. The chart workstream landed `paint.Path` +
+> `Canvas.FillPath` (`75a6c96`) and `Canvas.StrokePath` (`9f7a5d5`) — a *retained
+> `*paint.Path`* (pointer + `Gen()` in the scene op, so `opEqual`'s `==` stays valid
+> and `opBounds` uses `Bounds()`). Then **`Canvas.DrawSprite`** (`b944da6`) — a
+> shared-atlas blit (`Sprite{Src, Dst, Alpha, FlipX, Nearest}`, one cached texture per
+> atlas), driven by `examples/roguelike`. All CPU==GPU verified in the equivalence
+> test. Current signatures are simpler than sketched below (no explicit
+> `FillRule`/`Stroke`; tint via overlay; round caps/joins). **Remaining:** batched
+> `DrawSprites`, and `Tint`/`Blend`/rotation as first-class sprite options.
 
 ```go
 // appended to paint.Canvas
