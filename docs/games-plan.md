@@ -455,12 +455,14 @@ way: **idle must cost zero raster** — battery, not throughput.
 > **UPDATE:** most of this is **built**. The chart workstream landed `paint.Path` +
 > `Canvas.FillPath` (`75a6c96`) and `Canvas.StrokePath` (`9f7a5d5`) — a *retained
 > `*paint.Path`* (pointer + `Gen()` in the scene op, so `opEqual`'s `==` stays valid
-> and `opBounds` uses `Bounds()`). Then **`Canvas.DrawSprite`** (`b944da6`) — a
-> shared-atlas blit (`Sprite{Src, Dst, Alpha, FlipX, Nearest}`, one cached texture per
-> atlas), driven by `examples/roguelike`. All CPU==GPU verified in the equivalence
-> test. Current signatures are simpler than sketched below (no explicit
-> `FillRule`/`Stroke`; tint via overlay; round caps/joins). **Remaining:** batched
-> `DrawSprites`, and `Tint`/`Blend`/rotation as first-class sprite options.
+> and `opBounds` uses `Bounds()`). Then **`Canvas.DrawSprite`** — a shared-atlas blit
+> `Sprite{Src, Dst, Alpha, Tint, Rotation, FlipX, Nearest}`, one cached texture per
+> atlas, with `Tint` (color-multiply via a tinted-texture cache) and `Rotation`
+> (local `RotateAbout` — the "rotation bails on GPU" worry proved outdated). Driven by
+> `examples/roguelike` (atlas tiles, flip facing, tint torchlight). **All CPU==GPU
+> verified.** **Remaining:** batched `DrawSprites` (needs a gg instanced pipeline) and
+> additive `Blend` (needs GPU blend-mode support) — both real gg-fork work, unlike the
+> above.
 
 ```go
 // appended to paint.Canvas
