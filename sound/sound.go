@@ -11,6 +11,7 @@ package sound
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 )
 
 // SampleRate is the mixing rate (Hz).
@@ -129,105 +130,147 @@ func (g *Gain) Process(out []float32) bool {
 	return cont
 }
 
-// Mixer sums active sources (mono, clamped to [-1,1]) and exposes the result as
-// interleaved frames to a platform driver via ReadFloat32s. Add is safe to call
-// from the UI goroutine while the driver pulls on the audio goroutine.
-type Mixer struct {
-	mu       sync.Mutex
-	sources  []Source
-	scratch  []float32
-	mono     []float32
-	channels int
-	master   float64
+// PlayOptions configure a voice. Zero values mean natural (Volume 1, Pan center,
+// Pitch 1).
+type PlayOptions struct {
+	Volume float64 // linear gain; 0 → 1
+	Pan    float64 // -1 left … 0 center … +1 right
+	Pitch  float64 // playback rate; 0 → 1 (samples only)
+	Loop   bool
 }
 
-// NewMixer returns an empty mixer producing `channels` interleaved output
-// channels (0 → 2/stereo).
-func NewMixer(channels int) *Mixer {
-	if channels < 1 {
-		channels = 2
+// Voice is a playing sound — a mono Source placed in the stereo field with a
+// live-adjustable volume and pan. It is the handle returned by Play.
+type Voice struct {
+	src     Source
+	vol     atomic.Uint32 // Float32bits
+	pan     atomic.Uint32 // Float32bits, -1..1
+	stopped atomic.Bool
+}
+
+func newVoice(src Source, opts PlayOptions) *Voice {
+	v := &Voice{src: src}
+	vol := opts.Volume
+	if vol <= 0 {
+		vol = 1
 	}
-	return &Mixer{channels: channels, master: 1}
+	v.SetVolume(vol)
+	v.SetPan(opts.Pan)
+	return v
 }
 
-// Add starts playing src.
-func (m *Mixer) Add(src Source) {
-	if src == nil {
-		return
+// SetVolume sets the linear gain (live).
+func (v *Voice) SetVolume(x float64) { v.vol.Store(math.Float32bits(float32(x))) }
+
+// SetPan sets the stereo pan in [-1,1] (live).
+func (v *Voice) SetPan(x float64) {
+	if x < -1 {
+		x = -1
+	} else if x > 1 {
+		x = 1
+	}
+	v.pan.Store(math.Float32bits(float32(x)))
+}
+
+// Stop ends the voice; the mixer drops it on the next block.
+func (v *Voice) Stop() {
+	if v != nil {
+		v.stopped.Store(true)
+	}
+}
+
+func (v *Voice) volume() float32 { return math.Float32frombits(v.vol.Load()) }
+func (v *Voice) panpos() float32 { return math.Float32frombits(v.pan.Load()) }
+
+// Mixer sums active voices into interleaved stereo, applying each voice's volume
+// and constant-power pan. It implements the audio.ReadFloat32er contract the
+// platform driver pulls from; Play is safe to call while the driver reads.
+type Mixer struct {
+	mu     sync.Mutex
+	voices []*Voice
+	mono   []float32
+	master float64
+}
+
+// NewMixer returns an empty stereo mixer.
+func NewMixer() *Mixer { return &Mixer{master: 1} }
+
+func (m *Mixer) add(v *Voice) *Voice {
+	if v == nil {
+		return nil
 	}
 	m.mu.Lock()
-	m.sources = append(m.sources, src)
+	m.voices = append(m.voices, v)
 	m.mu.Unlock()
+	return v
 }
 
-// SetMasterVolume scales the whole mix (0..1+).
+// PlaySource starts an arbitrary Source as a voice.
+func (m *Mixer) PlaySource(src Source, opts PlayOptions) *Voice {
+	if src == nil {
+		return nil
+	}
+	return m.add(newVoice(src, opts))
+}
+
+// SetMasterVolume scales the whole mix.
 func (m *Mixer) SetMasterVolume(v float64) {
 	m.mu.Lock()
 	m.master = v
 	m.mu.Unlock()
 }
 
-// Len reports the number of active sources.
+// Len reports the number of active voices.
 func (m *Mixer) Len() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return len(m.sources)
+	return len(m.voices)
 }
 
-// Process sums active sources into mono `out`, dropping finished ones. Always
-// returns true (a mixer never finishes).
-func (m *Mixer) Process(out []float32) bool {
-	for i := range out {
-		out[i] = 0
+// ReadFloat32s fills buf with interleaved stereo frames (the audio.ReadFloat32er
+// contract), summing voices with per-voice volume + constant-power pan, dropping
+// finished or stopped ones, and clamping to [-1,1].
+func (m *Mixer) ReadFloat32s(buf []float32) (int, error) {
+	for i := range buf {
+		buf[i] = 0
 	}
+	frames := len(buf) / 2
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if cap(m.scratch) < len(out) {
-		m.scratch = make([]float32, len(out))
-	}
-	sc := m.scratch[:len(out)]
-	alive := m.sources[:0]
-	for _, s := range m.sources {
-		for i := range sc {
-			sc[i] = 0
-		}
-		if s.Process(sc) {
-			alive = append(alive, s)
-		}
-		for i := range out {
-			out[i] += sc[i]
-		}
-	}
-	m.sources = alive
-	master := float32(m.master)
-	for i := range out {
-		v := out[i] * master
-		if v > 1 {
-			v = 1
-		} else if v < -1 {
-			v = -1
-		}
-		out[i] = v
-	}
-	return true
-}
-
-// ReadFloat32s fills buf with interleaved frames (mono duplicated across
-// channels) — the audio.ReadFloat32er contract the platform driver pulls from.
-func (m *Mixer) ReadFloat32s(buf []float32) (int, error) {
-	ch := m.channels
-	frames := len(buf) / ch
 	if cap(m.mono) < frames {
 		m.mono = make([]float32, frames)
 	}
 	mono := m.mono[:frames]
-	m.Process(mono)
-	for i := 0; i < frames; i++ {
-		for c := 0; c < ch; c++ {
-			buf[i*ch+c] = mono[i]
+	master := float32(m.master)
+	alive := m.voices[:0]
+	for _, v := range m.voices {
+		if v.stopped.Load() {
+			continue // dropped
+		}
+		for i := range mono {
+			mono[i] = 0
+		}
+		cont := v.src.Process(mono)
+		a := (float64(v.panpos()) + 1) * 0.5 * (math.Pi / 2)
+		l := float32(math.Cos(a)) * v.volume() * master
+		r := float32(math.Sin(a)) * v.volume() * master
+		for i := 0; i < frames; i++ {
+			buf[2*i] += mono[i] * l
+			buf[2*i+1] += mono[i] * r
+		}
+		if cont {
+			alive = append(alive, v)
 		}
 	}
-	return frames * ch, nil
+	m.voices = alive
+	for i := range buf {
+		if buf[i] > 1 {
+			buf[i] = 1
+		} else if buf[i] < -1 {
+			buf[i] = -1
+		}
+	}
+	return len(buf), nil
 }
 
 // Render pulls n mono samples from src (for tests and offline rendering).

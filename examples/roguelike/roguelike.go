@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"math/rand"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/paint"
@@ -33,6 +34,7 @@ type gameState struct {
 	restarts int64
 
 	snd     *sound.Mixer
+	rng     *rand.Rand
 	samples map[SoundID]*sound.Sample
 
 	origin geom.Pt // last camera origin (world px), for tap→cell mapping
@@ -53,6 +55,7 @@ var (
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.atlas = buildAtlas()
+	s.rng = rand.New(rand.NewSource(1))
 	s.snd = s.W().Sound
 	if s.snd != nil {
 		s.samples = map[SoundID]*sound.Sample{
@@ -72,15 +75,22 @@ func (s *gameState) Init(ctx widget.Ctx) {
 }
 
 // attachSound wires the current game's sound hook to the mixer (a no-op without
-// audio). Called on mount and after each restart.
+// audio). Called on mount and after each restart. Hits get a small random pitch
+// for variety and a pan from the game (positional combat).
 func (s *gameState) attachSound() {
 	if s.snd == nil {
 		return
 	}
-	s.g.sfx = func(id SoundID) {
-		if smp := s.samples[id]; smp != nil {
-			s.snd.Play(smp, 0.55)
+	s.g.sfx = func(id SoundID, pan float64) {
+		smp := s.samples[id]
+		if smp == nil {
+			return
 		}
+		opts := sound.PlayOptions{Volume: 0.55, Pan: pan}
+		if id == SndHit {
+			opts.Pitch = 0.9 + s.rng.Float64()*0.35
+		}
+		s.snd.Play(smp, opts)
 	}
 }
 

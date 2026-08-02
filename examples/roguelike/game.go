@@ -55,13 +55,24 @@ type Game struct {
 	gold     int
 	dead     bool
 	won      bool
-	sfx      func(SoundID) // optional; set by the widget
+	sfx      func(id SoundID, pan float64) // optional; set by the widget
 }
 
-func (g *Game) play(id SoundID) {
+func (g *Game) play(id SoundID, pan float64) {
 	if g.sfx != nil {
-		g.sfx(id)
+		g.sfx(id, pan)
 	}
+}
+
+// panAt maps a world x to a stereo pan (-1..1) relative to the player.
+func (g *Game) panAt(x int) float64 {
+	p := float64(x-g.player.X) / fovRadius
+	if p < -1 {
+		p = -1
+	} else if p > 1 {
+		p = 1
+	}
+	return p
 }
 
 const fovRadius = 7
@@ -179,18 +190,18 @@ func (g *Game) pickup() {
 		if it.X == g.player.X && it.Y == g.player.Y {
 			if it.Amulet {
 				g.won = true
-				g.play(SndWin)
+				g.play(SndWin, 0)
 				g.logf("You claim the Amulet of Yendor — you win!")
 				continue
 			}
 			if it.Gold > 0 {
 				g.gold += it.Gold
-				g.play(SndCoin)
+				g.play(SndCoin, 0)
 				g.logf("You pick up %d gold.", it.Gold)
 			} else {
 				heal := 8
 				g.player.HP = min(g.player.MaxHP, g.player.HP+heal)
-				g.play(SndPotion)
+				g.play(SndPotion, 0)
 				g.logf("You quaff a potion (+%d HP).", heal)
 			}
 			continue
@@ -201,7 +212,7 @@ func (g *Game) pickup() {
 }
 
 func (g *Game) descend() {
-	g.play(SndDescend)
+	g.play(SndDescend, 0)
 	g.depth++
 	g.gold += 5
 	g.build()
@@ -210,17 +221,23 @@ func (g *Game) descend() {
 // attack resolves one d20 attack: d20 + Atk vs AC, then Damage die on a hit.
 func (g *Game) attack(a, b *Entity) {
 	roll := g.rng.Intn(20) + 1
+	// Pan toward the non-player combatant.
+	loc := b
+	if b == g.player {
+		loc = a
+	}
+	pan := g.panAt(loc.X)
 	if roll+a.Atk >= b.AC {
 		dmg := g.rng.Intn(b.hitDie(a)) + 1
 		b.HP -= dmg
-		g.play(SndHit)
+		g.play(SndHit, pan)
 		g.logf("%s hit %s for %d.", cap1(a.Name), b.Name, dmg)
 		if b.HP <= 0 {
 			b.Alive = false
 			g.logf("%s dies.", cap1(b.Name))
 			if b == g.player {
 				g.dead = true
-				g.play(SndDie)
+				g.play(SndDie, 0)
 				g.logf("You have died on level %d.", g.depth)
 			}
 		}

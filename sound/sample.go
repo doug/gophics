@@ -1,9 +1,6 @@
 package sound
 
-import (
-	"sync/atomic"
-	"time"
-)
+import "time"
 
 // Sample is a loaded mono PCM clip at the mixer's SampleRate.
 type Sample struct {
@@ -27,65 +24,51 @@ func (s *Sample) Duration() time.Duration {
 	return time.Duration(len(s.Data)) * time.Second / SampleRate
 }
 
-// clip plays a Sample once (or looped) at a fixed gain.
+// clip plays a Sample, optionally looped, at a playback rate (pitch) with linear
+// interpolation. Volume and pan are applied by the Voice, not here.
 type clip struct {
-	data    []float32
-	pos     int
-	gain    float32
-	loop    bool
-	stopped atomic.Bool
+	data  []float32
+	pos   float64
+	pitch float64
+	loop  bool
 }
 
 func (c *clip) Process(out []float32) bool {
-	if c.stopped.Load() {
-		return false
+	n := float64(len(c.data))
+	pitch := c.pitch
+	if pitch <= 0 {
+		pitch = 1
 	}
 	for i := range out {
-		if c.pos >= len(c.data) {
+		if c.pos >= n {
 			if !c.loop {
+				for j := i; j < len(out); j++ {
+					out[j] = 0
+				}
 				return false
 			}
-			c.pos = 0
+			c.pos -= n
 		}
-		out[i] = c.data[c.pos] * c.gain
-		c.pos++
+		idx := int(c.pos)
+		frac := float32(c.pos - float64(idx))
+		s0 := c.data[idx]
+		s1 := s0
+		if idx+1 < len(c.data) {
+			s1 = c.data[idx+1]
+		} else if c.loop {
+			s1 = c.data[0]
+		}
+		out[i] = s0 + (s1-s0)*frac
+		c.pos += pitch
 	}
 	return true
 }
 
-// Voice is a handle to a playing sound; Stop ends it (loops need this).
-type Voice struct{ c *clip }
-
-// Stop silences the voice; the mixer drops it on the next block.
-func (v *Voice) Stop() {
-	if v != nil && v.c != nil {
-		v.c.stopped.Store(true)
-	}
-}
-
-// Play starts a one-shot voice for s at gain (0 → 1). Safe to call from the UI
-// goroutine while audio plays.
-func (m *Mixer) Play(s *Sample, gain float64) *Voice {
+// Play starts a voice for s (Volume/Pan/Pitch/Loop from opts). Safe to call from
+// the UI goroutine while audio plays.
+func (m *Mixer) Play(s *Sample, opts PlayOptions) *Voice {
 	if s == nil || len(s.Data) == 0 {
 		return nil
 	}
-	if gain <= 0 {
-		gain = 1
-	}
-	c := &clip{data: s.Data, gain: float32(gain)}
-	m.Add(c)
-	return &Voice{c}
-}
-
-// Loop starts a looping voice (e.g. ambience/music); Stop it via the Voice.
-func (m *Mixer) Loop(s *Sample, gain float64) *Voice {
-	if s == nil || len(s.Data) == 0 {
-		return nil
-	}
-	if gain <= 0 {
-		gain = 1
-	}
-	c := &clip{data: s.Data, gain: float32(gain), loop: true}
-	m.Add(c)
-	return &Voice{c}
+	return m.PlaySource(&clip{data: s.Data, pitch: opts.Pitch, loop: opts.Loop}, opts)
 }

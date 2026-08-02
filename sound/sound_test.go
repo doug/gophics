@@ -20,12 +20,12 @@ func peak(buf []float32) float32 {
 }
 
 func TestMixerPlaysAndDrops(t *testing.T) {
-	m := NewMixer(2)
+	m := NewMixer()
 	if m.Len() != 0 {
 		t.Fatalf("new mixer len = %d", m.Len())
 	}
 	clip := Blip(440, 0.05) // ~2205 samples
-	m.Play(clip, 1)
+	m.Play(clip, PlayOptions{})
 	if m.Len() != 1 {
 		t.Fatalf("after Play len = %d, want 1", m.Len())
 	}
@@ -40,17 +40,32 @@ func TestMixerPlaysAndDrops(t *testing.T) {
 	}
 }
 
-func TestStereoDuplicatesMono(t *testing.T) {
-	m := NewMixer(2)
-	m.Play(Blip(440, 0.02), 1)
+func TestCenterPanEqualLR(t *testing.T) {
+	m := NewMixer()
+	m.Play(Blip(440, 0.02), PlayOptions{})
 	buf := make([]float32, 16)
 	if n, _ := m.ReadFloat32s(buf); n != len(buf) {
 		t.Fatalf("ReadFloat32s returned %d, want %d", n, len(buf))
 	}
 	for i := 0; i < len(buf); i += 2 {
 		if buf[i] != buf[i+1] {
-			t.Fatalf("L (%v) != R (%v) at frame %d", buf[i], buf[i+1], i/2)
+			t.Fatalf("center pan: L (%v) != R (%v) at frame %d", buf[i], buf[i+1], i/2)
 		}
+	}
+}
+
+func TestPanFavorsOneSide(t *testing.T) {
+	m := NewMixer()
+	m.Play(Blip(440, 0.05), PlayOptions{Pan: 1}) // hard right
+	buf := make([]float32, 512)
+	m.ReadFloat32s(buf)
+	var l, r float32
+	for i := 0; i < len(buf); i += 2 {
+		l += absf(buf[i])
+		r += absf(buf[i+1])
+	}
+	if r <= l*4 {
+		t.Fatalf("pan=+1 should be dominantly right: L=%v R=%v", l, r)
 	}
 }
 
@@ -63,8 +78,8 @@ func TestToneFinishes(t *testing.T) {
 }
 
 func TestLoopStops(t *testing.T) {
-	m := NewMixer(1)
-	v := m.Loop(Blip(220, 0.01), 1)
+	m := NewMixer()
+	v := m.Play(Blip(220, 0.01), PlayOptions{Loop: true})
 	m.ReadFloat32s(make([]float32, 64))
 	if m.Len() != 1 {
 		t.Fatal("loop should keep playing")

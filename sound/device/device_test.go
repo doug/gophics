@@ -14,13 +14,13 @@ func TestPlayTone(t *testing.T) {
 	if os.Getenv("SOUND_PLAY") == "" {
 		t.Skip("set SOUND_PLAY=1 to open the device and hear a tone")
 	}
-	m := sound.NewMixer(2)
+	m := sound.NewMixer()
 	c, err := Open(m)
 	if err != nil {
 		t.Fatalf("open audio device: %v", err)
 	}
 	defer c.Close()
-	m.Play(sound.Coin(), 0.6)
-	m.Play(sound.Blip(440, 0.5), 0.5)
+	m.Play(sound.Coin(), sound.PlayOptions{Volume: 0.6})
+	m.Play(sound.Blip(440, 0.5), sound.PlayOptions{Volume: 0.5})
 	time.Sleep(700 * time.Millisecond)
 }

@@ -20,7 +20,7 @@ import (
 
 func main() {
 	// Audio is best-effort: if the device won't open, the game runs silent.
-	mixer := sound.NewMixer(2)
+	mixer := sound.NewMixer()
 	if closer, err := device.Open(mixer); err != nil {
 		log.Printf("audio disabled: %v", err)
 	} else {
