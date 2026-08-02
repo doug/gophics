@@ -66,6 +66,25 @@ func TestBandScale(t *testing.T) {
 	}
 }
 
+func TestLogScale(t *testing.T) {
+	s := NewLog(1, 1000)
+	if lo, hi := s.Domain(); !approx(lo, 1) || !approx(hi, 1000) {
+		t.Fatalf("domain [%v, %v], want [1, 1000]", lo, hi)
+	}
+	if got := s.Map(1); math.Abs(float64(got)) > 1e-6 {
+		t.Fatalf("Map(1) = %v, want 0", got)
+	}
+	if got := s.Map(10); math.Abs(float64(got)-1.0/3) > 1e-4 { // log10(10)/log10(1000)
+		t.Fatalf("Map(10) = %v, want ~0.333", got)
+	}
+	if got := s.Invert(s.Map(100)); math.Abs(got-100) > 1e-4 {
+		t.Fatalf("Invert∘Map(100) = %v", got)
+	}
+	if ticks := s.Ticks(0); len(ticks) != 4 { // 1, 10, 100, 1000
+		t.Fatalf("got %d log ticks, want 4", len(ticks))
+	}
+}
+
 func TestNiceStep(t *testing.T) {
 	cases := []struct {
 		lo, hi float64

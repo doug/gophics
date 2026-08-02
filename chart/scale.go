@@ -182,3 +182,42 @@ func fmtNumber(v float64) string {
 func trim(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
+
+// Log is a base-10 logarithmic scale over [Lo, Hi] (both > 0), snapped to
+// enclosing powers of ten.
+type Log struct{ Lo, Hi float64 }
+
+// NewLog builds a log scale whose domain snaps out to powers of ten.
+func NewLog(lo, hi float64) *Log {
+	if lo <= 0 {
+		lo = 1
+	}
+	if hi <= lo {
+		hi = lo * 10
+	}
+	return &Log{
+		Lo: math.Pow(10, math.Floor(math.Log10(lo))),
+		Hi: math.Pow(10, math.Ceil(math.Log10(hi))),
+	}
+}
+
+func (s *Log) span() float64 { return math.Log10(s.Hi) - math.Log10(s.Lo) }
+
+func (s *Log) Map(v float64) float32 {
+	if v <= 0 || s.span() == 0 {
+		return 0
+	}
+	return float32((math.Log10(v) - math.Log10(s.Lo)) / s.span())
+}
+
+func (s *Log) Invert(t float32) float64   { return math.Pow(10, math.Log10(s.Lo)+float64(t)*s.span()) }
+func (s *Log) Domain() (float64, float64) { return s.Lo, s.Hi }
+
+func (s *Log) Ticks(_ int) []Tick {
+	var ticks []Tick
+	for e := math.Log10(s.Lo); e <= math.Log10(s.Hi)+1e-9; e++ {
+		v := math.Pow(10, e)
+		ticks = append(ticks, Tick{Value: v, Pos: s.Map(v)})
+	}
+	return ticks
+}

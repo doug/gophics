@@ -103,3 +103,21 @@ type Mark interface {
 
 // named marks contribute an entry to the legend (empty name → omitted).
 type named interface{ markName() string }
+
+// seriesSlot is the pixel width one item may occupy: a band's bandwidth, or the
+// smallest pixel gap between adjacent x positions.
+func seriesSlot(p Plot, xs []float64) float32 {
+	if bd, ok := p.X.(bander); ok {
+		return bd.Bandwidth() * p.Area.Dx()
+	}
+	if len(xs) < 2 {
+		return p.Area.Dx() * 0.4
+	}
+	minGap := p.Area.Dx()
+	for i := 1; i < len(xs); i++ {
+		if g := abs(p.px(xs[i]) - p.px(xs[i-1])); g > 0 && g < minGap {
+			minGap = g
+		}
+	}
+	return minGap
+}

@@ -2,6 +2,7 @@ package chart
 
 import (
 	"image/png"
+	"math"
 	"os"
 	"testing"
 
@@ -58,6 +59,30 @@ func TestChartShot(t *testing.T) {
 		XAxis: Axis{Grid: true},
 	}}
 	shot(t, dir+"/line.png", geom.Size{W: 720, H: 420}, white, line)
+
+	candles := make([]Candle, 14)
+	prev := 50.0
+	for i := range candles {
+		o := prev
+		cl := o + float64((i*37)%13) - 6
+		hi := math.Max(o, cl) + float64((i*13)%5)
+		lo := math.Min(o, cl) - float64((i*7)%5)
+		candles[i] = Candle{X: float64(i), Open: o, High: hi, Low: lo, Close: cl}
+		prev = cl
+	}
+	candle := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
+		Marks: []Mark{CandleMark{Data: candles}},
+	}}
+	shot(t, dir+"/candle.png", geom.Size{W: 720, H: 420}, white, candle)
+
+	rng := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
+		Marks: []Mark{RangeMark{Data: []Span{
+			{X: 0, Lo: 20, Hi: 65, Label: "Jan"}, {X: 1, Lo: 35, Hi: 80, Label: "Feb"},
+			{X: 2, Lo: 28, Hi: 72, Label: "Mar"}, {X: 3, Lo: 40, Hi: 95, Label: "Apr"},
+			{X: 4, Lo: 30, Hi: 60, Label: "May"},
+		}}},
+	}}
+	shot(t, dir+"/range.png", geom.Size{W: 620, H: 380}, white, rng)
 
 	var cells []Cell
 	for x := 0; x < 20; x++ {

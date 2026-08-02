@@ -50,6 +50,18 @@ func TestEmptyChart(t *testing.T) {
 	renderChart(t, Chart{})
 }
 
+// TestRangeAndCandle draws the interval and OHLC marks.
+func TestRangeAndCandle(t *testing.T) {
+	renderChart(t, Chart{Marks: []Mark{RangeMark{Data: []Span{
+		{X: 0, Lo: 2, Hi: 8, Label: "a"}, {X: 1, Lo: 3, Hi: 6, Label: "b"},
+	}}}, Animate: true})
+
+	renderChart(t, Chart{Marks: []Mark{CandleMark{Data: []Candle{
+		{X: 0, Open: 5, High: 8, Low: 4, Close: 7},
+		{X: 1, Open: 7, High: 9, Low: 5, Close: 5},
+	}}}, Animate: true})
+}
+
 // TestHeatmapRenders draws a small RectMark grid.
 func TestHeatmapRenders(t *testing.T) {
 	var cells []Cell
