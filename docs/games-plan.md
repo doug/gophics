@@ -13,9 +13,13 @@ and Android?**
 
 The short answer, established by exploration:
 
-- **Solitaire needs essentially nothing new.** Drag, animation, canvas painting,
-  damage tracking and headless golden tests are all in place. It ships first, on all
-  four platforms, as a near-zero-framework-change milestone.
+- **Solitaire needed essentially nothing new — and is now shipped** (`examples/solitaire`).
+  Drag, animation, canvas painting, damage tracking and headless golden tests were all
+  in place, so it was built with zero framework changes: a pure, fully unit-tested
+  `klondike` engine plus a bespoke-Canvas board with deal/flip animations, drag-drop by
+  overlap area, tap-to-foundation, auto-complete, a **win cascade**, real card faces, and
+  file-backed persistence. Desktop and web run today; mobile shares the same code and
+  rides on the Stage-5 GPU-present bring-up.
 - **The side-scroller is gated on five things**: sprite-atlas blitting, a real
   keyboard model with held-state polling, a low-latency sound mixer, display-list
   throughput, and — for mobile — a GPU present path (**built this session**; Go side
@@ -666,7 +670,7 @@ game/
   `Ticker.Tick` is Update, `Canvas.Draw` is Draw. What's worth adding is `game.Loop` —
   a widget that owns the accumulator, not a lifecycle interface.
 
-### `examples/solitaire` — Klondike, ships first
+### `examples/solitaire` — Klondike (✅ shipped this session)
 
 **Architecture: one full-screen `widget.Canvas` doing bespoke card layout and its own
 hit-testing.** Not 52 widgets — `layout.Stack` paints every child at the same origin
@@ -678,22 +682,19 @@ appears.
 - **Game state is pure and rendering-free**: deck, seven tableaus, four foundations,
   stock/waste, legal-move rules, undo stack, win detection. 100% `go test`-able with no
   framework at all — this is the majority of the code and it has zero dependencies.
-- **Card art: draw everything, embed no PNGs.** Body = `FillRRect` + `StrokeRRect` +
-  the existing `paint.DropShadow`; rank = `TextIn("bold", …)` with real shaping; back =
-  `FillRRectGradient` + a lattice; empty slot = `StrokeRRect` + a ghost pip.
-  **Do not rely on Unicode ♠♥♦♣** — `goregular` very likely lacks them (verify at
-  Stage 2), and adding a fallback font either bloats the binary or drags in system font
-  discovery, which breaks both determinism and the single-binary story. **Draw the
-  glyphs**: all four are constructible from today's primitives, where
-  `FillRRect(square, radius = half)` *is* a circle and `PushTransform{Rotation}` gives
-  rotation — diamond = one rotated `FillRect`; club = three circles + a stem; heart =
-  two circles + a 45°-rotated square; spade = the heart construction flipped
-  (`PushTransform{SY: -1, PivotY: cy}`) plus a flared stem. **~120 LOC for a complete
-  deck with zero new Canvas primitives and zero binary assets.** Court cards use a large
-  letter + decorative panel rather than J/Q/K figures — a legitimate minimalist design
-  that removes the art risk entirely. (The atlas-PNG route stays viable via `SubImage`,
-  but needs 53 distinct textures against a 64-texture GPU budget, can't recolour for
-  dark mode, and requires art nobody has authored.)
+- **Card art: draw everything, embed no PNGs — shipped this way.** Body = `FillRRect` +
+  `StrokeRRect` + `paint.DropShadow`; back = `FillRRectGradient` + a rotated-square
+  motif; empty slot = a `StrokeRRect` ghost; a subtle felt gradient underneath.
+  **Suit pips — the plan predicted `goregular` would lack ♠♥♦♣ and that they'd be
+  constructed from primitives; that turned out false. `goregular` *has* all four**, so
+  the deck renders them as shaped text: the traditional pip arrangement (N symbols per
+  rank in the standard grid, lower-half pips rotated 180°), an Ace with one large central
+  pip, court cards with a large rank letter, and two opposing corner indices (top-left +
+  a rotated bottom-right), with glyph centering via calibrated offsets (the Canvas has no
+  measure API). Ranks via `TextIn`/`Text` with real shaping. Still zero binary assets and
+  zero new Canvas primitives. (The constructed-shape and atlas-PNG routes both stay
+  viable but proved unnecessary — the atlas route would also need 53 textures against a
+  64-texture GPU budget and can't recolour for dark mode.)
 - **Drag** via `widget.Interactive{Handler{OnPress, OnDrag, OnRelease}}` wrapping the
   Canvas, hit-testing top-down through the stacks. Compute the drop target by
   **maximum overlap area against the dragged card's rect, not the pointer position** —
@@ -841,15 +842,19 @@ Then `game/{game,rand,clock,loop,input,timer}.go`, and
 matrix, stock recycle, undo/redo including `FlippedSource`, auto-complete termination,
 and a fuzz test asserting 52 distinct cards survive 10k random legal moves. The pure
 model banked before a single pixel.**
+**✅ Built this session: the `klondike/` engine (card / game / snapshot / auto-complete)
+with unit tests, rendering-free.** (The framework bug-fixes and `game/` package listed
+above remain to do — solitaire simply didn't need them.)
 
-**Stage 1b — Solitaire playable and shipped (~2.5 weeks, LOW risk).**
+**Stage 1b — Solitaire playable and shipped (~2.5 weeks, LOW risk). ✅ DONE this session
+on desktop + web.**
 Board layout as a pure `Layout(size, game) Board` function, top-down hit-testing, the
-vector deck with drawn suit glyphs, drag/drop with overlap-area targeting,
-tap-to-foundation, deal/flip/auto-complete/win-cascade animations, persistence via the
-`examples/notes` `Store` pattern, mobile targets mirroring `examples/hn`.
-**Gate: benchmark mobile frame cost before committing to the phone ship.**
-**Demo: a complete, attractive Klondike on desktop, web, iOS and Android — built with
-essentially zero renderer change.** First shippable artifact.
+deck rendered with shaped-text suit glyphs + standard pip layouts (see the card-art note
+above), drag/drop with overlap-area targeting, tap-to-foundation,
+deal/flip/auto-complete/win-cascade animations, persistence via the `examples/notes`
+`Store` pattern. Mobile targets share the same code and ride on Stage 5's GPU present.
+**Gate remaining: on-device mobile bring-up + benchmark frame cost before the phone
+ship.** Built with essentially zero renderer change — the first shippable artifact.
 
 **Stage 2 — Damage + key model + held-state (~2.5 weeks, MEDIUM risk).**
 Pure-translate transforms stop poisoning damage; `widget.Canvas.Damage`. Full
@@ -886,9 +891,10 @@ and iPhone.**
 **Stage 6 (optional).** Gamepad (web → mobile hosts → Linux → Windows → macOS last).
 Retained game surface + per-surface resolution.
 
-**Roll-up: ~4–5 months focused. A correct Klondike proven by tests in week 2; solitaire
-shipped on all four platforms by ~week 5; a complete flat-vector platformer on desktop
-+ web by ~week 11; sprites by ~week 14; mobile is the tail.** The tail is caused by the
+**Roll-up: ~4–5 months focused. A correct Klondike proven by tests — ✅ done; solitaire
+shipped on desktop + web — ✅ done (mobile riding the GPU-present tail); a complete
+flat-vector platformer on desktop + web by ~week 11 of the remaining work; sprites by
+~week 14; mobile is the tail.** The tail is caused by the
 Vulkan-preview and NDK-shim risks, not by gossamer's architecture — which already has
 the right seam (`app/present.go`'s per-frame `Target` selection) for mobile GPU to drop
 in without touching a line above `shell`.

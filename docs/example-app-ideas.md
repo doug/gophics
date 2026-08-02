@@ -33,7 +33,9 @@ server, the cost, and the privacy problem at once.
   graph (Canvas), tags, wikilinks. Sync = your folder (iCloud/Git). Uses the
   text-editing + caret-into-view work directly.
 - **Budget** — YNAB / Actual. Envelope budgeting, transaction LazyLists, trend
-  charts (Canvas), CSV/OFX import. Replaces ~$109/yr; pairs with `finance-cli`.
+  charts (Canvas), CSV/OFX import. Replaces ~$109/yr; pairs with `finance-cli`. The
+  visualize-half of this ("**Ledger**") is the chosen driver for a built-in Swift
+  Charts–style `chart` package — see **`docs/charts-plan.md`**.
 - **Journal** — Day One. Text-heavy, calendar, "on this day", local encrypted files.
   Replaces a subscription for deeply personal data. (See also the media-journal in
   section G.)
@@ -115,13 +117,39 @@ currency, energy timers on card games), so ad-free/offline/gorgeous is strictly
 better. Also great dogfood for hardening drag/animation/input. (Not a game *engine* —
 no sprites/physics — but these are UI-games.)
 
-- **Solitaire collection** — Klondike/Spider/FreeCell/Pyramid on one engine. Even
-  MS Solitaire has ads + a subscription now. Card drag + deal/flip animations.
+The purest offenders here charge **rent on a daily puzzle**: generating a 9×9 grid
+or checking a five-letter word is a few KB of offline code, yet it ships behind a
+subscription, 30-second unskippable video ads, or an **energy timer** ("wait 30
+minutes or pay $0.99"). Stripped of the artificial scarcity, these are delightful,
+self-contained, and *shipped* — `examples/solitaire` is the first (deal → play →
+auto-complete → win cascade, all local). The deep framework plan behind the games
+workstream — input model, audio mixer, sprite/path primitives, mobile GPU present, the
+`game` package, staging and risks — lives in **`docs/games-plan.md`** (this section is
+the menu; that doc is the build plan).
+
+- **Solitaire collection** — Klondike (shipped) → Spider/FreeCell/Pyramid on one
+  engine. Even MS Solitaire has ads + a subscription now. Card drag + deal/flip
+  animations.
 - **Classic card games vs. local AI** — Hearts, Spades, Euchre, Gin Rummy,
   **Cribbage** (the board is a Canvas gift; devoted fans; terrible incumbents).
-- **Sudoku** — grid + pencil marks + local generator/solver.
-- **2048**, **Minesweeper**, **daily Wordle-style word game** (deterministic by date,
-  bundled word list, no account).
+- **Daily word & logic (the NYT Games bundle)** — deterministic-by-date, bundled
+  data, no account — the sharpest "zero server, pure rent" shape:
+  - **Wordle-style** guess game (bundled word list).
+  - **Connections** — sort 16 words into 4 groups; a tight grid + selection +
+    shuffle + reveal animation. Tiny logic, big daily habit.
+  - **Mini crossword** — grid + clue list + text entry; leans on `layout/grid`.
+- **Sudoku / Nonogram** — grid + pencil marks + local generator/solver. Negligible
+  compute; the whole "premium" incumbent is a paywalled generator.
+- **Match-3 / falling-tile** — Candy Crush / Two Dots / Royal Match, minus the
+  energy timers and microtransactions engineered to monetise frustration. Grid swap
+  + gravity + match-cascade + juice: the strongest **animation/Canvas dogfood** in
+  this list (harder than the card games; a good stress test for the paint/anim path).
+- **Brain-training minigame pack** — Lumosity / Peak / Elevate stripped of the
+  pseudo-neuroscience subscription: a set of 60-second reaction / memory / pattern /
+  mental-math minigames behind one results screen. Exercises **fast input +
+  per-game animation + a stats/heatmap screen**; naturally grows one minigame at a
+  time.
+- **2048**, **Minesweeper** — grid + simple rules; classic quick wins.
 
 ## F. Simple mobile utilities
 
@@ -185,8 +213,11 @@ hardens a **reusable core layer**, not a one-off.
 
 ## Suggested starting points
 
-- **Fast high-signal proof:** habit tracker (Canvas heatmap, tiny) or a
-  solitaire/card collection (best mobile play today, crowd-pleaser).
+- **Fast high-signal proof:** habit tracker (Canvas heatmap, tiny), a daily puzzle
+  (Connections / Sudoku — deterministic, no server, natural follow-on to solitaire),
+  or more of the solitaire/card collection.
+- **Juiciest animation dogfood:** match-3 (grid swap + gravity + cascade) — bigger,
+  but a real workout for the paint/anim path.
 - **Flagship, both platforms:** tasks (from the `todo` seed) or EPUB reader
   (shows off the rendering engine).
 - **Differentiated + personal:** JJ / Jujutsu GUI.
