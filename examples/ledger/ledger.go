@@ -23,10 +23,12 @@ type Ledger struct{}
 func (Ledger) Build(_ widget.Ctx) widget.Widget {
 	d := sampleData()
 
+	orange := paint.RGB(0.95, 0.56, 0.16)
 	balance := chart.Chart{
 		Marks: []chart.Mark{
+			chart.AreaMark{Data: d.balance, Color: orange, Alpha: 0.13},
 			chart.RuleMark{Value: d.budget, Horizontal: true, Dash: 6, Color: colWarn},
-			chart.LineMark{Data: d.balance, Width: 2.5},
+			chart.LineMark{Data: d.balance, Width: 2.5, Color: orange},
 		},
 		XAxis:   chart.Axis{Format: d.dayLabel},
 		Animate: true,
