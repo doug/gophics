@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/paint"
@@ -36,6 +37,7 @@ type gameState struct {
 	snd     *sound.Mixer
 	rng     *rand.Rand
 	samples map[SoundID]*sound.Sample
+	music   *sound.Voice
 
 	origin geom.Pt // last camera origin (world px), for tap→cell mapping
 	ts     float32 // last tile size on screen
@@ -66,7 +68,8 @@ func (s *gameState) Init(ctx widget.Ctx) {
 			SndDie:     sound.Blip(140, 0.4),
 			SndWin:     sound.Coin(),
 		}
-		s.snd.PlaySource(sound.DungeonMusic(1), sound.PlayOptions{Volume: 0.30}) // ambient loop
+		s.music = s.snd.PlaySource(sound.DungeonMusic(1),
+			sound.PlayOptions{Volume: 0.30, FadeIn: 2 * time.Second}) // ambient loop, fades in
 	}
 	s.g = newGame(s.W().Seed)
 	s.attachSound()
@@ -139,6 +142,9 @@ func (s *gameState) act(dx, dy int) {
 		s.attachSound()
 	} else {
 		s.g.Move(dx, dy)
+	}
+	if s.music != nil {
+		s.music.SetVolume(0.28 + 0.05*float64(s.g.depth-1)) // tenser as you descend
 	}
 	s.SetState(nil)
 }

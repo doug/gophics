@@ -3,6 +3,7 @@ package sound
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/doug/gossamer/shell"
 )
@@ -25,7 +26,7 @@ func TestRenderPreviewWAV(t *testing.T) {
 		t.Skip("set SOUND_WAV=<path> to render a preview")
 	}
 	m := NewMixer()
-	m.PlaySource(DungeonMusic(1), PlayOptions{Volume: 0.5})
+	music := m.PlaySource(DungeonMusic(1), PlayOptions{Volume: 0.5, FadeIn: 2 * time.Second})
 
 	events := []struct {
 		at  float64
@@ -43,6 +44,7 @@ func TestRenderPreviewWAV(t *testing.T) {
 	const block = 2048
 	buf := make([]float32, block*2)
 	ei, frame := 0, 0
+	faded := false
 	for frame < total {
 		n := block
 		if frame+n > total {
@@ -51,6 +53,10 @@ func TestRenderPreviewWAV(t *testing.T) {
 		for ei < len(events) && float64(frame)/SampleRate >= events[ei].at {
 			m.Play(events[ei].s, PlayOptions{Volume: 0.7, Pan: events[ei].pan})
 			ei++
+		}
+		if float64(frame)/SampleRate >= secs-2 && !faded {
+			music.FadeOut(2 * time.Second) // fade the bed out at the end
+			faded = true
 		}
 		b := buf[:n*2]
 		m.ReadFloat32s(b)

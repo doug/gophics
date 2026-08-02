@@ -1,6 +1,32 @@
 package sound
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestFadeInRamps(t *testing.T) {
+	m := NewMixer()
+	m.PlaySource(&Osc{Wave: Sine, Freq: 440, Amp: 0.9}, PlayOptions{FadeIn: 200 * time.Millisecond})
+	early := make([]float32, 256)
+	m.ReadFloat32s(early)
+	m.ReadFloat32s(make([]float32, int(0.3*SampleRate)*2)) // skip past the fade
+	late := make([]float32, 256)
+	m.ReadFloat32s(late)
+	if peak(early) >= peak(late) {
+		t.Fatalf("fade-in: early peak %v should be < late %v", peak(early), peak(late))
+	}
+}
+
+func TestFadeOutDrops(t *testing.T) {
+	m := NewMixer()
+	v := m.PlaySource(&Osc{Wave: Sine, Freq: 440, Amp: 0.5}, PlayOptions{})
+	v.FadeOut(50 * time.Millisecond)
+	m.ReadFloat32s(make([]float32, int(0.1*SampleRate)*2)) // past the fade
+	if m.Len() != 0 {
+		t.Fatalf("faded-out voice not dropped: len %d", m.Len())
+	}
+}
 
 func absf(v float32) float32 {
 	if v < 0 {

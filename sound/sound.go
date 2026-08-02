@@ -12,6 +12,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // SampleRate is the mixing rate (Hz).
@@ -133,31 +134,67 @@ func (g *Gain) Process(out []float32) bool {
 // PlayOptions configure a voice. Zero values mean natural (Volume 1, Pan center,
 // Pitch 1).
 type PlayOptions struct {
-	Volume float64 // linear gain; 0 → 1
-	Pan    float64 // -1 left … 0 center … +1 right
-	Pitch  float64 // playback rate; 0 → 1 (samples only)
-	Loop   bool
+	Volume float64       // linear gain; 0 → 1
+	Pan    float64       // -1 left … 0 center … +1 right
+	Pitch  float64       // playback rate; 0 → 1 (samples only)
+	Loop   bool          // loop samples
+	FadeIn time.Duration // ramp the envelope 0→1 over this time
 }
 
 // Voice is a playing sound — a mono Source placed in the stereo field with a
-// live-adjustable volume and pan. It is the handle returned by Play.
+// live-adjustable volume and pan, plus a fade envelope. It is the handle
+// returned by Play.
 type Voice struct {
 	src     Source
 	vol     atomic.Uint32 // Float32bits
 	pan     atomic.Uint32 // Float32bits, -1..1
 	stopped atomic.Bool
+
+	env      float32       // envelope gain (advanced on the audio goroutine)
+	envTgt   atomic.Uint32 // Float32bits target
+	envRate  atomic.Uint32 // Float32bits per-sample ramp; 0 = instant
+	fadeStop atomic.Bool   // drop when the envelope reaches 0
 }
 
 func newVoice(src Source, opts PlayOptions) *Voice {
-	v := &Voice{src: src}
+	v := &Voice{src: src, env: 1}
 	vol := opts.Volume
 	if vol <= 0 {
 		vol = 1
 	}
 	v.SetVolume(vol)
 	v.SetPan(opts.Pan)
+	v.setEnvTgt(1)
+	if opts.FadeIn > 0 {
+		v.env = 0
+		v.setEnvRate(ramp(opts.FadeIn))
+	}
 	return v
 }
+
+// FadeOut ramps the voice to silence over d, then drops it.
+func (v *Voice) FadeOut(d time.Duration) {
+	if v == nil {
+		return
+	}
+	v.setEnvTgt(0)
+	v.setEnvRate(ramp(d))
+	v.fadeStop.Store(true)
+}
+
+// ramp is the per-sample envelope step for a fade of duration d.
+func ramp(d time.Duration) float32 {
+	frames := d.Seconds() * SampleRate
+	if frames < 1 {
+		frames = 1
+	}
+	return float32(1 / frames)
+}
+
+func (v *Voice) setEnvTgt(x float32)  { v.envTgt.Store(math.Float32bits(x)) }
+func (v *Voice) setEnvRate(x float32) { v.envRate.Store(math.Float32bits(x)) }
+func (v *Voice) envTarget() float32   { return math.Float32frombits(v.envTgt.Load()) }
+func (v *Voice) envStep() float32     { return math.Float32frombits(v.envRate.Load()) }
 
 // SetVolume sets the linear gain (live).
 func (v *Voice) SetVolume(x float64) { v.vol.Store(math.Float32bits(float32(x))) }
@@ -254,11 +291,28 @@ func (m *Mixer) ReadFloat32s(buf []float32) (int, error) {
 		a := (float64(v.panpos()) + 1) * 0.5 * (math.Pi / 2)
 		l := float32(math.Cos(a)) * v.volume() * master
 		r := float32(math.Sin(a)) * v.volume() * master
-		for i := 0; i < frames; i++ {
-			buf[2*i] += mono[i] * l
-			buf[2*i+1] += mono[i] * r
+
+		// Advance the fade envelope across the block, lerping per sample.
+		env0 := v.env
+		tgt, step := v.envTarget(), v.envStep()
+		if step <= 0 {
+			v.env = tgt
+		} else if v.env < tgt {
+			v.env = min(tgt, v.env+step*float32(frames))
+		} else {
+			v.env = max(tgt, v.env-step*float32(frames))
 		}
-		if cont {
+		env0, env1 := env0, v.env
+
+		for i := 0; i < frames; i++ {
+			e := env0
+			if frames > 1 {
+				e = env0 + (env1-env0)*float32(i)/float32(frames)
+			}
+			buf[2*i] += mono[i] * l * e
+			buf[2*i+1] += mono[i] * r * e
+		}
+		if cont && !(v.fadeStop.Load() && v.env <= 0.0002) {
 			alive = append(alive, v)
 		}
 	}
