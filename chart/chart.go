@@ -90,13 +90,15 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		if _, ok := mk.(BarMark); ok {
 			barGroups++
 		}
-		if n, ok := mk.(named); ok && n.markName() != "" {
+		if le, ok := mk.(legender); ok {
+			s.legend = append(s.legend, le.legendEntries(th)...)
+		} else if n, ok := mk.(named); ok && n.markName() != "" {
 			s.legend = append(s.legend, legendEntry{n.markName(), markColor(mk, th, i)})
 		}
 	}
 	m := margins(p, w, ys)
 	if w.Legend && len(s.legend) > 0 {
-		m.Top += p.Metrics(legendSize).LineHeight() + 12
+		m.Top += float32(legendRows(s.legend, p))*p.Metrics(legendSize).LineHeight() + 10
 	}
 
 	canvas := widget.Canvas{Clip: false, Draw: func(c paint.Canvas, size geom.Size) {

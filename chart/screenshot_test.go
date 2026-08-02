@@ -59,6 +59,15 @@ func TestChartShot(t *testing.T) {
 	}}
 	shot(t, dir+"/line.png", geom.Size{W: 720, H: 420}, white, line)
 
+	donut := widget.Padding{Insets: geom.InsetsAll(24), Child: Chart{
+		Marks: []Mark{SectorMark{Inner: 0.55, Data: Values(
+			"Rent", 1850, "Food", 620, "Transit", 180, "Fun", 240, "Utilities", 165, "Shopping", 310)}},
+		XAxis:  Axis{Hide: true},
+		YAxis:  Axis{Hide: true},
+		Legend: true,
+	}}
+	shot(t, dir+"/donut.png", geom.Size{W: 560, H: 460}, white, donut)
+
 	grouped := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
 		Marks: []Mark{
 			BarMark{Name: "Budget", Data: Values("Rent", 1800, "Food", 600, "Fun", 300, "Transit", 200)},

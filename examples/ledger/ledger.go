@@ -33,8 +33,11 @@ func (Ledger) Build(_ widget.Ctx) widget.Widget {
 		XAxis:   chart.Axis{Format: d.dayLabel},
 		Animate: true,
 	}
-	spend := chart.Chart{
-		Marks:   []chart.Mark{chart.BarMark{Data: d.byCategory, Color: paint.RGB(0.20, 0.47, 0.85)}},
+	donut := chart.Chart{
+		Marks:   []chart.Mark{chart.SectorMark{Inner: 0.58, Data: d.byCategory}},
+		XAxis:   chart.Axis{Hide: true},
+		YAxis:   chart.Axis{Hide: true},
+		Legend:  true,
 		Animate: true,
 	}
 	week := chart.Chart{
@@ -42,15 +45,19 @@ func (Ledger) Build(_ widget.Ctx) widget.Widget {
 		Animate: true,
 	}
 
+	row := widget.Row(
+		widget.Flexible{Flex: 3, Child: card("Where it goes", "", 300, donut)},
+		widget.Sized{W: 16},
+		widget.Flexible{Flex: 2, Child: card("This week", "", 300, week)},
+	)
+	row.CrossAlign = layout.CrossStretch
+
 	page := column(layout.CrossStretch,
 		header("Ledger", "August 2026"),
 		widget.Sized{H: 18},
-		card("Balance", money(d.latest), 280, balance),
+		card("Balance", money(d.latest), 260, balance),
 		widget.Sized{H: 16},
-		rowCards(
-			card("Spending by category", "", 260, spend),
-			card("This week", "", 260, week),
-		),
+		row,
 	)
 	return widget.Decorated{Color: colBG, Child: widget.Padding{All: 24, Child: page}}
 }
@@ -78,13 +85,6 @@ func card(title, value string, h float32, body widget.Widget) widget.Widget {
 		Color: colCard, Radius: 16,
 		Child: widget.Padding{All: 20, Child: column(layout.CrossStretch, head...)},
 	}}
-}
-
-// rowCards places two cards side by side, sharing the width evenly.
-func rowCards(a, b widget.Widget) widget.Widget {
-	r := widget.Row(widget.Expand(a), widget.Sized{W: 16}, widget.Expand(b))
-	r.CrossAlign = layout.CrossStretch
-	return r
 }
 
 func column(cross layout.CrossAlign, kids ...widget.Widget) widget.Widget {
