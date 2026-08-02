@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"image/color"
+	"math"
 )
 
 // The tileset is generated in Go at startup — no binary assets. Every tile is a
@@ -24,6 +25,8 @@ const (
 	TGold
 	TStairs
 	TDoor
+	TAmulet
+	TGlow
 	tileCount
 )
 
@@ -99,11 +102,36 @@ func buildAtlas() *image.RGBA {
 
 	// Door: brown with a knob.
 	rect(a, TDoor, 3, 2, 12, 13, cBrown)
-	rect(a, TDoor, 3, 2, 12, 13, cBrown)
 	outlineRect(a, TDoor, 3, 2, 12, 13, cOutline)
 	px(a, TDoor, 10, 7, cGold)
 
+	// Amulet: gold medallion with a red gem and a chain.
+	px(a, TAmulet, 8, 3, cGold)
+	px(a, TAmulet, 8, 4, cGold)
+	disc(a, TAmulet, 8, 9, 4, cGold)
+	disc(a, TAmulet, 8, 9, 2, cRed)
+	outline(a, TAmulet, cOutline)
+
+	// Glow: a soft radial warm halo (premultiplied alpha) for the torch aura.
+	glowTile(a)
+
 	return a
+}
+
+func glowTile(a *image.RGBA) {
+	const cx, cy = 7.5, 7.5
+	for y := 0; y < tile; y++ {
+		for x := 0; x < tile; x++ {
+			f := 1 - math.Hypot(float64(x)-cx, float64(y)-cy)/8
+			if f < 0 {
+				f = 0
+			}
+			f *= f
+			ax, ay := at(TGlow, x, y)
+			a.SetRGBA(ax, ay, color.RGBA{
+				R: uint8(255 * f), G: uint8(238 * f), B: uint8(205 * f), A: uint8(255 * f)})
+		}
+	}
 }
 
 // creature draws a rounded body with two eyes — the shared entity shape.

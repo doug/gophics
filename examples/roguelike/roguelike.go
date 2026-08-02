@@ -89,9 +89,9 @@ func (s *gameState) tap(p geom.Pt) {
 }
 
 func (s *gameState) act(dx, dy int) {
-	if s.g.dead {
+	if s.g.dead || s.g.won {
 		s.restarts++
-		s.g = newGame(s.W().Seed + s.restarts) // any input after death restarts
+		s.g = newGame(s.W().Seed + s.restarts) // any input after death/win starts anew
 	} else {
 		s.g.Move(dx, dy)
 	}
@@ -118,6 +118,12 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 			s.blit(c, terrainTile(g.d.at(x, y)), x, y, false, s.light(x, y))
 		}
 	}
+	// Torch halo: a translucent warm glow centered on the player.
+	gs := ts * 7
+	c.DrawSprite(s.atlas, paint.Sprite{Src: src(TGlow),
+		Dst:   geom.RectXYWH(float32(g.player.X)*ts-ox+ts/2-gs/2, float32(g.player.Y)*ts-oy+ts/2-gs/2, gs, gs),
+		Alpha: 0.45})
+
 	for _, it := range g.items {
 		if g.visibleAt(it.X, it.Y) {
 			s.blit(c, it.Tile, it.X, it.Y, false, s.light(it.X, it.Y))
@@ -131,8 +137,11 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 	s.blit(c, g.player.Tile, g.player.X, g.player.Y, g.player.FlipX, paint.Color{R: 1, G: 1, B: 1, A: 1})
 
 	s.drawHUD(c, size)
-	if g.dead {
+	switch {
+	case g.dead:
 		s.banner(c, size, "You died — press a key to descend anew")
+	case g.won:
+		s.banner(c, size, "You claimed the Amulet! Press a key to delve anew")
 	}
 }
 
@@ -188,6 +197,7 @@ func (s *gameState) drawHUD(c paint.Canvas, size geom.Size) {
 	c.Text(fmt.Sprintf("HP %d/%d", g.player.HP, g.player.MaxHP), geom.Pt{X: bx + bw + 12, Y: by + 12}, 14, colInk)
 	c.Text(fmt.Sprintf("Depth %d", g.depth), geom.Pt{X: bx + bw + 130, Y: by + 12}, 14, colInk)
 	c.Text(fmt.Sprintf("Gold %d", g.gold), geom.Pt{X: bx + bw + 220, Y: by + 12}, 14, colCoin)
+	c.Text(fmt.Sprintf("Amulet · depth %d", maxDepth), geom.Pt{X: size.W - 170, Y: by + 12}, 14, colDim)
 
 	// Last few log lines.
 	ly := size.H - h + 40

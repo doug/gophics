@@ -51,6 +51,27 @@ func TestRoguelikeRenders(t *testing.T) {
 	}
 }
 
+// TestWin verifies the amulet on the deepest level wins the game.
+func TestWin(t *testing.T) {
+	g := newGame(1)
+	g.depth = maxDepth - 1
+	g.descend() // builds the final level, which carries the amulet
+	var am *Item
+	for _, it := range g.items {
+		if it.Amulet {
+			am = it
+		}
+	}
+	if am == nil {
+		t.Fatalf("no amulet on level %d", g.depth)
+	}
+	g.player.X, g.player.Y = am.X, am.Y
+	g.pickup()
+	if !g.won {
+		t.Fatal("claiming the amulet should win the game")
+	}
+}
+
 // TestCombatAndFOV exercises the pure game: movement reveals cells, and a d20
 // attack eventually kills an adjacent rat.
 func TestCombatAndFOV(t *testing.T) {

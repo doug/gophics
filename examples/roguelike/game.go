@@ -19,10 +19,14 @@ type Entity struct {
 
 // Item is a pickup lying on the floor.
 type Item struct {
-	X, Y int
-	Tile TileID
-	Gold int // >0 → gold; else a potion
+	X, Y   int
+	Tile   TileID
+	Gold   int  // >0 → gold; else a potion
+	Amulet bool // the win goal
 }
+
+// maxDepth is where the Amulet of Yendor waits.
+const maxDepth = 5
 
 // Game is the full, rendering-free game state.
 type Game struct {
@@ -85,8 +89,19 @@ func (g *Game) build() {
 			}
 		}
 	}
+	// The Amulet of Yendor waits on the deepest level (no stairs down there).
+	if g.depth >= maxDepth {
+		sx, sy := d.rooms[len(d.rooms)-1].center()
+		d.set(sx, sy, CellFloor)
+		g.items = append(g.items, &Item{X: sx, Y: sy, Tile: TAmulet, Amulet: true})
+	}
+
 	g.computeFOV()
-	g.logf("You enter dungeon level %d.", g.depth)
+	if g.depth >= maxDepth {
+		g.logf("Level %d — the Amulet of Yendor is near!", g.depth)
+	} else {
+		g.logf("You enter dungeon level %d.", g.depth)
+	}
 }
 
 func (g *Game) logf(format string, a ...any) {
@@ -142,6 +157,11 @@ func (g *Game) pickup() {
 	kept := g.items[:0]
 	for _, it := range g.items {
 		if it.X == g.player.X && it.Y == g.player.Y {
+			if it.Amulet {
+				g.won = true
+				g.logf("You claim the Amulet of Yendor — you win!")
+				continue
+			}
 			if it.Gold > 0 {
 				g.gold += it.Gold
 				g.logf("You pick up %d gold.", it.Gold)
