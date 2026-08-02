@@ -3,7 +3,7 @@ package app
 import (
 	"log"
 
-	"github.com/gogpu/gg"
+	"github.com/doug/gg"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"

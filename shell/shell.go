@@ -20,7 +20,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gogpu/gpucontext"
+	"github.com/doug/gpucontext"
 
 	"github.com/doug/gossamer/geom"
 )

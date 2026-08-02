@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gogpu/gogpu"
-	"github.com/gogpu/gpucontext"
+	"github.com/doug/gogpu"
+	"github.com/doug/gpucontext"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"

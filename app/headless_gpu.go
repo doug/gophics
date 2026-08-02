@@ -5,10 +5,10 @@ package app
 import (
 	"image"
 
-	"github.com/gogpu/gg"
-	_ "github.com/gogpu/gg/gpu" // register gg's GPU accelerator
-	"github.com/gogpu/gg/integration/ggcanvas"
-	"github.com/gogpu/gogpu"
+	"github.com/doug/gg"
+	_ "github.com/doug/gg/gpu" // register gg's GPU accelerator
+	"github.com/doug/gg/integration/ggcanvas"
+	"github.com/doug/gogpu"
 )
 
 // gpuRenderer is a headless GPU renderer + canvas, reused across RenderGPU calls.

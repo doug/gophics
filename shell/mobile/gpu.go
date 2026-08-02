@@ -4,11 +4,11 @@ import (
 	"log"
 	"unsafe"
 
-	"github.com/gogpu/gg"
-	"github.com/gogpu/gg/integration/ggcanvas"
-	"github.com/gogpu/gpucontext"
-	"github.com/gogpu/gputypes"
-	"github.com/gogpu/wgpu"
+	"github.com/doug/gg"
+	"github.com/doug/gg/integration/ggcanvas"
+	"github.com/doug/gpucontext"
+	"github.com/doug/gputypes"
+	"github.com/doug/wgpu"
 )
 
 // GPU presentation for the mobile Bridge. The host hands over a native render

@@ -13,8 +13,8 @@ import (
 	"image/draw"
 	"math"
 
-	"github.com/gogpu/gg"
-	ggtext "github.com/gogpu/gg/text"
+	"github.com/doug/gg"
+	ggtext "github.com/doug/gg/text"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/shell"

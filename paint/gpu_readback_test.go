@@ -18,10 +18,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gogpu/gg"
-	_ "github.com/gogpu/gg/gpu" // register gg's GPU accelerator
-	"github.com/gogpu/gg/integration/ggcanvas"
-	"github.com/gogpu/gogpu"
+	"github.com/doug/gg"
+	_ "github.com/doug/gg/gpu" // register gg's GPU accelerator
+	"github.com/doug/gg/integration/ggcanvas"
+	"github.com/doug/gogpu"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gossamer/geom"

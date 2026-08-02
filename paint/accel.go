@@ -1,6 +1,6 @@
 package paint
 
-import "github.com/gogpu/gg"
+import "github.com/doug/gg"
 
 // The GPU accelerator (gg's SDF shapes + tiled/adaptive coverage) is linked and
 // process-globally registered by accel_link.go's blank import, unless the
