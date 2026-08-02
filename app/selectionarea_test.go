@@ -183,7 +183,7 @@ func TestSelectionAreaTouchDragScrolls(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	touchDown(h, geom.Pt{X: 1, Y: 6}) // on "alpha"
+	touchDown(h, geom.Pt{X: 1, Y: 6})  // on "alpha"
 	touchMove(h, geom.Pt{X: 5, Y: 60}) // drag down immediately (no hold)
 	h.Release(geom.Pt{X: 5, Y: 60})
 	h.Render()

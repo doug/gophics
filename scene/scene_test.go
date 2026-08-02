@@ -1,8 +1,8 @@
 package scene_test
 
 import (
-	"image"
 	"bytes"
+	"image"
 	"image/png"
 	"testing"
 
