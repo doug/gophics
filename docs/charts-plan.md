@@ -45,27 +45,25 @@ package holds only conveniences over `paint`/`widget`; any new *primitive* goes 
 - **Testing:** `app.NewHeadless` golden images (the whole `examples/*` test pattern),
   so every chart type gets a deterministic pixel test.
 
-**The one real gap — path/polygon fill.** `paint.Canvas` has no filled path or
-polygon; `FillRRect(square, radius=half)` fakes a circle, but there is no way to fill
-an arbitrary closed shape. That gates exactly four things:
+**The path primitive — now BUILT (was the one real gap).** `paint.Canvas` originally
+had no filled path or polygon. It now has `FillPath` (commit `75a6c96`) and
+`StrokePath` (`9f7a5d5`), backed by a retained `paint.Path`. This was the
+**same primitive `docs/games-plan.md` §Workstream 3 specs**, so building it served
+both. The design that made it cheap: a *retained* `*paint.Path` passed by pointer —
+the scene op stores the pointer + a `Gen()` counter, so `opEqual`'s `==` stays valid
+(the path's slices would otherwise panic) and `opBounds` returns `Bounds()`. Verified
+CPU==GPU in the equivalence test.
 
-| Mark | Needs |
+What it unlocked, all shipped:
+
+| Mark | Built with |
 |---|---|
-| **Area** (filled under a line) | fill a closed polygon (line + baseline) |
-| **Pie / Donut** (`SectorMark`) | fill a wedge (arc + two radii) |
-| **Smoothed line** (Catmull-Rom/monotone) | stroke a curved path with joins |
-| **Thick line with crisp joins** | `Line` is per-segment → miter gaps at vertices |
+| **Pie / Donut** (`SectorMark`) | `FillPath` wedges (animated sweep) |
+| **Smoothed line** (`LineMark.Smooth`) | Catmull-Rom sampled into `StrokePath` |
+| **Thick lines with round joins** | `StrokePath` |
 
-This is the **same primitive `docs/games-plan.md` §Workstream 3 already specs**:
-`paint.Path` + `FillPath(p, rule, c)` / `StrokePath(p, style, c)` (the fork's
-`gg.Path`/`Context.FillPath` already exist; only the `paint.Canvas` exposure is
-missing). **Charts and games share it — building it serves both**, which is exactly
-the "earns its place beyond one caller" test. So:
-
-- **Charts v1 ships every mark that needs only rects + lines + measured text.**
-- **v2 unlocks area / pie / donut / smoothed lines the day `paint.Path` lands.**
-- Interim hacks (area as a clipped vertical gradient under a polyline; pie as a
-  many-wedge `FillRect` fan) are ugly enough to skip — defer to the real primitive.
+`AreaMark` still uses a sampled-column fill (works, animates via the reveal clip); it
+could move to a real filled path later, but there's no pressing need.
 
 Optional, minor: a device-pixel-ratio accessor (`Ctx.DevicePixelRatio()`, also on the
 games-plan wishlist) would let charts snap gridlines to physical pixels for hairline
@@ -215,29 +213,28 @@ this promotes **Ledger** to the concrete chart-library driver.
 
 Each stage ends runnable and golden-tested; mirrors the `games-plan` discipline.
 
-- **C0 — Skeleton + measurement + one golden (small).** `chart` package: `Scale`
+- **C0 — Skeleton + measurement + golden. ✅ DONE.** `chart` package: `Scale`
   (Linear + Band), `Mark` interface, `BarMark`, the `Chart` widget with
-  painter-measured insets and axis rendering. Exit: a headless golden of a labelled
-  bar chart, plus scale unit tests (`Map`/`Invert`/`Ticks` "nice" numbers).
-- **C1 — The "today" library (medium).** `LineMark`, `PointMark`, `RuleMark`,
-  `RectMark` (heatmap), `RangeMark`; `Time`/`Log`/`ColorScale`; axes (grid, tick
-  formatting, rotated/elided labels), legend, dark-mode palettes, `Selection` +
-  tooltip overlay, and data-change animation. Exit: a golden per mark type + an
-  interaction test (tap → correct `Selection.Index` via `Scale.Invert`).
-- **C2 — `paint.Path` marks (medium; shared with games-plan §WS3).** Land
-  `paint.Path` + `FillPath`/`StrokePath` in `paint` (with the `gpu_equiv_test.go`
-  CPU/GPU-parity guard), then `AreaMark`, `SectorMark`, and `LineMark.Smooth`. Exit:
-  goldens for area/donut/smoothed + the parity test.
-- **C3 — Ledger dashboard (medium).** The example app: CSV/OFX import, the six views
-  above, filter chips, local-file persistence, desktop + web. Exit: a shippable
-  dashboard whose every panel is a `chart` mark; render tests via `stateHook` +
-  pixel probes.
-- **Polish.** Accessibility `Semantics` overlay; `Ctx.DevicePixelRatio()` for hairline
-  gridlines; export-to-PNG (already have headless render).
+  painter-measured insets and axis rendering; scale unit tests + render tests.
+- **C1 — The "today" library. ✅ DONE** (except a few deferred items). `LineMark`,
+  `PointMark`, `RuleMark` (dashed), `AreaMark`, axes (grid, tick formatting), **legend
+  + grouped multi-series bars**, dark-mode palettes, **press-to-inspect selection +
+  crosshair/tooltip**, and mount animation. *Deferred:* `RectMark` heatmap, `RangeMark`,
+  `Time`/`Log`/`ColorScale`.
+- **C2 — `paint.Path` marks. ✅ DONE.** Landed `paint.Path` + `FillPath` + `StrokePath`
+  in `paint` (with the `gpu_equiv_test.go` parity guard), then **`SectorMark`
+  (pie/donut)** and **`LineMark.Smooth`** (Catmull-Rom). `AreaMark` shipped in C1 via
+  column fill.
+- **C3 — Ledger dashboard. ✅ DONE (sample data).** The example app: balance line+area
+  with a date axis + budget rule, a "Where it goes" donut, weekly bars, card layout,
+  render test. *Deferred:* real CSV/OFX import + local-file persistence.
+- **Polish (remaining).** `Time` scale (Ledger uses a `Format` callback for now);
+  accessibility `Semantics` overlay; `Ctx.DevicePixelRatio()` for hairline gridlines;
+  heatmap/range marks.
 
-**Framework changes required:** only **`paint.Path`/`FillPath`/`StrokePath`** (C2),
-which the games workstream wants anyway; everything in C0–C1 rides on primitives that
-already exist. Optional: `Ctx.DevicePixelRatio()`.
+**Framework changes required:** only **`paint.Path`/`FillPath`/`StrokePath`** — now
+built (also serves games). Everything else rode on primitives that already existed
+(notably `Ctx.Painter()` measurement).
 
 ## Scope guard (so `chart` doesn't grow a stats engine)
 

@@ -452,6 +452,14 @@ way: **idle must cost zero raster** — battery, not throughput.
 
 ### The API: four methods, not sixteen
 
+> **UPDATE:** the path half of this is **built** — the chart workstream landed
+> `paint.Path` + `Canvas.FillPath` (`75a6c96`) and `Canvas.StrokePath` (`9f7a5d5`),
+> exactly as a *retained `*paint.Path`* (pointer + `Gen()` in the scene op, so
+> `opEqual`'s `==` stays valid and `opBounds` uses `Bounds()`), CPU==GPU verified.
+> The current signatures are simpler than sketched below (`FillPath(p, col)`,
+> `StrokePath(p, width, col)` — no explicit `FillRule`/`Stroke` yet; round caps/joins).
+> `DrawSprite`/`DrawSprites` remain to do.
+
 ```go
 // appended to paint.Canvas
 DrawSprite(img image.Image, s Sprite)
