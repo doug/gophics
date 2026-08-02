@@ -28,6 +28,19 @@ type Item struct {
 // maxDepth is where the Amulet of Yendor waits.
 const maxDepth = 5
 
+// SoundID names a sound effect; the widget maps these to samples. The engine
+// only emits ids, staying decoupled from the audio package (and silent in tests).
+type SoundID int
+
+const (
+	SndHit SoundID = iota
+	SndCoin
+	SndPotion
+	SndDescend
+	SndDie
+	SndWin
+)
+
 // Game is the full, rendering-free game state.
 type Game struct {
 	d        *Dungeon
@@ -42,6 +55,13 @@ type Game struct {
 	gold     int
 	dead     bool
 	won      bool
+	sfx      func(SoundID) // optional; set by the widget
+}
+
+func (g *Game) play(id SoundID) {
+	if g.sfx != nil {
+		g.sfx(id)
+	}
 }
 
 const fovRadius = 7
@@ -159,15 +179,18 @@ func (g *Game) pickup() {
 		if it.X == g.player.X && it.Y == g.player.Y {
 			if it.Amulet {
 				g.won = true
+				g.play(SndWin)
 				g.logf("You claim the Amulet of Yendor — you win!")
 				continue
 			}
 			if it.Gold > 0 {
 				g.gold += it.Gold
+				g.play(SndCoin)
 				g.logf("You pick up %d gold.", it.Gold)
 			} else {
 				heal := 8
 				g.player.HP = min(g.player.MaxHP, g.player.HP+heal)
+				g.play(SndPotion)
 				g.logf("You quaff a potion (+%d HP).", heal)
 			}
 			continue
@@ -178,6 +201,7 @@ func (g *Game) pickup() {
 }
 
 func (g *Game) descend() {
+	g.play(SndDescend)
 	g.depth++
 	g.gold += 5
 	g.build()
@@ -189,12 +213,14 @@ func (g *Game) attack(a, b *Entity) {
 	if roll+a.Atk >= b.AC {
 		dmg := g.rng.Intn(b.hitDie(a)) + 1
 		b.HP -= dmg
+		g.play(SndHit)
 		g.logf("%s hit %s for %d.", cap1(a.Name), b.Name, dmg)
 		if b.HP <= 0 {
 			b.Alive = false
 			g.logf("%s dies.", cap1(b.Name))
 			if b == g.player {
 				g.dead = true
+				g.play(SndDie)
 				g.logf("You have died on level %d.", g.depth)
 			}
 		}

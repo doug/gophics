@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/doug/audio v0.2.0
 	github.com/doug/naga v0.18.0 // indirect
 	github.com/go-webgpu/goffi v0.6.1 // indirect
 	github.com/go-webgpu/webgpu v0.5.3 // indirect

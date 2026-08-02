@@ -8,12 +8,17 @@ import (
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/shell"
+	"github.com/doug/gossamer/sound"
 	"github.com/doug/gossamer/widget"
 )
 
 // Roguelike is the root widget: a tile dungeon crawler rendered entirely with
-// paint.DrawSprite from one procedurally-generated atlas.
-type Roguelike struct{ Seed int64 }
+// paint.DrawSprite from one procedurally-generated atlas. Sound is optional
+// (nil → silent, e.g. in tests).
+type Roguelike struct {
+	Seed  int64
+	Sound *sound.Mixer
+}
 
 func (Roguelike) CreateState() widget.State { return &gameState{} }
 
@@ -26,6 +31,9 @@ type gameState struct {
 	g        *Game
 	atlas    *image.RGBA
 	restarts int64
+
+	snd     *sound.Mixer
+	samples map[SoundID]*sound.Sample
 
 	origin geom.Pt // last camera origin (world px), for tap→cell mapping
 	ts     float32 // last tile size on screen
@@ -45,9 +53,34 @@ var (
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.atlas = buildAtlas()
+	s.snd = s.W().Sound
+	if s.snd != nil {
+		s.samples = map[SoundID]*sound.Sample{
+			SndHit:     sound.Hit(),
+			SndCoin:    sound.Coin(),
+			SndPotion:  sound.Blip(720, 0.14),
+			SndDescend: sound.Thud(),
+			SndDie:     sound.Blip(140, 0.4),
+			SndWin:     sound.Coin(),
+		}
+	}
 	s.g = newGame(s.W().Seed)
+	s.attachSound()
 	if stateHook != nil {
 		stateHook(s)
+	}
+}
+
+// attachSound wires the current game's sound hook to the mixer (a no-op without
+// audio). Called on mount and after each restart.
+func (s *gameState) attachSound() {
+	if s.snd == nil {
+		return
+	}
+	s.g.sfx = func(id SoundID) {
+		if smp := s.samples[id]; smp != nil {
+			s.snd.Play(smp, 0.55)
+		}
 	}
 }
 
@@ -92,6 +125,7 @@ func (s *gameState) act(dx, dy int) {
 	if s.g.dead || s.g.won {
 		s.restarts++
 		s.g = newGame(s.W().Seed + s.restarts) // any input after death/win starts anew
+		s.attachSound()
 	} else {
 		s.g.Move(dx, dy)
 	}

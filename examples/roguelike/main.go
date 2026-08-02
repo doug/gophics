@@ -14,10 +14,20 @@ import (
 
 	"github.com/doug/gossamer/app"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/sound"
+	"github.com/doug/gossamer/sound/device"
 )
 
 func main() {
-	err := app.Run(Roguelike{Seed: time.Now().UnixNano()}, app.Config{
+	// Audio is best-effort: if the device won't open, the game runs silent.
+	mixer := sound.NewMixer(2)
+	if closer, err := device.Open(mixer); err != nil {
+		log.Printf("audio disabled: %v", err)
+	} else {
+		defer closer.Close()
+	}
+
+	err := app.Run(Roguelike{Seed: time.Now().UnixNano(), Sound: mixer}, app.Config{
 		Title:        "Roguelike",
 		Size:         geom.Size{W: 900, H: 680},
 		Background:   colBG,

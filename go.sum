@@ -1,3 +1,5 @@
+github.com/doug/audio v0.2.0 h1:TQ9l0p0c/GQqyBU4W/eWt1JS+vca5ayHWxAk2eik4P8=
+github.com/doug/audio v0.2.0/go.mod h1:sm+x3wq/0BeKwAQb9KSpK1Dvpi3RoOMkWPBePM1jYf0=
 github.com/doug/gg v0.51.0 h1:dwVn/ed7z/goifRxH12TtQZwqurM/UG9YR7SnD9XYxU=
 github.com/doug/gg v0.51.0/go.mod h1:r+hyinF7Q7tve8O2Sl7O+UiI1tFJ6tMrX3zA13jhnj0=
 github.com/doug/gogpu v0.45.0 h1:jarZocSvQ8lo9KRiGR56w0/tLEp5hPMpo7GsnUohpoM=
