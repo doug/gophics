@@ -13,12 +13,13 @@ import (
 // DrawSprite calls shares a single cached texture — the reason to use an atlas
 // rather than one image per tile (which hits the texture-cache budget).
 type Sprite struct {
-	Src     image.Rectangle // source region in the atlas (pixels)
-	Dst     geom.Rect       // destination (logical pixels)
-	Alpha   float32         // 0 → 1 (opaque)
-	Tint    Color           // multiplies the sprite's RGBA; zero alpha → no tint
-	FlipX   bool            // mirror horizontally about Dst's center
-	Nearest bool            // nearest-neighbor sampling (crisp pixel art)
+	Src      image.Rectangle // source region in the atlas (pixels)
+	Dst      geom.Rect       // destination (logical pixels)
+	Alpha    float32         // 0 → 1 (opaque)
+	Tint     Color           // multiplies the sprite's RGBA; zero alpha → no tint
+	Rotation float32         // radians, clockwise about Dst's center
+	FlipX    bool            // mirror horizontally about Dst's center
+	Nearest  bool            // nearest-neighbor sampling (crisp pixel art)
 }
 
 // tintKey identifies a cached tinted sub-image: the source atlas, its region,

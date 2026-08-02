@@ -870,12 +870,18 @@ func (c *ggCanvas) DrawSprite(atlas image.Image, s Sprite) {
 		src := s.Src
 		opts.SrcRect = &src
 	}
-	if s.FlipX {
+	if s.FlipX || s.Rotation != 0 {
 		cx := float64(s.Dst.Min.X) + float64(s.Dst.Dx())/2
+		cy := float64(s.Dst.Min.Y) + float64(s.Dst.Dy())/2
 		c.dc.Push()
-		c.dc.Translate(cx, 0)
-		c.dc.Scale(-1, 1)
-		c.dc.Translate(-cx, 0)
+		if s.Rotation != 0 {
+			c.dc.RotateAbout(float64(s.Rotation), cx, cy)
+		}
+		if s.FlipX {
+			c.dc.Translate(cx, 0)
+			c.dc.Scale(-1, 1)
+			c.dc.Translate(-cx, 0)
+		}
 		c.dc.DrawImageEx(buf, opts)
 		c.dc.Pop()
 		return
