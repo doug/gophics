@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math/rand"
 	"time"
 
 	"github.com/doug/gossamer/anim"
@@ -51,6 +52,35 @@ type gameState struct {
 	// Deal: a fresh game flies its tableau cards in from the stock, staggered.
 	dealing  bool
 	dealCtrl *anim.Controller
+
+	// Win cascade: on a win, the foundation cards fountain off and bounce down
+	// the felt, leaving streaks — the classic finale.
+	size        geom.Size // last drawn surface size (physics bounds)
+	cascading   bool
+	cascadeTick *cascadeAnim
+	cascade     []fallCard   // cards currently in flight
+	stamps      []stamp      // trail left behind (bounded)
+	launch      []launchItem // cards waiting to fountain, top-first
+	launchT     float32      // countdown to the next launch
+	rng         *rand.Rand
+}
+
+// fallCard is a bouncing card during the win cascade.
+type fallCard struct {
+	card     klondike.Card
+	pos, vel geom.Pt
+}
+
+// stamp is one frame of a card's trail, drawn cheaply so streaks are affordable.
+type stamp struct {
+	card klondike.Card
+	pos  geom.Pt
+}
+
+// launchItem is a foundation card queued to fountain, with its source pile.
+type launchItem struct {
+	card  klondike.Card
+	found int
 }
 
 func (s *gameState) Init(ctx widget.Ctx) {
@@ -76,6 +106,9 @@ func (s *gameState) Init(ctx widget.Ctx) {
 		}
 	}}
 	ctx.AddTicker(s.dealCtrl)
+	s.rng = rand.New(rand.NewSource(s.deal + 1))
+	s.cascadeTick = &cascadeAnim{s}
+	ctx.AddTicker(s.cascadeTick)
 	if !resumed {
 		s.startDeal() // animate a fresh deal, but not a resumed game
 	}
@@ -87,6 +120,7 @@ func (s *gameState) Init(ctx widget.Ctx) {
 func (s *gameState) Dispose() {
 	s.ctx.RemoveTicker(s.snapCtrl)
 	s.ctx.RemoveTicker(s.dealCtrl)
+	s.ctx.RemoveTicker(s.cascadeTick)
 }
 
 func (s *gameState) startDeal() {
@@ -94,6 +128,112 @@ func (s *gameState) startDeal() {
 	s.dealCtrl.Jump(0)
 	s.dealCtrl.Forward()
 	s.ctx.Invalidate()
+}
+
+// maybeWin refreshes the win flag and kicks the cascade off exactly on the
+// losing→won transition (and cancels it if an undo takes the win back).
+func (s *gameState) maybeWin() {
+	won := s.g.Won()
+	switch {
+	case won && !s.won:
+		s.startCascade()
+	case !won:
+		s.stopCascade()
+	}
+	s.won = won
+}
+
+// startCascade queues every foundation card (top of each pile first, dealt
+// round-robin across suits) to fountain off and bounce down the felt.
+func (s *gameState) startCascade() {
+	s.cascading = true
+	s.cascade, s.stamps, s.launch, s.launchT = nil, nil, nil, 0
+	maxLen := 0
+	for i := 0; i < 4; i++ {
+		if l := len(s.g.Foundation(i)); l > maxLen {
+			maxLen = l
+		}
+	}
+	for row := 0; row < maxLen; row++ {
+		for i := 0; i < 4; i++ {
+			f := s.g.Foundation(i)
+			if idx := len(f) - 1 - row; idx >= 0 {
+				s.launch = append(s.launch, launchItem{f[idx], i})
+			}
+		}
+	}
+	s.ctx.Invalidate()
+}
+
+func (s *gameState) stopCascade() {
+	s.cascading = false
+	s.cascade, s.stamps, s.launch = nil, nil, nil
+}
+
+// stepCascade advances the cascade physics by dt seconds: launch the next card
+// on a fixed cadence, integrate gravity + floor bounce, and record a trail.
+func (s *gameState) stepCascade(dt float32) {
+	if s.size.W == 0 {
+		return // no frame drawn yet — no bounds to bounce within
+	}
+	if dt > 0.05 {
+		dt = 0.05 // clamp long stalls so the integration stays stable
+	}
+	for s.launchT -= dt; s.launchT <= 0 && len(s.launch) > 0; s.launchT += 0.11 {
+		it := s.launch[0]
+		s.launch = s.launch[1:]
+		vx := (s.rng.Float32()*2 - 1) // [-1,1]
+		if vx > -0.4 && vx < 0.4 {    // ensure a decent sideways throw
+			if vx < 0 {
+				vx -= 0.4
+			} else {
+				vx += 0.4
+			}
+		}
+		s.cascade = append(s.cascade, fallCard{
+			card: it.card,
+			pos:  s.board.Foundations[it.found].Min,
+			vel:  geom.Pt{X: vx * 340, Y: -(220 + s.rng.Float32()*180)},
+		})
+	}
+	const gravity = 2100
+	floor := s.size.H - s.board.CardH
+	alive := s.cascade[:0]
+	for _, fc := range s.cascade {
+		fc.vel.Y += gravity * dt
+		fc.pos.X += fc.vel.X * dt
+		fc.pos.Y += fc.vel.Y * dt
+		if fc.pos.Y >= floor {
+			fc.pos.Y = floor
+			if fc.vel.Y = -fc.vel.Y * 0.78; fc.vel.Y > -90 {
+				fc.vel.Y = 0 // too slow to rebound — slide off along the floor
+			}
+		}
+		s.stamps = append(s.stamps, stamp{fc.card, fc.pos})
+		if fc.pos.X > -s.board.CardW && fc.pos.X < s.size.W {
+			alive = append(alive, fc)
+		}
+	}
+	s.cascade = alive
+	if n := len(s.stamps); n > 900 { // bound the trail (perf)
+		s.stamps = append(s.stamps[:0], s.stamps[n-900:]...)
+	}
+	if len(s.cascade) == 0 && len(s.launch) == 0 {
+		s.cascading = false
+	}
+}
+
+// cascadeAnim drives the win cascade's per-frame physics.
+type cascadeAnim struct{ s *gameState }
+
+func (a *cascadeAnim) Tick(dt float64) bool {
+	if !a.s.cascading {
+		return false
+	}
+	a.s.stepCascade(float32(dt))
+	a.s.SetState(nil)
+	a.s.ctx.Invalidate()
+	return a.s.cascading
 }
 
 // loadOrNew resumes the saved game (resumed=true), or deals a fresh one if
@@ -153,7 +293,7 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 				}
 				if s.tryDrop() {
 					s.dragging, s.dragCards = false, nil
-					s.won = s.g.Won()
+					s.maybeWin()
 					s.persist()
 				} else {
 					s.startSnapBack()
@@ -170,7 +310,7 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 				case klondike.Waste, klondike.Tableau, klondike.Foundation:
 					s.g.AutoToFoundation(s.pressHit)
 				}
-				s.won = s.g.Won()
+				s.maybeWin()
 				s.persist()
 				s.SetState(nil)
 			},
@@ -206,7 +346,7 @@ func chip(label string, onTap func()) widget.Widget {
 func (s *gameState) undo() {
 	s.cancelInteraction()
 	s.g.Undo()
-	s.won = s.g.Won()
+	s.maybeWin()
 	s.persist()
 	s.SetState(nil)
 }
@@ -215,6 +355,7 @@ func (s *gameState) newGame() {
 	s.cancelInteraction()
 	s.deal++
 	s.g = klondike.New(s.deal, 1)
+	s.stopCascade()
 	s.won = false
 	s.persist()
 	s.startDeal()
@@ -226,7 +367,7 @@ func (s *gameState) newGame() {
 func (s *gameState) finish() {
 	s.cancelInteraction()
 	s.g.AutoComplete()
-	s.won = s.g.Won()
+	s.maybeWin()
 	s.persist()
 	s.SetState(nil)
 }
@@ -320,6 +461,7 @@ func (s *gameState) hidingRun() bool { return s.dragging || s.snapping }
 
 func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 	s.board = Layout(size, s.g)
+	s.size = size
 	b := s.board
 	// A subtle felt gradient (lighter top → darker bottom) for depth.
 	c.FillRRectGradient(geom.RectXYWH(0, 0, size.W, size.H), 0, colFeltHi, colFeltLo, false)
@@ -381,7 +523,16 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 			drawCard(c, geom.RectXYWH(rx, ry+float32(i)*fan, b.CardW, b.CardH), card)
 		}
 	}
-	if s.won {
+	// Win cascade: the trail streaks under the live bouncing cards.
+	for _, st := range s.stamps {
+		drawStamp(c, geom.RectXYWH(st.pos.X, st.pos.Y, b.CardW, b.CardH), st.card)
+	}
+	for _, fc := range s.cascade {
+		drawCard(c, geom.RectXYWH(fc.pos.X, fc.pos.Y, b.CardW, b.CardH), fc.card)
+	}
+
+	// The banner lands once the cascade has played out.
+	if s.won && !s.cascading {
 		c.FillRRect(geom.RectXYWH(size.W*0.5-size.W*0.22, size.H*0.42, size.W*0.44, size.H*0.14), 16, colFeltHi)
 		c.TextIn("bold", "You win!", geom.Pt{X: size.W*0.5 - size.W*0.16, Y: size.H * 0.52}, size.W*0.08, colFace)
 	}

@@ -229,6 +229,43 @@ func TestPersistResume(t *testing.T) {
 	}
 }
 
+func TestWinCascade(t *testing.T) {
+	h, st := mount(t, 1)
+
+	// Force a completed game: all four foundations full, A→K.
+	var snap klondike.Snapshot
+	snap.DrawN = 1
+	for suit := 0; suit < 4; suit++ {
+		for rank := 1; rank <= 13; rank++ {
+			snap.Foundations[suit] = append(snap.Foundations[suit],
+				klondike.Card{Suit: klondike.Suit(suit), Rank: uint8(rank), Up: true})
+		}
+	}
+	st.g = klondike.Restore(snap)
+	h.Render() // record size/board so the cascade has bounds
+	st.maybeWin()
+	if !st.cascading || !st.won {
+		t.Fatalf("a win should start the cascade: cascading=%v won=%v", st.cascading, st.won)
+	}
+
+	settled := false
+	for i := 0; i < 3000 && !settled; i++ {
+		h.Step(0.016)
+		settled = !st.cascading
+	}
+	if !settled {
+		t.Fatal("cascade did not settle")
+	}
+	if !st.won {
+		t.Fatal("game should still read as won after the cascade")
+	}
+	// A New game clears any lingering trail.
+	st.newGame()
+	if st.cascading || len(st.stamps) != 0 {
+		t.Fatalf("new game left cascade state: cascading=%v stamps=%d", st.cascading, len(st.stamps))
+	}
+}
+
 func TestDealAnimates(t *testing.T) {
 	makeStore = func() store { return &memStore{} }
 	var st *gameState

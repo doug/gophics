@@ -166,6 +166,17 @@ var pipLayout = map[uint8][]pipPos{
 	10: {{0, 0.20}, {2, 0.20}, {1, 0.30}, {0, 0.40}, {2, 0.40}, {0, 0.60}, {2, 0.60}, {1, 0.70}, {0, 0.80}, {2, 0.80}},
 }
 
+// drawStamp paints a cheap card for the win-cascade trail: just the face, a
+// hairline edge, and the top-left index — enough to read as a streaking card
+// without the cost of a full pip layout across hundreds of stamps per frame.
+func drawStamp(c paint.Canvas, r geom.Rect, card klondike.Card) {
+	sz := r.Dx()
+	c.FillRRect(r, sz*0.08, colFace)
+	c.StrokeRRect(r, sz*0.08, 1, colEdge)
+	col := suitColor(card.Suit)
+	drawCorner(c, r, rankLabel(card.Rank), suitGlyph(card.Suit), col)
+}
+
 // drawEmpty paints a ghost slot where a pile can be placed.
 func drawEmpty(c paint.Canvas, r geom.Rect) {
 	c.StrokeRRect(r, r.Dx()*0.08, 1.5, colSlot)
