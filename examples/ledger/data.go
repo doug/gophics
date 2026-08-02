@@ -18,7 +18,7 @@ type dataset struct {
 	budget     float64       // monthly budget target
 	latest     float64       // most recent balance
 	spent      float64       // total spent this month
-	base       time.Time     // day 0 of the balance series
+	start, end time.Time     // balance-series date range
 }
 
 func sampleData() dataset {
@@ -38,10 +38,12 @@ func sampleData() dataset {
 		spent += c.amt
 	}
 
+	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	bal := 4200.0
 	var balance []chart.Datum
 	for d := 0; d < 30; d++ {
-		balance = append(balance, chart.Datum{X: float64(d), Y: bal})
+		day := base.AddDate(0, 0, d)
+		balance = append(balance, chart.Datum{X: chart.Seconds(day), Y: bal, Label: day.Format("Jan 2")})
 		bal += r.Float64()*300 - 130 // gentle drift with a downward bias
 	}
 
@@ -57,13 +59,9 @@ func sampleData() dataset {
 		budget:     3800,
 		latest:     bal,
 		spent:      spent,
-		base:       time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+		start:      base,
+		end:        base.AddDate(0, 0, 29),
 	}
-}
-
-// dayLabel formats a balance-series x index (0..29) as a calendar date.
-func (d dataset) dayLabel(v float64) string {
-	return d.base.AddDate(0, 0, int(v+0.5)).Format("Jan 2")
 }
 
 // money formats a dollar amount with thousands separators, e.g. "$4,120".

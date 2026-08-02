@@ -30,7 +30,7 @@ func (Ledger) Build(_ widget.Ctx) widget.Widget {
 			chart.RuleMark{Value: d.budget, Horizontal: true, Dash: 6, Color: colWarn},
 			chart.LineMark{Data: d.balance, Width: 2.5, Color: orange},
 		},
-		XAxis:   chart.Axis{Format: d.dayLabel},
+		X:       chart.NewTime(d.start, d.end),
 		Animate: true,
 	}
 	donut := chart.Chart{
