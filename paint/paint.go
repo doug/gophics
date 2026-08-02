@@ -202,9 +202,10 @@ type Painter struct {
 	// Shaping is the dominant text cost and layout re-measures every frame,
 	// so shaped lines are memoized (cleared on font change or when the
 	// cache grows past a bound).
-	shapes  map[shapeKey]text.Line
-	metrics map[metricsKey]TextMetrics
-	imgBufs map[image.Image]*gg.ImageBuf
+	shapes   map[shapeKey]text.Line
+	metrics  map[metricsKey]TextMetrics
+	imgBufs  map[image.Image]*gg.ImageBuf
+	tintBufs map[tintKey]*gg.ImageBuf // per (atlas, src rect, quantized tint)
 
 	// Rendering glyph outlines is ~80% of raster cost, so each distinct
 	// text run (font, string, size, color, scale) is rasterized once into a
@@ -260,6 +261,7 @@ func NewPainter() *Painter {
 		shapes:    map[shapeKey]text.Line{},
 		metrics:   map[metricsKey]TextMetrics{},
 		imgBufs:   map[image.Image]*gg.ImageBuf{},
+		tintBufs:  map[tintKey]*gg.ImageBuf{},
 		runs:      map[runKey]*cachedRun{},
 		ggSources: map[string]*ggtext.FontSource{},
 		ggFaces:   map[ggFaceKey]ggtext.Face{},
@@ -855,13 +857,19 @@ func (c *ggCanvas) DrawSprite(atlas image.Image, s Sprite) {
 	if alpha == 0 {
 		alpha = 1
 	}
-	src := s.Src
 	opts := gg.DrawImageOptions{
 		X: float64(s.Dst.Min.X), Y: float64(s.Dst.Min.Y),
 		DstWidth: float64(s.Dst.Dx()), DstHeight: float64(s.Dst.Dy()),
-		SrcRect: &src, Interpolation: interp, Opacity: float64(alpha), BlendMode: gg.BlendNormal,
+		Interpolation: interp, Opacity: float64(alpha), BlendMode: gg.BlendNormal,
 	}
-	buf := c.imgBuf(atlas)
+	var buf *gg.ImageBuf
+	if s.Tint.A > 0 {
+		buf = c.p.tinted(atlas, s.Src, s.Tint) // pre-multiplied sub-region; no SrcRect
+	} else {
+		buf = c.imgBuf(atlas)
+		src := s.Src
+		opts.SrcRect = &src
+	}
 	if s.FlipX {
 		cx := float64(s.Dst.Min.X) + float64(s.Dst.Dx())/2
 		c.dc.Push()
