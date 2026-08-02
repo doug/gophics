@@ -59,6 +59,14 @@ func TestChartShot(t *testing.T) {
 	}}
 	shot(t, dir+"/line.png", geom.Size{W: 720, H: 420}, white, line)
 
+	smooth := widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
+		Marks: []Mark{
+			AreaMark{Data: XY(0, 20, 1, 35, 2, 22, 3, 55, 4, 40, 5, 72, 6, 58, 7, 85), Alpha: 0.14},
+			LineMark{Data: XY(0, 20, 1, 35, 2, 22, 3, 55, 4, 40, 5, 72, 6, 58, 7, 85), Width: 3, Smooth: true, Points: true},
+		},
+	}}
+	shot(t, dir+"/smooth.png", geom.Size{W: 720, H: 420}, white, smooth)
+
 	donut := widget.Padding{Insets: geom.InsetsAll(24), Child: Chart{
 		Marks: []Mark{SectorMark{Inner: 0.55, Data: Values(
 			"Rent", 1850, "Food", 620, "Transit", 180, "Fun", 240, "Utilities", 165, "Shopping", 310)}},
