@@ -6,6 +6,7 @@ import (
 
 	"github.com/doug/gossamer/anim"
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/widget"
 )
@@ -133,16 +134,20 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		}
 	}}
 
-	if len(s.primary) == 0 {
-		return canvas // nothing to select
+	var root widget.Widget = canvas
+	if len(s.primary) > 0 {
+		root = widget.Interactive{
+			Handler: widget.Handler{
+				OnPress: func(pos geom.Pt) { s.selectAt(pos) },
+				OnDrag:  func(pos, _ geom.Pt) { s.selectAt(pos) },
+			},
+			Child: canvas,
+		}
 	}
-	return widget.Interactive{
-		Handler: widget.Handler{
-			OnPress: func(pos geom.Pt) { s.selectAt(pos) },
-			OnDrag:  func(pos, _ geom.Pt) { s.selectAt(pos) },
-		},
-		Child: canvas,
+	if label := w.semanticsLabel(); label != "" {
+		root = widget.Semantics{Role: layout.RoleGroup, Label: label, Child: root}
 	}
+	return root
 }
 
 // selectAt selects the primary datum whose x is nearest the pointer.
