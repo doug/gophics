@@ -63,8 +63,15 @@ func rankLabel(r uint8) string {
 // drop shadow for depth.
 func drawCard(c paint.Canvas, r geom.Rect, card klondike.Card) {
 	sz := r.Dx()
+	paint.DropShadow(c, r, sz*0.08, geom.Pt{Y: sz * 0.02}, sz*0.05, colShadow)
+	drawCardBody(c, r, card)
+}
+
+// drawCardBody paints the card without a shadow (used for the many win-cascade
+// trail stamps, where per-card shadows would be too costly).
+func drawCardBody(c paint.Canvas, r geom.Rect, card klondike.Card) {
+	sz := r.Dx()
 	rad := sz * 0.08
-	paint.DropShadow(c, r, rad, geom.Pt{Y: sz * 0.02}, sz*0.05, colShadow)
 	if !card.Up {
 		c.FillRRectGradient(r, rad, colBack1, colBack2, false)
 		// A centered diamond motif inside a hairline frame.
@@ -79,12 +86,84 @@ func drawCard(c paint.Canvas, r geom.Rect, card klondike.Card) {
 
 	col := suitColor(card.Suit)
 	glyph := suitGlyph(card.Suit)
-	// Corner: rank over a small pip, kept compact in the top-left so a fanned
-	// card reveals the whole corner (the fan offset is ~0.42·sz — see Layout).
-	c.Text(rankLabel(card.Rank), geom.Pt{X: r.Min.X + sz*0.10, Y: r.Min.Y + sz*0.25}, sz*0.24, col)
-	c.Text(glyph, geom.Pt{X: r.Min.X + sz*0.12, Y: r.Min.Y + sz*0.41}, sz*0.15, col)
-	// Center: one large pip (roughly centered; suit glyphs are near-square).
-	c.Text(glyph, geom.Pt{X: r.Min.X + sz*0.28, Y: r.Min.Y + r.Dy()*0.64}, sz*0.46, col)
+	rl := rankLabel(card.Rank)
+
+	// Two opposing corner indices (top-left, and bottom-right rotated 180°),
+	// like a real deck — the second one shows on face-up tops (waste/foundation).
+	drawCorner(c, r, rl, glyph, col)
+	cx, cy := r.Min.X+sz/2, r.Min.Y+r.Dy()/2
+	c.PushTransform(paint.Transform{Rotation: pi, PivotX: cx, PivotY: cy})
+	drawCorner(c, r, rl, glyph, col)
+	c.PopTransform()
+
+	switch {
+	case card.Rank >= 2 && card.Rank <= 10:
+		// The traditional pip arrangement: N symbols laid out in the standard
+		// grid, with the lower-half pips rotated 180° as on a printed card.
+		xs := [3]float32{r.Min.X + sz*0.30, cx, r.Max.X - sz*0.30}
+		ps := sz * 0.19
+		for _, p := range pipLayout[card.Rank] {
+			y := r.Min.Y + r.Dy()*p.y
+			pip(c, glyph, xs[p.col], y, ps, col, p.y > 0.5)
+		}
+	case card.Rank == 1:
+		// Ace: one large central pip.
+		pip(c, glyph, cx, cy, sz*0.5, col, false)
+	default:
+		// Court cards: a large rank letter over its suit.
+		centerGlyph(c, rl, cx, r.Min.Y+r.Dy()*0.46, sz*0.5, col)
+		centerGlyph(c, glyph, cx, r.Min.Y+r.Dy()*0.72, sz*0.26, col)
+	}
+}
+
+// drawCorner paints the top-left rank index over a small pip. Kept compact so a
+// fanned card still reveals it (the fan offset is ~0.42·sz — see Layout).
+func drawCorner(c paint.Canvas, r geom.Rect, rl, glyph string, col paint.Color) {
+	sz := r.Dx()
+	centerGlyph(c, rl, r.Min.X+sz*0.15, r.Min.Y+sz*0.19, sz*0.20, col)
+	centerGlyph(c, glyph, r.Min.X+sz*0.15, r.Min.Y+sz*0.36, sz*0.15, col)
+}
+
+// pip draws a suit symbol centered at (ax, ay), optionally rotated 180° (as the
+// lower-half pips are printed on a real card).
+func pip(c paint.Canvas, glyph string, ax, ay, size float32, col paint.Color, flip bool) {
+	if flip {
+		c.PushTransform(paint.Transform{Rotation: pi, PivotX: ax, PivotY: ay})
+		centerGlyph(c, glyph, ax, ay, size, col)
+		c.PopTransform()
+		return
+	}
+	centerGlyph(c, glyph, ax, ay, size, col)
+}
+
+// centerGlyph draws s centered on (ax, ay). The Canvas has no measure API, so it
+// uses fixed fractions calibrated for goregular's near-square suit glyphs and
+// digits (baseline-left positioning; pos.Y is the baseline).
+func centerGlyph(c paint.Canvas, s string, ax, ay, size float32, col paint.Color) {
+	c.Text(s, geom.Pt{X: ax - size*0.30, Y: ay + size*0.36}, size, col)
+}
+
+const pi = 3.14159265
+
+// pipPos is a suit-symbol slot: column (0=left, 1=center, 2=right) and a
+// vertical fraction of the card height. Lower-half slots (y>0.5) render rotated.
+type pipPos struct {
+	col int
+	y   float32
+}
+
+// pipLayout is the standard printed arrangement of N suit symbols for ranks
+// 2–10.
+var pipLayout = map[uint8][]pipPos{
+	2:  {{1, 0.20}, {1, 0.80}},
+	3:  {{1, 0.20}, {1, 0.50}, {1, 0.80}},
+	4:  {{0, 0.20}, {2, 0.20}, {0, 0.80}, {2, 0.80}},
+	5:  {{0, 0.20}, {2, 0.20}, {1, 0.50}, {0, 0.80}, {2, 0.80}},
+	6:  {{0, 0.20}, {2, 0.20}, {0, 0.50}, {2, 0.50}, {0, 0.80}, {2, 0.80}},
+	7:  {{0, 0.20}, {2, 0.20}, {1, 0.35}, {0, 0.50}, {2, 0.50}, {0, 0.80}, {2, 0.80}},
+	8:  {{0, 0.20}, {2, 0.20}, {1, 0.35}, {0, 0.50}, {2, 0.50}, {1, 0.65}, {0, 0.80}, {2, 0.80}},
+	9:  {{0, 0.20}, {2, 0.20}, {0, 0.40}, {2, 0.40}, {1, 0.50}, {0, 0.60}, {2, 0.60}, {0, 0.80}, {2, 0.80}},
+	10: {{0, 0.20}, {2, 0.20}, {1, 0.30}, {0, 0.40}, {2, 0.40}, {0, 0.60}, {2, 0.60}, {1, 0.70}, {0, 0.80}, {2, 0.80}},
 }
 
 // drawEmpty paints a ghost slot where a pile can be placed.
