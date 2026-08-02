@@ -43,3 +43,6 @@ func (m PointMark) draw(p Plot) {
 		dot(p.Canvas, p.px(pt.X), p.py(pt.Y), d, colorOr(pt.Color, col))
 	}
 }
+
+func (m PointMark) seriesData() []Datum    { return m.Data }
+func (m PointMark) baseColor() paint.Color { return m.Color }

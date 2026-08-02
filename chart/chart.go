@@ -22,22 +22,38 @@ type Chart struct {
 
 func (Chart) CreateState() widget.State { return &chartState{} }
 
+// stateHook lets tests observe the mounted chart state.
+var stateHook func(*chartState)
+
 type chartState struct {
 	widget.StateBase[Chart]
 	ctx  widget.Ctx
 	anim *anim.Controller
 	t    float32
+
+	// Selection: the primary data series and the currently-selected index
+	// (-1 = none), plus the last drawn plot area so the press handler can map a
+	// pointer back to a datum.
+	sel     int
+	xs, ys  Scale
+	area    geom.Rect
+	primary []Datum
+	selCol  paint.Color
 }
 
 func (s *chartState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.t = 1
+	s.sel = -1
 	if s.W().Animate && !ctx.ReduceMotion() {
 		s.t = 0
 		s.anim = &anim.Controller{Duration: 600 * time.Millisecond, Curve: anim.EaseOut,
 			OnChange: func() { s.t = s.anim.Value(); s.ctx.Invalidate() }}
 		ctx.AddTicker(s.anim)
 		s.anim.Forward()
+	}
+	if stateHook != nil {
+		stateHook(s)
 	}
 }
 
@@ -53,9 +69,22 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	th := themeFor(ctx.DarkMode())
 	p := ctx.Painter()
 	m := margins(p, w, ys)
+	s.xs, s.ys = xs, ys
 
-	return widget.Canvas{Clip: false, Draw: func(c paint.Canvas, size geom.Size) {
+	// The primary series is the first data-bearing mark — the one a press
+	// selects against.
+	s.primary, s.selCol = nil, paint.Color{}
+	for i, mk := range w.Marks {
+		if sd, ok := mk.(selectable); ok && len(sd.seriesData()) > 0 {
+			s.primary = sd.seriesData()
+			s.selCol = th.color(i, sd.baseColor())
+			break
+		}
+	}
+
+	canvas := widget.Canvas{Clip: false, Draw: func(c paint.Canvas, size geom.Size) {
 		area := m.Inset(geom.RectFromSize(size))
+		s.area = area
 		if area.IsEmpty() {
 			return
 		}
@@ -69,7 +98,46 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 			mk.draw(pl)
 		}
 		c.PopClip()
+
+		if s.sel >= 0 && s.sel < len(s.primary) {
+			drawSelection(c, area, xs, ys, s.primary[s.sel], s.selCol, w.YAxis, th, p)
+		}
 	}}
+
+	if len(s.primary) == 0 {
+		return canvas // nothing to select
+	}
+	return widget.Interactive{
+		Handler: widget.Handler{
+			OnPress: func(pos geom.Pt) { s.selectAt(pos) },
+			OnDrag:  func(pos, _ geom.Pt) { s.selectAt(pos) },
+		},
+		Child: canvas,
+	}
+}
+
+// selectAt selects the primary datum whose x is nearest the pointer.
+func (s *chartState) selectAt(pos geom.Pt) {
+	if len(s.primary) == 0 || s.area.IsEmpty() {
+		return
+	}
+	best, bestDist := -1, float32(1e9)
+	for i, d := range s.primary {
+		x := s.area.Min.X + s.xs.Map(d.X)*s.area.Dx()
+		if dd := abs(x - pos.X); dd < bestDist {
+			bestDist, best = dd, i
+		}
+	}
+	if best != s.sel {
+		s.sel = best
+		s.ctx.Invalidate()
+	}
+}
+
+// selectable marks expose their data (and base color) for press selection.
+type selectable interface {
+	seriesData() []Datum
+	baseColor() paint.Color
 }
 
 // margins reserves space for the axis labels: the widest y-label on the left and

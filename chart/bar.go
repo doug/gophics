@@ -107,3 +107,6 @@ func abs(v float32) float32 {
 	}
 	return v
 }
+
+func (b BarMark) seriesData() []Datum    { return b.Data }
+func (b BarMark) baseColor() paint.Color { return b.Color }

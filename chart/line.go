@@ -61,3 +61,6 @@ func dot(c paint.Canvas, x, y, d float32, col paint.Color) {
 	r := d / 2
 	c.FillRRect(geom.RectXYWH(x-r, y-r, d, d), r, col)
 }
+
+func (l LineMark) seriesData() []Datum    { return l.Data }
+func (l LineMark) baseColor() paint.Color { return l.Color }

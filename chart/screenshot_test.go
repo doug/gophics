@@ -58,4 +58,21 @@ func TestChartShot(t *testing.T) {
 		XAxis: Axis{Grid: true},
 	}}
 	shot(t, dir+"/line.png", geom.Size{W: 720, H: 420}, white, line)
+
+	// Selection tooltip: mount, press a point, then render.
+	size := geom.Size{W: 720, H: 420}
+	h, err := app.NewHeadless(widget.Padding{Insets: geom.InsetsAll(28), Child: Chart{
+		Marks: []Mark{BarMark{Data: Values(
+			"Mon", 12, "Tue", 19, "Wed", 7, "Thu", 22, "Fri", 15, "Sat", 9, "Sun", 4)}},
+	}}, app.Config{Size: size, Background: white,
+		Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	h.Tap(geom.Pt{X: 380, Y: 200}) // press the Thu bar
+	h.Render()
+	f, _ := os.Create(dir + "/select.png")
+	defer f.Close()
+	_ = png.Encode(f, h.Render())
 }

@@ -49,3 +49,37 @@ func TestMarksRender(t *testing.T) {
 func TestEmptyChart(t *testing.T) {
 	renderChart(t, Chart{})
 }
+
+// TestSelection drives presses on a bar chart and checks the nearest datum is
+// selected (rightward press → higher index than a leftward one).
+func TestSelection(t *testing.T) {
+	var st *chartState
+	stateHook = func(s *chartState) { st = s }
+	defer func() { stateHook = nil }()
+
+	h, err := app.NewHeadless(
+		Chart{Marks: []Mark{BarMark{Data: Values("a", 3, "b", 7, "c", 2, "d", 5)}}},
+		app.Config{Size: geom.Size{W: 420, H: 300}, Background: paint.RGB(1, 1, 1),
+			Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateHook = nil
+	h.Render()
+	if st == nil {
+		t.Fatal("chart state not mounted")
+	}
+
+	h.Tap(geom.Pt{X: 40, Y: 150})
+	h.Render()
+	left := st.sel
+	h.Tap(geom.Pt{X: 395, Y: 150})
+	h.Render()
+	right := st.sel
+	if left < 0 || right < 0 {
+		t.Fatalf("no selection: left=%d right=%d", left, right)
+	}
+	if right <= left {
+		t.Fatalf("rightward press selected %d, should exceed leftward %d", right, left)
+	}
+}
