@@ -1,0 +1,193 @@
+package main
+
+import (
+	"fmt"
+	"image"
+
+	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/paint"
+	"github.com/doug/gossamer/shell"
+	"github.com/doug/gossamer/widget"
+)
+
+// Roguelike is the root widget: a tile dungeon crawler rendered entirely with
+// paint.DrawSprite from one procedurally-generated atlas.
+type Roguelike struct{ Seed int64 }
+
+func (Roguelike) CreateState() widget.State { return &gameState{} }
+
+// stateHook lets tests observe the mounted state.
+var stateHook func(*gameState)
+
+type gameState struct {
+	widget.StateBase[Roguelike]
+	ctx      widget.Ctx
+	g        *Game
+	atlas    *image.RGBA
+	restarts int64
+
+	origin geom.Pt // last camera origin (world px), for tap→cell mapping
+	ts     float32 // last tile size on screen
+}
+
+var (
+	colBG     = paint.RGB(0.04, 0.045, 0.06)
+	colFog    = paint.Color{A: 0.55}
+	colPanel  = paint.Color{R: 0.08, G: 0.09, B: 0.12, A: 0.93}
+	colInk    = paint.RGB(0.86, 0.88, 0.92)
+	colDim    = paint.RGB(0.55, 0.58, 0.64)
+	colHP     = paint.RGB(0.80, 0.27, 0.30)
+	colHPbg   = paint.Color{R: 1, G: 1, B: 1, A: 0.12}
+	colCoin   = paint.RGB(0.90, 0.74, 0.30)
+	colBanner = paint.Color{R: 0, G: 0, B: 0, A: 0.62}
+)
+
+func (s *gameState) Init(ctx widget.Ctx) {
+	s.ctx = ctx
+	s.atlas = buildAtlas()
+	s.g = newGame(s.W().Seed)
+	if stateHook != nil {
+		stateHook(s)
+	}
+}
+
+func (s *gameState) Build(_ widget.Ctx) widget.Widget {
+	return widget.Interactive{
+		Handler: widget.Handler{
+			OnKey: func(k shell.Key) {
+				if k.Kind == shell.KeyPress {
+					s.key(k.Code)
+				}
+			},
+			OnPress: func(p geom.Pt) { s.tap(p) },
+		},
+		Child: widget.Canvas{Clip: true, Draw: s.draw},
+	}
+}
+
+func (s *gameState) key(c shell.KeyCode) {
+	switch c {
+	case shell.KeyLeft:
+		s.act(-1, 0)
+	case shell.KeyRight:
+		s.act(1, 0)
+	case shell.KeyUp:
+		s.act(0, -1)
+	case shell.KeyDown:
+		s.act(0, 1)
+	}
+}
+
+// tap moves one step toward the tapped cell (touch/mouse control).
+func (s *gameState) tap(p geom.Pt) {
+	if s.ts == 0 {
+		return
+	}
+	cx := int((p.X + s.origin.X) / s.ts)
+	cy := int((p.Y + s.origin.Y) / s.ts)
+	s.act(sign(cx-s.g.player.X), sign(cy-s.g.player.Y))
+}
+
+func (s *gameState) act(dx, dy int) {
+	if s.g.dead {
+		s.restarts++
+		s.g = newGame(s.W().Seed + s.restarts) // any input after death restarts
+	} else {
+		s.g.Move(dx, dy)
+	}
+	s.SetState(nil)
+}
+
+func (s *gameState) draw(c paint.Canvas, size geom.Size) {
+	c.Clear(colBG)
+	g := s.g
+	ts := float32(32)
+	s.ts = ts
+	ox := float32(g.player.X)*ts - size.W/2 + ts/2
+	oy := float32(g.player.Y)*ts - (size.H-90)/2 + ts/2 // leave room for the HUD
+	s.origin = geom.Pt{X: ox, Y: oy}
+
+	x0, y0 := int(ox/ts)-1, int(oy/ts)-1
+	x1 := x0 + int(size.W/ts) + 3
+	y1 := y0 + int(size.H/ts) + 3
+	for y := y0; y <= y1; y++ {
+		for x := x0; x <= x1; x++ {
+			if !g.seenAt(x, y) {
+				continue
+			}
+			dst := s.cell(x, y)
+			c.DrawSprite(s.atlas, paint.Sprite{Src: src(terrainTile(g.d.at(x, y))), Dst: dst, Nearest: true})
+			if !g.visibleAt(x, y) {
+				c.FillRect(dst, colFog) // remembered but out of sight
+			}
+		}
+	}
+	for _, it := range g.items {
+		if g.visibleAt(it.X, it.Y) {
+			s.blit(c, it.Tile, it.X, it.Y, false)
+		}
+	}
+	for _, m := range g.monsters {
+		if m.Alive && g.visibleAt(m.X, m.Y) {
+			s.blit(c, m.Tile, m.X, m.Y, m.FlipX)
+		}
+	}
+	s.blit(c, g.player.Tile, g.player.X, g.player.Y, g.player.FlipX)
+
+	s.drawHUD(c, size)
+	if g.dead {
+		s.banner(c, size, "You died — press a key to descend anew")
+	}
+}
+
+func (s *gameState) cell(x, y int) geom.Rect {
+	return geom.RectXYWH(float32(x)*s.ts-s.origin.X, float32(y)*s.ts-s.origin.Y, s.ts, s.ts)
+}
+
+func (s *gameState) blit(c paint.Canvas, id TileID, x, y int, flip bool) {
+	c.DrawSprite(s.atlas, paint.Sprite{Src: src(id), Dst: s.cell(x, y), Nearest: true, FlipX: flip})
+}
+
+func terrainTile(cell Cell) TileID {
+	switch cell {
+	case CellWall:
+		return TWall
+	case CellStairs:
+		return TStairs
+	case CellDoor:
+		return TDoor
+	default:
+		return TFloor
+	}
+}
+
+func (s *gameState) drawHUD(c paint.Canvas, size geom.Size) {
+	g := s.g
+	h := float32(90)
+	panel := geom.RectXYWH(0, size.H-h, size.W, h)
+	c.FillRect(panel, colPanel)
+
+	// HP bar.
+	bx, by, bw := float32(16), size.H-h+16, float32(180)
+	c.FillRRect(geom.RectXYWH(bx, by, bw, 14), 7, colHPbg)
+	frac := float32(g.player.HP) / float32(g.player.MaxHP)
+	if frac < 0 {
+		frac = 0
+	}
+	c.FillRRect(geom.RectXYWH(bx, by, bw*frac, 14), 7, colHP)
+	c.Text(fmt.Sprintf("HP %d/%d", g.player.HP, g.player.MaxHP), geom.Pt{X: bx + bw + 12, Y: by + 12}, 14, colInk)
+	c.Text(fmt.Sprintf("Depth %d", g.depth), geom.Pt{X: bx + bw + 130, Y: by + 12}, 14, colInk)
+	c.Text(fmt.Sprintf("Gold %d", g.gold), geom.Pt{X: bx + bw + 220, Y: by + 12}, 14, colCoin)
+
+	// Last few log lines.
+	ly := size.H - h + 40
+	for _, line := range g.log {
+		c.Text(line, geom.Pt{X: bx, Y: ly}, 13, colDim)
+		ly += 16
+	}
+}
+
+func (s *gameState) banner(c paint.Canvas, size geom.Size, msg string) {
+	c.FillRect(geom.RectXYWH(0, size.H*0.4, size.W, 60), colBanner)
+	c.TextIn("bold", msg, geom.Pt{X: size.W*0.5 - float32(len(msg))*4.6, Y: size.H*0.4 + 38}, 22, colInk)
+}
