@@ -9,16 +9,18 @@ import (
 )
 
 var (
-	colFelt   = paint.RGB(0.09, 0.42, 0.28)
-	colFeltHi = paint.RGB(0.11, 0.48, 0.32)
+	colFelt   = paint.RGB(0.10, 0.44, 0.30)
+	colFeltHi = paint.RGB(0.13, 0.50, 0.34)
+	colFeltLo = paint.RGB(0.06, 0.33, 0.22)
 	colFace   = paint.RGB(0.99, 0.99, 0.98)
-	colEdge   = paint.Color{R: 0, G: 0, B: 0, A: 0.12} // subtle card outline
-	colRed    = paint.RGB(0.80, 0.14, 0.18)
+	colEdge   = paint.Color{R: 0, G: 0, B: 0, A: 0.10} // subtle card outline
+	colShadow = paint.Color{R: 0, G: 0, B: 0, A: 0.28}
+	colRed    = paint.RGB(0.79, 0.13, 0.17)
 	colBlack  = paint.RGB(0.11, 0.12, 0.15)
-	colBack1  = paint.RGB(0.24, 0.38, 0.66)
-	colBack2  = paint.RGB(0.13, 0.23, 0.46)
-	colBack3  = paint.RGB(0.34, 0.48, 0.76) // back motif
-	colSlot   = paint.Color{R: 1, G: 1, B: 1, A: 0.13}
+	colBack1  = paint.RGB(0.28, 0.42, 0.72)
+	colBack2  = paint.RGB(0.12, 0.22, 0.46)
+	colBack3  = paint.RGB(0.40, 0.54, 0.82) // back motif
+	colSlot   = paint.Color{R: 1, G: 1, B: 1, A: 0.14}
 )
 
 func suitColor(s klondike.Suit) paint.Color {
@@ -57,18 +59,19 @@ func rankLabel(r uint8) string {
 	}
 }
 
-// drawCard paints one card in r (face up, or a plain gradient back).
+// drawCard paints one card in r (face up, or a gradient back), with a soft
+// drop shadow for depth.
 func drawCard(c paint.Canvas, r geom.Rect, card klondike.Card) {
-	rad := r.Dx() * 0.08
+	sz := r.Dx()
+	rad := sz * 0.08
+	paint.DropShadow(c, r, rad, geom.Pt{Y: sz * 0.02}, sz*0.05, colShadow)
 	if !card.Up {
 		c.FillRRectGradient(r, rad, colBack1, colBack2, false)
-		// A simple centered diamond motif — no inset rectangles.
-		sz := r.Dx()
+		// A centered diamond motif inside a hairline frame.
 		cx, cy := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
 		c.PushTransform(paint.Transform{Rotation: 0.7853982, PivotX: cx, PivotY: cy})
-		c.FillRect(geom.RectXYWH(cx-sz*0.16, cy-sz*0.16, sz*0.32, sz*0.32), colBack3)
+		c.FillRect(geom.RectXYWH(cx-sz*0.15, cy-sz*0.15, sz*0.30, sz*0.30), colBack3)
 		c.PopTransform()
-		c.StrokeRRect(r, rad, 1, colEdge)
 		return
 	}
 	c.FillRRect(r, rad, colFace)
@@ -76,7 +79,6 @@ func drawCard(c paint.Canvas, r geom.Rect, card klondike.Card) {
 
 	col := suitColor(card.Suit)
 	glyph := suitGlyph(card.Suit)
-	sz := r.Dx()
 	// Corner: rank over a small pip, kept compact in the top-left so a fanned
 	// card reveals the whole corner (the fan offset is ~0.42·sz — see Layout).
 	c.Text(rankLabel(card.Rank), geom.Pt{X: r.Min.X + sz*0.10, Y: r.Min.Y + sz*0.25}, sz*0.24, col)

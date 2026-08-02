@@ -321,7 +321,8 @@ func (s *gameState) hidingRun() bool { return s.dragging || s.snapping }
 func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 	s.board = Layout(size, s.g)
 	b := s.board
-	c.Clear(colFelt)
+	// A subtle felt gradient (lighter top → darker bottom) for depth.
+	c.FillRRectGradient(geom.RectXYWH(0, 0, size.W, size.H), 0, colFeltHi, colFeltLo, false)
 
 	if len(s.g.Stock()) > 0 {
 		drawCard(c, b.Stock, klondike.Card{})
