@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"math"
 
 	"github.com/doug/gossamer/geom"
 	"github.com/doug/gossamer/paint"
@@ -32,7 +33,6 @@ type gameState struct {
 
 var (
 	colBG     = paint.RGB(0.04, 0.045, 0.06)
-	colFog    = paint.Color{A: 0.55}
 	colPanel  = paint.Color{R: 0.08, G: 0.09, B: 0.12, A: 0.93}
 	colInk    = paint.RGB(0.86, 0.88, 0.92)
 	colDim    = paint.RGB(0.55, 0.58, 0.64)
@@ -115,24 +115,20 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 			if !g.seenAt(x, y) {
 				continue
 			}
-			dst := s.cell(x, y)
-			c.DrawSprite(s.atlas, paint.Sprite{Src: src(terrainTile(g.d.at(x, y))), Dst: dst, Nearest: true})
-			if !g.visibleAt(x, y) {
-				c.FillRect(dst, colFog) // remembered but out of sight
-			}
+			s.blit(c, terrainTile(g.d.at(x, y)), x, y, false, s.light(x, y))
 		}
 	}
 	for _, it := range g.items {
 		if g.visibleAt(it.X, it.Y) {
-			s.blit(c, it.Tile, it.X, it.Y, false)
+			s.blit(c, it.Tile, it.X, it.Y, false, s.light(it.X, it.Y))
 		}
 	}
 	for _, m := range g.monsters {
 		if m.Alive && g.visibleAt(m.X, m.Y) {
-			s.blit(c, m.Tile, m.X, m.Y, m.FlipX)
+			s.blit(c, m.Tile, m.X, m.Y, m.FlipX, s.light(m.X, m.Y))
 		}
 	}
-	s.blit(c, g.player.Tile, g.player.X, g.player.Y, g.player.FlipX)
+	s.blit(c, g.player.Tile, g.player.X, g.player.Y, g.player.FlipX, paint.Color{R: 1, G: 1, B: 1, A: 1})
 
 	s.drawHUD(c, size)
 	if g.dead {
@@ -144,8 +140,22 @@ func (s *gameState) cell(x, y int) geom.Rect {
 	return geom.RectXYWH(float32(x)*s.ts-s.origin.X, float32(y)*s.ts-s.origin.Y, s.ts, s.ts)
 }
 
-func (s *gameState) blit(c paint.Canvas, id TileID, x, y int, flip bool) {
-	c.DrawSprite(s.atlas, paint.Sprite{Src: src(id), Dst: s.cell(x, y), Nearest: true, FlipX: flip})
+func (s *gameState) blit(c paint.Canvas, id TileID, x, y int, flip bool, tint paint.Color) {
+	c.DrawSprite(s.atlas, paint.Sprite{Src: src(id), Dst: s.cell(x, y), Nearest: true, FlipX: flip, Tint: tint})
+}
+
+// light returns the tint for a cell: a torchlight falloff when in sight (bright
+// at the player, dimming with distance), or a cool dim for remembered cells.
+func (s *gameState) light(x, y int) paint.Color {
+	if !s.g.visibleAt(x, y) {
+		return paint.Color{R: 0.30, G: 0.32, B: 0.40, A: 1} // explored memory
+	}
+	d := math.Hypot(float64(x-s.g.player.X), float64(y-s.g.player.Y))
+	b := 1.0 - d/float64(fovRadius+1)*0.72
+	if b < 0.32 {
+		b = 0.32
+	}
+	return paint.Color{R: float32(b), G: float32(b * 0.99), B: float32(b * 0.94), A: 1} // warm torchlight
 }
 
 func terrainTile(cell Cell) TileID {
