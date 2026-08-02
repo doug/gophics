@@ -81,6 +81,13 @@ type fillPathOp struct {
 	col paint.Color
 }
 
+type strokePathOp struct {
+	p     *paint.Path
+	gen   uint64
+	width float32
+	col   paint.Color
+}
+
 type textOp struct {
 	font string
 	s    string
@@ -120,6 +127,7 @@ func (o rrectGradientOp) replay(c paint.Canvas) {
 func (o strokeRRectOp) replay(c paint.Canvas)   { c.StrokeRRect(o.r, o.radius, o.width, o.col) }
 func (o lineOp) replay(c paint.Canvas)          { c.Line(o.a, o.b, o.width, o.col) }
 func (o fillPathOp) replay(c paint.Canvas)      { c.FillPath(o.p, o.col) }
+func (o strokePathOp) replay(c paint.Canvas)    { c.StrokePath(o.p, o.width, o.col) }
 func (o textOp) replay(c paint.Canvas)          { c.TextIn(o.font, o.s, o.pos, o.size, o.col) }
 func (o imageOp) replay(c paint.Canvas)         { c.Image(o.img, o.dst) }
 func (o pushClipOp) replay(c paint.Canvas)      { c.PushClip(o.r) }
@@ -159,6 +167,13 @@ func (r recorder) FillPath(p *paint.Path, col paint.Color) {
 		return
 	}
 	r.l.ops = append(r.l.ops, fillPathOp{p, p.Gen(), col})
+}
+
+func (r recorder) StrokePath(p *paint.Path, width float32, col paint.Color) {
+	if p == nil || p.Empty() {
+		return
+	}
+	r.l.ops = append(r.l.ops, strokePathOp{p, p.Gen(), width, col})
 }
 
 func (r recorder) Text(s string, pos geom.Pt, size float32, col paint.Color) {

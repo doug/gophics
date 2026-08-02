@@ -42,6 +42,10 @@ func equivScene() widget.Widget {
 		tri.LineTo(geom.Pt{X: 250, Y: 330})
 		tri.LineTo(geom.Pt{X: 200, Y: 252})
 		c.FillPath(tri.Close(), paint.RGB(0.95, 0.55, 0.1))
+		zig := paint.NewPath()
+		zig.MoveTo(geom.Pt{X: 20, Y: 300}).LineTo(geom.Pt{X: 70, Y: 260}).
+			LineTo(geom.Pt{X: 110, Y: 300}).LineTo(geom.Pt{X: 140, Y: 262})
+		c.StrokePath(zig, 5, paint.RGB(0.1, 0.5, 0.7))
 		c.Text("Equivalence", geom.Pt{X: 20, Y: 380}, 28, black)
 		c.Text("gpu == cpu?", geom.Pt{X: 20, Y: 412}, 16, paint.RGB(0.4, 0.4, 0.45))
 	}}

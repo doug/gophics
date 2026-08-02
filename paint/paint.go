@@ -82,6 +82,8 @@ type Canvas interface {
 	// FillPath fills a retained path (non-zero winding). Pass the same *Path
 	// across frames so scene diffing can compare it by identity.
 	FillPath(p *Path, c Color)
+	// StrokePath strokes a retained path with round caps and joins.
+	StrokePath(p *Path, width float32, c Color)
 	Line(a, b geom.Pt, width float32, c Color)
 	// Text draws s with its baseline-left at pos, in the default family.
 	Text(s string, pos geom.Pt, size float32, c Color)
@@ -636,6 +638,32 @@ func (c *ggCanvas) FillPath(p *Path, col Color) {
 		}
 	}
 	c.dc.Fill()
+}
+
+func (c *ggCanvas) StrokePath(p *Path, width float32, col Color) {
+	if p == nil || len(p.verbs) == 0 {
+		return
+	}
+	c.dc.SetColor(col.nrgba())
+	c.dc.SetLineWidth(float64(width))
+	c.dc.SetLineCap(gg.LineCapRound)
+	c.dc.SetLineJoin(gg.LineJoinRound)
+	j := 0
+	for _, v := range p.verbs {
+		switch v {
+		case verbMove:
+			c.dc.MoveTo(float64(p.pts[j].X), float64(p.pts[j].Y))
+			j++
+		case verbLine:
+			c.dc.LineTo(float64(p.pts[j].X), float64(p.pts[j].Y))
+			j++
+		case verbClose:
+			c.dc.ClosePath()
+		}
+	}
+	c.dc.Stroke()
+	c.dc.SetLineCap(gg.LineCapButt) // restore defaults so plain Line() is unaffected
+	c.dc.SetLineJoin(gg.LineJoinMiter)
 }
 
 func (c *ggCanvas) StrokeRRect(r geom.Rect, radius, width float32, col Color) {
