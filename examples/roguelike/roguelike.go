@@ -66,6 +66,7 @@ func (s *gameState) Init(ctx widget.Ctx) {
 			SndDie:     sound.Blip(140, 0.4),
 			SndWin:     sound.Coin(),
 		}
+		s.snd.PlaySource(sound.DungeonMusic(1), sound.PlayOptions{Volume: 0.30}) // ambient loop
 	}
 	s.g = newGame(s.W().Seed)
 	s.attachSound()
