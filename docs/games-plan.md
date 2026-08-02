@@ -254,6 +254,16 @@ Android/iOS host forwarding → Linux evdev via `golang.org/x/sys` → Windows X
 
 ## Workstream 2 — Audio
 
+> **UPDATE: a first cut is built.** The `sound` package is a pure-Go DSP mixer
+> (Source/Osc/Tone/Gain + a thread-safe `Mixer`, DSP core adapted from the author's
+> gophics/audio) with `Sample` playback voices (`Play`/`Loop`/`Stop`), procedural SFX
+> (`Blip`/`Coin`/`Thud`/`Hit`), and a `ReadFloat32s` adapter. `sound/device` feeds it
+> to the platform via the **`github.com/doug/audio`** fork's `Driver` (CoreAudio /
+> PulseAudio / WASAPI / WebAudio), kept out of the pure package. `examples/roguelike`
+> plays SFX on game events; the device opens and plays on macOS. This is the simple
+> tier (mono clips, no pan/pitch/fade yet); the fuller `shell.Sound`/`Voice`/`Sink`
+> design below is the next iteration.
+
 ### What exists (as of this session's commits)
 
 More than expected, and it moved during this session. `b6acfc6` landed the media
