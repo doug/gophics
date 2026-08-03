@@ -404,7 +404,8 @@ func heroTag(id int) string { return fmt.Sprintf("swatch-%d", id) }
 // image scales with bilinear filtering, so the flight stays smooth). W or H
 // of 0 fills the available space.
 func swatch(img image.Image, w, h, radius float32) widget.Widget {
-	return widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
+	return widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) {
+		r := geom.Rect{Max: size.Pt()}
 		if radius > 0 {
 			c.PushClipRRect(r, radius)
 			c.Image(img, r)

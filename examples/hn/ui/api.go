@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
 	"encoding/json"
 	"fmt"
+	"github.com/doug/gossamer/layout"
+	"github.com/doug/gossamer/paint"
 	"html"
 	"net/http"
 	"strings"
