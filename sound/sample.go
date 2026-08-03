@@ -24,6 +24,43 @@ func (s *Sample) Duration() time.Duration {
 	return time.Duration(len(s.Data)) * time.Second / SampleRate
 }
 
+// FromInterleaved builds a Sample from interleaved float32 PCM at srcRate with
+// `channels` channels, downmixing to mono and linearly resampling to
+// SampleRate. Decoders (sound/ogg, sound/mp3) feed this.
+func FromInterleaved(data []float32, srcRate, channels int) *Sample {
+	if channels < 1 {
+		channels = 1
+	}
+	frames := len(data) / channels
+	mono := make([]float32, frames)
+	inv := 1 / float32(channels)
+	for i := 0; i < frames; i++ {
+		var s float32
+		for c := 0; c < channels; c++ {
+			s += data[i*channels+c]
+		}
+		mono[i] = s * inv
+	}
+	if srcRate == SampleRate || srcRate <= 0 {
+		return &Sample{Data: mono}
+	}
+	ratio := float64(SampleRate) / float64(srcRate)
+	outN := int(float64(frames) * ratio)
+	out := make([]float32, outN)
+	for i := 0; i < outN; i++ {
+		pos := float64(i) / ratio
+		idx := int(pos)
+		frac := float32(pos - float64(idx))
+		s0 := mono[idx]
+		s1 := s0
+		if idx+1 < frames {
+			s1 = mono[idx+1]
+		}
+		out[i] = s0 + (s1-s0)*frac
+	}
+	return &Sample{Data: out}
+}
+
 // clip plays a Sample, optionally looped, at a playback rate (pitch) with linear
 // interpolation. Volume and pan are applied by the Voice, not here.
 type clip struct {

@@ -9,9 +9,13 @@ require (
 	github.com/doug/gputypes v0.6.0
 	github.com/doug/wgpu v0.31.0
 	github.com/go-text/typesetting v0.3.4
+	github.com/hajimehoshi/go-mp3 v0.3.4
+	github.com/jfreymuth/oggvorbis v1.0.5
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
 )
+
+require github.com/jfreymuth/vorbis v1.0.2 // indirect
 
 require (
 	github.com/doug/audio v0.2.0

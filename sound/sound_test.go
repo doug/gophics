@@ -116,3 +116,20 @@ func TestLoopStops(t *testing.T) {
 		t.Fatalf("stopped loop not dropped: len = %d", m.Len())
 	}
 }
+
+func TestFromInterleavedDownmix(t *testing.T) {
+	s := FromInterleaved([]float32{1, -1, 0.5, 0.5}, SampleRate, 2) // stereo, 2 frames
+	if len(s.Data) != 2 {
+		t.Fatalf("frames = %d, want 2", len(s.Data))
+	}
+	if absf(s.Data[0]) > 1e-6 || absf(s.Data[1]-0.5) > 1e-6 {
+		t.Fatalf("downmix = %v, want [0, 0.5]", s.Data)
+	}
+}
+
+func TestFromInterleavedResample(t *testing.T) {
+	s := FromInterleaved([]float32{0, 1, 0, 1, 0, 1}, SampleRate/2, 1) // 6 mono frames at half rate
+	if len(s.Data) < 11 || len(s.Data) > 13 {
+		t.Fatalf("resampled len = %d, want ~12", len(s.Data))
+	}
+}
