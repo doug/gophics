@@ -98,6 +98,18 @@ Both are cheap, both are prerequisites, both land in Stage 0.
 
 ## Workstream 1 — Input
 
+> **UPDATE: the core is built** (`7c233de`). The two bugs listed below were
+> already fixed (mobile `SourceTouch`; the `shell.Focus` case). The **`input`
+> package** now provides poll-style held state (`Down`/`JustPressed`/
+> `JustReleased`/`Axis`/pointer, sticky edges), fed by the runner
+> (`HandleKey`/`HandlePointer` before the keyboard focus early-return so polling
+> is focus-free, `NewFrame` at frame end, `Clear` on blur) and read via
+> `Ctx.Input()`. `shell.KeyCode` gained physical game keys (Space/WASD/digits,
+> appended to keep the mobile ABI frozen), mapped in the desktop shell.
+> `Headless.KeyDown/KeyUp` added; `examples/mover` is a real-time held-key demo.
+> **Remaining:** the full W3C `KeyNamed` bridge for mobile, multi-touch tier-1
+> (pointer IDs), and gamepad. What follows is the original analysis.
+
 ### The key model
 
 **Adopt physical / W3C `KeyboardEvent.code` semantics** and say so explicitly in
@@ -262,7 +274,10 @@ Android/iOS host forwarding → Linux evdev via `golang.org/x/sys` → Windows X
 > PulseAudio / WASAPI / WebAudio), kept out of the pure package. `examples/roguelike`
 > plays SFX on game events; the device opens and plays on macOS. This is the simple
 > tier (mono clips, no pan/pitch/fade yet); the fuller `shell.Sound`/`Voice`/`Sink`
-> design below is the next iteration.
+> design below is the next iteration. **Music decoding also landed**: `sound/ogg`
+> and `sound/mp3` decode Ogg Vorbis / MP3 to a `Sample` (via jfreymuth/oggvorbis
+> and hajimehoshi/go-mp3, pure-Go, in subpackages so the base stays decoder-free),
+> alongside the synthesized `Drone`/`DungeonMusic` and voice `FadeIn`/`FadeOut`.
 
 ### What exists (as of this session's commits)
 
