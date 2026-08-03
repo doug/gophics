@@ -1,3 +1,5 @@
-examples/hn/ios/Hnmobile.xcframework/
-examples/hn/ios/GossamerHN.xcodeproj/
-examples/hn/ios/build/
+# Paths are relative to this dir (examples/hn/ios).
+# gomobile-bind artifact + generated Xcode project + build output.
+Hnmobile.xcframework/
+GossamerHN.xcodeproj/
+build/

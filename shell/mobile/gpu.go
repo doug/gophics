@@ -32,9 +32,9 @@ type mobileGPU struct {
 // displayHandle/windowHandle are the platform's raw handles as int64 (iOS: 0,
 // CAMetalLayer*; Android: 0, ANativeWindow*); widthPx/heightPx are the surface's
 // physical size and scale its density. Safe to call again after a
-// rotation/resize (it rebuilds). On failure the surface is left unset and
-// RenderFrame no-ops until a surface is provided — there is no CPU host
-// fallback for live rendering (Snapshot stays available for offscreen).
+// rotation/resize (it rebuilds). On failure the surface is left unset
+// (GPUActive reports false) and RenderFrame no-ops; the host should then
+// present with the CPU path (Snapshot + blit — see GPUActive).
 func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx int, scale float32) {
 	b.ClearSurface()
 	if scale <= 0 {
@@ -42,15 +42,22 @@ func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx
 	}
 	g, err := newMobileGPU(uintptr(displayHandle), uintptr(windowHandle), widthPx, heightPx, float64(scale))
 	if err != nil {
-		// No CPU-blit fallback exists for live rendering, so the surface stays
-		// blank until a valid one is provided — RenderFrame no-ops. (Seen on the
-		// iOS Simulator, whose Metal doesn't expose the HAL wgpu needs.)
-		log.Printf("gossamer/mobile: GPU surface creation failed; live rendering disabled until a valid surface is provided: %v", err)
+		// GPU surface unavailable (e.g. the iOS Simulator, whose Metal doesn't
+		// expose the HAL wgpu needs): GPUActive stays false so the host falls
+		// back to the CPU present path. RenderFrame no-ops in the meantime.
+		log.Printf("gossamer/mobile: GPU surface unavailable, host should use CPU present (GPUActive=false): %v", err)
 		return
 	}
 	b.gpu = g
 	b.dirty.Store(true)
 }
+
+// GPUActive reports whether a GPU render surface is live. When false — no
+// surface set, or surface creation failed (iOS Simulator, some emulators) —
+// the host should present with the CPU path instead: call Snapshot each frame
+// and blit the returned pixels. GPU on device, CPU everywhere else, both from
+// the same (parity-tested) rasterizer.
+func (b *Bridge) GPUActive() bool { return b.gpu != nil }
 
 // ClearSurface tears down the GPU surface (call when the host surface is
 // destroyed — backgrounding, rotation — before handing over a new one).

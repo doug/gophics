@@ -11,7 +11,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // VERIFY (xcodebuild SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG VERIFY',
+        // via run.sh --verify) swaps in the GPU bring-up scene.
+        #if VERIFY
+        let err = HnmobileStartVerify()
+        #else
         let err = HnmobileStart()
+        #endif
         if !err.isEmpty { fatalError("gossamer start: \(err)") }
         let w = UIWindow(frame: UIScreen.main.bounds)
         w.rootViewController = GossamerViewController()
@@ -35,12 +41,23 @@ class GossamerView: UIView, UIKeyInput {
     private var keyboardVisible = false
     private var surfaceSet = false
 
+    // CPU present fallback: when the GPU surface can't be created (iOS
+    // Simulator — its Metal lacks the HAL wgpu needs), the Go side rasterizes
+    // each frame on the CPU and we blit it into this layer instead. Same
+    // parity-tested rasterizer; GPU on device, CPU in the Simulator.
+    private let cpuLayer = CALayer()
+    private let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
+
     // The Go side renders on the GPU straight to this CAMetalLayer.
     override class var layerClass: AnyClass { CAMetalLayer.self }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard window != nil else { displayLink?.invalidate(); return }
+        if cpuLayer.superlayer == nil {
+            cpuLayer.isHidden = true
+            layer.addSublayer(cpuLayer)
+        }
         HnmobileSetDarkMode(traitCollection.userInterfaceStyle == .dark)
         let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
         link.add(to: .main, forMode: .common)
@@ -58,6 +75,10 @@ class GossamerView: UIView, UIKeyInput {
         let metal = layer as! CAMetalLayer
         metal.contentsScale = scale
         metal.drawableSize = CGSize(width: wPx, height: hPx)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        cpuLayer.frame = bounds
+        cpuLayer.contentsScale = scale
+        CATransaction.commit()
         if !surfaceSet {
             let ptr = Int64(Int(bitPattern: Unmanaged.passUnretained(metal).toOpaque()))
             HnmobileSetSurface(0, ptr, wPx, hPx, Double(scale))
@@ -73,13 +94,35 @@ class GossamerView: UIView, UIKeyInput {
         let dt = lastTime == 0 ? 1.0 / 60 : link.timestamp - lastTime
         lastTime = link.timestamp
         guard HnmobileNeedsFrame() else { syncKeyboard(); return }
-        HnmobileRenderFrame(dt) // renders on the GPU straight to the CAMetalLayer
+        if HnmobileGpuActive() {
+            HnmobileRenderFrame(dt) // renders on the GPU straight to the CAMetalLayer
+        } else {
+            presentCPU(dt) // Simulator: rasterize on the CPU and blit
+        }
         while true {
             let url = HnmobileTakeOpenedURL()
             if url.isEmpty { break }
             if let u = URL(string: url) { UIApplication.shared.open(u) }
         }
         syncKeyboard()
+    }
+
+    // presentCPU renders one frame on the CPU (Hnmobile.Snapshot → RGBA8888)
+    // and shows it in cpuLayer. Used only when GPU rendering is unavailable.
+    private func presentCPU(_ dt: CFTimeInterval) {
+        guard let data = HnmobileSnapshot(dt), !data.isEmpty else { return }
+        let w = HnmobileFrameWidth(), h = HnmobileFrameHeight()
+        guard w > 0, h > 0, data.count >= w * h * 4,
+              let provider = CGDataProvider(data: data as CFData) else { return }
+        let img = CGImage(
+            width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+            space: rgbColorSpace,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        cpuLayer.contents = img
+        cpuLayer.isHidden = false
+        CATransaction.commit()
     }
 
     private func syncKeyboard() {

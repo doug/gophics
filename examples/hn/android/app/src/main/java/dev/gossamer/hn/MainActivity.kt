@@ -71,6 +71,8 @@ class GossamerView(private val activity: Activity) :
     private var frameTimeSum = 0.0
     private var nativeWin = 0L    // ANativeWindow*, from NativeSurface
     private var surfaceSet = false
+    private var gpuActive = false  // false → CPU-blit present (emulator, GPU-less)
+    private var blitBitmap: Bitmap? = null
 
     init {
         holder.addCallback(this)
@@ -150,7 +152,9 @@ class GossamerView(private val activity: Activity) :
         // directly to it. Resize thereafter reconfigures the surface.
         if (!surfaceSet && nativeWin != 0L) {
             Hnmobile.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
+            gpuActive = Hnmobile.gpuActive()
             surfaceSet = true
+            Log.i("gossamer", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
         }
         Hnmobile.resize(w.toLong(), h.toLong(), d)
     }
@@ -171,7 +175,11 @@ class GossamerView(private val activity: Activity) :
 
         if (Hnmobile.needsFrame()) {
             val t0 = System.nanoTime()
-            Hnmobile.renderFrame(dt) // GPU-presents directly to the ANativeWindow
+            if (gpuActive) {
+                Hnmobile.renderFrame(dt) // GPU-presents directly to the ANativeWindow
+            } else {
+                presentCPU(dt) // emulator / no GPU: rasterize on CPU and blit
+            }
             // Frame pacing: log a rolling average every 60 rendered frames.
             frameTimeSum += (System.nanoTime() - t0) / 1e6
             if (++frameCount == 60) {
@@ -187,6 +195,28 @@ class GossamerView(private val activity: Activity) :
         }
         syncIME()
         Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    // presentCPU rasterizes one frame on the Go side (Hnmobile.snapshot →
+    // RGBA8888) and blits it into the SurfaceView with lockCanvas — the present
+    // path when the GPU surface is unavailable (emulator). The frame is
+    // physical-pixel sized, matching the surface, so it blits 1:1.
+    private fun presentCPU(dt: Double) {
+        val px = Hnmobile.snapshot(dt) ?: return
+        val w = Hnmobile.frameWidth().toInt(); val h = Hnmobile.frameHeight().toInt()
+        if (w == 0 || h == 0 || px.size < w * h * 4) return
+        var bmp = blitBitmap
+        if (bmp == null || bmp.width != w || bmp.height != h) {
+            bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            blitBitmap = bmp
+        }
+        bmp.copyPixelsFromBuffer(ByteBuffer.wrap(px))
+        val canvas = holder.lockCanvas() ?: return
+        try {
+            canvas.drawBitmap(bmp, 0f, 0f, null)
+        } finally {
+            holder.unlockCanvasAndPost(canvas)
+        }
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {

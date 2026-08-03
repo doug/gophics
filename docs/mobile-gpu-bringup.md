@@ -20,29 +20,30 @@ part of the GPU path is readable at a glance.
 
 ## Simulator / emulator results (2026-08-02)
 
-Ran the harness through both — the toolchains work, but **neither
-simulator/emulator can validate the GPU present path**, as the games-plan
-predicted:
+The simulator/emulator **can't create a GPU surface** — as the games-plan
+predicted — but they now render the app via a **CPU-blit present fallback**, so
+they're first-class for day-to-day development. `Bridge.GPUActive()` reports
+whether the GPU surface is live; when it's false the host presents each frame
+with `Bridge.Snapshot()` (the same parity-tested rasterizer, `app/gpu_equiv_test.go`)
+and blits the pixels. GPU on device, CPU everywhere else.
 
-- **iOS Simulator** (iPhone 17, Apple Silicon): `gomobile bind -target=ios`
-  produces a device+simulator `xcframework`; `xcodebuild -sdk iphonesimulator`
-  builds; the app **installs, launches, and runs without crashing**. But the log
-  shows `GPU surface creation failed: wgpu: no HAL instance available for surface
-  creation` — the Simulator's Metal doesn't expose the HAL wgpu needs — so the
-  screen stays **black** (there is no CPU-blit fallback for live rendering). A
-  **real iOS device** (full Metal) is required.
-- **Android emulator** (Pixel-class AVD, `-gpu host`): `gomobile bind
-  -target=android` produces the `.aar`; the Gradle build assembles a debug APK.
-  But the app **crashes on launch**: `UnsatisfiedLinkError: library
-  "libgossamer_surface.so" not found` — the host's JNI shim
-  (`examples/hn/android/app/src/main/cpp/gossamer_surface.c`) wasn't compiled/
-  packaged by the ad-hoc CLI `gradle` build (its `externalNativeBuild`/CMake step
-  didn't run without the NDK/CMake wired). Build the host in **Android Studio**
-  (which runs the CMake step) — then run on a **real device**, since the emulator
-  uses SwiftShader/experimental Vulkan and isn't a reliable GPU signal anyway.
+- **iOS Simulator** (iPhone 17 Pro, Apple Silicon): `./examples/hn/ios/run.sh
+  --verify` binds, builds, installs, and launches; `GPUActive()` is false
+  (`wgpu: no HAL instance available for surface creation` — the Simulator's Metal
+  lacks the HAL wgpu needs), so the host blits `Snapshot()` into a `CALayer`.
+  **Verified:** the gpucheck scene renders fully — title, animating frame
+  counter, correct swatches, gradient, three text sizes, sprite trio
+  (plain/tint/rotate), triangle + spinning square. Not black.
+- **Android emulator**: `./examples/hn/android/run.sh` now packages the JNI
+  surface shim (`libgossamer_surface.so`) — the earlier `UnsatisfiedLinkError`
+  crash was a missing `externalNativeBuild`/CMake wiring, now fixed — so the app
+  launches. If the emulator's Vulkan can't back a wgpu surface, `GPUActive()` is
+  false and the host blits via `lockCanvas`, same as iOS.
 
-**Net:** both toolchains compile the whole stack and the iOS app runs; the GPU
-surface itself is unverifiable off-device. Proceed to real hardware.
+**Net:** every dev can run the app in the simulator/emulator with one command
+and see a faithful, interactive UI. What's still **device-only** is validating
+the *GPU present path itself* — the emulator's SwiftShader/Vulkan isn't a
+trustworthy GPU signal, and the iOS Simulator can't create a GPU surface at all.
 
 ## What only a device can confirm
 
@@ -52,26 +53,26 @@ on every rotation), **background/foreground** (surface loss), the **Vulkan-Andro
 scale** (the headless GPU render placed content at ~1× in a 2× buffer — watch for
 this on device).
 
-## How to run it on device
+## How to run it
 
-`StartVerify()` is already wired into `examples/hn/mobile` (it builds the gpucheck
-scene instead of HN), so you reuse the whole existing HN host:
+`StartVerify()` is wired into `examples/hn/mobile` (it builds the gpucheck scene
+instead of HN), exposed via each host's `--verify` flag. One command each:
 
-1. Rebuild the bind library:
-   - **Android:** `gomobile bind -target=android -androidapi 24 -o
-     examples/hn/android/app/libs/hnmobile.aar ./examples/hn/mobile`
-   - **iOS:** `gomobile bind -target=ios -o examples/hn/ios/Hnmobile.xcframework
-     ./examples/hn/mobile`
-2. Point the host at the verify scene (one line):
-   - **Android** — in `examples/hn/android/.../MainActivity.kt`, call
-     `Hnmobile.startVerify()` where it calls `Hnmobile.start()`.
-   - **iOS** — in `examples/hn/ios/GossamerHN/GossamerApp.swift`, call
-     `Hnmobile.startVerify()` in place of `Hnmobile.start()`.
-3. Build & run the HN Android/iOS project on the device.
+- **Android:** `examples/hn/android/run.sh --verify` (device or emulator)
+- **iOS:** `examples/hn/ios/run.sh --verify` (Simulator; for a device, build
+  with `-sdk iphoneos` + a signing team, or open the project in Xcode)
+
+Both bind the Go side, build, install, and launch. On the Simulator/emulator the
+scene renders via the CPU fallback; on a real device it renders on the GPU —
+which is the path the checklist below validates.
 
 ## The checklist
 
-Compare the device screen against the desktop render of the same scene
+On a real device, **first confirm you're on the GPU path, not the CPU fallback**
+— check the host log for `GPU present` (Android) / a `GPU ready` line
+(`gossamer/mobile`); if it says GPU is unavailable you're validating the CPU
+blit, not the surface. Then compare the device screen against the desktop render
+of the same scene
 (`GPUCHECK_SHOT=out.png go test -run TestGPUCheckRenders ./examples/gpucheck`).
 
 | # | Check | Pass = | A failure implies |

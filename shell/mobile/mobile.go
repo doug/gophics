@@ -89,10 +89,14 @@ func (b *Bridge) RenderFrame(dtSeconds float64) {
 	b.handler.Frame(b, &frame{b: b}, dtSeconds)
 }
 
-// Snapshot renders one frame offscreen on the CPU and returns it as RGBA8888
-// pixels (FrameWidth*FrameHeight*4, row-major) — for headless tests and
-// screenshots, independent of the live GPU surface. nil if the surface has no
-// size.
+// Snapshot renders one frame on the CPU and returns it as RGBA8888 pixels
+// (FrameWidth*FrameHeight*4, row-major), independent of the live GPU surface.
+// nil if the surface has no size.
+//
+// Two uses, same faithful (parity-tested) rasterizer: headless tests/
+// screenshots, and the live CPU present path when GPUActive is false (iOS
+// Simulator, some emulators) — there the host calls this each vsync (while
+// NeedsFrame) and blits the pixels itself.
 func (b *Bridge) Snapshot(dtSeconds float64) []byte {
 	if b.widthPx == 0 || b.heightPx == 0 {
 		return nil

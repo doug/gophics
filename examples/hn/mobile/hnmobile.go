@@ -71,6 +71,11 @@ func SetSurface(displayHandle, windowHandle int64, widthPx, heightPx int, scale 
 // ClearSurface releases the GPU surface (call when the host surface is destroyed).
 func ClearSurface() { bridge.ClearSurface() }
 
+// GpuActive reports whether GPU rendering is live. When false (iOS Simulator,
+// some emulators, or before SetSurface), present with the CPU path instead:
+// each vsync call Snapshot and blit the returned pixels. See docs/mobile-gpu-bringup.md.
+func GpuActive() bool { return bridge.GPUActive() }
+
 // RenderFrame renders one frame on the GPU to the surface set by SetSurface;
 // call each vsync while NeedsFrame is true.
 func RenderFrame(dtSeconds float64) { bridge.RenderFrame(dtSeconds) }
