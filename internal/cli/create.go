@@ -23,8 +23,8 @@ func cmdCreate(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 	var module, platforms string
 	fs.StringVar(&module, "module", "", "Go module path (default: the app name)")
-	fs.StringVar(&platforms, "platform", "desktop,web,ios,android", "comma-separated targets to scaffold: desktop,web,terminal,ios,android")
-	fs.StringVar(&platforms, "p", "desktop,web,ios,android", "shorthand for -platform")
+	fs.StringVar(&platforms, "platform", "desktop,web,terminal,ios,android", "comma-separated targets to scaffold: desktop,web,terminal,ios,android")
+	fs.StringVar(&platforms, "p", "desktop,web,terminal,ios,android", "shorthand for -platform")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
