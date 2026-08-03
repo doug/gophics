@@ -43,7 +43,13 @@ func (h *Headless) RenderGPU() image.Image {
 		h.gpu = g
 	}
 	if g.ggc == nil || g.w != pw || g.h != ph {
-		ggc, err := ggcanvas.New(g.r.GPUContextProvider(), pw, ph)
+		// Logical size + device scale (not physical size with no scale): the
+		// scene replays in logical coordinates, so the GPU context needs the
+		// same device-scale transform the CPU context gets from
+		// NewContextWithScale. Plain New(pw, ph) drew everything at 1× in the
+		// physical buffer (content in the top-left quarter at 2×).
+		ggc, err := ggcanvas.NewWithScale(g.r.GPUContextProvider(),
+			int(h.size.W), int(h.size.H), float64(h.scale))
 		if err != nil {
 			return nil
 		}
