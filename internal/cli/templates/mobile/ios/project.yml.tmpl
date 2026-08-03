@@ -1,0 +1,28 @@
+name: {{.ProjectName}}
+options:
+  bundleIdPrefix: {{.BundleIDPrefix}}
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  {{.ProjectName}}:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - framework: {{.Framework}}.xcframework
+        embed: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: {{.Name}}
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: {{.BundleID}}
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"

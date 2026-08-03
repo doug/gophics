@@ -1,12 +1,23 @@
 package cli
 
 import (
+	"embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
+
+// mobileTemplates holds the iOS + Android host projects and the gomobile-bind
+// package that `gossamer create` scaffolds. all: keeps dotfiles (.gitignore)
+// and the binary gradle-wrapper jar.
+//
+//go:embed all:templates/mobile
+var mobileTemplates embed.FS
 
 func cmdCreate(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
@@ -25,11 +36,27 @@ func cmdCreate(args []string) error {
 	if _, err := os.Stat(name); err == nil {
 		return fmt.Errorf("%q already exists", name)
 	}
-	data := map[string]string{"Module": module, "Name": name}
+	slug := sanitizeIdent(name)
+	mobilePkg := slug + "mobile"
+	bundleID := "com.example." + slug
+	data := map[string]string{
+		"Module":         module,
+		"Name":           name,
+		"MobilePkg":      mobilePkg,
+		"Framework":      titleFirst(mobilePkg),
+		"BundleID":       bundleID,
+		"BundleIDPrefix": "com.example",
+		"AndroidPkg":     bundleID,
+		"JNIPkg":         strings.ReplaceAll(bundleID, ".", "_"),
+		"ProjectName":    titleFirst(slug),
+	}
 	for path, tmpl := range scaffold {
 		if err := writeTemplate(filepath.Join(name, path), tmpl, data); err != nil {
 			return err
 		}
+	}
+	if err := scaffoldMobile(name, bundleID, data); err != nil {
+		return err
 	}
 	// Initialize the module. We intentionally do NOT `go get` gossamer here: it
 	// isn't published yet (and uses local replace forks), so that would hang or
@@ -45,10 +72,70 @@ Next:
   #   go mod edit -require=github.com/doug/gossamer@v0.0.0
   #   go mod edit -replace=github.com/doug/gossamer=/path/to/gossamer
   #   go mod tidy
-  gossamer dev -p web       # fastest loop
-  gossamer run -p desktop    # native window
+  gossamer dev -p web        # fastest loop
+  gossamer run -p desktop     # native window
+  gossamer run -p ios ./mobile      # iOS Simulator (needs Xcode + xcodegen)
+  gossamer run -p android ./mobile  # Android device/emulator (needs the SDK)
 `, name, name)
 	return nil
+}
+
+// scaffoldMobile writes the embedded iOS + Android host projects and the
+// gomobile-bind package under root, parameterized by data. Template files end
+// in .tmpl (rendered, suffix stripped); everything else is copied verbatim
+// (the gradle wrapper jar, gradlew, CMake). The Android Kotlin sources move
+// from templates/.../kotlin/ to app/src/main/java/<pkg-path>/.
+func scaffoldMobile(root, bundleID string, data map[string]string) error {
+	const base = "templates/mobile"
+	pkgPath := strings.ReplaceAll(bundleID, ".", "/")
+	return fs.WalkDir(mobileTemplates, base, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel := strings.TrimPrefix(p, base+"/")
+		// Kotlin sources live under a package-derived java/ path on disk.
+		if k := "android/app/src/main/kotlin/"; strings.HasPrefix(rel, k) {
+			rel = "android/app/src/main/java/" + pkgPath + "/" + strings.TrimPrefix(rel, k)
+		}
+		b, err := mobileTemplates.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		out := filepath.Join(root, filepath.FromSlash(rel))
+		if trimmed, ok := strings.CutSuffix(out, ".tmpl"); ok {
+			return writeTemplate(trimmed, string(b), data)
+		}
+		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+			return err
+		}
+		perm := os.FileMode(0o644)
+		if base := path.Base(rel); base == "gradlew" || base == "gradlew.bat" {
+			perm = 0o755
+		}
+		return os.WriteFile(out, b, perm)
+	})
+}
+
+// sanitizeIdent lowercases and strips a name to [a-z0-9] for use in package,
+// bundle-id, and identifier positions.
+func sanitizeIdent(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "app"
+	}
+	return b.String()
+}
+
+func titleFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func writeTemplate(path, tmpl string, data any) error {
