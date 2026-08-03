@@ -49,6 +49,7 @@ type buildOpts struct {
 	tags     string
 	out      string
 	pkg      string
+	host     string // mobile host project dir (run only; "" = sibling convention)
 }
 
 // addBuildFlags registers the flags common to build/run/dev on fs. platName is

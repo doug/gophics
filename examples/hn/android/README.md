@@ -8,24 +8,26 @@ the bridge the `ANativeWindow` behind its `SurfaceView` (via the
 
 ## Build & run
 
-One command builds the Go side, compiles the APK (including the native surface
-shim), and installs + launches on a connected device/emulator:
+The `gossamer` CLI drives the whole loop — bind the Go side, compile the APK
+(including the native surface shim), install + launch on a connected
+device/emulator — in one command from the repo root:
 
 ```sh
-./run.sh            # HN app
-./run.sh --verify   # GPU bring-up scene (docs/mobile-gpu-bringup.md)
-./run.sh --build    # build only, don't install/launch
+gossamer run -p android ./examples/hn/mobile
+gossamer run -p android -tags gossamer_verify ./examples/hn/mobile  # GPU bring-up scene
+gossamer build -p android ./examples/hn/mobile                       # just the .aar
 ```
 
-It ensures the SDK bits it needs (NDK, CMake), builds with the pinned Gradle
-wrapper (`./gradlew`, Gradle 8.9) under a JDK 17–21, and reports the native
-libraries packaged into the APK. Prereqs it does *not* install: the Android SDK
-(set `ANDROID_HOME` if it isn't at `~/Library/Android/sdk`), a JDK 17–21
-(Android Studio's bundled JBR is picked up automatically), and `gomobile`
-(`go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init`).
+It finds this host project (the sibling `android/` of the `mobile` package),
+ensures the SDK bits (NDK, CMake), builds with the pinned Gradle wrapper
+(`./gradlew`, Gradle 8.9) under a JDK 17–21 (Android Studio's JBR is found
+automatically), and installs + launches. Prereqs it does *not* install: the
+Android SDK (set `ANDROID_HOME` if not at `~/Library/Android/sdk`) and `gomobile`
+(`go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init`). Run
+`gossamer doctor` to check.
 
-The GPU present path needs a **real device** — the emulator's SwiftShader/Vulkan
-isn't a reliable signal. See `docs/mobile-gpu-bringup.md`.
+The GPU present path needs a **real device** — the emulator can't back a wgpu
+surface (it falls back to CPU). See `docs/mobile-gpu-bringup.md`.
 
 ## Current state / known gaps
 

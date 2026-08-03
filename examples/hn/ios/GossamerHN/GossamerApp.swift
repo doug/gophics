@@ -11,13 +11,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // VERIFY (xcodebuild SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG VERIFY',
-        // via run.sh --verify) swaps in the GPU bring-up scene.
-        #if VERIFY
-        let err = HnmobileStartVerify()
-        #else
         let err = HnmobileStart()
-        #endif
         if !err.isEmpty { fatalError("gossamer start: \(err)") }
         let w = UIWindow(frame: UIScreen.main.bounds)
         w.rootViewController = GossamerViewController()

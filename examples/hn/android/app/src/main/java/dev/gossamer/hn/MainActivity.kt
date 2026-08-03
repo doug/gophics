@@ -34,8 +34,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // BuildConfig.VERIFY (gradle -Pverify) swaps in the GPU bring-up scene.
-        val err = if (BuildConfig.VERIFY) Hnmobile.startVerify() else Hnmobile.start()
+        val err = Hnmobile.start()
         if (err.isNotEmpty()) throw RuntimeException("gossamer start: $err")
         val v = GossamerView(this)
         view = v

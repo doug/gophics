@@ -27,15 +27,16 @@ whether the GPU surface is live; when it's false the host presents each frame
 with `Bridge.Snapshot()` (the same parity-tested rasterizer, `app/gpu_equiv_test.go`)
 and blits the pixels. GPU on device, CPU everywhere else.
 
-- **iOS Simulator** (iPhone 17 Pro, Apple Silicon): `./examples/hn/ios/run.sh
-  --verify` binds, builds, installs, and launches; `GPUActive()` is false
+- **iOS Simulator** (iPhone 17 Pro, Apple Silicon): `gossamer run -p ios -tags
+  gossamer_verify ./examples/hn/mobile` binds, builds, installs, and launches;
+  `GPUActive()` is false
   (`wgpu: no HAL instance available for surface creation` — the Simulator's Metal
   lacks the HAL wgpu needs), so the host blits `Snapshot()` into a `CALayer`.
   **Verified:** the gpucheck scene renders fully — title, animating frame
   counter, correct swatches, gradient, three text sizes, sprite trio
   (plain/tint/rotate), triangle + spinning square. Not black.
 - **Android emulator** (arm64 `google_apis`, `-gpu host` → host M1 Ultra Metal):
-  `./examples/hn/android/run.sh --verify` packages the JNI surface shim
+  `gossamer run -p android -tags gossamer_verify ./examples/hn/mobile` packages the JNI surface shim
   (`libgossamer_surface.so`) — the earlier `UnsatisfiedLinkError` crash was a
   missing `externalNativeBuild`/CMake wiring, now fixed — so the app launches.
   `GPUActive()` is false (even with `-gpu host`, wgpu can't back a Vulkan
@@ -59,16 +60,19 @@ this on device).
 
 ## How to run it
 
-`StartVerify()` is wired into `examples/hn/mobile` (it builds the gpucheck scene
-instead of HN), exposed via each host's `--verify` flag. One command each:
+The gpucheck scene is selected by the `gossamer_verify` build tag (see
+`examples/hn/mobile/scene.go`); the `gossamer` CLI drives bind → build → install
+→ launch in one command:
 
-- **Android:** `examples/hn/android/run.sh --verify` (device or emulator)
-- **iOS:** `examples/hn/ios/run.sh --verify` (Simulator; for a device, build
-  with `-sdk iphoneos` + a signing team, or open the project in Xcode)
+- **Android:** `gossamer run -p android -tags gossamer_verify ./examples/hn/mobile`
+- **iOS:** `gossamer run -p ios -tags gossamer_verify ./examples/hn/mobile`
+  (Simulator; for a device, build with `-sdk iphoneos` + a signing team, or open
+  the project in Xcode)
 
-Both bind the Go side, build, install, and launch. On the Simulator/emulator the
-scene renders via the CPU fallback; on a real device it renders on the GPU —
-which is the path the checklist below validates.
+The CLI finds the sibling `ios/`/`android/` host project, binds into it, ensures
+the SDK bits (Android NDK/CMake), picks a simulator/booted device, and launches.
+On the Simulator/emulator the scene renders via the CPU fallback; on a real
+device it renders on the GPU — the path the checklist below validates.
 
 ## The checklist
 

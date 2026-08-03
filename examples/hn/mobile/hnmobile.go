@@ -15,35 +15,20 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gossamer/app"
-	gpucheck "github.com/doug/gossamer/examples/gpucheck/ui"
-	hn "github.com/doug/gossamer/examples/hn/ui"
 	"github.com/doug/gossamer/shell/mobile"
 )
 
 var bridge *mobile.Bridge
 
-// Start builds the HN app; call once from the host before any other call.
+// Start builds the app and must be called once from the host before any other
+// call. The scene is the HN app, or the GPU bring-up check when built with
+// -tags gossamer_verify (see scene.go).
 func Start() string {
-	h, err := app.NewHandler(hn.Root(), app.Config{
+	root, bg := scene()
+	h, err := app.NewHandler(root, app.Config{
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
-		Background:   hn.Background(),
-	})
-	if err != nil {
-		return err.Error()
-	}
-	bridge = mobile.NewBridge(h)
-	return ""
-}
-
-// StartVerify builds the GPU-verification scene instead of HN — call this from
-// the host (in place of Start) to run the mobile GPU bring-up check. See
-// docs/mobile-gpu-bringup.md.
-func StartVerify() string {
-	h, err := app.NewHandler(gpucheck.Root(), app.Config{
-		Font:         goregular.TTF,
-		FontFamilies: map[string][]byte{"bold": gobold.TTF},
-		Background:   gpucheck.Background(),
+		Background:   bg,
 	})
 	if err != nil {
 		return err.Error()
