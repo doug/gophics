@@ -6,13 +6,30 @@ plugins {
 android {
     namespace 'dev.gossamer.hn'
     compileSdk 34
+    // The AGP 8.5 default NDK; run.sh ensures it (and the CMake below) are
+    // installed. Pin here so the native build is reproducible across machines.
+    ndkVersion '26.1.10909125'
     defaultConfig {
         applicationId 'dev.gossamer.hn'
         minSdk 24
         targetSdk 34
         versionCode 1
         versionName '0.1'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' } // real devices + emulator
+        // `gradle ... -Pverify` runs the GPU bring-up scene (Hnmobile.startVerify)
+        // instead of HN — see docs/mobile-gpu-bringup.md.
+        buildConfigField 'boolean', 'VERIFY', (project.hasProperty('verify') ? 'true' : 'false')
     }
+    // Build the JNI surface shim (libgossamer_surface.so) that hands the Go/GPU
+    // side the ANativeWindow* behind the Java Surface. Without this the app
+    // crashes at launch on System.loadLibrary("gossamer_surface").
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+    buildFeatures { buildConfig true }
     kotlinOptions { jvmTarget = '17' }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -22,7 +39,7 @@ android {
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
-    // Built by: gomobile bind -target=android -androidapi 24 \
-    //   -o app/libs/hnmobile.aar github.com/doug/gossamer/examples/hn/mobile
+    // Built by run.sh (or: gomobile bind -target=android -androidapi 24 \
+    //   -o app/libs/hnmobile.aar github.com/doug/gossamer/examples/hn/mobile)
     implementation files('libs/hnmobile.aar')
 }
