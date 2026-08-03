@@ -42,7 +42,10 @@ func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx
 	}
 	g, err := newMobileGPU(uintptr(displayHandle), uintptr(windowHandle), widthPx, heightPx, float64(scale))
 	if err != nil {
-		log.Printf("gossamer/mobile: GPU surface unavailable, using CPU blit: %v", err)
+		// No CPU-blit fallback exists for live rendering, so the surface stays
+		// blank until a valid one is provided — RenderFrame no-ops. (Seen on the
+		// iOS Simulator, whose Metal doesn't expose the HAL wgpu needs.)
+		log.Printf("gossamer/mobile: GPU surface creation failed; live rendering disabled until a valid surface is provided: %v", err)
 		return
 	}
 	b.gpu = g

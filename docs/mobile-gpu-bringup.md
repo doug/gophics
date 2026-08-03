@@ -18,6 +18,32 @@ part of the GPU path is readable at a glance.
   *rendering* is very likely correct; what's unproven is the mobile-specific
   **surface handoff + lifecycle**.
 
+## Simulator / emulator results (2026-08-02)
+
+Ran the harness through both — the toolchains work, but **neither
+simulator/emulator can validate the GPU present path**, as the games-plan
+predicted:
+
+- **iOS Simulator** (iPhone 17, Apple Silicon): `gomobile bind -target=ios`
+  produces a device+simulator `xcframework`; `xcodebuild -sdk iphonesimulator`
+  builds; the app **installs, launches, and runs without crashing**. But the log
+  shows `GPU surface creation failed: wgpu: no HAL instance available for surface
+  creation` — the Simulator's Metal doesn't expose the HAL wgpu needs — so the
+  screen stays **black** (there is no CPU-blit fallback for live rendering). A
+  **real iOS device** (full Metal) is required.
+- **Android emulator** (Pixel-class AVD, `-gpu host`): `gomobile bind
+  -target=android` produces the `.aar`; the Gradle build assembles a debug APK.
+  But the app **crashes on launch**: `UnsatisfiedLinkError: library
+  "libgossamer_surface.so" not found` — the host's JNI shim
+  (`examples/hn/android/app/src/main/cpp/gossamer_surface.c`) wasn't compiled/
+  packaged by the ad-hoc CLI `gradle` build (its `externalNativeBuild`/CMake step
+  didn't run without the NDK/CMake wired). Build the host in **Android Studio**
+  (which runs the CMake step) — then run on a **real device**, since the emulator
+  uses SwiftShader/experimental Vulkan and isn't a reliable GPU signal anyway.
+
+**Net:** both toolchains compile the whole stack and the iOS app runs; the GPU
+surface itself is unverifiable off-device. Proceed to real hardware.
+
 ## What only a device can confirm
 
 Surface creation from a native handle, **rotation** (Android destroys the surface
