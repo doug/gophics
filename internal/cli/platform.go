@@ -21,7 +21,7 @@ func platformByName(name string) (platform, error) {
 		return platform{name: "desktop"}, nil
 	case "web":
 		return platform{name: "web", goos: "js", goarch: "wasm", wasm: true}, nil
-	case "terminal", "term":
+	case "terminal":
 		return platform{name: "terminal", tags: []string{"gossamer_term"}}, nil
 	case "ios":
 		return platform{name: "ios"}, nil // via gomobile
