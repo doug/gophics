@@ -511,8 +511,9 @@ func drawGem(c paint.Canvas, cx, cy, sz float32, g gem) {
 	c.FillRRectGradient(r, rad, g.light, g.base, false)
 
 	// Gloss: a pre-blended highlight streak across the top — a lighter tint of
-	// the gem rather than a PushOpacity layer (this scene draws 64 gems/frame;
-	// stacking that many opacity groups currently drops their contents).
+	// the gem rather than a PushOpacity layer. With 64 gems/frame, pre-blending
+	// avoids allocating a full-surface layer pixmap per gem (a perf win; the
+	// HiDPI layer-clipping bug this once tripped is fixed in gg).
 	c.FillRRect(geom.RectXYWH(cx-h*0.66, cy-h*0.7, sz*0.66, sz*0.28), sz*0.14, mix(g.base, white, 0.55))
 
 	// Symbol: a distinct white glyph for colorblind-safe identification.
