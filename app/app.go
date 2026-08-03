@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/input"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/scene"
@@ -182,7 +183,7 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 		}
 	}
 	c := &Core{
-		Owner:      &widget.Owner{Painter: p},
+		Owner:      &widget.Owner{Painter: p, Input: input.New()},
 		Painter:    p,
 		background: cfg.Background,
 		root:       root,
@@ -418,6 +419,9 @@ func boxes(hits []hitInteractive) []*widget.InteractiveBox {
 // Pointer dispatches a pointer event: hover enter/exit, drag, scroll,
 // tap on press+release over the same Interactive, and tap-to-focus.
 func (c *Core) Pointer(e shell.Pointer) {
+	if c.Owner.Input != nil {
+		c.Owner.Input.HandlePointer(e)
+	}
 	switch e.Kind {
 	case shell.PointerMove:
 		delta := e.Pos.Sub(c.lastPos)
@@ -556,6 +560,15 @@ func (c *Core) focusFrom(hits []hitInteractive) {
 
 // Keyboard dispatches key/text events to the current keyboard target.
 func (c *Core) Keyboard(e shell.Event) {
+	// Feed held-state polling first, before the focus early-return — a game
+	// canvas polls keys with no focused widget.
+	if in := c.Owner.Input; in != nil {
+		if k, ok := e.(shell.Key); ok {
+			in.HandleKey(k)
+		}
+		t := c.Owner.KeyboardTarget
+		in.SetTextCapturing(t != nil && t.OnText != nil)
+	}
 	t := c.Owner.KeyboardTarget
 	if t == nil {
 		return
@@ -688,6 +701,9 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// Present via the GPU rasterizer or the CPU rasterizer, chosen per frame
 	// from the frame's Target (see present.go).
 	h.present(f, changed, damage)
+	if in := h.core.Owner.Input; in != nil {
+		in.NewFrame() // clear per-frame key/pointer edges after the frame read them
+	}
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.
 		h.core.recordFrameTime(float32(time.Since(t0).Seconds() * 1000))
@@ -720,10 +736,13 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		w.Invalidate()
 	case shell.Focus:
 		// Losing focus mid-interaction (alt-tab while dragging) must not leave a
-		// gesture stuck down: cancel any in-progress press/drag. (Held-key state,
-		// which also needs clearing here, arrives with the input package.)
+		// gesture or a held key stuck down: cancel the press/drag and clear the
+		// input state.
 		if !e.Focused {
 			h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: -1e6, Y: -1e6}})
+			if in := h.core.Owner.Input; in != nil {
+				in.Clear()
+			}
 		}
 		w.Invalidate()
 	}

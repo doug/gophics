@@ -201,6 +201,32 @@ const (
 	KeyC
 	KeyV
 	KeyX
+
+	// Game/physical keys. APPEND ONLY, and never reorder the block above — the
+	// mobile Bridge.Key ABI passes these integer values across the FFI boundary
+	// (examples/hn/.../MainActivity.kt hardcodes indices). Delivered as physical
+	// KeyPress/KeyRelease for held-state polling (input package), independent of
+	// text input.
+	KeySpace
+	KeyW
+	KeyS
+	KeyD
+	KeyE
+	KeyQ
+	KeyR
+	KeyF
+	KeyShift
+	KeyCtrl
+	Key0
+	Key1
+	Key2
+	Key3
+	Key4
+	Key5
+	Key6
+	Key7
+	Key8
+	Key9
 )
 
 // Mods is a bitmask of held modifier keys.

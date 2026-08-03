@@ -19,6 +19,7 @@ package widget
 
 import (
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/input"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/shell"
 )
@@ -113,6 +114,9 @@ func (c Ctx) Camera() shell.Camera { return c.el.owner.Camera }
 // Audio returns the platform audio record/playback capability, or nil when
 // unavailable. See shell/media.go.
 func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
+
+// Input returns per-frame poll-style input state (held keys, pointer) for games.
+func (c Ctx) Input() *input.State { return c.el.owner.Input }
 
 // OpenURL opens url in the system browser (no-op before the runner
 // provides the hook).

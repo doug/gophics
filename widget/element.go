@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/input"
 	"github.com/doug/gossamer/layout"
 	"github.com/doug/gossamer/paint"
 	"github.com/doug/gossamer/shell"
@@ -56,6 +57,9 @@ type Owner struct {
 	// runner from the platform window (nil when unsupported). See shell/media.go.
 	Camera shell.Camera
 	Audio  shell.Audio
+	// Input is per-frame poll-style input state for games (held keys, pointer),
+	// fed by the app runner and read via Ctx.Input().
+	Input *input.State
 
 	root    *element
 	dirty   []*element

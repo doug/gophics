@@ -77,7 +77,11 @@ func (h *Headless) Resize(size geom.Size) {
 // running. Deterministic replacement for vsync in tests.
 func (h *Headless) Step(dt float64) bool {
 	h.Core.TickGestures(dt)
-	return h.Core.Owner.TickAll(dt)
+	r := h.Core.Owner.TickAll(dt)
+	if h.Core.Owner.Input != nil {
+		h.Core.Owner.Input.NewFrame() // clear per-frame edges after tickers read them
+	}
+	return r
 }
 
 // Drag dispatches press at from, a move to to (exceeding tap slop), and
@@ -120,6 +124,19 @@ func (h *Headless) Type(s string) {
 func (h *Headless) Key(code shell.KeyCode) {
 	h.layoutForInput()
 	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
+}
+
+// KeyDown dispatches a key-press (held). Pair with KeyUp to test held-state
+// polling via Ctx.Input().
+func (h *Headless) KeyDown(code shell.KeyCode) {
+	h.layoutForInput()
+	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
+}
+
+// KeyUp dispatches a key-release.
+func (h *Headless) KeyUp(code shell.KeyCode) {
+	h.layoutForInput()
+	h.Core.Keyboard(shell.Key{Kind: shell.KeyRelease, Code: code})
 }
 
 // Compose dispatches an IME composition update (Start on first call).
