@@ -897,6 +897,10 @@ func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
 	c.dc.DrawImageEx(buf, gg.DrawImageOptions{
 		X: float64(dst.Min.X), Y: float64(dst.Min.Y),
 		DstWidth: float64(dst.Dx()), DstHeight: float64(dst.Dy()),
+		// Opacity must be set explicitly: the GPU backend treats the zero value
+		// as fully transparent (the CPU path treated it as opaque), so leaving
+		// it unset blitted nothing on GPU. Match DrawSprite's defaults.
+		Interpolation: gg.InterpBilinear, Opacity: 1, BlendMode: gg.BlendNormal,
 	})
 }
 
