@@ -21,13 +21,19 @@ var mobileTemplates embed.FS
 
 func cmdCreate(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
-	var module string
+	var module, platforms string
 	fs.StringVar(&module, "module", "", "Go module path (default: the app name)")
+	fs.StringVar(&platforms, "platform", "desktop,web,ios,android", "comma-separated targets to scaffold: desktop,web,terminal,ios,android")
+	fs.StringVar(&platforms, "p", "desktop,web,ios,android", "shorthand for -platform")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: gossamer create <name> [-module path]")
+		return fmt.Errorf("usage: gossamer create <name> [-module path] [-p desktop,web,ios,android]")
+	}
+	plats, err := parsePlatforms(platforms)
+	if err != nil {
+		return err
 	}
 	name := fs.Arg(0)
 	if module == "" {
@@ -55,8 +61,10 @@ func cmdCreate(args []string) error {
 			return err
 		}
 	}
-	if err := scaffoldMobile(name, bundleID, data); err != nil {
-		return err
+	if plats["ios"] || plats["android"] {
+		if err := scaffoldMobile(name, bundleID, data, plats["ios"], plats["android"]); err != nil {
+			return err
+		}
 	}
 	// Initialize the module. We intentionally do NOT `go get` gossamer here: it
 	// isn't published yet (and uses local replace forks), so that would hang or
@@ -64,7 +72,23 @@ func cmdCreate(args []string) error {
 	if err := run(name, nil, "go", "mod", "init", module); err != nil {
 		return fmt.Errorf("go mod init: %w", err)
 	}
-	fmt.Printf(`created %s
+	var next strings.Builder
+	if plats["web"] {
+		next.WriteString("  gossamer dev -p web        # fastest loop\n")
+	}
+	if plats["desktop"] {
+		next.WriteString("  gossamer run -p desktop     # native window\n")
+	}
+	if plats["terminal"] {
+		next.WriteString("  gossamer run -p terminal    # in the terminal\n")
+	}
+	if plats["ios"] {
+		next.WriteString("  gossamer run -p ios ./mobile      # iOS Simulator (needs Xcode + xcodegen)\n")
+	}
+	if plats["android"] {
+		next.WriteString("  gossamer run -p android ./mobile  # Android device/emulator (needs the SDK)\n")
+	}
+	fmt.Printf(`created %s (%s)
 
 Next:
   cd %s
@@ -72,11 +96,7 @@ Next:
   #   go mod edit -require=github.com/doug/gossamer@v0.0.0
   #   go mod edit -replace=github.com/doug/gossamer=/path/to/gossamer
   #   go mod tidy
-  gossamer dev -p web        # fastest loop
-  gossamer run -p desktop     # native window
-  gossamer run -p ios ./mobile      # iOS Simulator (needs Xcode + xcodegen)
-  gossamer run -p android ./mobile  # Android device/emulator (needs the SDK)
-`, name, name)
+%s`, name, platforms, name, next.String())
 	return nil
 }
 
@@ -85,7 +105,7 @@ Next:
 // in .tmpl (rendered, suffix stripped); everything else is copied verbatim
 // (the gradle wrapper jar, gradlew, CMake). The Android Kotlin sources move
 // from templates/.../kotlin/ to app/src/main/java/<pkg-path>/.
-func scaffoldMobile(root, bundleID string, data map[string]string) error {
+func scaffoldMobile(root, bundleID string, data map[string]string, wantIOS, wantAndroid bool) error {
 	const base = "templates/mobile"
 	pkgPath := strings.ReplaceAll(bundleID, ".", "/")
 	return fs.WalkDir(mobileTemplates, base, func(p string, d fs.DirEntry, err error) error {
@@ -93,6 +113,14 @@ func scaffoldMobile(root, bundleID string, data map[string]string) error {
 			return err
 		}
 		rel := strings.TrimPrefix(p, base+"/")
+		// Only emit the host dirs for the selected platforms (mobile/ — the
+		// shared bind package — is always needed if either is selected).
+		if strings.HasPrefix(rel, "ios/") && !wantIOS {
+			return nil
+		}
+		if strings.HasPrefix(rel, "android/") && !wantAndroid {
+			return nil
+		}
 		// Kotlin sources live under a package-derived java/ path on disk.
 		if k := "android/app/src/main/kotlin/"; strings.HasPrefix(rel, k) {
 			rel = "android/app/src/main/java/" + pkgPath + "/" + strings.TrimPrefix(rel, k)
@@ -114,6 +142,25 @@ func scaffoldMobile(root, bundleID string, data map[string]string) error {
 		}
 		return os.WriteFile(out, b, perm)
 	})
+}
+
+// parsePlatforms validates a comma-separated platform list into a set.
+func parsePlatforms(s string) (map[string]bool, error) {
+	set := map[string]bool{}
+	for p := range strings.SplitSeq(s, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if _, err := platformByName(p); err != nil {
+			return nil, err
+		}
+		set[p] = true
+	}
+	if len(set) == 0 {
+		return nil, fmt.Errorf("no platforms selected (-p desktop,web,ios,android)")
+	}
+	return set, nil
 }
 
 // sanitizeIdent lowercases and strips a name to [a-z0-9] for use in package,
