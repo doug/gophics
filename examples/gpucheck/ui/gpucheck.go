@@ -1,0 +1,148 @@
+// Package gpucheck is a diagnostic scene for verifying the mobile GPU present
+// path on a real device. Everything about it is meant to be read at a glance:
+//
+//   - the four color swatches confirm solid fills render the right colors;
+//   - the gradient bar confirms GPU gradients;
+//   - text at three sizes confirms glyph compositing (the LoadOpClear-wipe risk);
+//   - the sprite trio confirms DrawSprite (plain / tinted / rotated);
+//   - the spinning square + rising frame counter confirm per-frame present;
+//   - tapping drops a marker and bumps the tap counter, confirming touch input.
+//
+// If the surface renders, animates, and responds to touch, the mobile GPU path
+// works. Compare a device screenshot against the desktop-GPU golden.
+package gpucheck
+
+import (
+	"fmt"
+	"image"
+	"image/color"
+	"math"
+
+	"github.com/doug/gossamer/geom"
+	"github.com/doug/gossamer/paint"
+	"github.com/doug/gossamer/widget"
+)
+
+// Root is the scene widget; Background is its clear color.
+func Root() widget.Widget     { return Check{} }
+func Background() paint.Color { return paint.RGB(0.06, 0.07, 0.10) }
+
+type Check struct{}
+
+func (Check) CreateState() widget.State { return &checkState{} }
+
+type checkState struct {
+	widget.StateBase[Check]
+	ctx     widget.Ctx
+	atlas   *image.RGBA
+	t       float64
+	frames  int
+	taps    int
+	lastTap geom.Pt
+}
+
+func (s *checkState) Init(ctx widget.Ctx) {
+	s.ctx = ctx
+	s.atlas = buildAtlas()
+	ctx.AddTicker(tick{s})
+}
+
+type tick struct{ s *checkState }
+
+func (t tick) Tick(dt float64) bool {
+	t.s.t += dt
+	t.s.frames++
+	t.s.ctx.Invalidate()
+	return true
+}
+
+func (s *checkState) Build(_ widget.Ctx) widget.Widget {
+	return widget.Interactive{
+		Handler: widget.Handler{OnPress: func(p geom.Pt) {
+			s.taps++
+			s.lastTap = p
+			s.ctx.Invalidate()
+		}},
+		Child: widget.Canvas{Clip: true, Draw: s.draw},
+	}
+}
+
+var (
+	ink  = paint.RGB(0.90, 0.92, 0.96)
+	dim  = paint.RGB(0.55, 0.60, 0.68)
+	good = paint.RGB(0.30, 0.80, 0.45)
+)
+
+func (s *checkState) draw(c paint.Canvas, size geom.Size) {
+	c.Clear(Background())
+	x, y := float32(20), float32(24)
+
+	c.TextIn("bold", "GPU CHECK", geom.Pt{X: x, Y: y + 8}, 30, ink)
+	c.Text(fmt.Sprintf("frames %d   taps %d", s.frames, s.taps), geom.Pt{X: x, Y: y + 36}, 15, dim)
+	y += 64
+
+	// Color swatches — fills + color correctness.
+	for i, col := range []paint.Color{
+		paint.RGB(0.86, 0.24, 0.26), paint.RGB(0.26, 0.72, 0.40),
+		paint.RGB(0.28, 0.50, 0.92), paint.RGB(0.95, 0.95, 0.97),
+	} {
+		c.FillRRect(geom.RectXYWH(x+float32(i)*66, y, 56, 40), 8, col)
+	}
+	y += 56
+
+	// Gradient bar — GPU gradients.
+	c.FillRRectGradient(geom.RectXYWH(x, y, 4*66-10, 30), 8,
+		paint.RGB(0.20, 0.85, 0.90), paint.RGB(0.90, 0.30, 0.60), true)
+	y += 46
+
+	// Text at three sizes — glyph compositing.
+	c.Text("The quick brown fox 0123", geom.Pt{X: x, Y: y + 12}, 12, ink)
+	c.Text("The quick brown fox", geom.Pt{X: x, Y: y + 34}, 18, ink)
+	c.TextIn("bold", "Sharp?", geom.Pt{X: x, Y: y + 64}, 26, ink)
+	y += 84
+
+	// Sprite trio — DrawSprite plain / tinted / rotated.
+	q := image.Rect(0, 0, 8, 8)
+	c.DrawSprite(s.atlas, paint.Sprite{Src: q, Dst: geom.RectXYWH(x, y, 48, 48), Nearest: true})
+	c.DrawSprite(s.atlas, paint.Sprite{Src: q, Dst: geom.RectXYWH(x+64, y, 48, 48), Nearest: true, Tint: paint.RGB(1, 0.5, 0.2)})
+	c.DrawSprite(s.atlas, paint.Sprite{Src: q, Dst: geom.RectXYWH(x+128, y, 48, 48), Nearest: true, Rotation: float32(s.t)})
+	c.Text("sprite · tint · rotate", geom.Pt{X: x, Y: y + 62}, 13, dim)
+	y += 84
+
+	// Filled path (triangle) + a spinning square — animation + paths.
+	tri := paint.NewPath()
+	tri.MoveTo(geom.Pt{X: x, Y: y + 44}).LineTo(geom.Pt{X: x + 48, Y: y + 44}).LineTo(geom.Pt{X: x + 24, Y: y}).Close()
+	c.FillPath(tri, good)
+	spin := paint.NewPath()
+	cx, cy, r := x+120, y+24, float32(22)
+	for i := 0; i <= 4; i++ {
+		a := s.t + float64(i)*math.Pi/2
+		p := geom.Pt{X: cx + r*float32(math.Cos(a)), Y: cy + r*float32(math.Sin(a))}
+		if i == 0 {
+			spin.MoveTo(p)
+		} else {
+			spin.LineTo(p)
+		}
+	}
+	c.FillPath(spin.Close(), paint.RGB(0.95, 0.72, 0.30))
+	c.Text("path fill · spinning = frames advancing", geom.Pt{X: x + 170, Y: y + 28}, 13, dim)
+
+	// Tap marker.
+	if s.taps > 0 {
+		c.FillRRect(geom.RectXYWH(s.lastTap.X-10, s.lastTap.Y-10, 20, 20), 10, paint.RGB(1, 0.9, 0.3))
+	}
+	c.Text("tap anywhere → marker + tap count (touch input)",
+		geom.Pt{X: 20, Y: size.H - 20}, 13, dim)
+}
+
+// buildAtlas is a tiny 16×16 atlas with four solid color quadrants.
+func buildAtlas() *image.RGBA {
+	a := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	quad := [4]color.RGBA{{220, 70, 70, 255}, {70, 170, 220, 255}, {80, 200, 120, 255}, {230, 200, 80, 255}}
+	for yy := 0; yy < 16; yy++ {
+		for xx := 0; xx < 16; xx++ {
+			a.SetRGBA(xx, yy, quad[(yy/8)*2+(xx/8)])
+		}
+	}
+	return a
+}
