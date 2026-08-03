@@ -34,11 +34,15 @@ and blits the pixels. GPU on device, CPU everywhere else.
   **Verified:** the gpucheck scene renders fully — title, animating frame
   counter, correct swatches, gradient, three text sizes, sprite trio
   (plain/tint/rotate), triangle + spinning square. Not black.
-- **Android emulator**: `./examples/hn/android/run.sh` now packages the JNI
-  surface shim (`libgossamer_surface.so`) — the earlier `UnsatisfiedLinkError`
-  crash was a missing `externalNativeBuild`/CMake wiring, now fixed — so the app
-  launches. If the emulator's Vulkan can't back a wgpu surface, `GPUActive()` is
-  false and the host blits via `lockCanvas`, same as iOS.
+- **Android emulator** (arm64 `google_apis`, `-gpu host` → host M1 Ultra Metal):
+  `./examples/hn/android/run.sh --verify` packages the JNI surface shim
+  (`libgossamer_surface.so`) — the earlier `UnsatisfiedLinkError` crash was a
+  missing `externalNativeBuild`/CMake wiring, now fixed — so the app launches.
+  `GPUActive()` is false (even with `-gpu host`, wgpu can't back a Vulkan
+  surface: `no HAL instance available`), so the host blits via `lockCanvas`.
+  **Verified:** the gpucheck scene renders fully and animates, and taps register
+  (marker + tap counter). It's slow (~90 ms/frame — full-screen CPU raster +
+  blit under emulation), fine for layout/logic/touch work.
 
 **Net:** every dev can run the app in the simulator/emulator with one command
 and see a faithful, interactive UI. What's still **device-only** is validating
