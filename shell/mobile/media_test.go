@@ -40,7 +40,7 @@ func (h *fakeHost) PlayClip(reqID int, wav []byte) {
 	h.b.SetPlaybackPosition(reqID, 50)
 }
 func (h *fakeHost) SeekPlayback(reqID, ms int) {}
-func (h *fakeHost) StopPlayback(reqID int)   { h.b.PlaybackEnded(reqID) }
+func (h *fakeHost) StopPlayback(reqID int)     { h.b.PlaybackEnded(reqID) }
 
 func TestBridgeMediaCapabilities(t *testing.T) {
 	h, err := app.NewHandler(tapApp{}, app.Config{Font: goregular.TTF})

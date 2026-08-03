@@ -253,7 +253,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		if k.Kind != shell.KeyPress {
 			return
 		}
-		s.activity()          // keep the caret solid while interacting
+		s.activity()           // keep the caret solid while interacting
 		s.revealPending = true // a key press moves or edits the caret: keep it visible
 		shift := k.Mods&shell.ModShift != 0
 		switch k.Code {

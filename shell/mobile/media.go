@@ -26,12 +26,12 @@ import (
 // Go encodes the portable WAV Clip with shell.EncodeWAV, so the format matches
 // the web shell exactly. Playback is given that WAV via PlayClip.
 type MediaHost interface {
-	AuthorizeCamera(reqID int)         // → DeliverPermission(reqID, granted)
+	AuthorizeCamera(reqID int)          // → DeliverPermission(reqID, granted)
 	CapturePhoto(reqID int, facing int) // → DeliverPhoto(reqID, jpeg) | FailCapture(reqID, msg)
-	AuthorizeMic(reqID int)            // → DeliverPermission(reqID, granted)
-	StartRecording(reqID int)          // → DeliverRecorderReady(reqID) | FailRecording(reqID, msg); SetAudioLevel while live
-	StopRecording(reqID int)           // → DeliverPCM(reqID, pcm, sampleRate, durationMs)
-	PlayClip(reqID int, wav []byte)    // → DeliverPlaybackReady(reqID); SetPlaybackPosition; PlaybackEnded
+	AuthorizeMic(reqID int)             // → DeliverPermission(reqID, granted)
+	StartRecording(reqID int)           // → DeliverRecorderReady(reqID) | FailRecording(reqID, msg); SetAudioLevel while live
+	StopRecording(reqID int)            // → DeliverPCM(reqID, pcm, sampleRate, durationMs)
+	PlayClip(reqID int, wav []byte)     // → DeliverPlaybackReady(reqID); SetPlaybackPosition; PlaybackEnded
 	SeekPlayback(reqID int, ms int)
 	StopPlayback(reqID int)
 }

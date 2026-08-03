@@ -127,9 +127,9 @@ type Stack struct {
 	Children []Widget
 }
 
-func (s Stack) createBox(Ctx) layout.Box      { return &layout.Stack{} }
-func (s Stack) updateBox(Ctx, layout.Box)     {}
-func (s Stack) childWidgets() []Widget        { return s.Children }
+func (s Stack) createBox(Ctx) layout.Box  { return &layout.Stack{} }
+func (s Stack) updateBox(Ctx, layout.Box) {}
+func (s Stack) childWidgets() []Widget    { return s.Children }
 func (s Stack) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Stack).Children = append(b.(*layout.Stack).Children[:0], kids...)
 }

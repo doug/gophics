@@ -246,8 +246,10 @@ type webProvider struct {
 	format  gputypes.TextureFormat
 }
 
-func (p *webProvider) Device() gpucontext.Device { return gpucontext.NewDevice(unsafe.Pointer(p.device)) }
-func (p *webProvider) Queue() gpucontext.Queue   { return gpucontext.NewQueue(unsafe.Pointer(p.queue)) }
+func (p *webProvider) Device() gpucontext.Device {
+	return gpucontext.NewDevice(unsafe.Pointer(p.device))
+}
+func (p *webProvider) Queue() gpucontext.Queue               { return gpucontext.NewQueue(unsafe.Pointer(p.queue)) }
 func (p *webProvider) SurfaceFormat() gputypes.TextureFormat { return p.format }
 func (p *webProvider) Adapter() gpucontext.Adapter {
 	return gpucontext.NewAdapter(unsafe.Pointer(p.adapter))

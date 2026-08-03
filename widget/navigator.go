@@ -180,9 +180,9 @@ func (s *navState) Build(Ctx) Widget {
 	if len(s.stack) > 0 && s.trans == nil {
 		children = append(children, Interactive{
 			Handler: Handler{
-				DragAxis:  DragHorizontal,
-				OnPress:   func(geom.Pt) { s.edgeDx = 0 },
-				OnDrag:    func(_, d geom.Pt) { s.edgeDx += d.X },
+				DragAxis: DragHorizontal,
+				OnPress:  func(geom.Pt) { s.edgeDx = 0 },
+				OnDrag:   func(_, d geom.Pt) { s.edgeDx += d.X },
 				OnRelease: func() {
 					if s.edgeDx > 64 {
 						s.pop()
@@ -236,9 +236,9 @@ func (s *navState) buildFlights(width float32) []Widget {
 // stackW and translatedW are internal render widgets over the layout boxes.
 type stackW struct{ Children []Widget }
 
-func (w stackW) createBox(Ctx) layout.Box          { return &layout.Stack{} }
-func (w stackW) updateBox(_ Ctx, b layout.Box)     {}
-func (w stackW) childWidgets() []Widget            { return w.Children }
+func (w stackW) createBox(Ctx) layout.Box      { return &layout.Stack{} }
+func (w stackW) updateBox(_ Ctx, b layout.Box) {}
+func (w stackW) childWidgets() []Widget        { return w.Children }
 func (w stackW) attach(b layout.Box, kids []layout.Box) {
 	st := b.(*layout.Stack)
 	st.Children = append(st.Children[:0], kids...)
@@ -248,9 +248,9 @@ func (w stackW) attach(b layout.Box, kids []layout.Box) {
 // hit-testing it.
 type offstageW struct{ Child Widget }
 
-func (w offstageW) createBox(Ctx) layout.Box      { return &offstageBox{} }
-func (w offstageW) updateBox(Ctx, layout.Box)     {}
-func (w offstageW) childWidgets() []Widget        { return []Widget{w.Child} }
+func (w offstageW) createBox(Ctx) layout.Box  { return &offstageBox{} }
+func (w offstageW) updateBox(Ctx, layout.Box) {}
+func (w offstageW) childWidgets() []Widget    { return []Widget{w.Child} }
 func (w offstageW) attach(b layout.Box, kids []layout.Box) {
 	b.(*offstageBox).Child = first(kids)
 }
@@ -270,8 +270,8 @@ func (b *offstageBox) Layout(cs layout.Constraints) geom.Size {
 	return b.Done(cs, cs.Constrain(geom.Size{}))
 }
 
-func (b *offstageBox) Paint(paint.Canvas, geom.Pt)      {}
-func (b *offstageBox) AddHits(geom.Pt, *[]layout.Hit)   {}
+func (b *offstageBox) Paint(paint.Canvas, geom.Pt)    {}
+func (b *offstageBox) AddHits(geom.Pt, *[]layout.Hit) {}
 
 type translatedW struct {
 	FracX float32

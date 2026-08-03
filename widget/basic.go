@@ -597,8 +597,8 @@ const (
 	// "normal" NSScrollView deceleration rate is ~0.998 per millisecond, i.e.
 	// v(t) = v0·0.998^(1000t) = v0·e^(−2.0t): friction ≈ −1000·ln(0.998) ≈ 2.0.
 	flingFriction = 2.0 // 1/s decay rate — tuned to NSScrollView; feel-test
-	flingMinStart = 80   // px/s needed to start a fling
-	flingMinSpeed = 20   // px/s considered at rest
+	flingMinStart = 80  // px/s needed to start a fling
+	flingMinSpeed = 20  // px/s considered at rest
 
 	// Rubber-band + bounce tuning (see rubberBand / overspring).
 	rubberC       = 0.55 // elastic resistance factor (macOS ≈ 0.55)
@@ -834,9 +834,9 @@ type revealAnchor struct {
 	child  Widget
 }
 
-func (w revealAnchor) createBox(Ctx) layout.Box          { return &revealAnchorBox{reveal: w.reveal} }
-func (w revealAnchor) updateBox(_ Ctx, b layout.Box)     { b.(*revealAnchorBox).reveal = w.reveal }
-func (w revealAnchor) childWidgets() []Widget            { return []Widget{w.child} }
+func (w revealAnchor) createBox(Ctx) layout.Box            { return &revealAnchorBox{reveal: w.reveal} }
+func (w revealAnchor) updateBox(_ Ctx, b layout.Box)       { b.(*revealAnchorBox).reveal = w.reveal }
+func (w revealAnchor) childWidgets() []Widget              { return []Widget{w.child} }
 func (w revealAnchor) attach(b layout.Box, k []layout.Box) { b.(*revealAnchorBox).child = first(k) }
 
 type revealAnchorBox struct {

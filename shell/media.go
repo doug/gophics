@@ -70,10 +70,10 @@ type Clip struct {
 // Recorder is an in-progress microphone recording. Poll Level each frame for a
 // live meter; call Stop to finalize (the clip arrives on the callback).
 type Recorder interface {
-	Level() float32          // current input level, 0..1
-	Elapsed() time.Duration  // time since recording began
-	Stop(func(Clip, error))  // finalize; the recorded clip arrives on the callback
-	Cancel()                 // discard the recording
+	Level() float32         // current input level, 0..1
+	Elapsed() time.Duration // time since recording began
+	Stop(func(Clip, error)) // finalize; the recorded clip arrives on the callback
+	Cancel()                // discard the recording
 }
 
 // Playback controls a playing Clip.

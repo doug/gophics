@@ -3,7 +3,7 @@ package widget
 import (
 	"fmt"
 	"image"
-	_ "image/gif"  // decoders
+	_ "image/gif" // decoders
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"

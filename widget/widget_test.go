@@ -21,8 +21,8 @@ type probeState struct {
 	local           int // survives rebuilds, dies on remount
 }
 
-func (s *probeState) Init(Ctx)  { s.inits++ }
-func (s *probeState) Dispose()  { s.disposes++ }
+func (s *probeState) Init(Ctx) { s.inits++ }
+func (s *probeState) Dispose() { s.disposes++ }
 func (s *probeState) Build(ctx Ctx) Widget {
 	return Sized{W: 10 + float32(s.local), H: 10}
 }

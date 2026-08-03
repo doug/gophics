@@ -43,9 +43,9 @@ func (d Dismissible) CreateState() State { return &dismissState{} }
 type dismissState struct {
 	StateBase[Dismissible]
 	ctx      Ctx
-	dx       float32  // current horizontal translation (px)
-	width    float32  // last laid-out child width
-	velocity float32  // px/s along x
+	dx       float32 // current horizontal translation (px)
+	width    float32 // last laid-out child width
+	velocity float32 // px/s along x
 	lastDrag time.Time
 	anim     *anim.Controller
 	from, to float32
@@ -151,7 +151,7 @@ type dismissStack struct {
 	reveal bool
 }
 
-func (d dismissStack) createBox(Ctx) layout.Box { return &dismissBox{} }
+func (d dismissStack) createBox(Ctx) layout.Box      { return &dismissBox{} }
 func (d dismissStack) updateBox(_ Ctx, b layout.Box) { b.(*dismissBox).reveal = d.reveal }
 func (d dismissStack) childWidgets() []Widget        { return []Widget{d.bg, d.fg} }
 func (d dismissStack) attach(b layout.Box, kids []layout.Box) {
