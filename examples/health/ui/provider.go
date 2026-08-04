@@ -1,8 +1,9 @@
-package main
+package healthui
 
 import (
 	"math"
 	"math/rand"
+	"sync"
 )
 
 // Metric identifies a health series.
@@ -148,3 +149,97 @@ var (
 	_ Provider = (*synthProvider)(nil)
 	_ Advancer = (*synthProvider)(nil)
 )
+
+// DeviceProvider is the Provider used on iOS/Android: the native host reads the
+// platform health store (HealthKit / Health Connect) and pushes samples in via
+// Push. It is NOT an Advancer — the platform drives updates — so the UI ticker
+// only repaints. All access is mutex-guarded because Push is called from the
+// host's callback threads while the UI reads on the frame thread.
+type DeviceProvider struct {
+	mu       sync.RWMutex
+	name     string
+	authed   bool
+	series   [4][]Sample // indexed by Metric
+	stepsSum float64     // Steps reports a running total, like the synthetic one
+}
+
+// NewDeviceProvider builds an empty device provider labelled with the platform
+// store's name (e.g. "Apple Health", "Health Connect").
+func NewDeviceProvider(name string) *DeviceProvider {
+	return &DeviceProvider{name: name}
+}
+
+func (d *DeviceProvider) Name() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.name
+}
+
+func (d *DeviceProvider) Authorized() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.authed
+}
+
+// SetAuthorized records the result of the platform permission prompt.
+func (d *DeviceProvider) SetAuthorized(ok bool) {
+	d.mu.Lock()
+	d.authed = ok
+	d.mu.Unlock()
+}
+
+// Push appends a sample for a metric from the native health store. cap bounds
+// the retained history (0 = unbounded); the newest samples are kept.
+func (d *DeviceProvider) Push(m Metric, t, v float64, capN int) {
+	if m < 0 || int(m) >= len(d.series) {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	s := append(d.series[m], Sample{T: t, V: v})
+	if capN > 0 && len(s) > capN {
+		s = s[len(s)-capN:]
+	}
+	d.series[m] = s
+	if m == Steps {
+		d.stepsSum = v // HealthKit/Health Connect report cumulative steps directly
+	}
+}
+
+// ReplaceSeries swaps a metric's whole history at once — used when the host
+// backfills a range query (e.g. 30 days of weight) rather than streaming.
+func (d *DeviceProvider) ReplaceSeries(m Metric, xs []Sample) {
+	if m < 0 || int(m) >= len(d.series) {
+		return
+	}
+	d.mu.Lock()
+	d.series[m] = append(d.series[m][:0], xs...)
+	if m == Steps && len(xs) > 0 {
+		d.stepsSum = xs[len(xs)-1].V
+	}
+	d.mu.Unlock()
+}
+
+func (d *DeviceProvider) Series(m Metric) []Sample {
+	if m < 0 || int(m) >= len(d.series) {
+		return nil
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return append([]Sample(nil), d.series[m]...) // copy: caller reads without the lock
+}
+
+func (d *DeviceProvider) Latest(m Metric) (Sample, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if m == Steps {
+		return Sample{V: d.stepsSum}, len(d.series[Steps]) > 0
+	}
+	if m < 0 || int(m) >= len(d.series) || len(d.series[m]) == 0 {
+		return Sample{}, false
+	}
+	s := d.series[m]
+	return s[len(s)-1], true
+}
+
+var _ Provider = (*DeviceProvider)(nil)

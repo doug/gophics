@@ -1,4 +1,4 @@
-package main
+package healthui
 
 import (
 	"github.com/doug/gophics/geom"
@@ -11,7 +11,7 @@ import (
 // dashboard. It reads the shared provider and repaints itself each frame so
 // live updates (advanced by the root ticker) show here too.
 type detailPage struct {
-	p *synthProvider
+	p Provider
 	m Metric
 }
 
@@ -102,7 +102,7 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 		statBlock("Max", sp.fmtVal(hi)),
 	))
 
-	return widget.Fill{Color: bg, Child: widget.Scroll{Child: widget.Padding{
+	return widget.Fill{Color: BG, Child: widget.Scroll{Child: widget.Padding{
 		Insets: geom.InsetsSymmetric(18, 22),
 		Child:  widget.Flex{CrossAlign: layout.CrossStretch, Children: kids},
 	}}}
