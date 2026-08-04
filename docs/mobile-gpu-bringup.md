@@ -254,3 +254,33 @@ Deferring `dispatcher.Init()` to the first actual compute-routed draw would:
 Deliberately **not done** for now: the underlying error is harmless, so the
 init-path regression risk isn't worth it yet. Revisit if cold-start time on
 mobile becomes a concern, or to quiet the log for on-device profiling.
+
+### Orientation (2026-08-04)
+
+The iOS host now declares all four interface orientations
+(`examples/hn/ios/GossamerHN/Info.plist`). On device: **portrait and both
+landscape orientations render and re-layout correctly** — rotating swaps
+`GossamerView.bounds`, `layoutSubviews` calls `HnmobileResize`, and the Go bridge
+full-rebuilds the surface on an orientation flip (`shell/mobile/gpu.go`
+`orientationChanged`, the same path fixed for Android tearing).
+
+`UIInterfaceOrientationPortraitUpsideDown` is declared but is a **no-op on
+notched iPhones** (e.g. 13 mini) — iOS suppresses upside-down portrait at the OS
+level on those devices regardless of the plist, so rotating toward upside-down
+stays in landscape (the nearest orientation the device honors). This is expected,
+unchangeable Apple behavior; the declaration is still correct for iPad / non-
+notched devices. Not a bug — do not re-investigate.
+
+Not yet tested headlessly: the Simulator can't be rotated from the CLI (`osascript`
+keystrokes need Accessibility permission; `simctl ui` has no orientation option),
+so rotation was verified by hand on the device.
+
+## Open issues
+
+- **Spinning-square jitter (iOS, open).** The gpucheck spinning square jitters
+  occasionally on device. Ruled out: it is **not** pipeline recompilation /
+  `MTLCompilerService` churn — an 18s run with no debug layer showed 0 recompiles
+  and no pipeline churn. It is a **timing/animation** issue — next step is to
+  instrument the per-frame `dt` fed to `RenderFrame` (from the CADisplayLink) and
+  the animation's angle derivation for spikes / non-monotonic steps (GC pauses,
+  irregular `dt`, or frame drops are the suspects). Not yet root-caused.
