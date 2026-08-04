@@ -228,3 +228,19 @@ hardens a **reusable core layer**, not a one-off.
 - **Differentiated + personal:** JJ / Jujutsu GUI.
 - **Purest "strictly better, zero server":** local PDF toolkit.
 - **Core-capability forcing function:** multimedia capture journal (→ camera + audio).
+
+## In flight / queued (session log)
+
+- **Health dashboard** — IN PROGRESS (`examples/health/`). Live metric cards
+  (real-time heart rate, steps, weight, sleep) over a `Provider` interface.
+  Phase 1: synthetic live provider (desktop/web). Phase 2: bind the same
+  interface to HealthKit (iOS) / Health Connect (Android) — health stores are
+  on-device only, so real live data is the mobile build's showcase: one Go UI,
+  pixel-identical, real native data on the phone.
+- **WebRTC calling app** — QUEUED. A 1:1 (or small-group) call app to exercise
+  the WebRTC stack end-to-end *and* the audio/video capture + playback paths:
+  camera preview, mic capture, peer connection/signalling, remote video render,
+  call controls (mute/hangup/switch camera). Doubles as the forcing function for
+  the media capabilities (`shell.Camera`, `shell.Audio`) and a real-time
+  networking dogfood. Big, but a strong differentiated showcase once mobile
+  camera/audio bring-up lands.
