@@ -160,6 +160,17 @@ Gophics is young and moving fast — so, the real caveats up front:
 
 The hard part — own-rendering pipeline, constraint layout, GPU compositing, real text shaping, four live platforms, headless golden tests — is done.
 
+## Built on
+
+Gophics vendors its rendering substrate in-tree (so the whole stack is one repo with zero CGo), all forks of excellent prior work — credit where it's due:
+
+- **gg** — the analytic-AA 2D renderer + tiered GPU pipeline that `paint` draws through (from the `gogpu/gg` lineage).
+- **wgpu** — a pure-Go WebGPU implementation (Vulkan / Metal / DX12), and **naga** — a pure-Go WGSL shader compiler.
+- **gogpu** — windowing and the higher-level GPU layer, sitting on **[go-webgpu/goffi + webgpu](https://github.com/go-webgpu)** — the pure-Go FFI/dlopen floor.
+- **[go-text/typesetting](https://github.com/go-text/typesetting)** — HarfBuzz-class shaping, bidi, and line-breaking; plus **[go-mp3](https://github.com/hajimehoshi/go-mp3)** / **[oggvorbis](https://github.com/jfreymuth/oggvorbis)** for audio.
+
+Every vendored tree keeps its MIT license — see **[THIRD_PARTY.md](THIRD_PARTY.md)** for the full list and attributions.
+
 ## Learn more
 
 - **[PLAN.md](PLAN.md)** — the vision, architecture, and roadmap (the thesis for building this in Go).

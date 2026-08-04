@@ -300,6 +300,43 @@ func TestGPUOpacityNested(t *testing.T) {
 	}
 }
 
+// TestGPUShadowThenFill reproduces the solitaire "black cards" bug: a drop
+// shadow (semi-transparent black fills) drawn BEFORE an opaque white fill at the
+// same rect. In insertion order the white face covers the shadow (a light card
+// with a shadow halo). If the GPU reorders same-tier fills, the black shadow
+// paints over the white face and the card centre goes dark. The CPU path is the
+// reference.
+func TestGPUShadowThenFill(t *testing.T) {
+	felt := paint.RGB(0.10, 0.44, 0.30)
+	white := paint.RGB(0.99, 0.99, 0.98)
+	r := geom.RectXYWH(60, 40, 90, 120) // a "card"
+	scene := widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+		c.Clear(felt)
+		paint.DropShadow(c, r, 9, geom.Pt{Y: 2}, 5, paint.Color{R: 0, G: 0, B: 0, A: 0.28})
+		c.FillRRect(r, 9, white) // the card face — must end up on top
+	}}
+	h, err := NewHeadless(scene, Config{Size: geom.Size{W: 220, H: 220}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gimg := h.RenderGPU()
+	if gimg == nil {
+		t.Skip("no headless GPU adapter")
+	}
+	gpu, cpu := toRGBA(gimg), toRGBA(h.Render())
+
+	// Sample the card centre — should be ~white on both paths.
+	cx, cy := 105, 100
+	gc, cc := gpu.RGBAAt(cx, cy), cpu.RGBAAt(cx, cy)
+	t.Logf("card centre — cpu %v, gpu %v", cc, gc)
+	if cc.R < 200 {
+		t.Fatalf("CPU reference is wrong: centre %v not white", cc)
+	}
+	if gc.R < 200 || gc.G < 200 || gc.B < 200 {
+		t.Errorf("GPU card centre is dark: got %v, want ~white (shadow painted over the face)", gc)
+	}
+}
+
 func absi(v int) int {
 	if v < 0 {
 		return -v

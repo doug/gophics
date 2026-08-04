@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — architecture</title>
+<meta name="description" content="How Gophics works: a per-frame pipeline of immutable widgets, element reconciliation, constraint layout, and GPU layer compositing — in pure Go.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="architecture.html">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap prose">
+  <h2>Architecture</h2>
+  <p class="lead">Gophics is one idea carried all the way down: a <em>pipeline</em>. You describe the UI as immutable values; the framework diffs them into a retained tree, lays it out once, and composites it on the GPU — every frame, in pure Go.</p>
+
+  <h3>The frame pipeline</h3>
+  <p>Each frame flows through the same phases (mirroring the model that made own-rendering UIs fast). Every phase is independently instrumentable and testable:</p>
+  <pre class="code">input → gestures → callbacks           mark widgets dirty
+      → tickers fire                    animations advance
+      → <b>build</b>                           rebuild dirty widgets, reconcile the element tree
+      → <b>layout</b>                          constraints down, sizes up (one pass, relayout boundaries)
+      → <b>paint</b>                           dirty nodes record display lists into a layer tree
+      → <b>composite</b>                       layer tree → GPU commands → present</pre>
+  <p>Only what changed is rebuilt, re-laid-out, and repainted — damage tracking rides on the layer tree, so a one-widget change costs about one widget's worth of work.</p>
+
+  <h3>The layers</h3>
+  <p>Each concern is a small Go package; dependencies point downward. You build apps against the top; everything below is the engine.</p>
+  <pre class="code"><b>widget</b>   Widget/Element trees, State (StateBase[W]), keys, focus, the reconciler
+<b>gesture</b>  hit-testing, pointer routing, the gesture arena      <b>anim</b>  tickers, curves, controllers
+──────────────────────────────────────────────────────────────────────────────────────────
+<b>layout</b>   the box protocol — BoxConstraints down, sizes up; flex, stack, padding, viewports
+──────────────────────────────────────────────────────────────────────────────────────────
+<b>scene</b>    retained display lists, diffed for damage      <b>paint</b>  Canvas: paths, gradients, layers, text
+<b>text</b>     shaping · bidi · line-breaking (go-text)        <b>geom</b>   points, rects, rrects, affine transforms
+──────────────────────────────────────────────────────────────────────────────────────────
+<b>app</b>      the runtime: app.Run (a window) · app.Headless (tests)   <b>shell</b>  per-platform window / input / present
+<b>internal/gfx</b>   the vendored, pure-Go WebGPU + shader-compiler + 2D-renderer substrate (zero CGo)</pre>
+
+  <h3>Own-rendering, in pure Go</h3>
+  <p>Gophics draws every pixel itself rather than wrapping native widgets or a webview — that's why one widget tree looks the same on every platform. The rendering substrate is vendored in-tree and is entirely pure Go (no CGo): a WebGPU implementation, a WGSL shader compiler, and an analytic-AA 2D renderer. The <code>shell</code> layer presents that output per platform:</p>
+  <ul>
+    <li><b>Desktop</b> (macOS / Linux / Windows) — a native window, GPU-composited; one static binary.</li>
+    <li><b>Web</b> — WebGPU in the browser (with a CPU fallback), from the same code compiled to WASM.</li>
+    <li><b>Mobile</b> — iOS (Metal) and Android (Vulkan), the Go code bound into a thin native host.</li>
+    <li><b>Terminal</b> — the same widget tree, rasterized to the terminal via the kitty graphics protocol (even over SSH).</li>
+  </ul>
+
+  <h3>Testable without a display</h3>
+  <p>Because the renderer has an offscreen path, the whole UI is a rendering <em>library</em>: <code>app.Headless</code> mounts a widget tree, drives taps/keys/frames, and returns an <code>image</code> — no window, no emulator. Layout, painting, gestures, and full widget trees all run under <code>go test</code>, and golden-image tests are a first-class feature. A server can render a widget tree to a PNG or a report with no display at all.</p>
+
+  <p style="margin-top:28px"><a href="get-started.html">Get started →</a> &nbsp;·&nbsp; <a href="https://github.com/doug/gophics/blob/main/PLAN.md">The full design doc &amp; roadmap (PLAN.md) ↗</a></p>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>
