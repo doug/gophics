@@ -31,6 +31,11 @@ func main() {
 	}
 	root, _ := filepath.Abs(dir)
 
-	log.Printf("serving %s on http://localhost%s", root, *addr)
-	log.Fatal(http.ListenAndServe(*addr, http.FileServer(http.Dir(root))))
+	fs := http.FileServer(http.Dir(root))
+	nocache := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, must-revalidate")
+		fs.ServeHTTP(w, r)
+	})
+	log.Printf("serving %s on http://localhost%s (no-cache)", root, *addr)
+	log.Fatal(http.ListenAndServe(*addr, nocache))
 }
