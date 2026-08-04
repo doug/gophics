@@ -15,9 +15,9 @@ import (
 
 	"github.com/go-webgpu/goffi/ffi"
 	"github.com/go-webgpu/goffi/types"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/eventqueue"
-	xkbcommon "github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/xkb"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/eventqueue"
+	xkbcommon "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/xkb"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // Config holds configuration for creating a platform window.

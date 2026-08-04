@@ -5,7 +5,7 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // Render parses SVG XML data and renders it to an RGBA image at the specified size.

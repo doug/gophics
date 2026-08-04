@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/text"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // SDFAccelerator provides GPU-accelerated rendering using wgpu/hal render

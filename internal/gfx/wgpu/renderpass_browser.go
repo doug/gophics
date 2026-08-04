@@ -3,8 +3,8 @@
 package wgpu
 
 import (
-	"github.com/doug/gossamer/internal/gfx/wgpu/internal/browser"
-	"github.com/doug/gossamer/internal/gfx/wgpu/internal/indirect"
+	"github.com/doug/gophics/internal/gfx/wgpu/internal/browser"
+	"github.com/doug/gophics/internal/gfx/wgpu/internal/indirect"
 )
 
 // RenderPassEncoder records draw commands within a render pass.

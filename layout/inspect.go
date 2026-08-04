@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Walk visits every box in the tree with its rect in root coordinates,

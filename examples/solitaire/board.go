@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/doug/gossamer/examples/solitaire/klondike"
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/examples/solitaire/klondike"
+	"github.com/doug/gophics/geom"
 )
 
 // Board is the pure geometry of a Klondike layout for a given surface size and

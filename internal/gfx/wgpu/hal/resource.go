@@ -5,7 +5,7 @@ package hal
 import (
 	"image"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // Resource is the base interface for all GPU resources.

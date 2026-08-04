@@ -5,7 +5,7 @@
 
 package audio
 
-import "github.com/doug/gossamer/internal/audio/internal/wasapi"
+import "github.com/doug/gophics/internal/audio/internal/wasapi"
 
 // wasapiWrapper adapts internal/wasapi.Driver to the audio.Driver interface.
 // This is necessary because wasapi.Driver.SetSource takes wasapi.Source

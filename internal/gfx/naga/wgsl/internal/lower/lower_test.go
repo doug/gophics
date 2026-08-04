@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/registry"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl/internal/parser"
+	"github.com/doug/gophics/internal/gfx/naga/internal/registry"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/parser"
 )
 
 func TestLowerSimpleVertexShader(t *testing.T) {

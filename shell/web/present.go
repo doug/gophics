@@ -19,13 +19,13 @@ import (
 	"syscall/js"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 // presenter owns whichever presentation path this run committed to.
@@ -57,7 +57,7 @@ func newPresenter(w *window) *presenter {
 		return p
 	}
 	if w.renderer == shell.RendererGPU && !gpuSupported() {
-		log.Printf("gossamer/web: GPU requested but navigator.gpu is unavailable; using CPU")
+		log.Printf("gophics/web: GPU requested but navigator.gpu is unavailable; using CPU")
 	}
 	p.initCPU()
 	return p
@@ -98,7 +98,7 @@ func (p *presenter) setupGPU() {
 	if err != nil {
 		// The canvas may now be bound to WebGPU; CPU fallback is unsafe, so
 		// skip frames rather than taint it. This is rare (device already OK).
-		log.Printf("gossamer/web: gpu surface: %v", err)
+		log.Printf("gophics/web: gpu surface: %v", err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (p *presenter) setupGPU() {
 	// scale so 1 point maps to dpr device pixels.
 	c, err := ggcanvas.NewWithScale(provider, int(p.w.logical.W), int(p.w.logical.H), p.w.dpr)
 	if err != nil {
-		log.Printf("gossamer/web: ggcanvas: %v", err)
+		log.Printf("gophics/web: ggcanvas: %v", err)
 		return
 	}
 	p.ggc = c
@@ -126,7 +126,7 @@ func (p *presenter) setupGPU() {
 	}
 
 	p.gpuReady = true
-	log.Printf("gossamer/web: GPU ready (%s, %s, %dx%d @%gx)",
+	log.Printf("gophics/web: GPU ready (%s, %s, %dx%d @%gx)",
 		adapter.Info().Name, p.format, p.pw, p.ph, p.w.dpr)
 	p.w.Invalidate() // draw the first GPU frame now that we can present
 }
@@ -134,7 +134,7 @@ func (p *presenter) setupGPU() {
 // gpuSetupFailed logs and falls back to the CPU path — safe because the canvas
 // has not been bound to a WebGPU surface yet at these failure points.
 func (p *presenter) gpuSetupFailed(stage string, err error) {
-	log.Printf("gossamer/web: gpu %s: %v; falling back to CPU", stage, err)
+	log.Printf("gophics/web: gpu %s: %v; falling back to CPU", stage, err)
 	p.initCPU()
 	p.w.Invalidate()
 }
@@ -150,7 +150,7 @@ func (p *presenter) configure() {
 		Usage:     gputypes.TextureUsageRenderAttachment,
 		AlphaMode: gputypes.CompositeAlphaModeOpaque,
 	}); err != nil {
-		log.Printf("gossamer/web: surface configure: %v", err)
+		log.Printf("gophics/web: surface configure: %v", err)
 	}
 }
 
@@ -160,7 +160,7 @@ func (p *presenter) onResize() {
 	}
 	p.configure()
 	if err := p.ggc.Resize(int(p.w.logical.W), int(p.w.logical.H)); err != nil {
-		log.Printf("gossamer/web: ggcanvas resize: %v", err)
+		log.Printf("gophics/web: ggcanvas resize: %v", err)
 	}
 	p.ggc.SetDeviceScale(p.w.dpr)
 }
@@ -203,21 +203,21 @@ type gpuTarget struct{ p *presenter }
 func (t gpuTarget) RenderGPU(replay func(*gg.Context)) {
 	p := t.p
 	if err := p.ggc.Draw(func(cc *gg.Context) { replay(cc) }); err != nil {
-		log.Printf("gossamer/web: gpu draw: %v", err)
+		log.Printf("gophics/web: gpu draw: %v", err)
 		return
 	}
 	st, _, err := p.surface.GetCurrentTexture()
 	if err != nil {
-		log.Printf("gossamer/web: get current texture: %v", err)
+		log.Printf("gophics/web: get current texture: %v", err)
 		return
 	}
 	view, err := st.CreateView(nil)
 	if err != nil {
-		log.Printf("gossamer/web: surface view: %v", err)
+		log.Printf("gophics/web: surface view: %v", err)
 		return
 	}
 	if err := p.ggc.RenderDirect(gpucontext.NewTextureView(unsafe.Pointer(view)), uint32(p.pw), uint32(p.ph)); err != nil {
-		log.Printf("gossamer/web: render direct: %v", err)
+		log.Printf("gophics/web: render direct: %v", err)
 	}
 	_ = p.surface.Present(st) // no-op on browser (auto-presented)
 }

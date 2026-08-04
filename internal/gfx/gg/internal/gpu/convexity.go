@@ -2,7 +2,7 @@
 
 package gpu
 
-import "github.com/doug/gossamer/internal/gfx/gg"
+import "github.com/doug/gophics/internal/gfx/gg"
 
 // convexityEpsilon is the tolerance for cross product comparisons.
 // Values below this threshold are treated as zero (collinear edges).

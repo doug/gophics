@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/naga/glsl"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/gl"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/naga/glsl"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/gles/gl"
 )
 
 // Surface and SurfaceTexture are defined in platform-specific files (resource_windows.go, resource_linux.go)

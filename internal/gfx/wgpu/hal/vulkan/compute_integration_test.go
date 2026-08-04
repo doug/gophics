@@ -11,9 +11,9 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan/vk"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan/vk"
 )
 
 // sdfShaderWGSL is a compute shader that computes signed distance field

@@ -3,8 +3,8 @@ package gg
 import (
 	"image"
 
-	intImage "github.com/doug/gossamer/internal/gfx/gg/internal/image"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	intImage "github.com/doug/gophics/internal/gfx/gg/internal/image"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // ImageBuf is a public alias for internal ImageBuf.

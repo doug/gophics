@@ -1,4 +1,4 @@
-//go:build !js && !android && !ios && !gossamer_term
+//go:build !js && !android && !ios && !gophics_term
 
 package app
 
@@ -9,17 +9,17 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/widget"
 )
 
-// devStateEnv names the file `gossamer dev` uses to hand UI state from an
+// devStateEnv names the file `gophics dev` uses to hand UI state from an
 // exiting process to its relaunched successor. Empty/unset disables the
 // feature — a shipped binary never sees it. The CLI (internal/cli) sets the
-// same variable when launching the app under `gossamer dev -p desktop`.
-const devStateEnv = "GOSSAMER_DEV_STATE"
+// same variable when launching the app under `gophics dev -p desktop`.
+const devStateEnv = "GOPHICS_DEV_STATE"
 
 // setupDevState enables state-preserving hot-restart when the process runs
-// under `gossamer dev` (which sets devStateEnv to a snapshot file path). It is
+// under `gophics dev` (which sets devStateEnv to a snapshot file path). It is
 // a no-op in a shipped binary, where the variable is unset.
 //
 // On boot it restores any snapshot the previous process left behind, so the
@@ -52,7 +52,7 @@ func restoreDevState(sh *shellHandler, path string) {
 	}
 	var snap widget.StateSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
-		log.Printf("gossamer dev: restore state: %v", err)
+		log.Printf("gophics dev: restore state: %v", err)
 		return
 	}
 	sh.core.Owner.RestoreState(snap)

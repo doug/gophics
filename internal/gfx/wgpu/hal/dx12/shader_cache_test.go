@@ -8,7 +8,7 @@ package dx12
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 func TestShaderCache_GetMiss(t *testing.T) {

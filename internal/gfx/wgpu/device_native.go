@@ -7,11 +7,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	naga "github.com/doug/gossamer/internal/gfx/naga"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/wgpu/core"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	naga "github.com/doug/gophics/internal/gfx/naga"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/wgpu/core"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // Device represents a logical GPU device.

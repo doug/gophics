@@ -8,7 +8,7 @@ package metal
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // TestTextureFormatToMTL tests texture format conversions to Metal pixel formats.

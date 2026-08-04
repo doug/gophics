@@ -1,4 +1,4 @@
-// Package theme is gossamer's default design language: a Theme value
+// Package theme is gophics's default design language: a Theme value
 // provided to the tree plus components pre-wired to consult it. The core
 // widget package stays unstyled primitives; this package is the styled
 // layer — the widgets/material split as two ordinary Go packages.
@@ -12,9 +12,9 @@
 package theme
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 // FontBold is the font family name themed components use for emphasis;

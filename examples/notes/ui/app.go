@@ -1,17 +1,17 @@
 // Package ui is a local-first Markdown notes app — the driving example for
-// gossamer's text-editing and state-preservation stories. A vault is a folder
+// gophics's text-editing and state-preservation stories. A vault is a folder
 // of .md files; edit and read them side by side, follow [[wikilinks]], and —
-// because all UI state is plain serializable data — a `gossamer dev` hot-restart
+// because all UI state is plain serializable data — a `gophics dev` hot-restart
 // drops you back on the same note, in the same mode, with unsaved edits intact.
 package ui
 
 import (
 	"strings"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 var (

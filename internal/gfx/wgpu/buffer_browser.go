@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/internal/browser"
+	"github.com/doug/gophics/internal/gfx/wgpu/internal/browser"
 )
 
 // Buffer represents a GPU buffer.

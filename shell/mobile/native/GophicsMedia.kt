@@ -1,11 +1,11 @@
-// Reference Android MediaHost for gossamer's shell/mobile media bridge.
+// Reference Android MediaHost for gophics's shell/mobile media bridge.
 // Scaffolding — copy into the host app and verify on device. Type names from
 // `gomobile bind` (here `mobile.*`) may differ; adjust to your bind package.
 //
-// Wire once at startup:  bridge.setMediaHost(GossamerMedia(activity, bridge))
+// Wire once at startup:  bridge.setMediaHost(GophicsMedia(activity, bridge))
 // Camera uses ACTION_IMAGE_CAPTURE; route the Activity result to onPhotoResult().
 
-package com.example.gossamer
+package com.example.gophics
 
 import android.app.Activity
 import android.content.Intent
@@ -23,7 +23,7 @@ import kotlin.concurrent.thread
 import mobile.Bridge
 import mobile.MediaHost
 
-class GossamerMedia(
+class GophicsMedia(
     private val activity: Activity,
     private val bridge: Bridge,
 ) : MediaHost {
@@ -86,7 +86,7 @@ class GossamerMedia(
         recording = true
         rec.startRecording()
         bridge.deliverRecorderReady(reqID)
-        thread(name = "gossamer-rec") {
+        thread(name = "gophics-rec") {
             val buf = ByteArray(4096)
             while (recording) {
                 val n = rec.read(buf, 0, buf.size)

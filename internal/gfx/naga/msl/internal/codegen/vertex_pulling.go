@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // doVertexPulling returns true if VPT should be applied for the given entry point.

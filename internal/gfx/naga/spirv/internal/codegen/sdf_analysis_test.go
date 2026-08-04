@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl"
 )
 
 // sdfCircleWGSL is the SDF circle compute shader from gg/internal/gpu/shaders/sdf_circle.wgsl.

@@ -1,6 +1,6 @@
 package blend
 
-import "github.com/doug/gossamer/internal/gfx/gg/internal/wide"
+import "github.com/doug/gophics/internal/gfx/gg/internal/wide"
 
 // Batch implementations of advanced separable blend modes.
 //

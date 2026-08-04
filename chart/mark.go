@@ -1,8 +1,8 @@
 package chart
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Datum is one data point. X is numeric (or a band index for categorical marks);

@@ -4,7 +4,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/types"
 )
 
 func TestDefaultConfigValues(t *testing.T) {

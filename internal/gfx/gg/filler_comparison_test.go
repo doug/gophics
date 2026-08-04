@@ -6,8 +6,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	_ "github.com/doug/gossamer/internal/gfx/gg/raster" // registers AdaptiveFiller (SparseStrips + TileCompute)
+	"github.com/doug/gophics/internal/gfx/gg"
+	_ "github.com/doug/gophics/internal/gfx/gg/raster" // registers AdaptiveFiller (SparseStrips + TileCompute)
 )
 
 // TestStrokeSineWave_AnalyticVsSparseStrips measures the rendering difference

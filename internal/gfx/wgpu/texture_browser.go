@@ -2,7 +2,7 @@
 
 package wgpu
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/internal/browser"
+import "github.com/doug/gophics/internal/gfx/wgpu/internal/browser"
 
 // Texture represents a GPU texture.
 type Texture struct {

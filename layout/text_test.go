@@ -5,9 +5,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/scene"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/scene"
 )
 
 func textPainter(t *testing.T) *paint.Painter {

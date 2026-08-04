@@ -3,8 +3,8 @@
 package app
 
 import (
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/web"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/shell/web"
 )
 
 func desktopRun(h shell.Handler, cfg shell.Config) error {

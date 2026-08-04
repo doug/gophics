@@ -3,9 +3,9 @@ package app
 import (
 	"image"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/widget"
 )
 
 // Headless drives an app without a display: the widget-test harness.
@@ -20,7 +20,7 @@ type Headless struct {
 	scale float32
 
 	// gpu holds the lazily-created headless GPU renderer used by RenderGPU
-	// (gossamer_gpu build only); typed any so this file stays tag-agnostic.
+	// (gophics_gpu build only); typed any so this file stays tag-agnostic.
 	gpu any
 }
 

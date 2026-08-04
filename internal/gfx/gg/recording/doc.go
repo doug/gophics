@@ -62,14 +62,14 @@
 // backend package with a blank identifier to automatically register it:
 //
 //	import (
-//	    "github.com/doug/gossamer/internal/gfx/gg/recording"
+//	    "github.com/doug/gophics/internal/gfx/gg/recording"
 //	    _ "github.com/doug/gg-pdf"  // Registers "pdf" backend
 //	    _ "github.com/doug/gg-svg"  // Registers "svg" backend
 //	)
 //
 // The built-in "raster" backend is always available via:
 //
-//	import _ "github.com/doug/gossamer/internal/gfx/gg/recording/backends/raster"
+//	import _ "github.com/doug/gophics/internal/gfx/gg/recording/backends/raster"
 //
 // # Resource Management
 //

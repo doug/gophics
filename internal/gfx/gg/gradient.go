@@ -4,7 +4,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/color"
+	"github.com/doug/gophics/internal/gfx/gg/internal/color"
 )
 
 // ExtendMode defines how gradients extend beyond their defined bounds.

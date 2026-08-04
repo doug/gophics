@@ -1,14 +1,14 @@
-//go:build gossamer_gpu && !js
+//go:build gophics_gpu && !js
 
 package app
 
 import (
 	"image"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	_ "github.com/doug/gossamer/internal/gfx/gg/gpu" // register gg's GPU accelerator
-	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
-	"github.com/doug/gossamer/internal/gfx/gogpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	_ "github.com/doug/gophics/internal/gfx/gg/gpu" // register gg's GPU accelerator
+	"github.com/doug/gophics/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gophics/internal/gfx/gogpu"
 )
 
 // gpuRenderer is a headless GPU renderer + canvas, reused across RenderGPU calls.
@@ -21,7 +21,7 @@ type gpuRenderer struct {
 // RenderGPU lays out and records the scene exactly like Render, but rasterizes
 // it on the GPU — offscreen render through ggcanvas plus a readback — instead of
 // the CPU. It returns the physical-pixel image so tests can compare the two
-// backends. Available only under -tags gossamer_gpu; returns nil when no GPU
+// backends. Available only under -tags gophics_gpu; returns nil when no GPU
 // adapter is present (so callers can t.Skip).
 func (h *Headless) RenderGPU() image.Image {
 	h.Core.drainPosted()

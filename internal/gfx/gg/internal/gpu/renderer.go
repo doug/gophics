@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // Renderer-specific errors.

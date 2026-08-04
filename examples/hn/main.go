@@ -6,8 +6,8 @@ package main
 import (
 	"log"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/examples/hn/ui"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/examples/hn/ui"
 )
 
 func main() {

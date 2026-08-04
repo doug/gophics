@@ -6,10 +6,10 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 func TestRenderSessionCreation(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/textutil"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/internal/textutil"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // dotWrapper tracks an integer dot product wrapper function.

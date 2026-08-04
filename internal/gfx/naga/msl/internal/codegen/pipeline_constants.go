@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // applyPipelineConstants creates a copy of the module with override values

@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // =============================================================================

@@ -3,8 +3,8 @@ package layout
 import (
 	"testing"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // leaf is a test box that wants a fixed size.

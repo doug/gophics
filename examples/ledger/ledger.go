@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/doug/gossamer/chart"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/chart"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 var (

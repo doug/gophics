@@ -7,7 +7,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 func TestNewLayeredPixmapTarget(t *testing.T) {

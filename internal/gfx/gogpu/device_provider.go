@@ -1,8 +1,8 @@
 package gogpu
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // DeviceProvider provides access to GPU resources for external libraries.

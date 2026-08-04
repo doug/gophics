@@ -4,8 +4,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // BlurFilter applies separable Gaussian blur to an image.

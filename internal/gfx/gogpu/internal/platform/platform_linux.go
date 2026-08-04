@@ -13,10 +13,10 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/eventqueue"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/wayland"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/x11"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/eventqueue"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/wayland"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/x11"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // xkbKeyHandler abstracts the keyboard layout handling provided by libxkbcommon.

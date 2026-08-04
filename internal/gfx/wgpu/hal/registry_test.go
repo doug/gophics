@@ -5,9 +5,9 @@ package hal_test
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/noop" // Import for side effect of registering noop backend
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/noop" // Import for side effect of registering noop backend
 )
 
 // mockBackend is a simple test backend implementation.

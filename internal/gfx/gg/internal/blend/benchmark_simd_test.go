@@ -3,7 +3,7 @@ package blend
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/wide"
+	"github.com/doug/gophics/internal/gfx/gg/internal/wide"
 )
 
 // BenchmarkSourceOver_Scalar_1000px benchmarks scalar SourceOver blending.

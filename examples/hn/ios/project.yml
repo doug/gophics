@@ -1,21 +1,21 @@
-name: GossamerHN
+name: GophicsHN
 options:
-  bundleIdPrefix: dev.gossamer
+  bundleIdPrefix: dev.gophics
   deploymentTarget:
     iOS: "15.0"
 targets:
-  GossamerHN:
+  GophicsHN:
     type: application
     platform: iOS
     sources:
-      - GossamerHN
+      - GophicsHN
     dependencies:
       - framework: Hnmobile.xcframework
         embed: true
     info:
-      path: GossamerHN/Info.plist
+      path: GophicsHN/Info.plist
       properties:
-        CFBundleDisplayName: gossamer HN
+        CFBundleDisplayName: gophics HN
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -23,6 +23,6 @@ targets:
           - UIInterfaceOrientationPortrait
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.gossamer.hn
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gophics.hn
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1"

@@ -8,11 +8,11 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 // TestShapedPipelineRender renders mixed-direction text through the full
-// gossamer pipeline (shape → outlines → gg fill) when GOSSAMER_RENDER_OUT
+// gophics pipeline (shape → outlines → gg fill) when GOPHICS_RENDER_OUT
 // is set; it always asserts the fallback+shaping path produces glyphs.
 func TestShapedPipelineRender(t *testing.T) {
 	if runtime.GOOS != "darwin" {
@@ -35,7 +35,7 @@ func TestShapedPipelineRender(t *testing.T) {
 		t.Fatalf("mixed line glyphs = %d", len(l.Glyphs))
 	}
 
-	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		c := p.BeginOffscreen(geom.Size{W: 480, H: 120}, 2)
 		c.Clear(RGB(1, 1, 1))
 		c.Text("السلام عليكم", geom.Pt{X: 20, Y: 50}, 30, RGB(0, 0, 0))

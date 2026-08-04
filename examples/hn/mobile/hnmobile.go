@@ -14,15 +14,15 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/shell/mobile"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/shell/mobile"
 )
 
 var bridge *mobile.Bridge
 
 // Start builds the app and must be called once from the host before any other
 // call. The scene is the HN app, or the GPU bring-up check when built with
-// -tags gossamer_verify (see scene.go).
+// -tags gophics_verify (see scene.go).
 func Start() string {
 	root, bg := scene()
 	h, err := app.NewHandler(root, app.Config{

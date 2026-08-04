@@ -6,7 +6,7 @@ package gpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // =============================================================================

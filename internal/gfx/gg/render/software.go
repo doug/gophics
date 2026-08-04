@@ -7,7 +7,7 @@ import (
 	"errors"
 	"image/color"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/raster"
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 )
 
 // SoftwareRenderer is a CPU-based renderer using the core/ package algorithms.

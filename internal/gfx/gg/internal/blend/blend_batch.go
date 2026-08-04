@@ -1,6 +1,6 @@
 package blend
 
-import "github.com/doug/gossamer/internal/gfx/gg/internal/wide"
+import "github.com/doug/gophics/internal/gfx/gg/internal/wide"
 
 // BlendBatch blends src over dst for n pixels using batch operations.
 // Automatically uses batch (16px) or scalar based on count.

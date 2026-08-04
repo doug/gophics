@@ -5,7 +5,7 @@ package gpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // TestPipelineStageString tests PipelineStage.String method.

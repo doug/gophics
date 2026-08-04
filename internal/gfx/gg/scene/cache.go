@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // Default cache configuration constants.

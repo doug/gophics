@@ -34,7 +34,7 @@
 //
 // Import this package to register the OpenGL backend:
 //
-//	import _ "github.com/doug/gossamer/internal/gfx/wgpu/hal/gles"
+//	import _ "github.com/doug/gophics/internal/gfx/wgpu/hal/gles"
 //
 // The backend is then available via hal.GetBackend(types.BackendGL).
 //

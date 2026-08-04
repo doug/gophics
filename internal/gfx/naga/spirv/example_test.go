@@ -3,7 +3,7 @@ package spirv_test
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/naga/spirv"
+	"github.com/doug/gophics/internal/gfx/naga/spirv"
 )
 
 // ExampleModuleBuilder_minimal demonstrates creating a minimal SPIR-V module.

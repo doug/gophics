@@ -1,6 +1,6 @@
 // Package chart is a built-in, Swift Charts–style charting library: declarative
 // marks (bars, lines, points, rules, heatmaps, ranges) composed over scales and
-// rendered through paint.Canvas. It depends only on gossamer's own layers
+// rendered through paint.Canvas. It depends only on gophics's own layers
 // (paint, widget, geom, anim, layout) and the standard library.
 //
 // The smallest useful chart:

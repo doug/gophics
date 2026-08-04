@@ -5,11 +5,11 @@ import (
 	"slices"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // GPU presentation for the mobile Bridge. The host hands over a native render
@@ -49,7 +49,7 @@ func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx
 		// GPU surface unavailable (e.g. the iOS Simulator, whose Metal doesn't
 		// expose the HAL wgpu needs): GPUActive stays false so the host falls
 		// back to the CPU present path. RenderFrame no-ops in the meantime.
-		log.Printf("gossamer/mobile: GPU surface unavailable, host should use CPU present (GPUActive=false): %v", err)
+		log.Printf("gophics/mobile: GPU surface unavailable, host should use CPU present (GPUActive=false): %v", err)
 		return
 	}
 	b.gpu = g
@@ -137,7 +137,7 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	if pma, ok := gg.Accelerator().(gg.PipelineModeAware); ok {
 		pma.SetPipelineMode(gg.PipelineModeRenderPass)
 	}
-	log.Printf("gossamer/mobile: GPU ready (%s, %dx%d @%gx, %v)",
+	log.Printf("gophics/mobile: GPU ready (%s, %dx%d @%gx, %v)",
 		adapter.Info().Name, wPx, hPx, scale, g.format)
 	return g, nil
 }
@@ -200,7 +200,7 @@ func (g *mobileGPU) configure() error {
 		PresentMode: g.present,
 	})
 	if err != nil {
-		log.Printf("gossamer/mobile: surface configure: %v", err)
+		log.Printf("gophics/mobile: surface configure: %v", err)
 	}
 	return err
 }
@@ -239,21 +239,21 @@ type mobileGPUTarget struct{ g *mobileGPU }
 func (t mobileGPUTarget) RenderGPU(replay func(*gg.Context)) {
 	g := t.g
 	if err := g.ggc.Draw(func(cc *gg.Context) { replay(cc) }); err != nil {
-		log.Printf("gossamer/mobile: gpu draw: %v", err)
+		log.Printf("gophics/mobile: gpu draw: %v", err)
 		return
 	}
 	st, _, err := g.surface.GetCurrentTexture()
 	if err != nil {
-		log.Printf("gossamer/mobile: get current texture: %v", err)
+		log.Printf("gophics/mobile: get current texture: %v", err)
 		return
 	}
 	view, err := st.CreateView(nil)
 	if err != nil {
-		log.Printf("gossamer/mobile: surface view: %v", err)
+		log.Printf("gophics/mobile: surface view: %v", err)
 		return
 	}
 	if err := g.ggc.RenderDirect(gpucontext.NewTextureView(unsafe.Pointer(view)), uint32(g.pw), uint32(g.ph)); err != nil {
-		log.Printf("gossamer/mobile: render direct: %v", err)
+		log.Printf("gophics/mobile: render direct: %v", err)
 	}
 	_ = g.surface.Present(st)
 }

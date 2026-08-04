@@ -1,6 +1,6 @@
 package blend
 
-import "github.com/doug/gossamer/internal/gfx/gg/internal/wide"
+import "github.com/doug/gophics/internal/gfx/gg/internal/wide"
 
 // BatchBlendFunc is signature for batch blend operations on 16 pixels.
 // It operates on a BatchState which contains source and destination RGBA channels

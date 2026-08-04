@@ -3,8 +3,8 @@
 package wgpu
 
 import (
-	"github.com/doug/gossamer/internal/gfx/wgpu/core"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/core"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // Texture represents a GPU texture.

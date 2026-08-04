@@ -4,8 +4,8 @@ import (
 	"image"
 	"io"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
 // Backend is the interface that all export backends must implement.

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // Debug damage visualization (ADR-021 Phase 6a).

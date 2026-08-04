@@ -1,4 +1,4 @@
-# gossamer
+# gophics
 
 A Flutter-class UI framework in pure Go — Flutter's pipeline architecture
 (immutable widgets → element reconciliation → constraint layout → layer

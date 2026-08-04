@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 func TestNewSceneBuilder(t *testing.T) {

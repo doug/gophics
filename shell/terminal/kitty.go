@@ -1,8 +1,8 @@
-// Package terminal presents a gossamer app inside a terminal emulator that
+// Package terminal presents a gophics app inside a terminal emulator that
 // supports the kitty graphics protocol (kitty, Ghostty, WezTerm, Konsole). The
 // core renders each frame to a CPU RGBA buffer (no GPU/window); this backend
 // transmits that buffer to the terminal as an image and parses terminal input
-// (SGR-pixel mouse, keyboard) into gossamer's event dispatch.
+// (SGR-pixel mouse, keyboard) into gophics's event dispatch.
 //
 // Frames are transmitted incrementally: the first frame (and any frame that
 // changes most of the screen) is sent whole with a=T; smaller changes send only
@@ -137,7 +137,7 @@ func zlibCompress(data []byte) []byte {
 // writeTemp writes data to a fresh temp file in dir and returns its path. Kitty
 // reads and (with t=t) deletes the file.
 func writeTemp(dir string, data []byte) (string, error) {
-	f, err := os.CreateTemp(dir, "gossamer-*.rgba")
+	f, err := os.CreateTemp(dir, "gophics-*.rgba")
 	if err != nil {
 		return "", err
 	}

@@ -7,8 +7,8 @@ package scene
 import (
 	"image"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // List is a recorded sequence of paint commands.

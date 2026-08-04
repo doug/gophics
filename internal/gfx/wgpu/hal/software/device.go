@@ -10,9 +10,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	naga "github.com/doug/gossamer/internal/gfx/naga"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	naga "github.com/doug/gophics/internal/gfx/naga"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // ErrComputeRequiresSPIRV indicates that a compute pipeline requires a shader

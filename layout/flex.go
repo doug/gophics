@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Axis is a layout direction. The zero value is Vertical: the natural

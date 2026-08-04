@@ -3,13 +3,13 @@ package widget
 import (
 	"time"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Animated tweens toward Value whenever it changes, rebuilding Build with
-// the interpolated value each frame — gossamer's implicit animation
+// the interpolated value each frame — gophics's implicit animation
 // (Flutter's AnimatedContainer/AnimatedFoo, generalized). No controller to
 // manage: set a new Value and it animates from wherever it currently is.
 //

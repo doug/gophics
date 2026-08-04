@@ -1,13 +1,13 @@
-// Package terminal presents a gossamer app inside a terminal emulator that
+// Package terminal presents a gophics app inside a terminal emulator that
 // supports the kitty graphics protocol (kitty, Ghostty, WezTerm, Konsole). The
 // core renders each frame to a CPU RGBA buffer (no GPU/window); this backend
 // transmits that buffer to the terminal as an image and parses terminal input
-// (SGR-pixel mouse, keyboard) into gossamer's event dispatch.
+// (SGR-pixel mouse, keyboard) into gophics's event dispatch.
 //
 // The backend is transport-agnostic. Run drives the local process terminal
 // (os.Stdin/os.Stdout). RunTTY drives any TTY — the same renderer serves a
-// gossamer app over an SSH session (e.g. behind charmbracelet/wish or
-// gliderlabs/ssh): the SSH server is the caller's concern, gossamer only needs
+// gophics app over an SSH session (e.g. behind charmbracelet/wish or
+// gliderlabs/ssh): the SSH server is the caller's concern, gophics only needs
 // the session's byte stream, pixel size, and resize notifications.
 //
 // See https://sw.kovidgoyal.net/kitty/graphics-protocol/ for the wire format.
@@ -24,26 +24,26 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // errNotATerminal is returned when the local stdin is not a tty.
 var errNotATerminal = errors.New("terminal: stdin is not a terminal")
 
-// dbgW is the debug sink: set GOSSAMER_TERM_DEBUG to a path (or "1" for
-// /tmp/gossamer-term.log) to trace sizing and per-frame transmits to a file —
+// dbgW is the debug sink: set GOPHICS_TERM_DEBUG to a path (or "1" for
+// /tmp/gophics-term.log) to trace sizing and per-frame transmits to a file —
 // the on-screen graphics can't be inspected, so this is how terminal issues get
 // diagnosed.
 var dbgW io.Writer
 
 func init() {
-	p := os.Getenv("GOSSAMER_TERM_DEBUG")
+	p := os.Getenv("GOPHICS_TERM_DEBUG")
 	if p == "" {
 		return
 	}
 	if p == "1" {
-		p = "/tmp/gossamer-term.log"
+		p = "/tmp/gophics-term.log"
 	}
 	if f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); err == nil {
 		dbgW = f
@@ -88,10 +88,10 @@ const targetLogicalW = 1400
 
 // maxImageLong caps the transmitted image's long edge so a huge (e.g. 4K)
 // terminal doesn't re-render/encode tens of megapixels per frame — the image is
-// scaled up to fill. Lower it (GOSSAMER_TERM_MAXRES) to trade sharpness for
+// scaled up to fill. Lower it (GOPHICS_TERM_MAXRES) to trade sharpness for
 // faster scrolling; the whole per-frame cost scales with pixel count.
 func maxImageLong() int {
-	if v := os.Getenv("GOSSAMER_TERM_MAXRES"); v != "" {
+	if v := os.Getenv("GOPHICS_TERM_MAXRES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 400 {
 			return n
 		}
@@ -100,10 +100,10 @@ func maxImageLong() int {
 }
 
 // contentScaleFor returns the logical→physical content scale: the
-// GOSSAMER_TERM_SCALE override if set, else one that targets ~targetLogicalW
+// GOPHICS_TERM_SCALE override if set, else one that targets ~targetLogicalW
 // logical pixels wide (so hidpi terminals don't render microscopically).
 func contentScaleFor(pw int) float32 {
-	if v := os.Getenv("GOSSAMER_TERM_SCALE"); v != "" {
+	if v := os.Getenv("GOPHICS_TERM_SCALE"); v != "" {
 		if f, err := strconv.ParseFloat(v, 32); err == nil && f > 0 {
 			return float32(f)
 		}
@@ -122,19 +122,19 @@ func contentScaleFor(pw int) float32 {
 //
 // The app renders at the transport's full pixel resolution; UI is laid out in
 // logical pixels = physical / scale, where scale defaults to 1 and can be
-// overridden with GOSSAMER_TERM_SCALE.
+// overridden with GOPHICS_TERM_SCALE.
 func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 	ts := &termState{out: tty, imageID: 1, done: make(chan struct{})}
 	// Default to inline base64 transfer: temp-file transfer (t=t) is not honored
 	// by every terminal (e.g. Ghostty renders nothing). Opt in with
-	// GOSSAMER_TERM_TMPFILE=1 on terminals that support it (kitty).
-	if ft, ok := tty.(FileTransport); ok && os.Getenv("GOSSAMER_TERM_TMPFILE") != "" {
+	// GOPHICS_TERM_TMPFILE=1 on terminals that support it (kitty).
+	if ft, ok := tty.(FileTransport); ok && os.Getenv("GOPHICS_TERM_TMPFILE") != "" {
 		ts.dir = ft.TempDir()
 	}
 	// Default to whole-frame transmits (a=T), which every kitty-graphics terminal
-	// supports. a=f region-compose partial updates are opt-in (GOSSAMER_TERM_COMPOSE=1):
+	// supports. a=f region-compose partial updates are opt-in (GOPHICS_TERM_COMPOSE=1):
 	// some terminals don't implement the animation/frame protocol.
-	ts.full = os.Getenv("GOSSAMER_TERM_COMPOSE") == "" || os.Getenv("GOSSAMER_TERM_FULLFRAME") != ""
+	ts.full = os.Getenv("GOPHICS_TERM_COMPOSE") == "" || os.Getenv("GOPHICS_TERM_FULLFRAME") != ""
 	ts.dirty.Store(true) // force the first frame (also binds h.window)
 
 	ts.applySize(tty)
@@ -160,8 +160,8 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 	// Dynamic resolution (video-encoding style): frames arriving faster than
 	// motionGap are "inter frames" rendered at reduced resolution; when motion
 	// stops, settle fires a full-resolution "keyframe". Disable with
-	// GOSSAMER_TERM_NODYNAMIC.
-	dynamic := os.Getenv("GOSSAMER_TERM_NODYNAMIC") == ""
+	// GOPHICS_TERM_NODYNAMIC.
+	dynamic := os.Getenv("GOPHICS_TERM_NODYNAMIC") == ""
 	const motionGap = 130 * time.Millisecond
 	const settleDelay = 180 * time.Millisecond
 	settle := time.NewTimer(time.Hour)
@@ -214,7 +214,7 @@ type termState struct {
 	scale   float32 // content scale: logical = physical/scale; pointer coords /scale
 	imageID int
 	dir     string // temp-file transfer dir; "" → inline base64
-	full    bool   // GOSSAMER_TERM_FULLFRAME: always send whole frames
+	full    bool   // GOPHICS_TERM_FULLFRAME: always send whole frames
 
 	dirty atomic.Bool
 

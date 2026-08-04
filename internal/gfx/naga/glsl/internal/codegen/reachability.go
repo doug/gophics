@@ -4,7 +4,7 @@
 package codegen
 
 import (
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // reachableSet tracks which IR entities are reachable from a specific entry point.

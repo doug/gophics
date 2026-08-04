@@ -3,7 +3,7 @@ package chart
 import (
 	"math"
 
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/paint"
 )
 
 // PointMark draws a filled dot per datum — a scatter plot, or the vertices of a

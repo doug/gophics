@@ -1,4 +1,4 @@
-//go:build gossamer_gpu
+//go:build gophics_gpu
 
 package app
 
@@ -6,8 +6,8 @@ package app
 // recorded scene through the CPU rasterizer and the GPU rasterizer (headless
 // readback) and asserts they agree within tolerance, and measures raster time.
 //
-//	go test -tags gossamer_gpu ./app -run TestGPUMatchesCPU -v
-//	go test -tags gossamer_gpu ./app -run x -bench BenchmarkRaster -benchmem
+//	go test -tags gophics_gpu ./app -run TestGPUMatchesCPU -v
+//	go test -tags gophics_gpu ./app -run x -bench BenchmarkRaster -benchmem
 
 import (
 	"image"
@@ -18,9 +18,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 // testAtlas is a 16×16 image with four solid 8×8 color quadrants.
@@ -92,7 +92,7 @@ func TestGPUMatchesCPU(t *testing.T) {
 	if cpu.Bounds() != gpu.Bounds() {
 		t.Fatalf("size mismatch: cpu %v vs gpu %v", cpu.Bounds(), gpu.Bounds())
 	}
-	if os.Getenv("GOSSAMER_GPU_DUMP") != "" {
+	if os.Getenv("GOPHICS_GPU_DUMP") != "" {
 		dumpPNG(t, "/tmp/equiv_cpu.png", cpu)
 		dumpPNG(t, "/tmp/equiv_gpu.png", gpu)
 	}
@@ -206,7 +206,7 @@ func TestGPUOpacityGroup(t *testing.T) {
 		if cpu.Bounds() != gpu.Bounds() {
 			t.Fatalf("scale %v: size mismatch cpu %v gpu %v", scale, cpu.Bounds(), gpu.Bounds())
 		}
-		if os.Getenv("GOSSAMER_GPU_DUMP") != "" {
+		if os.Getenv("GOPHICS_GPU_DUMP") != "" {
 			dumpPNG(t, "/tmp/opacity_gpu.png", gpu)
 			dumpPNG(t, "/tmp/opacity_cpu.png", cpu)
 		}

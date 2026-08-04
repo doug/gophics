@@ -3,8 +3,8 @@ package gogpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // mockWindow implements platform.PlatformWindow for testing.

@@ -3,7 +3,7 @@ package codegen
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // makeImageLoadModule creates a minimal IR module with a fragment shader that

@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl"
 )
 
 // TestMathBuiltinArgumentOrder verifies that GLSL.std.450 extended instructions

@@ -6,8 +6,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/stroke"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/stroke"
 )
 
 // --- Helper functions for generating test polygons ---

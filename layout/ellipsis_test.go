@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 func tbPainter(t *testing.T) *paint.Painter {

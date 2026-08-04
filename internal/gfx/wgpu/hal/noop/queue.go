@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // Queue implements hal.Queue for the noop backend.

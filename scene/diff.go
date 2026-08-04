@@ -1,8 +1,8 @@
 package scene
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Measurer supplies text extents for damage computation; paint.Painter

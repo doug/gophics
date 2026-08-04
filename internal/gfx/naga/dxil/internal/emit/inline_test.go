@@ -6,7 +6,7 @@ package emit
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // TestCanInlineCallee pins the Phase 1 inline eligibility gate, which is

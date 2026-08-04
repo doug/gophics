@@ -1,6 +1,6 @@
 package filter
 
-import "github.com/doug/gossamer/internal/gfx/gg"
+import "github.com/doug/gophics/internal/gfx/gg"
 
 // Test helper functions shared across filter tests.
 

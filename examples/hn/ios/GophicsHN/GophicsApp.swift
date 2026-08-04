@@ -1,4 +1,4 @@
-// Thin iOS host for the gossamer HN app (M9 embedding model): the Go side
+// Thin iOS host for the gophics HN app (M9 embedding model): the Go side
 // (Hnmobile.xcframework, built by gomobile bind) owns the UI; this host
 // owns the layer, display link, touch, keyboard, and URL opening —
 // mirroring the Android host.
@@ -12,9 +12,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         let err = HnmobileStart()
-        if !err.isEmpty { fatalError("gossamer start: \(err)") }
+        if !err.isEmpty { fatalError("gophics start: \(err)") }
         let w = UIWindow(frame: UIScreen.main.bounds)
-        w.rootViewController = GossamerViewController()
+        w.rootViewController = GophicsViewController()
         w.makeKeyAndVisible()
         window = w
         return true
@@ -24,12 +24,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationDidBecomeActive(_ application: UIApplication) { HnmobileFocused(true) }
 }
 
-class GossamerViewController: UIViewController {
-    override func loadView() { view = GossamerView() }
+class GophicsViewController: UIViewController {
+    override func loadView() { view = GophicsView() }
     override var prefersStatusBarHidden: Bool { false }
 }
 
-class GossamerView: UIView, UIKeyInput {
+class GophicsView: UIView, UIKeyInput {
     private var displayLink: CADisplayLink?
     private var lastTime: CFTimeInterval = 0
     private var keyboardVisible = false
@@ -156,7 +156,7 @@ class GossamerView: UIView, UIKeyInput {
     }
     func deleteBackward() { HnmobileKey(2, true) }
 
-    // --- VoiceOver: expose gossamer's semantics tree as a flat list of
+    // --- VoiceOver: expose gophics's semantics tree as a flat list of
     // virtual accessibility elements (the Go side owns the pixels, so there
     // are no real subviews). Mirrors the Android AccessibilityNodeProvider,
     // consuming the same Hnmobile.A11y* surface. ---
@@ -180,7 +180,7 @@ class GossamerView: UIView, UIKeyInput {
             let tappable = HnmobileA11yTappable(i)
             // Skip pure structural containers with nothing to announce.
             if label.isEmpty && !tappable { continue }
-            let el = GossamerA11yElement(accessibilityContainer: self)
+            let el = GophicsA11yElement(accessibilityContainer: self)
             el.nodeID = HnmobileA11yID(i)
             let value = HnmobileA11yValue(i)
             el.accessibilityLabel = value.isEmpty ? label : "\(label), \(value)"
@@ -196,9 +196,9 @@ class GossamerView: UIView, UIKeyInput {
     }
 }
 
-/// A single VoiceOver element backed by a gossamer semantics node; activating
+/// A single VoiceOver element backed by a gophics semantics node; activating
 /// it (double-tap) fires the widget's OnActivate through the bridge.
-final class GossamerA11yElement: UIAccessibilityElement {
+final class GophicsA11yElement: UIAccessibilityElement {
     var nodeID: Int = -1
     override func accessibilityActivate() -> Bool {
         HnmobileA11yActivate(nodeID)

@@ -3,7 +3,7 @@ package scene
 import (
 	"testing"
 
-	gg "github.com/doug/gossamer/internal/gfx/gg"
+	gg "github.com/doug/gophics/internal/gfx/gg"
 )
 
 // --- Regression: Encoding.AppendWithImages image index corruption ---

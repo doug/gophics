@@ -1,4 +1,4 @@
-// Package layout implements gossamer's render layer: the box protocol and
+// Package layout implements gophics's render layer: the box protocol and
 // the core layout boxes. It is Flutter's rendering/ analog (PLAN.md M2).
 //
 // The protocol is Flutter's, kept exactly (PLAN.md §4.5): constraints flow
@@ -13,8 +13,8 @@ package layout
 import (
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Inf is the unbounded constraint value.

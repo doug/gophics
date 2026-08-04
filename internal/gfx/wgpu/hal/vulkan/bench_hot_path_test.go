@@ -9,9 +9,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan/vk"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan/vk"
 )
 
 // benchSink prevents the compiler from optimizing away benchmark results.

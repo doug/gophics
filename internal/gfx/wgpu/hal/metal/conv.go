@@ -5,7 +5,7 @@
 
 package metal
 
-import "github.com/doug/gossamer/internal/gfx/gputypes"
+import "github.com/doug/gophics/internal/gfx/gputypes"
 
 // textureFormatToMTL converts WebGPU texture format to Metal pixel format.
 func textureFormatToMTL(format gputypes.TextureFormat) MTLPixelFormat {

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
 // TestTextIntegration tests the integration of text drawing with Context.

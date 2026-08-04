@@ -3,7 +3,7 @@
 package wayland
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/xkb"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/xkb"
 )
 
 // XKBHandle is the shared xkbcommon wrapper for keyboard layout handling.

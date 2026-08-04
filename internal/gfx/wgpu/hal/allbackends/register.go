@@ -13,5 +13,5 @@ import (
 	// Note: noop backend is NOT included here — it's for testing only and
 	// should be imported explicitly when needed. Both noop and software
 	// register as BackendEmpty, so only one can be active at a time.
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/software"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/software"
 )

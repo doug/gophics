@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/sound"
+	"github.com/doug/gophics/sound"
 )
 
 // TestPlayTone opens the real audio device and plays a short tone.

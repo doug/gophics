@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 // Run presents handler h in the current process's terminal (os.Stdin /
@@ -16,11 +16,11 @@ import (
 // RunTTY that puts the terminal in raw mode, tracks size via the tty ioctls,
 // and restores everything on exit.
 //
-// To serve a gossamer app over SSH instead, implement TTY over the SSH session
+// To serve a gophics app over SSH instead, implement TTY over the SSH session
 // (its channel is the reader/writer, the pty-req carries the size, window-change
 // messages drive Resize) and call RunTTY — see the package doc.
 //
-// Building any gossamer app with -tags gossamer_term routes app.Run here.
+// Building any gophics app with -tags gophics_term routes app.Run here.
 func Run(h shell.Handler, cfg shell.Config) (err error) {
 	inFD := int(os.Stdin.Fd())
 	if !isatty(inFD) {

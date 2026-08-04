@@ -1,6 +1,6 @@
 package main
 
-import "github.com/doug/gossamer/examples/solitaire/klondike"
+import "github.com/doug/gophics/examples/solitaire/klondike"
 
 // store persists the current game between runs. Desktop uses a file
 // (store_os.go); web uses localStorage (store_web.go). makeStore is a var so

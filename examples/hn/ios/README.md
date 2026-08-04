@@ -1,4 +1,4 @@
-# gossamer HN — iOS host
+# gophics HN — iOS host
 
 The same M9 embedding model as Android: `shell/mobile.Bridge` on the Go
 side, a thin Swift host owning the layer, display link, touch, keyboard,
@@ -15,19 +15,19 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
 ## Build & run (simulator)
 
-The `gossamer` CLI drives bind → xcodegen → xcodebuild → install → launch in one
+The `gophics` CLI drives bind → xcodegen → xcodebuild → install → launch in one
 command (needs `xcodegen`: `brew install xcodegen`). From the repo root:
 
 ```sh
-gossamer run -p ios ./examples/hn/mobile
-gossamer run -p ios -tags gossamer_verify ./examples/hn/mobile  # GPU bring-up scene
-gossamer build -p ios ./examples/hn/mobile                       # just the xcframework
+gophics run -p ios ./examples/hn/mobile
+gophics run -p ios -tags gophics_verify ./examples/hn/mobile  # GPU bring-up scene
+gophics build -p ios ./examples/hn/mobile                       # just the xcframework
 ```
 
 It finds this host project (the sibling `ios/` of the `mobile` package),
 regenerates the Xcode project, picks a booted or available iPhone simulator, and
 builds + installs + launches. For a device, build with `-sdk iphoneos` and a
-signing team, or open `GossamerHN.xcodeproj` in Xcode and run.
+signing team, or open `GophicsHN.xcodeproj` in Xcode and run.
 
 Verified 2026-07-26 on iPhone 17 (iOS 26) simulator: live HN front page
 over the network, bold titles, safe-area insets under the status bar.

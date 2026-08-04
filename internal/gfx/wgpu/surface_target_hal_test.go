@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 type fixedSurfaceTargetProvider struct {

@@ -1,6 +1,6 @@
-# Gossamer — a Flutter-class UI framework in pure Go
+# Gophics — a Flutter-class UI framework in pure Go
 
-This is the planning document for gossamer: an idiomatic-Go reimagining of
+This is the planning document for gophics: an idiomatic-Go reimagining of
 Flutter — its architecture, not its API surface — built on a pure-Go GPU stack
 with zero CGo, targeting desktop, web (WASM), and eventually mobile.
 
@@ -11,7 +11,7 @@ Status: **planning**. Nothing here is built yet.
 Flutter's core insight is a *pipeline*: immutable widget descriptions are
 diffed into a retained element tree, which owns a render tree that does
 single-pass constraint layout and paints into a compositable layer tree. That
-pipeline — not Dart, not Material, not Skia — is what gossamer ports.
+pipeline — not Dart, not Material, not Skia — is what gophics ports.
 
 Principles, in priority order:
 
@@ -28,7 +28,7 @@ Principles, in priority order:
    first-class feature from day one (the gogpu/wgpu software adapter makes
    this cheap).
 4. **Honest scope.** Flutter is ~1.5M lines of framework Dart plus a C++
-   engine plus years of text/a11y/IME grind. Gossamer succeeds by sequencing
+   engine plus years of text/a11y/IME grind. Gophics succeeds by sequencing
    ruthlessly: prove the pipeline on desktop first, keep web close behind
    (it shares the renderer), and treat mobile and accessibility as designed-in
    but late-built.
@@ -36,29 +36,29 @@ Principles, in priority order:
 ### Non-goals (initially, some permanently)
 
 - Dart source compatibility or mechanical transpilation of Flutter code.
-- Pixel-fidelity clones of Material/Cupertino. Gossamer ships one clean
+- Pixel-fidelity clones of Material/Cupertino. Gophics ships one clean
   default design language; Material-likeness is a theming exercise for later.
 - Flutter's plugin ecosystem, platform channels, or embedding-into-native-app
   story.
 - Hot reload parity with the Dart VM (see §6.3 for what replaces it).
 
-### 1.1 The thesis — where gossamer beats Flutter
+### 1.1 The thesis — where gophics beats Flutter
 
 "Flutter but Go" loses to Flutter on every axis Flutter is good at. The
 project is justified by the axes where Go *structurally* wins — these drive
 prioritization throughout:
 
-1. **A library, not an SDK.** Gossamer is a `go.mod` line. No `flutter
+1. **A library, not an SDK.** Gophics is a `go.mod` line. No `flutter
    doctor`, no channels, no engine artifacts; `go run` opens a window and
    `GOOS=windows go build` cross-compiles a static binary from a Mac. The
    Dart-VM/engine split makes this permanently impossible for Flutter.
 2. **Embeddable, not app-owning.** Flutter must own `main()` and the
-   lifecycle; add-to-app is famously painful. Gossamer serves programs
+   lifecycle; add-to-app is famously painful. Gophics serves programs
    Flutter can't: a CLI that pops a window, a server with a local admin UI,
    a pipeline with a live visualization pane.
 3. **One language, infra-grade ecosystem.** The same binary embeds HTTP
    servers, pure-Go SQLite, gRPC; client and server share types. The
-   natural gossamer app — tools, dashboards, local-first apps — sits on
+   natural gophics app — tools, dashboards, local-first apps — sits on
    Go's home turf, where Dart needs FFI and platform channels.
 4. **Real concurrency.** Goroutines with shared memory + the single-UI-
    goroutine rule (§4.6) + race detector, vs copy-based isolates.
@@ -73,14 +73,14 @@ prioritization throughout:
    accreted API, and the Go 1 compatibility ethos after 1.0 — no upgrade
    treadmill.
 
-Corollary: gossamer does not chase Flutter's center of gravity (consumer
+Corollary: gophics does not chase Flutter's center of gravity (consumer
 mobile). It wins first where Flutter is weakest — desktop tools, embedded
 UIs inside larger Go programs, server-side rendering, single-binary
 distribution — which is also why mobile is sequenced last (§6.4).
 
 ## 2. What "porting Flutter" actually means — scope inventory
 
-| Flutter piece | What it is | Gossamer plan |
+| Flutter piece | What it is | Gophics plan |
 | --- | --- | --- |
 | Engine (C++): Skia/Impeller | GPU rasterization, compositing | **Build**: vector renderer on gogpu/wgpu (§5) |
 | Engine: text (SkParagraph/HarfBuzz/ICU) | shaping, bidi, line breaking, font discovery | **Adopt**: go-text/typesetting (incl. `fontscan` fallback/discovery) + build paragraph layout |
@@ -126,7 +126,7 @@ Same layered shape as Flutter, as Go packages (dependency arrows point down):
 
 The `shell`+`gpu` layers are where gophics experience transfers directly:
 pure-Go windowing over goffi, gogpu/wgpu for the device/swapchain/pipeline
-plumbing, and its software adapter for headless rendering. Gossamer's new
+plumbing, and its software adapter for headless rendering. Gophics's new
 GPU work is the *vector* layer — analytic anti-aliased path filling, clip
 stacks, gradients, blurs/shadows — which gophics (flat-shaded ear-clip
 tessellation) deliberately doesn't attempt.
@@ -147,7 +147,7 @@ Each phase is independently instrumentable and testable; the frame budget
 
 ## 4. The idiomatic reimagining — key API decisions
 
-These are the decisions that make gossamer Go rather than transliterated
+These are the decisions that make gophics Go rather than transliterated
 Dart. Each gets an ADR (`docs/adr/`) when finalized; sketches here show intent.
 
 ### 4.1 Widgets are struct values; struct literals replace named parameters
@@ -160,7 +160,7 @@ single luckiest language mapping in the whole port:
 widget.Column{
     MainAxis: widget.MainAxisCenter,
     Children: []widget.Widget{
-        widget.Text{Value: "Hello, gossamer", Style: theme.Headline},
+        widget.Text{Value: "Hello, gophics", Style: theme.Headline},
         widget.Padding{
             All: 16,
             Child: widget.Button{
@@ -179,12 +179,12 @@ zero value *is* the default — this discipline pervades every widget design).
 ### 4.2 Interfaces + embedding replace the class hierarchy
 
 Flutter: `StatelessWidget`/`StatefulWidget`/`RenderObjectWidget` subclass
-`Widget`; `RenderBox` subclasses `RenderObject`. Gossamer: small interfaces
+`Widget`; `RenderBox` subclasses `RenderObject`. Gophics: small interfaces
 (`Widget`, `StatefulWidget`, `RenderObjectWidget`) with capability checks via
 type assertion, and shared behavior via embedded structs
 (`layout.BoxBase` embeds the parent-data/size/constraints plumbing the way
 `RenderBox` inherits it). No `protected`, no template-method overriding —
-where Flutter uses "override `performLayout`", gossamer uses an interface
+where Flutter uses "override `performLayout`", gophics uses an interface
 method the embedding struct must provide.
 
 ### 4.3 State via generics
@@ -218,7 +218,7 @@ dependency registration as Flutter, better call-site types than
 
 Constraints down, sizes up, parent sets position; one layout pass with
 `relayoutBoundary` optimization. This protocol is Flutter's crown jewel and
-is language-independent — gossamer keeps it exactly, including
+is language-independent — gophics keeps it exactly, including
 `BoxConstraints` semantics, intrinsic sizing (with its cost caveats), and
 baseline alignment. A sliver-equivalent protocol for scrolling comes later
 (M6) but the door is designed in from the start (layout protocol is
@@ -226,9 +226,9 @@ per-render-object-type, not global).
 
 ### 4.6 Concurrency: goroutines, one UI owner
 
-Dart is single-threaded with isolates; Go is the opposite. Gossamer's rule:
+Dart is single-threaded with isolates; Go is the opposite. Gophics's rule:
 **the framework owns one goroutine (the UI loop); all tree mutation happens
-there.** `gossamer.Post(func())` schedules work onto it (like
+there.** `gophics.Post(func())` schedules work onto it (like
 `SchedulerBinding`); any goroutine may Post. Long work runs in ordinary
 goroutines and posts results back — this replaces both Dart's event loop and
 `compute()`/isolates, and is *more* natural in Go than in Dart. Race detector
@@ -245,7 +245,7 @@ normally and have async widget wrappers (`widget.Future[T]`-style).
 ## 5. Rendering: the vector layer
 
 The stack below (device, swapchain, shaders, windowing, WASM, software
-rasterizer) exists — gogpu/wgpu + goffi, proven by gophics. What gossamer
+rasterizer) exists — gogpu/wgpu + goffi, proven by gophics. What gophics
 must build is a **2D vector renderer** with UI-grade quality:
 
 - analytic anti-aliasing (tessellate-and-MSAA is not good enough for text-adjacent UI edges; hairline strokes and rounded rects must be clean)
@@ -293,17 +293,17 @@ Load-bearing dependencies, with fallbacks:
 | **AccessKit** (`accesskit_c` via purego) | greenfield — no Go binding exists | pure-Go per-platform a11y bridges (much more work) |
 | **gen2brain codecs** (wazero/purego webp/avif) | active, CGo-free | stdlib + x/image only (webp decode-only, no avif) |
 
-Prior art to learn from (and where gossamer differs):
+Prior art to learn from (and where gophics differs):
 
 - **gogpu/ui + gogpu/gg** — the gogpu org's own toolkit stack (MIT,
   active, essentially one primary author with heavy AI assistance; very
   high velocity, unverified depth). gogpu/ui is retained-mode widgets +
   signals — a Qt/SwiftUI-style model, *not* Flutter's rebuild-and-
-  reconcile, so it doesn't occupy gossamer's niche; its ADRs (damage
+  reconcile, so it doesn't occupy gophics's niche; its ADRs (damage
   tracking, layer tree, a11y role model) are worth reading regardless.
   **gogpu/gg is the strategic piece**: it claims an analytic-AA CPU
   rasterizer + tiered GPU pipeline (SDF/convex/stencil+cover/MSDF glyphs)
-  — exactly gossamer's M1/M5 build items. M0 adds a hands-on evaluation
+  — exactly gophics's M1/M5 build items. M0 adds a hands-on evaluation
   spike: golden scenes (rrects/clips/gradients/shadows/blur) + perf vs
   the plan's own prototype. If gg's *rendering* holds up, M1 becomes
   "adopt gg as backend #1 behind `paint.Canvas`" and the sparse-strips
@@ -323,14 +323,14 @@ Prior art to learn from (and where gossamer differs):
   gg's `gg/gpu` registration is process-global and has no CPU readback —
   offscreen `Image()` renders blank, breaking golden tests, Headless, and
   the web present path. Benchmarks under it are meaningless (work never
-  rasterizes). Gated behind `-tags gossamer_gpu` as experimental;
+  rasterizes). Gated behind `-tags gophics_gpu` as experimental;
   adoption blocked on per-context opt-in + readback upstream (or
-  gossamer's own M5 backend). Hedge stands: v0.x weekly churn and
+  gophics's own M5 backend). Hedge stands: v0.x weekly churn and
   bus-factor-one mean gg must stay *a* backend behind the Canvas
   interface, never a foundation.
 - **Cogent Core** — the closest existing "Flutter-in-Go" in scope
   (retained widgets, Material 3, go-text stack). Its 2D UI is
-  CPU-rasterized (rasterx) with GPU reserved for 3D; gossamer's bet on a
+  CPU-rasterized (rasterx) with GPU reserved for 3D; gophics's bet on a
   GPU vector path and a Flutter-fidelity pipeline (element reconciliation,
   constraint protocol, layer compositing) is the differentiator. Small bus
   factor, pre-1.0 — study it, don't build on it.
@@ -339,7 +339,7 @@ Prior art to learn from (and where gossamer differs):
   retirement (§5) and its ops-based coupling are both cautionary inputs.
 - **Ebitengine** — the existence proof for CGo-free macOS/Windows via
   purego and for shipping Go on mobile/web at scale; its windowing lives
-  under `internal/`, so gossamer copies patterns, not packages.
+  under `internal/`, so gophics copies patterns, not packages.
 - **go-flutter** — embedder-only (Dart still runs the UI), abandoned 2023;
   confirms nobody has actually done this port.
 
@@ -354,7 +354,7 @@ Static text is in better shape than feared: go-text/typesetting (v0.3.x,
 BSD-3, jointly governed by Fyne/Gio maintainers and used in production by
 Fyne, Gio, and Ebitengine) covers shaping (full HarfBuzz port), bidi,
 segmentation/line-break opportunities, variable fonts, **and** — via
-`fontscan` — system font discovery and CJK/emoji fallback. Gossamer builds
+`fontscan` — system font discovery and CJK/emoji fallback. Gophics builds
 paragraph layout (runs → bidi reorder → line break → align → styles) above
 it. Main dependency caveat: pre-1.0 API churn.
 
@@ -379,7 +379,7 @@ prototype scanline filler and a gogpu compute shader, measured.
 ### 6.3 Developer experience without hot reload
 
 Dart-VM hot reload is Flutter's signature DX and Go cannot replicate it.
-Gossamer's answer, in order of leverage:
+Gophics's answer, in order of leverage:
 
 1. **Fast rebuild + state snapshot**: Go builds are seconds; a dev-mode
    harness restarts the process and restores serializable widget state
@@ -404,7 +404,7 @@ bottleneck; next levers are damage-rect blits through the bridge,
 ANativeWindow direct presentation, or GPU present. Measure on real
 hardware before optimizing further.
 
-Frame pacing measured 2026-07-26 (Core.FrameStats; GOSSAMER_PACING logs
+Frame pacing measured 2026-07-26 (Core.FrameStats; GOPHICS_PACING logs
 it; Core.SetDebugPaint overlays box bounds). Real M1 Ultra / Metal, a
 24-row text list at 480x800@2x:
   - Localized change (one row): ~2.6 ms — the common case is smooth.
@@ -445,7 +445,7 @@ Rotation/backgrounding are still unverified *on the GPU path*. Tracked as
 risks #1, #2 and #6 in docs/games-plan.md.
 
 Mobile embedding (lifecycle, surfaces, touch, IME, app-store packaging) is
-a whole platform team's worth of work in Flutter. Gossamer sequences it
+a whole platform team's worth of work in Flutter. Gophics sequences it
 last (M9): by then the shell interface has three desktop + one web
 implementation and its shape is trustworthy. The whole Go ecosystem has
 converged on one viable pattern — **Go as a library (`gomobile bind`-style
@@ -468,7 +468,7 @@ tree (a parallel, cheap tree emitted during paint, as in Flutter) is in the
 render-object protocol from M3, but the platform bridges land at M8. The
 concrete route is a **purego binding to `accesskit_c`** (AccessKit covers
 UIA/NSAccessibility/AT-SPI/Android from one tree API) — greenfield work
-nobody has published, and plausibly gossamer's first upstream-able spinoff
+nobody has published, and plausibly gophics's first upstream-able spinoff
 package. Semantics correctness is testable headless (assert on the tree)
 long before OS integration exists.
 
@@ -496,7 +496,7 @@ every phase de-risks the ones after it.
 
 - **M0 — Spikes & skeleton.** Repo layout, `geom` package, shell interface
   defined (window/vsync/input/IME/clipboard), gophics-derived desktop+WASM
-  shells opening a gossamer-owned frame loop. Spikes: gogpu/gg evaluation
+  shells opening a gophics-owned frame loop. Spikes: gogpu/gg evaluation
   (golden scenes, perf, shaping torture tests vs go-text/typesetting —
   §5.1); scanline-AA rasterizer proto (skipped if gg passes); go-text
   shaping proto; sparse-strip coverage proto on gogpu.
@@ -583,7 +583,7 @@ usually reached for. Remaining work, in build order:
 ## 9. Repo layout
 
 ```
-gossamer/
+gophics/
   geom/          # Point, Size, Rect, RRect, Mat4, EdgeInsets
   paint/         # Canvas, Path, Paint, Color, gradients, images
   text/          # shaping wrapper, paragraph layout, fonts
@@ -595,7 +595,7 @@ gossamer/
   gesture/       # hit testing, arena, recognizers
   anim/          # tickers, curves, controllers
   theme/         # the default design language (M7)
-  app/           # top-level runner tying shell→scene→widget (gossamer.Run)
+  app/           # top-level runner tying shell→scene→widget (gophics.Run)
   internal/      # ffi plumbing shared by shells
   examples/
   docs/adr/      # one file per §4/§5/§6 decision as it's made

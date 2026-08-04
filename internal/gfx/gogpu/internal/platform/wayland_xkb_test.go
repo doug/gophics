@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/eventqueue"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/xkb"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/eventqueue"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/xkb"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // TestWaylandXKBKeyDispatch verifies that when xkbcommon is available (Ready),

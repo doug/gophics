@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 func configuredReadPixelsSurface(t *testing.T, format gputypes.TextureFormat) *Surface {

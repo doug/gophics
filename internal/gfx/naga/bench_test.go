@@ -4,10 +4,10 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/glsl"
-	"github.com/doug/gossamer/internal/gfx/naga/hlsl"
-	"github.com/doug/gossamer/internal/gfx/naga/msl"
-	"github.com/doug/gossamer/internal/gfx/naga/spirv"
+	"github.com/doug/gophics/internal/gfx/naga/glsl"
+	"github.com/doug/gophics/internal/gfx/naga/hlsl"
+	"github.com/doug/gophics/internal/gfx/naga/msl"
+	"github.com/doug/gophics/internal/gfx/naga/spirv"
 )
 
 // ---------------------------------------------------------------------------

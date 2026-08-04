@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // blockEndsWithReturn checks if a block's control flow always ends with a return.

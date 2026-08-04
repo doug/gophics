@@ -6,7 +6,7 @@ package codegen
 import (
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/backend"
+	"github.com/doug/gophics/internal/gfx/naga/internal/backend"
 )
 
 // reservedKeywords is an alias to the authoritative keyword map in the

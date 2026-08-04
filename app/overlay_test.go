@@ -8,12 +8,12 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/theme"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/theme"
+	"github.com/doug/gophics/widget"
 )
 
 type dlgApp struct{ hook func(*dlgState) }
@@ -127,7 +127,7 @@ func TestDialogConfirmButton(t *testing.T) {
 	if hasSemLabel(h, "Delete?") {
 		t.Fatal("dialog should close after confirm")
 	}
-	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		h.Tap(geom.Pt{X: 200, Y: 200})
 		img := h.Render()
 		f, _ := os.Create(out)

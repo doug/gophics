@@ -4,8 +4,8 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/geom"
 )
 
 // Sprite describes one blit of a source region of an atlas image into a

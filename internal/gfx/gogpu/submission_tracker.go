@@ -4,7 +4,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // submissionTracker tracks GPU submissions for non-blocking resource recycling.

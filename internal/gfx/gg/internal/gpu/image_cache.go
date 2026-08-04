@@ -5,8 +5,8 @@ package gpu
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // defaultImageCacheBudget is the maximum number of cached image textures.

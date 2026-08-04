@@ -12,7 +12,7 @@
 package blend
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gg/internal/color"
+	"github.com/doug/gophics/internal/gfx/gg/internal/color"
 )
 
 // BlendModeLinear indicates if blending should be performed in linear space.

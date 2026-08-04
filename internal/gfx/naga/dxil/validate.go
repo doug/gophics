@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/dxcvalidator"
-	"github.com/doug/gossamer/internal/gfx/naga/internal/dxcvalidator/bitcheck"
+	"github.com/doug/gophics/internal/gfx/naga/internal/dxcvalidator"
+	"github.com/doug/gophics/internal/gfx/naga/internal/dxcvalidator/bitcheck"
 )
 
 // ValidationLevel selects how deeply Validate inspects a DXIL container.

@@ -1,14 +1,14 @@
-//go:build gossamer_gpu
+//go:build gophics_gpu
 
 package paint
 
-// Headless GPU readback harness. Drives gossamer's real GPU present path — a
+// Headless GPU readback harness. Drives gophics's real GPU present path — a
 // scene recorded onto a GPU-backed gg.Context (via ggcanvas) composited to an
 // off-screen render target — with no window, then reads the pixels back as an
 // image. This is how GPU output is verified during development instead of
 // eyeballing an on-screen window (which can't be captured in CI).
 //
-// Run: go test -tags gossamer_gpu ./paint -run TestGPUReadback -v
+// Run: go test -tags gophics_gpu ./paint -run TestGPUReadback -v
 // It writes PNGs to the paint package dir (gpu_*.png) for visual inspection and
 // asserts basic invariants (text is not a solid block; background shows through).
 
@@ -18,13 +18,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	_ "github.com/doug/gossamer/internal/gfx/gg/gpu" // register gg's GPU accelerator
-	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
-	"github.com/doug/gossamer/internal/gfx/gogpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	_ "github.com/doug/gophics/internal/gfx/gg/gpu" // register gg's GPU accelerator
+	"github.com/doug/gophics/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gophics/internal/gfx/gogpu"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 // renderGPU records draw onto a GPU-backed gg.Context and reads the composited
@@ -55,11 +55,11 @@ func renderGPU(t *testing.T, w, h int, draw func(cc *gg.Context)) *image.RGBA {
 	return img
 }
 
-// writePNG writes img for visual inspection, but only when GOSSAMER_GPU_DUMP is
+// writePNG writes img for visual inspection, but only when GOPHICS_GPU_DUMP is
 // set — so `go test` runs don't litter the package dir with PNGs.
 func writePNG(t *testing.T, name string, img image.Image) {
 	t.Helper()
-	if os.Getenv("GOSSAMER_GPU_DUMP") == "" {
+	if os.Getenv("GOPHICS_GPU_DUMP") == "" {
 		return
 	}
 	f, err := os.Create(name)

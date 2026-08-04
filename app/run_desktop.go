@@ -1,10 +1,10 @@
-//go:build !js && !android && !ios && !gossamer_term
+//go:build !js && !android && !ios && !gophics_term
 
 package app
 
 import (
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/desktop"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/shell/desktop"
 )
 
 func desktopRun(h shell.Handler, cfg shell.Config) error {

@@ -3,10 +3,10 @@ package widget
 import (
 	"strings"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 )
 
 // SelectableText renders static text the user can select by dragging and copy

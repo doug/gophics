@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // Mock HAL types to satisfy interfaces without returning nil, nil.

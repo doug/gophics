@@ -5,7 +5,7 @@ package x11
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 func TestParseXftDPI(t *testing.T) {

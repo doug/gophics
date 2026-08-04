@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 func TestGetQueue(t *testing.T) {

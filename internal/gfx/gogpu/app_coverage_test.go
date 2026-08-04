@@ -3,7 +3,7 @@ package gogpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
 )
 
 // mockWindowWithSizeMove wraps mockWindow and allows InSizeMove() to return true.

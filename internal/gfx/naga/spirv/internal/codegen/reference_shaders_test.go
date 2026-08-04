@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl"
 )
 
 // verifySPIRVOutput performs comprehensive SPIR-V binary validation.

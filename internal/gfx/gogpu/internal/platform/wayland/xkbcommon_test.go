@@ -5,7 +5,7 @@ package wayland
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/xkb"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/xkb"
 )
 
 // TestXKBConstants verifies xkbcommon constant values match the C header.

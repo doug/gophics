@@ -3,8 +3,8 @@ package layout
 import (
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // AspectRatio sizes its child to Ratio (width/height), as large as the

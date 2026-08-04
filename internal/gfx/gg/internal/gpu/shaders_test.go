@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // TestShaderSourcesNonEmpty verifies that all shader sources are embedded correctly.

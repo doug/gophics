@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // TestAdapter_Open_NilGLCtxReturnsDescriptiveError verifies that calling

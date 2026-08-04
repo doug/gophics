@@ -1,4 +1,4 @@
-// Command solitaire is a Klondike solitaire built on gossamer — one codebase
+// Command solitaire is a Klondike solitaire built on gophics — one codebase
 // for desktop, web, and (via shell/mobile) iOS/Android. The rules engine is the
 // pure, exhaustively-tested examples/solitaire/klondike package; this command is
 // the board: a single widget.Canvas that draws the cards (no image assets) and
@@ -12,8 +12,8 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
 )
 
 func main() {

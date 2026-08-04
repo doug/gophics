@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // Execute runs the named entry point with the given input variable values.

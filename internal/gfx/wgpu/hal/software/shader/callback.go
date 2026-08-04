@@ -2,7 +2,7 @@
 
 package shader
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/hal/software/raster"
+import "github.com/doug/gophics/internal/gfx/wgpu/hal/software/raster"
 
 // VertexShaderFunc transforms a vertex from object space to clip space.
 // It receives vertex data and returns a clip-space vertex with position and attributes.

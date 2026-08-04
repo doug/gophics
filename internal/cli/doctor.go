@@ -7,13 +7,13 @@ import (
 )
 
 func cmdDoctor(_ []string) error {
-	fmt.Print("gossamer doctor — toolchain check\n\n")
+	fmt.Print("gophics doctor — toolchain check\n\n")
 	ok := true
 	ok = check("Go toolchain", have("go"), firstNonEmpty(goEnv("GOVERSION"), runtime.Version())) && ok
 	ok = check("web (GOOS=js): wasm_exec.js", wasmExecJS() != "", altText(wasmExecJS(), "not found in GOROOT — is this Go ≥ 1.21?")) && ok
 	ok = check("desktop/terminal", have("go"), "uses the host toolchain") && ok
 	gomobileOK := check("ios/android: gomobile", have("gomobile"), "optional — go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init")
-	// `gossamer run -p ios` builds the host with xcodegen; -p android uses the
+	// `gophics run -p ios` builds the host with xcodegen; -p android uses the
 	// scaffolded Gradle wrapper (a system gradle is not required).
 	xcodegenOK := check("ios project: xcodegen", have("xcodegen"), "optional — brew install xcodegen")
 	check("android: gradle", have("gradle"), "optional — the scaffolded ./gradlew is used if present")

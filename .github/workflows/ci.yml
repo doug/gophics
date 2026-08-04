@@ -7,7 +7,7 @@ on:
 
 # Test scoping (see docs/substrate-consolidation.md):
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
-#   - test-framework: gossamer's own packages (CPU/headless, deterministic) — the gate.
+#   - test-framework: gophics's own packages (CPU/headless, deterministic) — the gate.
 #   - test-substrate: the vendored internal/gfx + internal/audio. Their
 #                     GPU / Metal-toolchain / interactive-display tests self-skip
 #                     when those prerequisites are absent, so this job is

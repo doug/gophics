@@ -5,7 +5,7 @@ package wgpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/internal/indirect"
+	"github.com/doug/gophics/internal/gfx/wgpu/internal/indirect"
 )
 
 func TestIndexedIndirectDelegatedValidationOffset(t *testing.T) {

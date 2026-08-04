@@ -10,11 +10,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // Run opens a window and drives h until the window closes.
@@ -65,7 +65,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	})
 	es.OnScroll(func(dx, dy float64) {
 		// gpucontext reports positive delta = scroll content down/right; the
-		// gossamer convention (matched by the web shell) is the negated
+		// gophics convention (matched by the web shell) is the negated
 		// platform delta, so forwarding it raw scrolled the wrong way. Negate
 		// to align, and to honor the OS natural-scroll setting the platform
 		// has already applied to these deltas.

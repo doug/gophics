@@ -1,6 +1,6 @@
 package gg
 
-import "github.com/doug/gossamer/internal/gfx/gg/text"
+import "github.com/doug/gophics/internal/gfx/gg/text"
 
 // LCDLayout describes the physical subpixel arrangement on the display.
 // Most LCD monitors use horizontal RGB stripe ordering, where each pixel

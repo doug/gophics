@@ -10,11 +10,11 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/naga/glsl"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/egl"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/gl"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/naga/glsl"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/gles/egl"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/gles/gl"
 )
 
 // Device implements hal.Device for OpenGL on Linux.

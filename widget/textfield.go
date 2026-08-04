@@ -4,11 +4,11 @@ import (
 	"math"
 	"strings"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/text"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/text"
 )
 
 // TextField is an editable single-line text input: click-to-caret, drag and

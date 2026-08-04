@@ -6,9 +6,9 @@ package hlsl
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/naga/hlsl/internal/codegen"
-	"github.com/doug/gossamer/internal/gfx/naga/internal/backend"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/hlsl/internal/codegen"
+	"github.com/doug/gophics/internal/gfx/naga/internal/backend"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // --- Configuration types ---

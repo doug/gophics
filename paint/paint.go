@@ -1,4 +1,4 @@
-// Package paint provides gossamer's drawing layer.
+// Package paint provides gophics's drawing layer.
 //
 // Canvas is the drawing interface the render layer paints into. The default
 // implementation wraps gogpu/gg's CPU rasterizer (analytic AA), presented to
@@ -13,12 +13,12 @@ import (
 	"image/draw"
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	ggtext "github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg"
+	ggtext "github.com/doug/gophics/internal/gfx/gg/text"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/text"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/text"
 )
 
 // Color is a straight-alpha RGBA color with float32 components in [0, 1].
@@ -307,7 +307,7 @@ func (p *Painter) LoadFontFamily(name string, data []byte) error {
 	}
 	p.families[name] = f
 	// Parallel gg source over the same bytes for the GPU glyph-mask tier
-	// (GIDs are font-file-intrinsic, so gg's parse matches gossamer's shaper).
+	// (GIDs are font-file-intrinsic, so gg's parse matches gophics's shaper).
 	if src, srcErr := ggtext.NewFontSource(data); srcErr == nil {
 		p.ggSources[name] = src
 		clear(p.ggFaces)
@@ -476,7 +476,7 @@ func (p *Painter) begin(size geom.Size, scale float32) Canvas {
 	s := float64(scale)
 	if p.dc == nil || p.w != w || p.h != h || p.scale != s {
 		p.dc = gg.NewContextWithScale(w, h, s)
-		// gossamer chooses CPU vs GPU explicitly (this Painter surface is the
+		// gophics chooses CPU vs GPU explicitly (this Painter surface is the
 		// CPU path; the GPU path uses a separate ggcanvas context). Opt this
 		// context out of the process-global accelerator — registered by default
 		// (see paint/accel.go) — so its fills and image blits never defer to a
@@ -531,7 +531,7 @@ type ggCanvas struct {
 }
 
 // GPUCanvas wraps an externally-owned gg.Context (e.g. a GPU-accelerated one
-// from ggcanvas) as a gossamer Canvas, so a recorded scene can be replayed
+// from ggcanvas) as a gophics Canvas, so a recorded scene can be replayed
 // onto it. It shares the Painter's caches (glyph runs, image buffers). Used
 // by the GPU present path (M5); the Painter's own surface is untouched.
 func (p *Painter) GPUCanvas(dc *gg.Context) Canvas { return &ggCanvas{p: p, dc: dc} }

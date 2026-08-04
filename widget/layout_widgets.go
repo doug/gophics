@@ -1,8 +1,8 @@
 package widget
 
 import (
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
 )
 
 // Spacer expands to consume free space along a Row/Column's main axis

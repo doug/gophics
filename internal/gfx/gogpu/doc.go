@@ -12,7 +12,7 @@
 //
 //	import (
 //	    "log"
-//	    "github.com/doug/gossamer/internal/gfx/gogpu"
+//	    "github.com/doug/gophics/internal/gfx/gogpu"
 //	)
 //
 //	func main() {

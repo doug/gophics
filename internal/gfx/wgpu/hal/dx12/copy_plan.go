@@ -8,8 +8,8 @@ package dx12
 import (
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 const d3d12TexturePlacementAlignment = 512

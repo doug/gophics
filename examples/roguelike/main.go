@@ -1,4 +1,4 @@
-// Command roguelike is a tile-based dungeon crawler on gossamer, and the driver
+// Command roguelike is a tile-based dungeon crawler on gophics, and the driver
 // example for paint.DrawSprite: the whole map, monsters, and items are blitted
 // from one procedurally-generated atlas texture (no binary assets). Turn-based,
 // with a minimal d20 combat core. Arrow keys or tap to move; bump to attack;
@@ -12,10 +12,10 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/sound"
-	"github.com/doug/gossamer/sound/device"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/sound/device"
 )
 
 func main() {

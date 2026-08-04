@@ -10,8 +10,8 @@
 package input
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // State is the current input snapshot. Not safe for concurrent use; touched only

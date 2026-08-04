@@ -2,7 +2,7 @@
 
 package platform
 
-import "github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/darwin"
+import "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/darwin"
 
 // SystemScaleFactor returns the primary display DPI scale factor.
 // On macOS this queries [NSScreen mainScreen].backingScaleFactor and is safe

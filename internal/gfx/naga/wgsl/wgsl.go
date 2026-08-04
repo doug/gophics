@@ -1,9 +1,9 @@
 package wgsl
 
 import (
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl/internal/lower"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl/internal/parser"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/lower"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/parser"
 )
 
 // Module represents a parsed WGSL module (abstract syntax tree).

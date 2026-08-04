@@ -2,7 +2,7 @@
 
 package wgpu
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/internal/browser"
+import "github.com/doug/gophics/internal/gfx/wgpu/internal/browser"
 
 // ComputePassEncoder records compute dispatch commands.
 // On browser, this wraps a GPUComputePassEncoder via internal/browser.ComputePassEncoder.

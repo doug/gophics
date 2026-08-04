@@ -23,15 +23,15 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/container"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/emit"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/module"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/passes/dce"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/passes/mem2reg"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/passes/sroa"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/viewid"
-	"github.com/doug/gossamer/internal/gfx/naga/internal/backend"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/container"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/emit"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/module"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/passes/dce"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/passes/mem2reg"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/passes/sroa"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/viewid"
+	"github.com/doug/gophics/internal/gfx/naga/internal/backend"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // ShaderModel represents a DXIL shader model version.

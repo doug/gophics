@@ -3,8 +3,8 @@
 package wgpu
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/core"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/core"
 )
 
 // SetTestRequiredVertexBuffers sets the requiredVertexBuffers field for testing.

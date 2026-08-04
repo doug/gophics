@@ -14,12 +14,12 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 var (
@@ -99,7 +99,7 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 
 	footer := fmt.Sprintf("%d left · click row to toggle · hover shows delete", left)
 	col := widget.Column(
-		widget.Text{S: "gossamer · todo", Size: 15, Color: colDim},
+		widget.Text{S: "gophics · todo", Size: 15, Color: colDim},
 		widget.Sized{H: 16},
 		inputField{
 			Value:    s.input,
@@ -269,7 +269,7 @@ func (s *todoState) leave(i int) {
 
 func main() {
 	err := app.Run(Todo{}, app.Config{
-		Title:      "gossamer todo",
+		Title:      "gophics todo",
 		Size:       geom.Size{W: 440, H: 560},
 		Background: colBg,
 		Font:       goregular.TTF,

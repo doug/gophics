@@ -1,13 +1,13 @@
 package paint
 
-import "github.com/doug/gossamer/internal/gfx/gg"
+import "github.com/doug/gophics/internal/gfx/gg"
 
 // The GPU accelerator (gg's SDF shapes + tiled/adaptive coverage) is linked and
 // process-globally registered by accel_link.go's blank import, unless the
 // binary is built with -tags nogpu. Registration silently no-ops when the
 // machine has no GPU, so GPUAvailable reports the real outcome.
 //
-// gossamer keeps its offscreen/CPU Painter contexts opted out of the global
+// gophics keeps its offscreen/CPU Painter contexts opted out of the global
 // accelerator per-context (see begin()'s SetGPUDisabled), so a registered
 // accelerator never perturbs the deterministic CPU raster path — only the
 // shell's on-screen GPU present path uses it.

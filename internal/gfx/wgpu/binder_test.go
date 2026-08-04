@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 func TestBinderReset(t *testing.T) {

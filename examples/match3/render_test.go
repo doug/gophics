@@ -8,8 +8,8 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
 )
 
 // TestRenders mounts the game, advances a few frames, and (with MATCH3_SHOT

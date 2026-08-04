@@ -1,6 +1,6 @@
 package dxil
 
-import "github.com/doug/gossamer/internal/gfx/naga/ir"
+import "github.com/doug/gophics/internal/gfx/naga/ir"
 
 // inputUsageKey identifies a signature element by its flat input index.
 // For non-struct arguments, it's the argument's position in the flat binding list.

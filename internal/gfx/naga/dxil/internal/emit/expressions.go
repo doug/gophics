@@ -5,8 +5,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/module"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/module"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // DXIL OpClass-based function symbols. Per dxc DxilOperations.cpp,

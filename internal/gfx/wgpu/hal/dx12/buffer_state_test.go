@@ -8,8 +8,8 @@ package dx12
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/dx12/d3d12"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/dx12/d3d12"
 )
 
 // TestBufferInitialState verifies that buffers start in the correct D3D12 resource state

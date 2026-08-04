@@ -3,8 +3,8 @@ package chart
 import (
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // Span is one Lo–Hi interval at position X (categorical when Label is set).

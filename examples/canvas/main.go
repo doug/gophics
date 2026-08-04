@@ -7,7 +7,7 @@
 // fallback or when forced (the on-screen readout says which).
 //
 //	go run ./examples/canvas                        # GPU (default), CPU if none
-//	GOSSAMER_RENDERER=cpu go run ./examples/canvas  # force CPU
+//	GOPHICS_RENDERER=cpu go run ./examples/canvas  # force CPU
 package main
 
 import (
@@ -17,10 +17,10 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 // Field is a stateful widget that advances a clock every frame and rebuilds a
@@ -86,7 +86,7 @@ func (s *fieldState) Build(widget.Ctx) widget.Widget {
 
 		// Title and a live readout, drawn into the same surface — this is the
 		// text path that renders correctly on the GPU build.
-		c.Text("gossamer · canvas", geom.Pt{X: 28, Y: 50}, 30, colTxt)
+		c.Text("gophics · canvas", geom.Pt{X: 28, Y: 50}, 30, colTxt)
 		c.Text(fmt.Sprintf("generative interference field — %.1fs — %s rasterizer", t, rasterizer()),
 			geom.Pt{X: 28, Y: 76}, 14, colDim)
 	}}
@@ -94,7 +94,7 @@ func (s *fieldState) Build(widget.Ctx) widget.Widget {
 
 func main() {
 	if err := app.Run(Field{}, app.Config{
-		Title:      "gossamer canvas",
+		Title:      "gophics canvas",
 		Size:       geom.Size{W: 960, H: 620},
 		Background: colBot,
 		Font:       goregular.TTF,

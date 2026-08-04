@@ -15,12 +15,12 @@ import (
 	"math"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/gpu/tilecompute"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/stroke"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
+	"github.com/doug/gophics/internal/gfx/gg/internal/stroke"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // VelloAccelerator provides GPU-accelerated scene rendering using the Vello-style

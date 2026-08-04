@@ -1,11 +1,11 @@
-// Package text is gossamer's text stack: shaping, bidi, font fallback, and
+// Package text is gophics's text stack: shaping, bidi, font fallback, and
 // line breaking, built on go-text/typesetting (the shared pure-Go
 // HarfBuzz-family stack used by Gio, Fyne, and Ebitengine). It exists
 // because the rendering backend's own shaper handles Latin only (PLAN.md
-// §5.1, §6.1): gossamer shapes here and hands positioned glyph outlines to
+// §5.1, §6.1): gophics shapes here and hands positioned glyph outlines to
 // the paint backend.
 //
-// Coordinates follow gossamer conventions: logical pixels, y down, line
+// Coordinates follow gophics conventions: logical pixels, y down, line
 // origin at the left end of the baseline.
 package text
 
@@ -161,7 +161,7 @@ func (s *Shaper) UseSystemFonts(cacheDir string) error {
 		if err != nil {
 			return fmt.Errorf("text: no cache dir: %w", err)
 		}
-		cacheDir = filepath.Join(base, "gossamer", "fontscan")
+		cacheDir = filepath.Join(base, "gophics", "fontscan")
 	}
 	fm := fontscan.NewFontMap(nil)
 	if err := fm.UseSystemFonts(cacheDir); err != nil {

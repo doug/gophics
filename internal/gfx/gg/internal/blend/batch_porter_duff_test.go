@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/wide"
+	"github.com/doug/gophics/internal/gfx/gg/internal/wide"
 )
 
 // TestBatchPorterDuffModes tests all 14 Porter-Duff modes against scalar reference.

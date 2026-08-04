@@ -1,4 +1,4 @@
-//go:build js || android || ios || gossamer_term
+//go:build js || android || ios || gophics_term
 
 package app
 

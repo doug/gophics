@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-webgpu/goffi/ffi"
-	platformdarwin "github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/darwin"
+	platformdarwin "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/darwin"
 )
 
 // TestAllocateClassPair verifies that a custom ObjC class can be created

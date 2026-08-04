@@ -10,9 +10,9 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/darwin"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/eventqueue"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/darwin"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/eventqueue"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // darwinWindow holds all per-window state for a macOS window.

@@ -70,7 +70,7 @@ func sseHandler(b *broadcaster) http.HandlerFunc {
 
 // reloadClient reconnects and reloads the page on each event; EventSource
 // auto-reconnects, so the tab recovers across dev-server restarts too.
-const reloadClient = `<script>new EventSource("/_gossamer/reload").onmessage=function(){location.reload()};</script>`
+const reloadClient = `<script>new EventSource("/_gophics/reload").onmessage=function(){location.reload()};</script>`
 
 // serveIndexWithReload serves dir/index.html with the reload client injected
 // just before </body> (or appended if there's no body tag).

@@ -1,8 +1,8 @@
 package gogpu
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gogpu/input"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/input"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // eventSourceAdapter bridges gogpu to gpucontext.EventSource interface.

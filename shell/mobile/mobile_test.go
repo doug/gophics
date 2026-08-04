@@ -5,10 +5,10 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell/mobile"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell/mobile"
+	"github.com/doug/gophics/widget"
 )
 
 type tapApp struct{}

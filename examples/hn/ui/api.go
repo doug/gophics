@@ -3,8 +3,8 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
 	"html"
 	"net/http"
 	"strings"

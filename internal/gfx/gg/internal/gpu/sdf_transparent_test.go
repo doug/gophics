@@ -5,7 +5,7 @@ package gpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // TestFillShape_SkipsZeroAlpha verifies that FillShape via the draw queue

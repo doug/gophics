@@ -3,8 +3,8 @@ package chart
 import (
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // LineMark connects its data points in order with straight segments. On mount it

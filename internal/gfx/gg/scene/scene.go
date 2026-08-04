@@ -1,6 +1,6 @@
 package scene
 
-import "github.com/doug/gossamer/internal/gfx/gg/text"
+import "github.com/doug/gophics/internal/gfx/gg/text"
 
 // Scene is the main retained mode container for accumulating drawing operations.
 // It builds an Encoding that can be efficiently rendered or cached.

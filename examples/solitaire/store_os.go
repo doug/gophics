@@ -15,7 +15,7 @@ func platformStore() store {
 	if err != nil {
 		dir = os.TempDir()
 	}
-	d := filepath.Join(dir, "gossamer-solitaire")
+	d := filepath.Join(dir, "gophics-solitaire")
 	_ = os.MkdirAll(d, 0o755)
 	return &fileStore{path: filepath.Join(d, "game.json")}
 }

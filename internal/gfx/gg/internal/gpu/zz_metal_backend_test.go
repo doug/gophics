@@ -8,4 +8,4 @@ package gpu
 // which made the TestMetalStencil* tests fail with "software backend does not
 // support MSAA". (Production binaries get backends via the shell; test binaries
 // must import them explicitly.)
-import _ "github.com/doug/gossamer/internal/gfx/wgpu/hal/allbackends"
+import _ "github.com/doug/gophics/internal/gfx/wgpu/hal/allbackends"

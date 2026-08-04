@@ -6,7 +6,7 @@ package codegen
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // blockEndsWithTerminator returns true if the block's last statement is a

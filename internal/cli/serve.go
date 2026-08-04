@@ -13,11 +13,11 @@ import (
 // index.html — the dev live-reload channel.
 //
 // It binds the requested port, or the next free one if it's taken, so
-// `gossamer dev -p web` never dies on a busy 8080.
+// `gophics dev -p web` never dies on a busy 8080.
 func serve(dir string, port int, b *broadcaster) error {
 	mux := http.NewServeMux()
 	if b != nil {
-		mux.HandleFunc("/_gossamer/reload", sseHandler(b))
+		mux.HandleFunc("/_gophics/reload", sseHandler(b))
 	}
 	files := http.FileServer(http.Dir(dir))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,7 @@ func serve(dir string, port int, b *broadcaster) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "gossamer: serving %s at http://localhost%s/\n", dir, addr)
+	fmt.Fprintf(os.Stderr, "gophics: serving %s at http://localhost%s/\n", dir, addr)
 	return http.Serve(ln, mux)
 }
 
@@ -44,7 +44,7 @@ func listenFrom(port int) (net.Listener, string, error) {
 		ln, err := net.Listen("tcp", addr)
 		if err == nil {
 			if p != port {
-				fmt.Fprintf(os.Stderr, "gossamer: port %d in use — using %d\n", port, p)
+				fmt.Fprintf(os.Stderr, "gophics: port %d in use — using %d\n", port, p)
 			}
 			return ln, addr, nil
 		}

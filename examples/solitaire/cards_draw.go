@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/examples/solitaire/klondike"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/examples/solitaire/klondike"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 var (

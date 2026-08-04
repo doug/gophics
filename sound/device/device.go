@@ -7,9 +7,9 @@ package device
 import (
 	"io"
 
-	audio "github.com/doug/gossamer/internal/audio"
+	audio "github.com/doug/gophics/internal/audio"
 
-	"github.com/doug/gossamer/sound"
+	"github.com/doug/gophics/sound"
 )
 
 // Open starts the default platform driver pulling from m at 44.1 kHz stereo.

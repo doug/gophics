@@ -9,8 +9,8 @@ import (
 	// macOS/iOS-specific HAL backend imports.
 
 	// Metal backend - primary backend on Apple platforms.
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/metal"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/metal"
 
 	// Vulkan backend - available via MoltenVK on macOS.
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan"
 )

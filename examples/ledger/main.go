@@ -1,4 +1,4 @@
-// Command ledger is a local-first personal-finance dashboard built on gossamer,
+// Command ledger is a local-first personal-finance dashboard built on gophics,
 // and the driver app for the built-in chart package: it renders spending,
 // balance, and weekly-activity charts from a sample dataset (a real Ledger would
 // import a local CSV/OFX file). One codebase runs on desktop, web, and mobile.
@@ -10,8 +10,8 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
 )
 
 func main() {

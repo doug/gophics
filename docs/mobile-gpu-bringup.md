@@ -11,7 +11,7 @@ part of the GPU path is readable at a glance.
 - **Compiles for both targets:** `GOOS=android GOARCH=arm64` and `GOOS=ios
   GOARCH=arm64` build `./shell/mobile` and `./examples/hn/mobile` clean.
 - **The GPU pipeline composites the scene correctly on real hardware.** Rendering
-  `gpucheck` through the Metal rasterizer on macOS (`go test -tags gossamer_gpu
+  `gpucheck` through the Metal rasterizer on macOS (`go test -tags gophics_gpu
   -run TestGPUReference ./examples/gpucheck`) produces the full scene — colors,
   gradient, crisp text, sprites (plain/tint/rotate), filled paths — with **no
   wipe**. Since the mobile surface uses the same `ggcanvas.RenderDirect` path, the
@@ -45,7 +45,7 @@ Two further device-only fixes fell out of that run:
   now picks from `GetSurfaceCapabilities` (format, alpha mode, present mode), and
   a failed configure aborts to the CPU path instead of presenting nothing.
 - **16 KB pages.** Pixel 10 reports `ro.product.cpu.pagesize.max=16384`; the
-  4 KB-aligned `libgojni.so`/`libgossamer_surface.so` triggered Android's
+  4 KB-aligned `libgojni.so`/`libgophics_surface.so` triggered Android's
   PageSizeMismatch "app isn't compatible" dialog. Both are now linked with
   `-Wl,-z,max-page-size=16384`. Note this is *ELF segment* alignment — APK
   `zipalign -P 16` passed the whole time, so that check proves nothing here.
@@ -63,8 +63,8 @@ whether the GPU surface is live; when it's false the host presents each frame
 with `Bridge.Snapshot()` (the same parity-tested rasterizer, `app/gpu_equiv_test.go`)
 and blits the pixels. GPU on device, CPU everywhere else.
 
-- **iOS Simulator** (iPhone 17 Pro, Apple Silicon): `gossamer run -p ios -tags
-  gossamer_verify ./examples/hn/mobile` binds, builds, installs, and launches;
+- **iOS Simulator** (iPhone 17 Pro, Apple Silicon): `gophics run -p ios -tags
+  gophics_verify ./examples/hn/mobile` binds, builds, installs, and launches;
   `GPUActive()` is false
   (`wgpu: no HAL instance available for surface creation` — the Simulator's Metal
   lacks the HAL wgpu needs), so the host blits `Snapshot()` into a `CALayer`.
@@ -72,8 +72,8 @@ and blits the pixels. GPU on device, CPU everywhere else.
   counter, correct swatches, gradient, three text sizes, sprite trio
   (plain/tint/rotate), triangle + spinning square. Not black.
 - **Android emulator** (arm64 `google_apis`, `-gpu host` → host M1 Ultra Metal):
-  `gossamer run -p android -tags gossamer_verify ./examples/hn/mobile` packages the JNI surface shim
-  (`libgossamer_surface.so`) — the earlier `UnsatisfiedLinkError` crash was a
+  `gophics run -p android -tags gophics_verify ./examples/hn/mobile` packages the JNI surface shim
+  (`libgophics_surface.so`) — the earlier `UnsatisfiedLinkError` crash was a
   missing `externalNativeBuild`/CMake wiring, now fixed — so the app launches.
   `GPUActive()` is false (even with `-gpu host`, wgpu can't back a Vulkan
   surface: `no HAL instance available`), so the host blits via `lockCanvas`.
@@ -96,12 +96,12 @@ this on device).
 
 ## How to run it
 
-The gpucheck scene is selected by the `gossamer_verify` build tag (see
-`examples/hn/mobile/scene.go`); the `gossamer` CLI drives bind → build → install
+The gpucheck scene is selected by the `gophics_verify` build tag (see
+`examples/hn/mobile/scene.go`); the `gophics` CLI drives bind → build → install
 → launch in one command:
 
-- **Android:** `gossamer run -p android -tags gossamer_verify ./examples/hn/mobile`
-- **iOS:** `gossamer run -p ios -tags gossamer_verify ./examples/hn/mobile`
+- **Android:** `gophics run -p android -tags gophics_verify ./examples/hn/mobile`
+- **iOS:** `gophics run -p ios -tags gophics_verify ./examples/hn/mobile`
   (Simulator; for a device, build with `-sdk iphoneos` + a signing team, or open
   the project in Xcode)
 
@@ -114,7 +114,7 @@ device it renders on the GPU — the path the checklist below validates.
 
 On a real device, **first confirm you're on the GPU path, not the CPU fallback**
 — check the host log for `GPU present` (Android) / a `GPU ready` line
-(`gossamer/mobile`); if it says GPU is unavailable you're validating the CPU
+(`gophics/mobile`); if it says GPU is unavailable you're validating the CPU
 blit, not the surface. Then compare the device screen against the desktop render
 of the same scene
 (`GPUCHECK_SHOT=out.png go test -run TestGPUCheckRenders ./examples/gpucheck`).
@@ -258,9 +258,9 @@ mobile becomes a concern, or to quiet the log for on-device profiling.
 ### Orientation (2026-08-04)
 
 The iOS host now declares all four interface orientations
-(`examples/hn/ios/GossamerHN/Info.plist`). On device: **portrait and both
+(`examples/hn/ios/GophicsHN/Info.plist`). On device: **portrait and both
 landscape orientations render and re-layout correctly** — rotating swaps
-`GossamerView.bounds`, `layoutSubviews` calls `HnmobileResize`, and the Go bridge
+`GophicsView.bounds`, `layoutSubviews` calls `HnmobileResize`, and the Go bridge
 full-rebuilds the surface on an orientation flip (`shell/mobile/gpu.go`
 `orientationChanged`, the same path fixed for Android tearing).
 

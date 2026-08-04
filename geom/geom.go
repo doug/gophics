@@ -1,4 +1,4 @@
-// Package geom provides the geometric primitives used throughout gossamer:
+// Package geom provides the geometric primitives used throughout gophics:
 // points, sizes, rectangles, rounded rectangles, edge insets, and 2D affine
 // transforms.
 //
@@ -188,7 +188,7 @@ func Translate(p Pt) Affine { return Affine{A: 1, D: 1, Tx: p.X, Ty: p.Y} }
 func Scale(sx, sy float32) Affine { return Affine{A: sx, D: sy} }
 
 // Rotate returns a transform that rotates by radians about the origin,
-// clockwise in gossamer's y-down coordinate system.
+// clockwise in gophics's y-down coordinate system.
 func Rotate(radians float32) Affine {
 	sin, cos := math.Sincos(float64(radians))
 	s, c := float32(sin), float32(cos)

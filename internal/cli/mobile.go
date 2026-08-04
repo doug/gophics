@@ -20,8 +20,8 @@ const (
 )
 
 // buildMobile wraps `gomobile bind` to produce the standalone native artifact
-// (`gossamer build -p ios/android`): an .xcframework for iOS, an .aar for
-// Android, under build/<platform>. `gossamer run` binds straight into the host
+// (`gophics build -p ios/android`): an .xcframework for iOS, an .aar for
+// Android, under build/<platform>. `gophics run` binds straight into the host
 // project instead (see runMobile).
 func buildMobile(o buildOpts) (string, error) {
 	dir := outDir(o)
@@ -68,7 +68,7 @@ func gomobileBind(o buildOpts, target, out string) error {
 	return nil
 }
 
-// runMobile is the `gossamer run` path for ios/android: bind the Go side into
+// runMobile is the `gophics run` path for ios/android: bind the Go side into
 // the host project, build it, and install + launch on a simulator/device — the
 // whole loop, no per-project scripts. The host project is the sibling ios/ or
 // android/ directory next to the bind package (override with -host).
@@ -79,7 +79,7 @@ func runMobile(o buildOpts) error {
 	}
 	if _, err := os.Stat(host); err != nil {
 		return fmt.Errorf("host project not found at %s\n"+
-			"scaffold one with `gossamer create`, or pass -host <dir>", host)
+			"scaffold one with `gophics create`, or pass -host <dir>", host)
 	}
 	switch o.platform.name {
 	case "ios":
@@ -149,7 +149,7 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "gossamer: binding Go → "+fw+".xcframework")
+	fmt.Fprintln(os.Stderr, "gophics: binding Go → "+fw+".xcframework")
 	if err := gomobileBind(o, "ios,iossimulator", filepath.Join(host, fw+".xcframework")); err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "gossamer: simulator %s\n", dev)
+	fmt.Fprintf(os.Stderr, "gophics: simulator %s\n", dev)
 
 	if fileExists(filepath.Join(host, "project.yml")) {
 		if !have("xcodegen") {
@@ -176,7 +176,7 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "gossamer: xcodebuild "+scheme)
+	fmt.Fprintln(os.Stderr, "gophics: xcodebuild "+scheme)
 	if err := run(host, nil, "xcodebuild",
 		"-project", filepath.Base(proj), "-scheme", scheme,
 		"-sdk", "iphonesimulator", "-configuration", "Debug",
@@ -189,7 +189,7 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "gossamer: install + launch %s\n", bundleID)
+	fmt.Fprintf(os.Stderr, "gophics: install + launch %s\n", bundleID)
 	_ = exec.Command("xcrun", "simctl", "boot", udid).Run() // ignore "already booted"
 	_ = exec.Command("open", "-a", "Simulator").Run()
 	if err := run("", nil, "xcrun", "simctl", "install", udid, app); err != nil {
@@ -285,7 +285,7 @@ func runAndroid(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "gossamer: binding Go → app/libs/"+name+".aar")
+	fmt.Fprintln(os.Stderr, "gophics: binding Go → app/libs/"+name+".aar")
 	aar := filepath.Join(host, "app", "libs", name+".aar")
 	if err := gomobileBind(o, "android", aar); err != nil {
 		return err
@@ -298,7 +298,7 @@ func runAndroid(o buildOpts, host string) error {
 	} else if !have("gradle") {
 		return fmt.Errorf("no ./gradlew in %s and no gradle on PATH", host)
 	}
-	fmt.Fprintln(os.Stderr, "gossamer: gradle :app:assembleDebug")
+	fmt.Fprintln(os.Stderr, "gophics: gradle :app:assembleDebug")
 	if err := run(host, env, gradle, ":app:assembleDebug"); err != nil {
 		return fmt.Errorf("gradle: %w", err)
 	}
@@ -306,7 +306,7 @@ func runAndroid(o buildOpts, host string) error {
 	apk := filepath.Join(host, "app", "build", "outputs", "apk", "debug", "app-debug.apk")
 	adb := filepath.Join(sdk, "platform-tools", "adb")
 	if !deviceConnected(adb) {
-		fmt.Fprintf(os.Stderr, "gossamer: built %s\n"+
+		fmt.Fprintf(os.Stderr, "gophics: built %s\n"+
 			"No device/emulator connected. Start one, then:\n"+
 			"  %s install -r %s\n", apk, adb, apk)
 		return nil
@@ -315,7 +315,7 @@ func runAndroid(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "gossamer: install + launch %s\n", appID)
+	fmt.Fprintf(os.Stderr, "gophics: install + launch %s\n", appID)
 	if err := run("", nil, adb, "install", "-r", apk); err != nil {
 		return fmt.Errorf("adb install: %w", err)
 	}
@@ -323,7 +323,7 @@ func runAndroid(o buildOpts, host string) error {
 }
 
 // launchActivity resolves the app's launcher activity (e.g.
-// dev.gossamer.hn/.MainActivity) so `am start -n` works without hardcoding the
+// dev.gophics.hn/.MainActivity) so `am start -n` works without hardcoding the
 // class; falls back to the scaffold's .MainActivity convention.
 func launchActivity(adb, appID string) string {
 	out, err := exec.Command(adb, "shell", "cmd", "package", "resolve-activity",
@@ -378,7 +378,7 @@ func ensureAndroidSDK(sdk string) error {
 			strings.Join(missing, " + "))
 	}
 	for _, pkg := range missing {
-		fmt.Fprintf(os.Stderr, "gossamer: installing %s (one-time)\n", pkg)
+		fmt.Fprintf(os.Stderr, "gophics: installing %s (one-time)\n", pkg)
 		cmd := exec.Command(sm, "--sdk_root="+sdk, pkg)
 		cmd.Stdin = strings.NewReader(strings.Repeat("y\n", 50)) // accept licenses
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr

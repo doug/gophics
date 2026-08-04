@@ -8,7 +8,7 @@ package dxgi
 import (
 	"errors"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/dx12/d3d12"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/dx12/d3d12"
 )
 
 // DXGI-specific HRESULT error codes.

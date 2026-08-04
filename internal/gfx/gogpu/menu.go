@@ -1,6 +1,6 @@
 package gogpu
 
-import "github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
+import "github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
 
 // MenuRole maps to standard menu items.
 type MenuRole int

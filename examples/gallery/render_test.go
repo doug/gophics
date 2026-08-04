@@ -8,9 +8,9 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 func harness(t *testing.T) (*app.Headless, *feedState) {

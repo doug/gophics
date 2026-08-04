@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // Helper to create a pixmap of specific size

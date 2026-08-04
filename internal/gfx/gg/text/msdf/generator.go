@@ -4,7 +4,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
 // Generator creates MSDF textures from glyph outlines.

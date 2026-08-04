@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan/vk"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan/vk"
 )
 
 // AllocatorConfig configures the GPU memory allocator.

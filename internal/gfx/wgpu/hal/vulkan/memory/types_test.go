@@ -5,7 +5,7 @@ package memory
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan/vk"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan/vk"
 )
 
 func TestNewMemoryTypeSelector(t *testing.T) {

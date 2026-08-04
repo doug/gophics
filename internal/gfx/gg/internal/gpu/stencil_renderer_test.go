@@ -5,9 +5,9 @@ package gpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/noop"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/noop"
 )
 
 // testSampleCount probes the device for 4x MSAA support, falling back to 1x.

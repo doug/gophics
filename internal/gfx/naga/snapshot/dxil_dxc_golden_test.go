@@ -29,9 +29,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil"
-	"github.com/doug/gossamer/internal/gfx/naga/hlsl"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil"
+	"github.com/doug/gophics/internal/gfx/naga/hlsl"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 const dxcGoldenDir = "testdata/reference/dxil_dxc"

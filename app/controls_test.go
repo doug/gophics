@@ -8,9 +8,9 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/theme"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/theme"
+	"github.com/doug/gophics/widget"
 )
 
 type controlsApp struct{ hook func(*controlsState) }
@@ -114,7 +114,7 @@ func TestControlsGolden(t *testing.T) {
 		h.Render()
 	}
 	img := h.Render()
-	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		f, _ := os.Create(out)
 		defer f.Close()
 		_ = png.Encode(f, img)

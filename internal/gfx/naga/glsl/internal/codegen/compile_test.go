@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl"
 )
 
 // wgslToGLSL is a test helper that compiles WGSL source to GLSL with options.

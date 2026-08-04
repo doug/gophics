@@ -2,7 +2,7 @@
 
 package wgpu
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/internal/browser"
+import "github.com/doug/gophics/internal/gfx/wgpu/internal/browser"
 
 // BindGroupLayout defines the structure of resource bindings for shaders.
 type BindGroupLayout struct {

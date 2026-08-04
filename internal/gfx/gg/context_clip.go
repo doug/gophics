@@ -3,7 +3,7 @@ package gg
 import (
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/clip"
+	"github.com/doug/gophics/internal/gfx/gg/internal/clip"
 )
 
 // Clip sets the current path as the clipping region and clears the path.

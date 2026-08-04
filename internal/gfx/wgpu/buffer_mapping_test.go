@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // FEAT-WGPU-MAPPING-001 — public Buffer mapping API tests.

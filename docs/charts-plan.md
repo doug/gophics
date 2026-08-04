@@ -1,10 +1,10 @@
-# A built-in chart library for gossamer
+# A built-in chart library for gophics
 
 ## Goal
 
 A first-party, **Swift Charts–style** charting package — declarative marks composed
 over scales, rendered through `paint.Canvas`, animated with `anim.Controller`, and
-theme-/accessibility-aware. Pure standard library plus gossamer's own layers
+theme-/accessibility-aware. Pure standard library plus gophics's own layers
 (`paint`, `widget`, `geom`, `anim`, `layout`) — **zero new external dependencies**.
 "Kitchen sink, batteries included": a habit heatmap, a budget trend, a workout
 progress line, or a stock candlestick should each be a dozen lines of app code.

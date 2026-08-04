@@ -3,9 +3,9 @@ package gogpu
 import (
 	"io"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // gpuContextAdapter bridges gogpu to gpucontext.DeviceProvider interface.

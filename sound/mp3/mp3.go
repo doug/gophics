@@ -7,7 +7,7 @@ import (
 
 	gomp3 "github.com/hajimehoshi/go-mp3"
 
-	"github.com/doug/gossamer/sound"
+	"github.com/doug/gophics/sound"
 )
 
 // Decode reads an entire MP3 stream and returns it as a mono Sample resampled to

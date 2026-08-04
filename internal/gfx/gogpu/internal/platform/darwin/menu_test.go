@@ -5,7 +5,7 @@ package darwin_test
 import (
 	"testing"
 
-	platformdarwin "github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/darwin"
+	platformdarwin "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/darwin"
 )
 
 // TestMenuSelectorRegistration verifies that menu-related ObjC selectors

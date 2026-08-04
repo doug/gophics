@@ -7,11 +7,11 @@ import (
 	"runtime/debug"
 	"sort"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/input"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/input"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 )
 
 // renderWidget is the internal bridge from widgets to layout boxes.

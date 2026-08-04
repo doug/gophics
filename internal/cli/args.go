@@ -6,7 +6,7 @@ import (
 )
 
 // flagsFirst reorders args so every recognized flag (and its value) precedes
-// the positional operands, letting users intermix them — `gossamer dev ./app
+// the positional operands, letting users intermix them — `gophics dev ./app
 // -p web` works the same as `-p web ./app`. Go's flag package otherwise stops
 // at the first operand. Call after the flags are registered on fs, before
 // Parse.

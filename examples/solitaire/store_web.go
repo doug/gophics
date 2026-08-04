@@ -4,7 +4,7 @@ package main
 
 import "syscall/js"
 
-const lsKey = "gossamer-solitaire"
+const lsKey = "gophics-solitaire"
 
 // lsStore autosaves the game to the browser's localStorage.
 type lsStore struct{}

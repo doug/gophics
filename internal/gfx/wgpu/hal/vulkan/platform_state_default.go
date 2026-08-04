@@ -5,7 +5,7 @@
 
 package vulkan
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/hal"
+import "github.com/doug/gophics/internal/gfx/wgpu/hal"
 
 type platformInstanceState struct {
 	swapchain swapchainPlatformPolicy

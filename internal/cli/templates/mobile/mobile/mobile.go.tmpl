@@ -1,15 +1,15 @@
 // Package {{.MobilePkg}} is the gomobile-bind surface for {{.Name}} on iOS and
 // Android: a flat, bind-friendly API (ints, floats, strings, []byte) over
 // shell/mobile.Bridge. The native hosts (../ios, ../android) call it; the
-// `gossamer` CLI binds it (`gossamer run -p ios|android ./mobile`).
+// `gophics` CLI binds it (`gophics run -p ios|android ./mobile`).
 package {{.MobilePkg}}
 
 import (
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell/mobile"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell/mobile"
 
 	"{{.Module}}/ui"
 )

@@ -3,8 +3,8 @@ package chart
 import (
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // RuleMark draws a single reference line across the plot — a target, threshold,

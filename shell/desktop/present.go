@@ -12,11 +12,11 @@ import (
 	"image"
 	"log"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
-	"github.com/doug/gossamer/internal/gfx/gogpu"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gophics/internal/gfx/gogpu"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 // onFrameStart lazily creates (and keeps sized) the GPU canvas when the
@@ -39,7 +39,7 @@ func (w *window) onFrameStart(dc *gogpu.Context) {
 	}
 	c, err := ggcanvas.New(provider, lw, lh)
 	if err != nil {
-		log.Printf("gossamer/desktop: ggcanvas init: %v", err)
+		log.Printf("gophics/desktop: ggcanvas init: %v", err)
 		return
 	}
 	w.ggc = c
@@ -59,7 +59,7 @@ func (f *frame) Target() shell.Target {
 		r := f.dc.Renderer()
 		tex, err := r.NewTextureFromImage(img)
 		if err != nil {
-			log.Printf("gossamer/desktop: upload frame: %v", err)
+			log.Printf("gophics/desktop: upload frame: %v", err)
 			return
 		}
 		// PresentTexture submits an async GPU draw that samples tex; the GPU
@@ -67,7 +67,7 @@ func (f *frame) Target() shell.Target {
 		// next frame's BeginFrame (after the GPU consumed it) — destroying it
 		// now freed it mid-flight, causing trailing streaks under slow motion.
 		if err := f.dc.PresentTexture(tex); err != nil {
-			log.Printf("gossamer/desktop: present: %v", err)
+			log.Printf("gophics/desktop: present: %v", err)
 		}
 		r.EnqueueDeferredDestroy(tex.Destroy)
 	}}
@@ -85,6 +85,6 @@ type gpuTarget struct {
 func (t gpuTarget) RenderGPU(replay func(*gg.Context)) {
 	_ = t.ggc.Draw(func(cc *gg.Context) { replay(cc) })
 	if err := t.ggc.Render(t.dc.RenderTarget()); err != nil {
-		log.Printf("gossamer/desktop: gpu render: %v", err)
+		log.Printf("gophics/desktop: gpu render: %v", err)
 	}
 }

@@ -46,7 +46,7 @@
 //
 // Import the package and use types directly:
 //
-//	import "github.com/doug/gossamer/internal/gfx/gputypes"
+//	import "github.com/doug/gophics/internal/gfx/gputypes"
 //
 //	format := gputypes.TextureFormatRGBA8Unorm
 //	usage := gputypes.TextureUsageCopySrc | gputypes.TextureUsageRenderAttachment

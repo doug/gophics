@@ -5,8 +5,8 @@ package wgpu
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/core"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/core"
 )
 
 // DeviceDescriptor configures device creation.

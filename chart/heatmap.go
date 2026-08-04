@@ -3,8 +3,8 @@ package chart
 import (
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // ColorScale maps a value in [Lo, Hi] to a color along From→To. Unset From/To

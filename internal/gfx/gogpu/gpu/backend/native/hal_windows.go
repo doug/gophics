@@ -3,15 +3,15 @@
 package native
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 
 	// Importing HAL backends triggers their init() registration with hal.RegisterBackend().
 	// This is required for wgpu.CreateInstance() to discover available backends.
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/dx12"
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/gles"
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/software"
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/dx12"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/gles"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/software"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan"
 )
 
 // BackendInfo returns the backend display name and mask for the given graphics API.

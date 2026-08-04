@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/input"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/input"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // mockFrameGaterWindow wraps mockWindow and implements platform.FrameGater.

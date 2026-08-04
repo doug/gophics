@@ -1,7 +1,7 @@
 // Package blend provides color blending operations.
 package blend
 
-import "github.com/doug/gossamer/internal/gfx/gg"
+import "github.com/doug/gophics/internal/gfx/gg"
 
 // Mode represents a blending mode.
 type Mode int

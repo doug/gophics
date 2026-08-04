@@ -1,12 +1,12 @@
 package terminal
 
-// Serving a gossamer app over SSH.
+// Serving a gophics app over SSH.
 //
-// gossamer bundles no SSH server — that is deliberately out of scope. SSH is a
+// gophics bundles no SSH server — that is deliberately out of scope. SSH is a
 // security-sensitive domain (auth, host keys, session and PTY negotiation) that
-// charmbracelet/wish and gliderlabs/ssh already handle well. gossamer's job is
+// charmbracelet/wish and gliderlabs/ssh already handle well. gophics's job is
 // only to render and take input, so the terminal backend is transport-agnostic:
-// adapt an SSH session to the TTY interface and hand it to RunTTY. gossamer's
+// adapt an SSH session to the TTY interface and hand it to RunTTY. gophics's
 // go.mod stays free of any SSH dependency; you add wish or gliderlabs/ssh to
 // your own program.
 //
@@ -16,9 +16,9 @@ package terminal
 //	import (
 //	    "sync"
 //	    "github.com/gliderlabs/ssh"
-//	    "github.com/doug/gossamer/app"
-//	    "github.com/doug/gossamer/shell"
-//	    "github.com/doug/gossamer/shell/terminal"
+//	    "github.com/doug/gophics/app"
+//	    "github.com/doug/gophics/shell"
+//	    "github.com/doug/gophics/shell/terminal"
 //	)
 //
 //	// sshTTY adapts an ssh.Session (itself an io.Reader+io.Writer) to terminal.TTY.

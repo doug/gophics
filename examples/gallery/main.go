@@ -1,4 +1,4 @@
-// Command gallery is a polished showcase of gossamer's higher-level widgets,
+// Command gallery is a polished showcase of gophics's higher-level widgets,
 // built entirely on procedural (network-free) content so it runs anywhere and
 // stays testable headless.
 //
@@ -24,11 +24,11 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 // --- Theme -------------------------------------------------------------------
@@ -446,7 +446,7 @@ func mod01(v float32) float32 {
 
 func main() {
 	err := app.Run(Gallery{}, app.Config{
-		Title:        "Gossamer Gallery",
+		Title:        "Gophics Gallery",
 		Size:         geom.Size{W: 420, H: 680},
 		Background:   themeFor(true).bg,
 		Font:         goregular.TTF,

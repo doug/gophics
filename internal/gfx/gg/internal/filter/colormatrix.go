@@ -1,8 +1,8 @@
 package filter
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // ColorMatrixFilter applies a 4x5 color transformation matrix to an image.

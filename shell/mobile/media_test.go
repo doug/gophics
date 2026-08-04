@@ -9,9 +9,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/mobile"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/shell/mobile"
 )
 
 // fakeHost stands in for the native (iOS/Android) media backend: it services

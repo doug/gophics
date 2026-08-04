@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // RichSpan is one styled run of a rich paragraph.

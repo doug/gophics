@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // TestSpirvValBinary validates binary SPIR-V output from our naga compiler using spirv-val.

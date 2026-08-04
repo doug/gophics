@@ -10,9 +10,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 )
 
 // fakeAPI serves a deterministic HN corpus instantly.
@@ -35,7 +35,7 @@ func (f fakeAPI) Item(id int) (Item, error) {
 		}
 		return Item{
 			ID: id, Type: "story", By: fmt.Sprintf("user%d", i),
-			Title: fmt.Sprintf("Story number %d: gossamer reaches the front page", i),
+			Title: fmt.Sprintf("Story number %d: gophics reaches the front page", i),
 			URL:   "https://example.com/post", Score: 100 + i, Descendants: f.commentsPer,
 			Kids: kids,
 		}, nil
@@ -97,7 +97,7 @@ func TestFeedLoadsAndScrolls(t *testing.T) {
 	if len(st.stories) != 500 {
 		t.Fatalf("stories = %d", len(st.stories))
 	}
-	if out := os.Getenv("GOSSAMER_RENDER_FEED"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_FEED"); out != "" {
 		img := h.Render()
 		f, _ := os.Create(out)
 		defer f.Close()
@@ -145,7 +145,7 @@ scan:
 		t.Fatalf("link tap did not open URL: %v", h.OpenedURLs)
 	}
 
-	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		img := h.Render()
 		f, _ := os.Create(out)
 		defer f.Close()

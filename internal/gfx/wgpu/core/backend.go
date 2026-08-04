@@ -8,8 +8,8 @@ package core
 import (
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // BackendProvider bridges the Core API to HAL backend implementations.

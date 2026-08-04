@@ -1,4 +1,4 @@
-module github.com/doug/gossamer
+module github.com/doug/gophics
 
 go 1.26.5
 

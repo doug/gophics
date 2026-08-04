@@ -1,6 +1,6 @@
 package paint
 
-import "github.com/doug/gossamer/geom"
+import "github.com/doug/gophics/geom"
 
 // pathVerb is a single path command.
 type pathVerb uint8

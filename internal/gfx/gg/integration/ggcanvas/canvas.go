@@ -10,8 +10,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // Common errors returned by Canvas operations.

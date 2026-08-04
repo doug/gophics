@@ -1,7 +1,7 @@
 package recording
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // Brush represents a fill/stroke style for recording commands.

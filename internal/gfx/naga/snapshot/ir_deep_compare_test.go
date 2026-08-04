@@ -5,7 +5,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // mapRonScalarKind maps RON scalar kind string to ir.ScalarKind.

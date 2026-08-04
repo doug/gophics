@@ -3,10 +3,10 @@ package widget
 import (
 	"time"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
 )
 
 // DismissDir constrains which way a Dismissible may be swiped.

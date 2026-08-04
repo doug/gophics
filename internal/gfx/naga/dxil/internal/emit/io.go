@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/module"
-	"github.com/doug/gossamer/internal/gfx/naga/internal/backend"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/module"
+	"github.com/doug/gophics/internal/gfx/naga/internal/backend"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // emitInputLoads emits dx.op.loadInput calls for each entry point argument.

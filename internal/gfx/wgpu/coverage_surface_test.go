@@ -5,8 +5,8 @@ package wgpu_test
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/wgpu"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/noop"
+	"github.com/doug/gophics/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/noop"
 )
 
 // =============================================================================

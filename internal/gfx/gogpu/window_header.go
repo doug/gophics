@@ -1,6 +1,6 @@
 package gogpu
 
-import "github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
+import "github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
 
 // HeaderAlignment controls the horizontal position of the title in the OS
 // window header bar. It mirrors the Flutter AppBar.centerTitle pattern.

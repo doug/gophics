@@ -3,7 +3,7 @@ package blend
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/image"
+	"github.com/doug/gophics/internal/gfx/gg/internal/image"
 )
 
 // TestNewLayer tests layer creation.

@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/parallel"
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/parallel"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
 // tilePool manages pooled resources for per-tile rendering.

@@ -5,7 +5,7 @@
 
 package gles
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/hal"
+import "github.com/doug/gophics/internal/gfx/wgpu/hal"
 
 // init registers the OpenGL ES backend with the HAL registry.
 func init() {

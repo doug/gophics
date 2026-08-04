@@ -1,6 +1,6 @@
 package browser
 
-import "github.com/doug/gossamer/internal/gfx/gputypes"
+import "github.com/doug/gophics/internal/gfx/gputypes"
 
 // CompositeAlphaModeToJS converts a gputypes.CompositeAlphaMode to the WebGPU JS
 // canvas alpha mode string.

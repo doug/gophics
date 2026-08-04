@@ -10,7 +10,7 @@ examples/hn/android/local.properties
 /gallery
 examples/hn/ios/build/
 
-# gossamer CLI build output
+# gophics CLI build output
 /build/
 
 # iOS Simulator build output (autonomous test loop)

@@ -3,7 +3,7 @@ package svg
 import (
 	"image/color"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // renderState holds the rendering state during SVG traversal.

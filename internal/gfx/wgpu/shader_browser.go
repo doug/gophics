@@ -2,7 +2,7 @@
 
 package wgpu
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/internal/browser"
+import "github.com/doug/gophics/internal/gfx/wgpu/internal/browser"
 
 // ShaderModule represents a compiled shader module.
 type ShaderModule struct {

@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // SelectionSink collects selectable text fragments during a paint pass and

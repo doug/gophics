@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/widget"
 )
 
 // collect drains the parser's output for a fixed input into a slice.
@@ -67,7 +67,7 @@ func TestParseMouseKinds(t *testing.T) {
 			t.Errorf("%q: kind = %d, want %d", c.in, p.Kind, c.kind)
 		}
 	}
-	// Wheel up should scroll up (positive Y in gossamer's convention).
+	// Wheel up should scroll up (positive Y in gophics's convention).
 	up := collect(t, []byte("\x1b[<64;5;5M"), 1)[0].(shell.Pointer)
 	if up.Scroll.Y <= 0 {
 		t.Errorf("wheel-up scroll = %v, want positive Y", up.Scroll)

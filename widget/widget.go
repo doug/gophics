@@ -1,4 +1,4 @@
-// Package widget implements gossamer's declarative layer: immutable widget
+// Package widget implements gophics's declarative layer: immutable widget
 // values describing the UI, reconciled into a retained element tree that owns
 // layout boxes. It is Flutter's widgets/ analog (PLAN.md M3, §4).
 //
@@ -18,10 +18,10 @@
 package widget
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/input"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/input"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 )
 
 // Widget is an immutable description of part of the UI. A widget must be a

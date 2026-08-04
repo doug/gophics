@@ -5,8 +5,8 @@ package gpu
 import (
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // PipelineCache caches compiled GPU pipelines for rendering operations.

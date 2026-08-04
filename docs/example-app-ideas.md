@@ -1,12 +1,12 @@
 # Example application ideas
 
-A running shortlist of open-source clones worth building on gossamer — apps that
+A running shortlist of open-source clones worth building on gophics — apps that
 provide real value, run standalone (no ongoing server/compute cost), and play to
 the platform's grain. Captured from a brainstorm; revisit and prune as we build.
 
 ## Selection filter (why these, not others)
 
-Gossamer's wedge: **one small Go binary (no Electron), instant launch, GPU-smooth
+Gophics's wedge: **one small Go binary (no Electron), instant launch, GPU-smooth
 scrolling, offline-first, one codebase across desktop/web/mobile, and data that's
 just your own files** (the web build reads/writes real local files via File System
 Access). The best clones are apps that are:
@@ -69,7 +69,7 @@ server, the cost, and the privacy problem at once.
   - Challenges: stable structured output from a fast-moving CLI; diff/merge/conflict
     *editing* is the hard 20%. Desktop-first.
 - **API client** — Bruno / Postman. Bruno's pitch is *local-first, requests-as-files*
-  — dead-on for gossamer; timely as Postman pushes to the cloud. Forms + JSON text +
+  — dead-on for gophics; timely as Postman pushes to the cloud. Forms + JSON text +
   history lists.
 - **Git GUI** — Tower / Fork. Commit/diff lists, diff view, branch tree. (JJ GUI is
   more differentiated.)
@@ -182,7 +182,7 @@ hardens a **reusable core layer**, not a one-off.
   preview/video) and `shell.Audio` (out: play PCM/buffer; in: record mic → PCM + level
   metering).
   - **Sequence web-first:** browser gives all three with no native code
-    (`getUserMedia`, `MediaRecorder`, Web Audio) — prove the gossamer-side API + UX in
+    (`getUserMedia`, `MediaRecorder`, Web Audio) — prove the gophics-side API + UX in
     the browser, then implement the same `shell` interface on **gomobile**
     (AVFoundation/CameraX + AVAudioEngine/AudioTrack). Desktop audio via `oto`/`malgo`;
     desktop camera optional (CGo/AVFoundation/V4L2 — annoying, phone-first anyway).

@@ -1,5 +1,5 @@
 # Paths are relative to this dir (examples/hn/ios).
 # gomobile-bind artifact + generated Xcode project + build output.
 Hnmobile.xcframework/
-GossamerHN.xcodeproj/
+GophicsHN.xcodeproj/
 build/

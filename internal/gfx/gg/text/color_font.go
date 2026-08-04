@@ -1,7 +1,7 @@
 package text
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gg/text/emoji"
+	"github.com/doug/gophics/internal/gfx/gg/text/emoji"
 )
 
 // ColorFont is an optional interface that ParsedFont implementations

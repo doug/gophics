@@ -1,4 +1,4 @@
-// Command notes is a local-first Markdown notes app built on gossamer — one
+// Command notes is a local-first Markdown notes app built on gophics — one
 // codebase for desktop, web, and terminal. The widget tree, Root, and Config
 // live in the importable examples/notes/ui package.
 package main
@@ -6,8 +6,8 @@ package main
 import (
 	"log"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/examples/notes/ui"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/examples/notes/ui"
 )
 
 func main() {

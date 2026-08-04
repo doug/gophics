@@ -2,7 +2,7 @@
 
 package shader
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/hal/software/raster"
+import "github.com/doug/gophics/internal/gfx/wgpu/hal/software/raster"
 
 // SolidColorUniforms contains uniform data for the solid color shader.
 type SolidColorUniforms struct {

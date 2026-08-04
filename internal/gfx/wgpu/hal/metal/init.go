@@ -5,7 +5,7 @@
 
 package metal
 
-import "github.com/doug/gossamer/internal/gfx/wgpu/hal"
+import "github.com/doug/gophics/internal/gfx/wgpu/hal"
 
 // init registers the Metal backend with the HAL registry.
 // This is called automatically on package import.

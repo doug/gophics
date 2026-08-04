@@ -16,8 +16,8 @@ import (
 	"errors"
 	"syscall/js"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // wheelLineHeight is the logical pixels a single line-mode wheel step scrolls.

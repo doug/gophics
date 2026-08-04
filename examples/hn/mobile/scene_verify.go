@@ -1,14 +1,14 @@
-//go:build gossamer_verify
+//go:build gophics_verify
 
 package hnmobile
 
 import (
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 
-	gpucheck "github.com/doug/gossamer/examples/gpucheck/ui"
+	gpucheck "github.com/doug/gophics/examples/gpucheck/ui"
 )
 
 // scene (verify build) is the GPU bring-up diagnostic instead of HN. Selected
-// by -tags gossamer_verify. See docs/mobile-gpu-bringup.md.
+// by -tags gophics_verify. See docs/mobile-gpu-bringup.md.
 func scene() (widget.Widget, paint.Color) { return gpucheck.Root(), gpucheck.Background() }

@@ -2,7 +2,7 @@
 
 package hal
 
-import "github.com/doug/gossamer/internal/gfx/gputypes"
+import "github.com/doug/gophics/internal/gfx/gputypes"
 
 // InstanceDescriptor describes how to create a GPU instance.
 type InstanceDescriptor struct {

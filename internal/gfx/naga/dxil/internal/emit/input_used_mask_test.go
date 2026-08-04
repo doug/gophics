@@ -3,8 +3,8 @@ package emit
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/viewid"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/viewid"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // TestInputUsedMaskClamping verifies that InputUsedMasks values (0xFF for

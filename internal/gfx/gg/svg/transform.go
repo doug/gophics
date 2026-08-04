@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 // applyTransform parses an SVG transform attribute string and applies

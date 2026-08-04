@@ -22,7 +22,7 @@ func platformByName(name string) (platform, error) {
 	case "web":
 		return platform{name: "web", goos: "js", goarch: "wasm", wasm: true}, nil
 	case "terminal":
-		return platform{name: "terminal", tags: []string{"gossamer_term"}}, nil
+		return platform{name: "terminal", tags: []string{"gophics_term"}}, nil
 	case "ios":
 		return platform{name: "ios"}, nil // via gomobile
 	case "android":
@@ -62,7 +62,7 @@ func addBuildFlags(fs *flag.FlagSet, o *buildOpts, platName *string) {
 	fs.StringVar(&o.out, "o", "", "output path (default build/<platform>)")
 }
 
-// rendererEnv returns the GOSSAMER_RENDERER assignment for launching a native
+// rendererEnv returns the GOPHICS_RENDERER assignment for launching a native
 // app, or nil when unset. Applies to desktop/terminal run/dev; web reads its
 // renderer from Config (default Auto) since the browser has no process env.
 func (o buildOpts) rendererEnv() []string {
@@ -71,7 +71,7 @@ func (o buildOpts) rendererEnv() []string {
 		if o.renderer == "" {
 			return nil
 		}
-		return []string{"GOSSAMER_RENDERER=" + strings.ToLower(strings.TrimSpace(o.renderer))}
+		return []string{"GOPHICS_RENDERER=" + strings.ToLower(strings.TrimSpace(o.renderer))}
 	default:
 		return nil
 	}

@@ -5,7 +5,7 @@ import (
 	"html"
 	"strings"
 
-	"github.com/doug/gossamer/layout"
+	"github.com/doug/gophics/layout"
 )
 
 // InspectHTML renders the current render tree (see InspectTree) as a
@@ -101,8 +101,8 @@ function link(sel){document.querySelectorAll(sel).forEach(function(el){
 });}
 link('.row');link('.node');
 `
-	return `<!doctype html><meta charset="utf-8"><title>gossamer inspector</title><style>` + css + `</style>` +
-		fmt.Sprintf(`<header>gossamer render-tree inspector — %d boxes</header>`, count) +
+	return `<!doctype html><meta charset="utf-8"><title>gophics inspector</title><style>` + css + `</style>` +
+		fmt.Sprintf(`<header>gophics render-tree inspector — %d boxes</header>`, count) +
 		`<div class="wrap"><div class="pane tree">` + outline + `</div><div class="pane view">` + overlay +
 		`</div></div><script>` + js + `</script>`
 }

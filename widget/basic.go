@@ -5,10 +5,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
 )
 
 // Text displays text: single-line by default, word-wrapped when Wrap is
@@ -296,7 +296,7 @@ type scrollState struct {
 }
 
 // scrollReveal is the "scroll a descendant into view" service a Scroll provides
-// to its subtree (gossamer's analog of Flutter's Scrollable.ensureVisible). The
+// to its subtree (gophics's analog of Flutter's Scrollable.ensureVisible). The
 // content origin is captured each paint by revealAnchor; descendants convert a
 // caret rect to this content space and call reveal, which nudges the offset the
 // least amount needed to bring the rect inside the viewport (with a small

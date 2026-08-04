@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
 // findAliasedTestFont returns a path to an available system font, or empty string.

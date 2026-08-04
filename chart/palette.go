@@ -1,6 +1,6 @@
 package chart
 
-import "github.com/doug/gossamer/paint"
+import "github.com/doug/gophics/paint"
 
 // theme is the resolved set of chrome colors + the series palette for a given
 // light/dark mode.

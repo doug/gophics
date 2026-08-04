@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/gmath"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gogpu/gmath"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // Context provides drawing operations for a single frame.

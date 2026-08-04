@@ -8,10 +8,10 @@ package gles
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/gl"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/wgl"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/gles/gl"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/gles/wgl"
 )
 
 // Backend implements hal.Backend for OpenGL ES / OpenGL 3.3+.

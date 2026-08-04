@@ -3,7 +3,7 @@ package paint
 import (
 	"testing"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 func TestMapRect(t *testing.T) {

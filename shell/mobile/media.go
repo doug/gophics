@@ -9,7 +9,7 @@ import (
 	_ "image/png"
 	"time"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 // MediaHost is implemented by the native host (iOS/Android) and registered via

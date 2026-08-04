@@ -5,7 +5,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 )
 
 func TestNewResourcePool(t *testing.T) {

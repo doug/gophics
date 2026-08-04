@@ -1,4 +1,4 @@
-// Package app ties the widget tree to a shell: the gossamer runtime.
+// Package app ties the widget tree to a shell: the gophics runtime.
 //
 // Run drives a real window; Headless drives the same core without a display
 // for tests and golden images. Both share Core, so behavior verified
@@ -13,16 +13,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/input"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/scene"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/input"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/scene"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/widget"
 )
 
-// Config configures a gossamer app.
+// Config configures a gophics app.
 type Config struct {
 	Title      string
 	Size       geom.Size // initial logical window size
@@ -36,7 +36,7 @@ type Config struct {
 	Debug bool
 	// Renderer selects the rasterization backend: Auto (default) prefers the
 	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
-	// rasterizer. The GOSSAMER_RENDERER env var overrides this at startup.
+	// rasterizer. The GOPHICS_RENDERER env var overrides this at startup.
 	Renderer RendererMode
 }
 
@@ -101,9 +101,9 @@ const doubleTapWindow = 0.30
 // tapSlop is the drag distance that cancels a pending tap, in logical px.
 const tapSlop = 4
 
-// debugNoDamage forces a full-surface repaint every frame (GOSSAMER_NO_DAMAGE),
+// debugNoDamage forces a full-surface repaint every frame (GOPHICS_NO_DAMAGE),
 // bypassing damage culling — a diagnostic to isolate damage-tracking bugs.
-var debugNoDamage = os.Getenv("GOSSAMER_NO_DAMAGE") != ""
+var debugNoDamage = os.Getenv("GOPHICS_NO_DAMAGE") != ""
 
 // longPressSeconds is how long a still press must be held to fire OnLongPress.
 const longPressSeconds = 0.5
@@ -596,7 +596,7 @@ func Run(root widget.Widget, cfg Config) error {
 		return err
 	}
 	if sh, ok := h.(*shellHandler); ok {
-		setupDevState(sh) // no-op unless running under `gossamer dev`
+		setupDevState(sh) // no-op unless running under `gophics dev`
 	}
 	// Resolve the renderer (env override wins) and, when CPU is selected, drop
 	// the GPU accelerator so nothing offloads to it.
@@ -629,7 +629,7 @@ type shellHandler struct {
 	core   *Core
 	window shell.Window
 
-	// Dev-mode state-preserving hot-restart (set only under `gossamer dev` via
+	// Dev-mode state-preserving hot-restart (set only under `gophics dev` via
 	// setupDevState; zero/no-op in a shipped binary). On a restart signal the
 	// handler snapshots UI state to devStatePath so the relaunched process can
 	// restore it, landing back at the same place. See devstate_desktop.go.
@@ -675,7 +675,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		h.devSaved = true
 		if snap := h.core.Owner.SnapshotState(); len(snap) > 0 {
 			if err := writeDevSnapshot(h.devStatePath, snap); err != nil {
-				log.Printf("gossamer dev: snapshot state: %v", err)
+				log.Printf("gophics dev: snapshot state: %v", err)
 			}
 		}
 		w.Close()
@@ -707,11 +707,11 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.
 		h.core.recordFrameTime(float32(time.Since(t0).Seconds() * 1000))
-		// GOSSAMER_PACING logs a rolling frame-time summary each time the
+		// GOPHICS_PACING logs a rolling frame-time summary each time the
 		// 60-frame ring wraps — the on-device pacing readout (PLAN §6.4).
-		if h.core.frameHead == 0 && os.Getenv("GOSSAMER_PACING") != "" {
+		if h.core.frameHead == 0 && os.Getenv("GOPHICS_PACING") != "" {
 			avg, worst := h.core.FrameStats()
-			log.Printf("gossamer pacing: avg %.2f ms  worst %.2f ms (60 frames)", avg, worst)
+			log.Printf("gophics pacing: avg %.2f ms  worst %.2f ms (60 frames)", avg, worst)
 		}
 	}
 }

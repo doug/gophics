@@ -7,7 +7,7 @@ import (
 	"math"
 	"testing"
 
-	naga "github.com/doug/gossamer/internal/gfx/naga"
+	naga "github.com/doug/gophics/internal/gfx/naga"
 )
 
 // =============================================================================

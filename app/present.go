@@ -3,10 +3,10 @@ package app
 import (
 	"log"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // wireMedia publishes the window's optional media-capture capabilities (camera,
@@ -47,6 +47,6 @@ func (h *shellHandler) present(f shell.Frame, changed bool, damage geom.Rect) {
 	// Present even when skipped: the painter's surface is retained, and the
 	// swapchain still needs this frame's image.
 	if err := h.core.Painter.End(f); err != nil {
-		log.Printf("gossamer: present: %v", err)
+		log.Printf("gophics: present: %v", err)
 	}
 }

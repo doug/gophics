@@ -1,6 +1,6 @@
 //go:build !js
 
-// Command hello is the minimal gossamer app: a colored, vsynced, resizable
+// Command hello is the minimal gophics app: a colored, vsynced, resizable
 // window driven through the shell + paint layers (no widgets).
 package main
 
@@ -8,10 +8,10 @@ import (
 	"log"
 	"math"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/desktop"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/shell/desktop"
 )
 
 type app struct {
@@ -41,7 +41,7 @@ func (a *app) Event(w shell.Window, e shell.Event) {
 
 func main() {
 	err := desktop.Run(&app{painter: paint.NewPainter()}, shell.Config{
-		Title:     "gossamer hello",
+		Title:     "gophics hello",
 		Size:      geom.Size{W: 800, H: 600},
 		Resizable: true,
 	})

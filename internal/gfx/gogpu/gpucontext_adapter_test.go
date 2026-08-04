@@ -3,8 +3,8 @@ package gogpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // TestGPUContextAdapterInterface verifies the gpuContextAdapter implements gpucontext.DeviceProvider.

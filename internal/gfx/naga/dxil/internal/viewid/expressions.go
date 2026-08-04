@@ -1,7 +1,7 @@
 package viewid
 
 import (
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // taintOf returns the per-component taint for an expression, computing

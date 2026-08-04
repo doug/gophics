@@ -9,9 +9,9 @@ package gogpu
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // NewHeadlessRenderer creates a Renderer backed by a GPU device but with no

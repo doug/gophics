@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/container"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/module"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/container"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/module"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl"
 )
 
 func TestCompile_NilModule(t *testing.T) {

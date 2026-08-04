@@ -8,7 +8,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // Mock types for Render() tests. These extend mockRenderTarget from canvas_test.go

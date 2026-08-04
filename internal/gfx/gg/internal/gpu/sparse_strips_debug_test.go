@@ -7,9 +7,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/stroke"
+	"github.com/doug/gophics/internal/gfx/gg/internal/stroke"
 )
 
 // pixelWinding holds the winding decomposition for a single pixel column.

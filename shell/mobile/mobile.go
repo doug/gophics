@@ -15,9 +15,9 @@ import (
 	"image"
 	"sync/atomic"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // Touch phases, mirroring Android's MotionEvent actions.

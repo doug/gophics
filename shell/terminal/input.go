@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 // wheelStep is the logical-pixel scroll distance per mouse-wheel notch.
@@ -243,7 +243,7 @@ func parseMouse(b []byte, send func(shell.Event), scale float32) (consumed int, 
 	return i + 1, true
 }
 
-// sgrButton maps SGR button codes (0=left,1=middle,2=right) to gossamer's
+// sgrButton maps SGR button codes (0=left,1=middle,2=right) to gophics's
 // button numbering (0=primary, 1=secondary, 2=middle).
 func sgrButton(cb int) uint8 {
 	switch cb & 3 {

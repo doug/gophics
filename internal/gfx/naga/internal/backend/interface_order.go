@@ -3,7 +3,7 @@ package backend
 import (
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // EntryInterfaceOrder ranks an entry-point struct member's binding for

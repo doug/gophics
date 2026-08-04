@@ -9,8 +9,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/gpu/tilecompute"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
 )
 
 // TestConvertPathToPathDef_NilPath verifies nil/empty paths produce empty PathDef.

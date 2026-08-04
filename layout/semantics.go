@@ -3,7 +3,7 @@ package layout
 import (
 	"strings"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 // This file is the accessibility foundation (PLAN.md §6.5): a semantics

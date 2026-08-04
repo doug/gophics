@@ -3,7 +3,7 @@ package text
 import (
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/raster"
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 )
 
 // GlyphMaskRasterizer renders glyph outlines into R8 alpha masks using the

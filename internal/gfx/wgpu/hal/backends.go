@@ -5,7 +5,7 @@
 
 package hal
 
-import "github.com/doug/gossamer/internal/gfx/gputypes"
+import "github.com/doug/gophics/internal/gfx/gputypes"
 
 // Backend Implementation Guide
 //

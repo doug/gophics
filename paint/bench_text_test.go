@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 func benchPainter(b *testing.B) *Painter {

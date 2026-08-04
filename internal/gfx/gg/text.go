@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
 // forceTextMode lets a developer override text rendering globally via the

@@ -33,9 +33,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/gmath"
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gogpu/gmath"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 var updateGolden = flag.Bool("update-golden", false, "write golden PNG files instead of comparing")

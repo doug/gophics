@@ -45,15 +45,15 @@ func devWeb(o buildOpts, port int) error {
 	defer stop()
 	go func() {
 		for range changes {
-			fmt.Fprintln(os.Stderr, "gossamer: change detected — rebuilding wasm…")
+			fmt.Fprintln(os.Stderr, "gophics: change detected — rebuilding wasm…")
 			if _, err := buildWeb(o); err != nil {
-				fmt.Fprintf(os.Stderr, "gossamer: build error:\n%v\n", err)
+				fmt.Fprintf(os.Stderr, "gophics: build error:\n%v\n", err)
 				continue // leave the last good build up; fix and save again
 			}
 			b.publish()
 		}
 	}()
-	fmt.Fprintln(os.Stderr, "gossamer: web dev — edit & save to live-reload (Ctrl-C to stop)")
+	fmt.Fprintln(os.Stderr, "gophics: web dev — edit & save to live-reload (Ctrl-C to stop)")
 	return serve(outDir(o), port, b)
 }
 
@@ -70,11 +70,11 @@ func devRestart(o buildOpts) error {
 
 	// Hand-off file for state-preserving restart. Clear any snapshot from a
 	// previous session so this one starts fresh; the app reads/writes it via
-	// the GOSSAMER_DEV_STATE env var.
+	// the GOPHICS_DEV_STATE env var.
 	statePath, _ := filepath.Abs(filepath.Join("build", "dev-state.json"))
 	_ = os.MkdirAll(filepath.Dir(statePath), 0o755)
 	_ = os.Remove(statePath)
-	stateEnv := "GOSSAMER_DEV_STATE=" + statePath
+	stateEnv := "GOPHICS_DEV_STATE=" + statePath
 
 	var proc *exec.Cmd
 	kill := func() {
@@ -97,14 +97,14 @@ func devRestart(o buildOpts) error {
 	launch := func() {
 		bin, err := buildNative(o)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "gossamer: build error:\n%v\n", err)
+			fmt.Fprintf(os.Stderr, "gophics: build error:\n%v\n", err)
 			return
 		}
 		proc = exec.Command(bin)
 		proc.Env = append(append(os.Environ(), stateEnv), o.rendererEnv()...)
 		proc.Stdout, proc.Stderr, proc.Stdin = os.Stdout, os.Stderr, os.Stdin
 		if err := proc.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "gossamer: launch error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "gophics: launch error: %v\n", err)
 			proc = nil
 		}
 	}
@@ -113,7 +113,7 @@ func devRestart(o buildOpts) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	fmt.Fprintln(os.Stderr, "gossamer: native dev — edit & save to rebuild+restart, state preserved (Ctrl-C to stop)")
+	fmt.Fprintln(os.Stderr, "gophics: native dev — edit & save to rebuild+restart, state preserved (Ctrl-C to stop)")
 	launch()
 	for {
 		select {
@@ -121,7 +121,7 @@ func devRestart(o buildOpts) error {
 			kill()
 			return nil
 		case <-changes:
-			fmt.Fprintln(os.Stderr, "gossamer: change detected — rebuild + restart")
+			fmt.Fprintln(os.Stderr, "gophics: change detected — rebuild + restart")
 			kill()
 			launch()
 		}

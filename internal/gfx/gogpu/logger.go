@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // nopHandler silently discards all log records.

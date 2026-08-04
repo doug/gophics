@@ -22,7 +22,7 @@ func cmdBuild(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "gossamer: built %s → %s\n", o.platform.name, out)
+	fmt.Fprintf(os.Stderr, "gophics: built %s → %s\n", o.platform.name, out)
 	return nil
 }
 
@@ -101,7 +101,7 @@ const indexHTML = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <title>gossamer app</title>
+  <title>gophics app</title>
   <style>html,body{margin:0;height:100%;background:#fff}</style>
   <script src="wasm_exec.js"></script>
   <script>

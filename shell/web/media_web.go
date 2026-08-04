@@ -21,7 +21,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 // audioContextCtor returns the AudioContext constructor (or the webkit-prefixed

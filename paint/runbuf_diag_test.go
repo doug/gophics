@@ -1,10 +1,10 @@
-//go:build gossamer_gpu
+//go:build gophics_gpu
 
 package paint
 
 // Regression guard for the "text renders as a solid block" bug. It reproduces
 // the trigger without needing a GPU device: importing gg's GPU accelerator (via
-// the gossamer_gpu tag) registers a global tile-based CoverageFiller, and gg's
+// the gophics_gpu tag) registers a global tile-based CoverageFiller, and gg's
 // RasterizerAuto routes complex multi-contour paths — like a glyph run — to it.
 // That filler mishandles multi-contour winding, filling the gaps between glyphs
 // solid. runFor pins the glyph scratch context to RasterizerAnalytic to avoid

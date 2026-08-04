@@ -1,15 +1,15 @@
-//go:build gossamer_term && !js && !android && !ios
+//go:build gophics_term && !js && !android && !ios
 
 package app
 
 import (
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/terminal"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/shell/terminal"
 )
 
 // desktopRun routes app.Run to the terminal backend (kitty graphics protocol)
-// instead of a desktop window when built with -tags gossamer_term. The app code
+// instead of a desktop window when built with -tags gophics_term. The app code
 // is unchanged; only the presentation shell differs.
 //
 // The terminal transports CPU pixels (the kitty protocol carries an RGBA image),

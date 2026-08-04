@@ -7,4 +7,4 @@ package paint
 // default so the GPU present path works out of the box; build with -tags nogpu
 // for a pure-CPU binary that never links wgpu. Registration falls back to CPU
 // on its own when no GPU device is available — see accel.go.
-import _ "github.com/doug/gossamer/internal/gfx/gg/gpu"
+import _ "github.com/doug/gophics/internal/gfx/gg/gpu"

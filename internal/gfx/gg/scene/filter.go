@@ -1,6 +1,6 @@
 package scene
 
-import "github.com/doug/gossamer/internal/gfx/gg"
+import "github.com/doug/gophics/internal/gfx/gg"
 
 // Filter applies visual effects to rendered layers.
 // Filters are applied during layer pop when LayerFiltered is used.

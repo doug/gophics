@@ -3,7 +3,7 @@ package widget
 import (
 	"testing"
 
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/paint"
 )
 
 func TestTextFieldResolvedColors(t *testing.T) {

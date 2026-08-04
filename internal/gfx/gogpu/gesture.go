@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // GestureRecognizer computes gestures from pointer events.

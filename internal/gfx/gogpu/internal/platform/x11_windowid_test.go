@@ -5,7 +5,7 @@ package platform
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/x11"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/x11"
 )
 
 // TestTranslateX11Event_StampsWindowID guards against the regression this

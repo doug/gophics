@@ -3,7 +3,7 @@ package viewid
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // TestCopyAllAsUnion verifies that copyAllAsUnion collapses all components

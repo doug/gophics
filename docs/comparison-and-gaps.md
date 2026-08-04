@@ -1,52 +1,52 @@
-# Gossamer vs Flutter / React Native — and what's missing
+# Gophics vs Flutter / React Native — and what's missing
 
-An honest assessment (2026-07-26) of where gossamer stands against the two
+An honest assessment (2026-07-26) of where gophics stands against the two
 dominant cross-platform frameworks, driven by asking: *what would it take to
 build real apps?*
 
 ## Why Flutter succeeds
 
 1. **Everything is a widget.** One uniform composition model, deeply
-   learnable. — *Gossamer has this.*
+   learnable. — *Gophics has this.*
 2. **Own-rendering pipeline.** Flutter draws every pixel itself (Skia/
    Impeller), so apps are pixel-identical on every platform and it isn't
-   hostage to native widget quirks. — *Gossamer shares this architecture;
+   hostage to native widget quirks. — *Gophics shares this architecture;
    it's the structural match and the hard part, already done.*
 3. **Hot reload.** Sub-second edit→see-it iteration via the Dart VM. The
-   single most-loved DX feature in the ecosystem. — *Gossamer cannot match
+   single most-loved DX feature in the ecosystem. — *Gophics cannot match
    this in Go (see PLAN §6.3); permanent gap, partially offset by fast
    rebuild + state snapshot.*
 4. **A vast, polished widget catalog.** Material + Cupertino: hundreds of
-   accessible, animated, themed widgets. You *assemble* an app. — *Gossamer
+   accessible, animated, themed widgets. You *assemble* an app. — *Gophics
    has ~25 widgets. You still *build* primitives. This is the biggest
    feature gap and it's pure long-tail grind, not architecture.*
 5. **Implicit animations & transitions.** `AnimatedContainer`, `Hero`,
-   `AnimatedOpacity` — polish for near-free. — *Gossamer has explicit
+   `AnimatedOpacity` — polish for near-free. — *Gophics has explicit
    controllers only; no implicit-animation layer yet.*
 6. **Layout depth.** Slivers, intrinsics, flex, wrap, grid, custom
-   multi-child layout. — *Gossamer has flex + boxes; missing grid, wrap,
+   multi-child layout. — *Gophics has flex + boxes; missing grid, wrap,
    responsive layout, intrinsics.*
 7. **Tooling.** DevTools, widget inspector, performance overlay. — *None
-   yet in gossamer; the semantics tree + offscreen render make an inspector
+   yet in gophics; the semantics tree + offscreen render make an inspector
    very buildable.*
-8. **Ecosystem.** pub.dev, thousands of packages. — *Gossamer inherits the
+8. **Ecosystem.** pub.dev, thousands of packages. — *Gophics inherits the
    Go ecosystem — strong for infra/networking/data, thin for UI.*
 
 ## Why React Native succeeds
 
 1. **React + JavaScript.** Enormous existing developer pool and a familiar
-   component/hooks mental model. — *Gossamer's audience is Go developers, a
+   component/hooks mental model. — *Gophics's audience is Go developers, a
    smaller but real pool that Flutter/RN don't serve well.*
 2. **Native widgets.** RN renders *actual* platform components, so it looks
    native and inherits platform behavior/accessibility for free — the
-   opposite trade from Flutter/gossamer (native feel vs. cross-platform
+   opposite trade from Flutter/gophics (native feel vs. cross-platform
    consistency and control).
 3. **Fast Refresh**, huge **npm** ecosystem, and **web-knowledge transfer**
    (flexbox, CSS-like styling).
 
-## Gossamer's honest position
+## Gophics's honest position
 
-Gossamer has the **architecture** right (own-rendering pipeline, widget
+Gophics has the **architecture** right (own-rendering pipeline, widget
 composition, constraint layout, damage-tracked scenes, real text shaping,
 four live platforms) — the part that's hard to get right. It lacks
 **breadth** (the widget/animation/layout long tail) and **DX/tooling** (hot
@@ -100,7 +100,7 @@ Done (cont.):
 Done (cont.):
 
 10. ~~**Tooling**~~ — `Core.InspectTree` (render-tree dump), `Config.Debug`/
-    `SetDebugPaint` (box-bounds overlay), `Core.FrameStats`/GOSSAMER_PACING
+    `SetDebugPaint` (box-bounds overlay), `Core.FrameStats`/GOPHICS_PACING
     (frame timing), and `Core.SetInspect` — an interactive widget inspector
     that highlights the box under the pointer and labels it with type + size
     (Flutter's inspector; `layout.DeepestAt`/`InspectOverlay`).
@@ -113,8 +113,8 @@ Done (cont.):
     on device: TalkBack sees every HN story row as a clickable node with the
     right content description and bounds; `ACTION_CLICK` fires the widget's
     `OnActivate`. `SemInfo` carries `OnActivate`/`Checked`/`Disabled`/
-    `Selected`/`Hint`. iOS `UIAccessibility` host landed too: `GossamerView`
-    exposes `accessibilityElements` as `GossamerA11yElement`s (label/value/
+    `Selected`/`Hint`. iOS `UIAccessibility` host landed too: `GophicsView`
+    exposes `accessibilityElements` as `GophicsA11yElement`s (label/value/
     hint, screen-converted frames, `.button`/`.staticText` traits) built from
     the same `HnmobileA11y*` accessors, with `accessibilityActivate()` wired
     to `A11yActivate`. Builds and runs on the iOS simulator; full on-device
@@ -159,5 +159,5 @@ state.
 All 12 originally-identified cross-cutting gaps are now addressed — the
 accessibility bridge landed on both platforms (Android verified on device
 via `uiautomator dump`, iOS building and running with the same Go a11y
-surface). What remains is a polish tail. Gossamer now has the breadth to
+surface). What remains is a polish tail. Gophics now has the breadth to
 build the four app archetypes end to end.

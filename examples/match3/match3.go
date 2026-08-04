@@ -6,11 +6,11 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/sound"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/widget"
 )
 
 const (

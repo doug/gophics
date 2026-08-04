@@ -3,8 +3,8 @@ package spirv_test
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/spirv"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/spirv"
 )
 
 // Example_backendCompile demonstrates compiling an IR module to SPIR-V.

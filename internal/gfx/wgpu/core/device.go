@@ -5,7 +5,7 @@ package core
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // CreateDevice creates a device from an adapter.

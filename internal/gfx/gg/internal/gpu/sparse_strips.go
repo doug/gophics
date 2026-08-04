@@ -5,7 +5,7 @@ package gpu
 import (
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // SparseStripsRasterizer is the main entry point for vello-style sparse strips rendering.

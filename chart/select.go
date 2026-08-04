@@ -1,8 +1,8 @@
 package chart
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // drawSelection highlights the selected datum with a crosshair, an emphasized

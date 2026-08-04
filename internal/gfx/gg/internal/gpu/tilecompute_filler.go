@@ -3,9 +3,9 @@
 package gpu
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/gpu/tilecompute"
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // TileComputeFiller implements gg.CoverageFiller using the tilecompute

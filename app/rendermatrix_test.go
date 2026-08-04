@@ -7,7 +7,7 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/internal/renderref"
+	"github.com/doug/gophics/internal/renderref"
 )
 
 // TestRenderScaleConsistency renders the reference scene at 1×, 2×, and 3× and

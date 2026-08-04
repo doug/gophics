@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 func TestWindowManager_AddGet(t *testing.T) {

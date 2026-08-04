@@ -3,8 +3,8 @@ package lower
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl/internal/parser"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/parser"
 )
 
 // parseWGSL is a helper to parse WGSL source code

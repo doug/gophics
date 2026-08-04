@@ -1,12 +1,12 @@
 // Separate module so the SSH server dependency (gliderlabs/ssh) stays out of
-// gossamer core. It replaces gossamer and the gogpu forks with the local
+// gophics core. It replaces gophics and the gogpu forks with the local
 // checkouts, mirroring the parent module's replace directives.
-module gossamer-ssh-example
+module gophics-ssh-example
 
 go 1.26.5
 
 require (
-	github.com/doug/gossamer v0.0.0
+	github.com/doug/gophics v0.0.0
 	github.com/gliderlabs/ssh v0.3.8
 	golang.org/x/crypto v0.31.0
 	golang.org/x/image v0.44.0
@@ -28,7 +28,7 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 )
 
-replace github.com/doug/gossamer => ../..
+replace github.com/doug/gophics => ../..
 
 replace (
 	github.com/doug/gg => ../../../third_party/gg

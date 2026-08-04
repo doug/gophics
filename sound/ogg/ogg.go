@@ -7,7 +7,7 @@ import (
 
 	"github.com/jfreymuth/oggvorbis"
 
-	"github.com/doug/gossamer/sound"
+	"github.com/doug/gophics/sound"
 )
 
 // Decode reads an entire Ogg Vorbis stream and returns it as a mono Sample

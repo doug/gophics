@@ -10,7 +10,7 @@ import (
 	"image/draw"
 	"slices"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // LayeredTarget supports z-ordered layers for popups, dropdowns, and tooltips.

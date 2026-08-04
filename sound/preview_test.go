@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 func clip16(v float32) int16 {

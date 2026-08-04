@@ -1,10 +1,10 @@
-// Command journal is the M1 demo for gossamer's media-capture shell: a tiny
+// Command journal is the M1 demo for gophics's media-capture shell: a tiny
 // private journal that captures a photo (shell.Camera) and a voice memo
 // (shell.Audio record/playback with a live level + waveform), then lists
 // entries. It proves the shell/media.go interfaces end to end in the web build;
 // desktop, where those capabilities are nil today, degrades to text-only.
 //
-// Run on web (secure context / Chrome):  gossamer dev -p web ./examples/journal
+// Run on web (secure context / Chrome):  gophics dev -p web ./examples/journal
 package main
 
 import (
@@ -16,12 +16,12 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/widget"
 )
 
 var (

@@ -8,5 +8,5 @@ package allbackends
 import (
 	// Android intentionally registers Vulkan only. GLES and software fallback
 	// are outside the Android/arm64 preview contract.
-	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan"
+	_ "github.com/doug/gophics/internal/gfx/wgpu/hal/vulkan"
 )

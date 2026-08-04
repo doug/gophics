@@ -9,8 +9,8 @@ import (
 	"crypto/sha256"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // maxShaderCacheEntries is the maximum number of entries before LRU eviction.

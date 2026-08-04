@@ -10,11 +10,11 @@ import (
 	"os"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/backend/native"
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
-	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/backend/native"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // texQuadUniformSize is the size of the uniform buffer for textured quads.

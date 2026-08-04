@@ -3,8 +3,8 @@ package input
 import (
 	"testing"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 func press(s *State, k shell.KeyCode)   { s.HandleKey(shell.Key{Kind: shell.KeyPress, Code: k}) }

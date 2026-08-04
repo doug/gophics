@@ -9,8 +9,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	"github.com/doug/gossamer/internal/gfx/gg/internal/gpu/tilecompute"
+	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
 )
 
 // TestVelloAccelerator_FillPathAccumulates verifies that FillPath accumulates

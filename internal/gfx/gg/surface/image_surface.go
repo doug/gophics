@@ -8,7 +8,7 @@ import (
 	"image/color"
 	"image/draw"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/raster"
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 )
 
 // ImageSurface is a CPU-based surface that renders to an *image.RGBA.

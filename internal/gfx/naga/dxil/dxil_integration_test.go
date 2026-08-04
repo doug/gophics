@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/container"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/emit"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil/internal/module"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/container"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/emit"
+	"github.com/doug/gophics/internal/gfx/naga/dxil/internal/module"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // TestCompile_EmptyVertex tests the simplest possible vertex shader:

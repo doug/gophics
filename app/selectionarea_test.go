@@ -6,10 +6,10 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/widget"
 )
 
 // selAreaApp wraps a two-line column of plain Text in a SelectionArea, so the

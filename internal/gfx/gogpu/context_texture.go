@@ -3,7 +3,7 @@ package gogpu
 import (
 	"errors"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // DrawTextureOptions configures texture drawing with full transform control.

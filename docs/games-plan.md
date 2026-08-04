@@ -1,14 +1,14 @@
-# Games on gossamer: solitaire + a 2D side-scroller
+# Games on gophics: solitaire + a 2D side-scroller
 
 ## Context
 
-Gossamer is a Flutter-architecture UI framework in pure Go with four live platforms.
+Gophics is a Flutter-architecture UI framework in pure Go with four live platforms.
 `docs/example-app-ideas.md` §E already names games as the strongest *mobile* target
 today — "casual/turn-based games need only touch + Canvas + animation + layout/grid —
 all present" — while noting the framework is "not a game engine — no sprites/physics."
 
 The question this plan answers: **what actually has to be built to ship a Klondike
-solitaire and a real 2D action side-scroller on gossamer, across desktop, web, iOS
+solitaire and a real 2D action side-scroller on gophics, across desktop, web, iOS
 and Android?**
 
 The short answer, established by exploration:
@@ -25,7 +25,7 @@ The short answer, established by exploration:
   throughput, and — for mobile — a GPU present path (**built this session**; Go side
   done and API-validated, on-device verification pending — see §Stage 5).
 
-Everything gated is a *primitive* gossamer is missing, not a game engine. Adding
+Everything gated is a *primitive* gophics is missing, not a game engine. Adding
 them makes the framework better at charts, whiteboards, data viz and the JJ-GUI
 commit DAG too. That is the test applied throughout: **would this feature still earn
 its place if no game were ever built on it?**
@@ -43,8 +43,8 @@ Three options were weighed:
 
 | | What you get | What it costs |
 |---|---|---|
-| **A. Extend gossamer's `paint.Canvas`** ✅ | Sprites, paths, blend modes. Works on CPU fallback, works on mobile, one damage model, one binary, headless golden tests keep working | Nothing from gophics' shader/3D/feedback layers |
-| **B. Embed gophics as a shared-device GPU texture layer** | WGSL shader passes, blur, ping-pong feedback, 3D with shared depth buffer | GPU-only ⇒ **breaks the mobile requirement**; two font stacks, two input models, two color types; device-sharing plumbing across two forked repos; loses `GOSSAMER_RENDERER=cpu` and deterministic headless tests |
+| **A. Extend gophics's `paint.Canvas`** ✅ | Sprites, paths, blend modes. Works on CPU fallback, works on mobile, one damage model, one binary, headless golden tests keep working | Nothing from gophics' shader/3D/feedback layers |
+| **B. Embed gophics as a shared-device GPU texture layer** | WGSL shader passes, blur, ping-pong feedback, 3D with shared depth buffer | GPU-only ⇒ **breaks the mobile requirement**; two font stacks, two input models, two color types; device-sharing plumbing across two forked repos; loses `GOPHICS_RENDERER=cpu` and deterministic headless tests |
 | **C. Offscreen `image.RGBA` bridge** | Ten lines, portable | Full GPU readback + re-upload per frame (~3.5 MB at 1280×720). Fine for a static panel, not 60fps |
 
 **Decision: A.** The reason is not that gophics is worse — it is that gophics' value
@@ -57,7 +57,7 @@ Critically, **option A is cheap because the backend already does the work.** The
 `gg` fork at `../third_party/gg` already implements every missing primitive —
 `gg.DrawImageOptions` has `SrcRect`, `Opacity`, `BlendMode`, `Interpolation`; there
 are path fills, ellipses, arcs, radial/sweep gradients, blend modes and masks.
-gossamer simply doesn't expose them through `paint.Canvas`.
+gophics simply doesn't expose them through `paint.Canvas`.
 
 Option B stays available later as an additive escape hatch for a shader-driven
 visual toy — the seams exist on both sides (`gg.DeviceProviderAware` /
@@ -132,7 +132,7 @@ them frozen. Then add a name-based bridge entry (`Bridge.KeyNamed(name string, p
 repeat bool)`, W3C code names) so the numeric ABI never has to grow again — hosts map
 `KeyEvent.getKeyCode()` / `UIKey.keyCode` to names in ~40 lines of Kotlin/Swift.
 
-Add `Repeat bool` to `shell.Key`, **synthesized in gossamer** (a `KeyPress` for a code
+Add `Repeat bool` to `shell.Key`, **synthesized in gophics** (a `KeyPress` for a code
 already recorded as down is a repeat) rather than plumbed through `gpucontext`, whose
 `OnKeyPress(key, mods)` has no repeat field and is shared across the gogpu ecosystem.
 
@@ -142,7 +142,7 @@ Per-shell work: `shell/shell.go` (table + `Repeat` + `String()`/`KeyCodeFromName
 (`KeyNamed`), `app/headless.go:120` (add `KeyDown`/`KeyUp` — today's `Key` is
 press-only, which cannot test held state). **Terminal is a dead end and should be
 documented as one**: a TTY sends no key-up, so keyboard games are out of scope under
-`-tags gossamer_term`.
+`-tags gophics_term`.
 
 The web `preventDefault` policy needs a rule rather than "suppress anything
 recognized". Note this is **lower risk than it first appears**: `633eae9` already
@@ -156,7 +156,7 @@ explicitly instead of the framework guessing.
 
 Games need `Down(KeyW)` / `JustPressed(KeySpace)` per frame, not callbacks.
 
-**Build it in gossamer from `shell` events; do not use `gogpu/input`.** That package
+**Build it in gophics from `shell` events; do not use `gogpu/input`.** That package
 exists and is free on desktop, but it is desktop-only (web/mobile would each need a
 parallel implementation that would drift), it is invisible to `app.NewHeadless` (so
 game input could not be tested in `go test` — a stated house constraint), and it is
@@ -325,7 +325,7 @@ type Sound interface {
 }
 ```
 
-**The key architectural move: gossamer owns the mixer; the platform supplies only a
+**The key architectural move: gophics owns the mixer; the platform supplies only a
 pull-sink.** That is what makes it uniform, testable, and independent of any one
 audio library's design.
 
@@ -423,7 +423,7 @@ sized at roughly 30–120 lines each.
 
 ### The predicted bottleneck is not what I assumed
 
-I flagged gossamer's per-op interface boxing as the throughput risk. The bigger one is
+I flagged gophics's per-op interface boxing as the throughput risk. The bigger one is
 in gg: `buildImageResources` (`internal/gpu/render_session.go:1889-1990`) does **one
 `CreateBindGroup` + one uniform `WriteBuffer` + one draw call per image, rebuilt every
 frame**, with an unpreallocated append accumulating vertex bytes per quad. "Hundreds of
@@ -431,7 +431,7 @@ sprites" is exactly the workload that shape is worst at.
 
 Related cliff: gg's GPU texture cache budget is **64 textures, LRU**
 (`internal/gpu/image_cache.go:13`). A 52-card deck plus UI art is already at ~80% of
-budget — this is a *solitaire-tier* cliff, not just an action-tier one. And gossamer's
+budget — this is a *solitaire-tier* cliff, not just an action-tier one. And gophics's
 own `Painter.imgBufs` does a wholesale `clear()` at 256 (`paint/paint.go:783`), which
 reassigns `GenerationID`s and invalidates gg's texture cache too, so a 257-sprite game
 re-uploads every texture every frame.
@@ -455,7 +455,7 @@ table and nothing ships before it.**
 Benchmarks: **B0** reproduce §6.4 · **B1 SpriteStorm** — N ∈ {50…2000} textured quads
 at 1280×720@2x, crossed with 1/8/64/128 distinct textures (crosses the cache cliff) and
 axis-aligned vs rotated (crosses the rotation bail) · **B2 RectStorm** (separates "gg's
-image path is slow" from "gossamer's display list is slow") · **B3 record-only**
+image path is slow" from "gophics's display list is slow") · **B3 record-only**
 allocs/op · **B4 diff-only** · **B5 CPU present** at phone resolution · **B6 real
 mobile hardware**, not the SwiftShader emulator that produced the 89ms figure · **B7**
 browser.
@@ -543,7 +543,7 @@ transform. That matters less than it first appears: **on the GPU present path da
 ignored entirely** (`app/present.go:36-41` replays the whole scene every frame), so on
 the primary (GPU) path of **all four** targets — mobile now included — it costs only a
 wasted `Diff` and never-skipped frames. It costs real pixels only on the CPU render
-paths: `GOSSAMER_RENDERER=cpu`, mobile `Snapshot`, and every headless test.
+paths: `GOPHICS_RENDERER=cpu`, mobile `Snapshot`, and every headless test.
 
 Three layers, cheapest first:
 
@@ -554,7 +554,7 @@ Three layers, cheapest first:
 2. **`widget.Canvas.Damage func(size geom.Size) geom.Rect`** — the game declares its own
    dirty rect, because it knows it infinitely better than a positional op-diff. Solitaire
    returns the union of moving card rects during a deal and an **empty rect when idle**.
-   A wrong `Damage` degrades to visual staleness, never a crash, and `GOSSAMER_NO_DAMAGE=1`
+   A wrong `Damage` degrades to visual staleness, never a crash, and `GOPHICS_NO_DAMAGE=1`
    already exists to bisect it.
 3. **(Named now, built later)** A `RepaintBoundary`-style retained surface: the game
    renders into its own offscreen texture and the UI composites it. gg already has
@@ -690,7 +690,7 @@ scale/rotate).
 ### Package scope — hold the line on "not a game engine"
 
 PLAN.md lists a game engine as a permanent non-goal. The line this plan holds:
-**gossamer core gets primitives** (sprite blit, blend, paths, keys, held-state, sound
+**gophics core gets primitives** (sprite blit, blend, paths, keys, held-state, sound
 mixer — each justified by non-game callers too); **a thin `game` package gets
 conveniences**; **anything above that lives in the example app, not the framework.**
 The test for every item: *would this still earn its place if no game were ever built
@@ -723,7 +723,7 @@ game/
 - **Port easing *formulas*, not the `easing` package** (float64 + an `Easer` interface
   is the wrong shape) — as `anim.Curve` funcs. Add `Controller.Repeat/Reverses`.
 - **Port `rand.go` minus the package-level global source** — a mutable global RNG is
-  anti-testable and gossamer has none. **Add `Shuffle[T]`**, which gophics lacks and
+  anti-testable and gophics has none. **Add `Shuffle[T]`**, which gophics lacks and
   solitaire needs.
 - **Do not port `physics.go`. This is a trap.** Position-Verlet with distance
   constraints is a cloth/rope solver: velocity is *implicit* in `Pos - Prev`, which
@@ -731,7 +731,7 @@ game/
   velocity for variable jump height, and coyote time and fixed ground speed both fight
   the integrator. It will "work" for a demo and then make the controller unfixable.
   Write swept-AABB-vs-tilemap with separate-axis resolution instead.
-- **Do not port `scene.go`.** Gossamer already has two retained trees (`element` and
+- **Do not port `scene.go`.** Gophics already has two retained trees (`element` and
   `scene.List`); a third is the engine the non-goals forbid.
 - **Do not introduce a `Sketch{Setup,Update,Draw}` analog.** `Initer.Init` is Setup,
   `Ticker.Tick` is Update, `Canvas.Draw` is Draw. What's worth adding is `game.Loop` —
@@ -778,7 +778,7 @@ appears.
 - **Cmd/Ctrl+Z is impossible today** — `shell.KeyZ` doesn't exist. Ship the button; add
   the shortcut when the key table lands in Stage 2.
 - **Acknowledged cost: a Canvas-drawn board is invisible to the a11y bridge**
-  (`Core.A11yTree` walks render boxes), and gossamer just landed TalkBack/VoiceOver.
+  (`Core.A11yTree` walks render boxes), and gophics just landed TalkBack/VoiceOver.
   Mitigation is a later semantics overlay — transparent `widget.Semantics{Role, Label}`
   nodes positioned by `Padding` from the same pure `board.Layout` function, ~80 LOC.
   This is deliberate debt, not an oversight.
@@ -829,7 +829,7 @@ it (`Painter.scale` is unexported, `shell.Frame.Scale()` is unreachable from a w
 
 **Level format: plain-text ASCII maps in `levels/*.txt`, `go:embed`-ed.** Diffable in
 git, editable in any editor, **reviewable in a PR**, ~2 KB per level, zero tooling, zero
-importer, zero codegen — exactly the gossamer grain. The parser is ~60 LOC. The trick
+importer, zero codegen — exactly the gophics grain. The parser is ~60 LOC. The trick
 that makes it look authored rather than programmer-art: `Tilemap.Neighbours(x,y)` returns
 a 4-bit same-class mask, so the skin picks the right edge/corner/interior tile from a
 16-tile autotile set and picks decorative variants from `hash(x,y)`. ~30 LOC, and it is
@@ -851,7 +851,7 @@ wall 10k times from randomised sub-tile offsets. Naming the invariant and testin
 - **Controls**: `input.State.Axis(KeyA, KeyD)` + `JustPressed(KeySpace)`, guarded by
   `if in.TextCapturing() { return }`. Arrow keys already work today, so a playable
   keyboard scroller needs no framework change at all.
-- **Touch, and the design that unblocks it.** Gossamer is single-pointer, so you cannot
+- **Touch, and the design that unblocks it.** Gophics is single-pointer, so you cannot
   hold "right" and tap "jump" simultaneously until multi-touch lands. Rather than let
   that gate the demo: **auto-run.** The player always runs forward; tap = jump, hold =
   higher jump. That is one pointer, it's a legitimate genre, and it plays well on a
@@ -962,7 +962,7 @@ Retained game surface + per-surface resolution.
 shipped on desktop + web — ✅ done (mobile riding the GPU-present tail); a complete
 flat-vector platformer on desktop + web by ~week 11 of the remaining work; sprites by
 ~week 14; mobile is the tail.** The tail is caused by the
-Vulkan-preview and NDK-shim risks, not by gossamer's architecture — which already has
+Vulkan-preview and NDK-shim risks, not by gophics's architecture — which already has
 the right seam (`app/present.go`'s per-frame `Target` selection) for mobile GPU to drop
 in without touching a line above `shell`.
 
@@ -970,7 +970,7 @@ in without touching a line above `shell`.
 
 Put the non-goals list in `game`'s package doc and make it a review gate. Proposed
 wording: *"`game` provides the renderer-independent pieces a 2D game needs that
-gossamer's UI layers have no reason to contain. It provides no entity system, no scene
+gophics's UI layers have no reason to contain. It provides no entity system, no scene
 graph, no rigid-body solver, no asset pipeline, no audio, and no scripting. Games own
 their own state structs. If a proposed addition would be at home in Unity's
 `Assets/Scripts`, it does not belong here."* Consider holding `tilemap.go` and
@@ -1018,7 +1018,7 @@ Ordered by threat to the plan.
 3. **Full-scene perf is unmeasured.** The ~60ms figure predates GPU-by-default. Every
    throughput decision in Stages 3–4 is gated on Stage 0's numbers.
 4. **gg's GPU image path rebuilds a bind group + uniform buffer + draw call per sprite
-   per frame** — the predicted bottleneck, worse than gossamer's op boxing.
+   per frame** — the predicted bottleneck, worse than gophics's op boxing.
 5. **A full-window Canvas defeats damage tracking twice over** (identity `PushTransform`
    + `hasLayers` escalation). Cheap fix, large payoff, especially solitaire on mobile.
 6. **Rotated sprites vanish on the direct-surface path — this prediction is now
@@ -1051,11 +1051,11 @@ Ordered by threat to the plan.
 - **`app/gpu_equiv_test.go` gains a `Canvas` case** — every new `Canvas` method must
   render identically on CPU and GPU. This is the guard against the silent
   "renders on GPU, vanishes on CPU" class.
-- **`GOSSAMER_PACING=1 gossamer run -p desktop ./examples/scroller`** and the same on
+- **`GOPHICS_PACING=1 gophics run -p desktop ./examples/scroller`** and the same on
   `-p web`, against the Stage-0 budget table.
 - **Real devices, not emulators** — the 89ms figure came from SwiftShader and is not
   evidence about phone hardware.
-- **`GOSSAMER_RENDERER=cpu` must keep working** for both examples at every stage; it is
+- **`GOPHICS_RENDERER=cpu` must keep working** for both examples at every stage; it is
   the mobile and fallback path, and it is what keeps the tests deterministic.
 - **Solitaire: zero raster while idle**, verified via `Core.FrameStats` and by
   confirming frames are skipped, not merely cheap.

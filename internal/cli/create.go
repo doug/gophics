@@ -13,7 +13,7 @@ import (
 )
 
 // mobileTemplates holds the iOS + Android host projects and the gomobile-bind
-// package that `gossamer create` scaffolds. all: keeps dotfiles (.gitignore)
+// package that `gophics create` scaffolds. all: keeps dotfiles (.gitignore)
 // and the binary gradle-wrapper jar.
 //
 //go:embed all:templates/mobile
@@ -29,7 +29,7 @@ func cmdCreate(args []string) error {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: gossamer create <name> [-module path] [-p desktop,web,ios,android]")
+		return fmt.Errorf("usage: gophics create <name> [-module path] [-p desktop,web,ios,android]")
 	}
 	plats, err := parsePlatforms(platforms)
 	if err != nil {
@@ -66,7 +66,7 @@ func cmdCreate(args []string) error {
 			return err
 		}
 	}
-	// Initialize the module. We intentionally do NOT `go get` gossamer here: it
+	// Initialize the module. We intentionally do NOT `go get` gophics here: it
 	// isn't published yet (and uses local replace forks), so that would hang or
 	// fail. The user wires the dependency themselves (see printed guidance).
 	if err := run(name, nil, "go", "mod", "init", module); err != nil {
@@ -74,27 +74,27 @@ func cmdCreate(args []string) error {
 	}
 	var next strings.Builder
 	if plats["web"] {
-		next.WriteString("  gossamer dev -p web        # fastest loop\n")
+		next.WriteString("  gophics dev -p web        # fastest loop\n")
 	}
 	if plats["desktop"] {
-		next.WriteString("  gossamer run -p desktop     # native window\n")
+		next.WriteString("  gophics run -p desktop     # native window\n")
 	}
 	if plats["terminal"] {
-		next.WriteString("  gossamer run -p terminal    # in the terminal\n")
+		next.WriteString("  gophics run -p terminal    # in the terminal\n")
 	}
 	if plats["ios"] {
-		next.WriteString("  gossamer run -p ios ./mobile      # iOS Simulator (needs Xcode + xcodegen)\n")
+		next.WriteString("  gophics run -p ios ./mobile      # iOS Simulator (needs Xcode + xcodegen)\n")
 	}
 	if plats["android"] {
-		next.WriteString("  gossamer run -p android ./mobile  # Android device/emulator (needs the SDK)\n")
+		next.WriteString("  gophics run -p android ./mobile  # Android device/emulator (needs the SDK)\n")
 	}
 	fmt.Printf(`created %s (%s)
 
 Next:
   cd %s
-  # add the gossamer dependency (not yet published), e.g. a replace to a local checkout:
-  #   go mod edit -require=github.com/doug/gossamer@v0.0.0
-  #   go mod edit -replace=github.com/doug/gossamer=/path/to/gossamer
+  # add the gophics dependency (not yet published), e.g. a replace to a local checkout:
+  #   go mod edit -require=github.com/doug/gophics@v0.0.0
+  #   go mod edit -replace=github.com/doug/gophics=/path/to/gophics
   #   go mod tidy
 %s`, name, platforms, name, next.String())
 	return nil
@@ -209,7 +209,7 @@ var scaffold = map[string]string{
 	".gitignore": "/build/\n*.wasm\n",
 }
 
-const mainTmpl = `// Command {{.Name}} is a gossamer app. One codebase runs on desktop, web,
+const mainTmpl = `// Command {{.Name}} is a gophics app. One codebase runs on desktop, web,
 // terminal, and mobile; the shell is chosen by build tags at compile time.
 //
 // Root and Config are split out so the widget tree stays easy to test and
@@ -221,9 +221,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/widget"
 
 	"{{.Module}}/ui"
 )
@@ -249,7 +249,7 @@ func main() {
 
 const uiTmpl = `// Package ui holds {{.Name}}'s widget tree.
 //
-// This starter follows two conventions that let "gossamer dev" restore your
+// This starter follows two conventions that let "gophics dev" restore your
 // place on every rebuild (state-preserving hot-restart): increment the counter,
 // open the detail page, edit this file, save — you come back to the same page
 // with the same count.
@@ -264,9 +264,9 @@ package ui
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 func init() {
@@ -281,7 +281,7 @@ var (
 	colOnAcc  = paint.RGB(1, 1, 1)
 )
 
-// Root returns the app's root widget. Edit this and save: "gossamer dev"
+// Root returns the app's root widget. Edit this and save: "gophics dev"
 // live-reloads (web) or hot-restarts (desktop), landing back where you were.
 func Root() widget.Widget {
 	return widget.Navigator{Home: homePage{}}
@@ -344,13 +344,13 @@ func screen(title string, body widget.Widget) widget.Widget {
 
 const readmeTmpl = `# {{.Name}}
 
-A [gossamer](https://github.com/doug/gossamer) app — one codebase for desktop,
+A [gophics](https://github.com/doug/gophics) app — one codebase for desktop,
 web, terminal, and mobile.
 
 ## Develop
 
-    gossamer dev -p web        # live-reload in the browser (fastest loop)
-    gossamer dev -p desktop    # native window, rebuild + hot-restart on save
+    gophics dev -p web        # live-reload in the browser (fastest loop)
+    gophics dev -p desktop    # native window, rebuild + hot-restart on save
 
 On desktop, a rebuild preserves your place: the current page, scroll position,
 text fields, and any exported widget state are restored, so you come back to
@@ -358,9 +358,9 @@ exactly where you were. See ui/app.go for the two conventions that enable it.
 
 ## Build
 
-    gossamer build -p web       # → build/web/  (wasm + html)
-    gossamer build -p desktop   # → build/desktop/app  (single binary)
-    gossamer build -p terminal  # → build/terminal/app
+    gophics build -p web       # → build/web/  (wasm + html)
+    gophics build -p desktop   # → build/desktop/app  (single binary)
+    gophics build -p terminal  # → build/terminal/app
 
-Run ` + "`gossamer doctor`" + ` to check your toolchain.
+Run ` + "`gophics doctor`" + ` to check your toolchain.
 `

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/dxil"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/dxil"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // dxcPath returns the path to dxc.exe from Windows SDK, or empty if not found.

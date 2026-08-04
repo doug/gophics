@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 func TestDefaultTextureOptions(t *testing.T) {

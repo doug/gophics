@@ -1,8 +1,8 @@
 package chart
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 )
 
 // BarMark draws a vertical bar per datum, from the zero baseline to Y. With

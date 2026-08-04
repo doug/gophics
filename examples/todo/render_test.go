@@ -7,9 +7,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 func newHeadless(t *testing.T) (*app.Headless, *todoState) {
@@ -114,7 +114,7 @@ func TestRenderOffscreen(t *testing.T) {
 	if b := img.Bounds(); b.Dx() != 880 || b.Dy() != 1120 {
 		t.Fatalf("physical size = %dx%d, want 880x1120", b.Dx(), b.Dy())
 	}
-	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		f, err := os.Create(out)
 		if err != nil {
 			t.Fatal(err)

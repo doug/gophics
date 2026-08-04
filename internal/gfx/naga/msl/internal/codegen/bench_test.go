@@ -4,8 +4,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl"
 )
 
 // ---------------------------------------------------------------------------

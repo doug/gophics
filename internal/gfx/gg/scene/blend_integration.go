@@ -1,7 +1,7 @@
 // Package scene provides blend mode integration with internal/blend package.
 package scene
 
-import "github.com/doug/gossamer/internal/gfx/gg/internal/blend"
+import "github.com/doug/gophics/internal/gfx/gg/internal/blend"
 
 // ToInternalBlendMode converts scene.BlendMode to internal blend.BlendMode.
 // This provides the mapping between the scene graph blend modes and

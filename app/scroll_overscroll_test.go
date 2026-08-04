@@ -3,8 +3,8 @@ package app
 import (
 	"testing"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/widget"
 )
 
 // overscrollHarness builds a plain vertical Scroll whose content overflows the

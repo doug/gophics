@@ -1,8 +1,8 @@
 package widget
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 )
 
 // Rich displays a wrapped paragraph of styled spans; spans with Link set

@@ -9,9 +9,9 @@ import (
 	"math"
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 //go:embed shaders/fine.wgsl

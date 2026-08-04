@@ -5,7 +5,7 @@ package gpu
 import (
 	"sync"
 
-	"github.com/doug/gossamer/internal/gfx/gg/scene"
+	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // TileSize is the width and height of a tile in pixels.

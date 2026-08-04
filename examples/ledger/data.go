@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/doug/gossamer/chart"
+	"github.com/doug/gophics/chart"
 )
 
 // dataset is the sample finance data the dashboard visualizes. It is generated

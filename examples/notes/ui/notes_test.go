@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/widget"
 )
 
 func writeNote(t *testing.T, dir, name, body string) string {

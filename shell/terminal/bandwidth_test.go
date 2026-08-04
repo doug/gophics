@@ -7,7 +7,7 @@ import (
 
 // TestBandwidthPartialVsFull quantifies the partial-update win over inline
 // (SSH-style) transfer: a small change on a large frame should cost a tiny
-// fraction of a full-frame retransmit. This is the number that makes gossamer
+// fraction of a full-frame retransmit. This is the number that makes gophics
 // usable over SSH.
 func TestBandwidthPartialVsFull(t *testing.T) {
 	const w, h = 960, 600

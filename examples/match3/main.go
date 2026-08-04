@@ -1,4 +1,4 @@
-// Command match3 is a match-3 puzzle on gossamer: swap adjacent gems to line up
+// Command match3 is a match-3 puzzle on gophics: swap adjacent gems to line up
 // three or more; matches clear, gems fall in to fill the gaps, and fresh gems
 // drop from the top — chaining into cascades. It's the animation driver
 // example: every swap, clear, fall, and cascade runs through anim.Controller
@@ -13,10 +13,10 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/sound"
-	"github.com/doug/gossamer/sound/device"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/sound/device"
 )
 
 func main() {

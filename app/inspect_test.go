@@ -7,10 +7,10 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 type inspApp struct{}
@@ -101,7 +101,7 @@ func TestInspectHTML(t *testing.T) {
 			t.Errorf("inspector HTML missing %q", want)
 		}
 	}
-	if out := os.Getenv("GOSSAMER_INSPECT_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_INSPECT_OUT"); out != "" {
 		if err := os.WriteFile(out, []byte(page), 0o644); err != nil {
 			t.Fatal(err)
 		}

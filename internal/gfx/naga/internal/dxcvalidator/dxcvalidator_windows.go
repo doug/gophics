@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/dxcvalidator/bitcheck"
+	"github.com/doug/gophics/internal/gfx/naga/internal/dxcvalidator/bitcheck"
 )
 
 // --- COM GUIDs ---

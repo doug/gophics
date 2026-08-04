@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/registry"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/naga/wgsl/internal/parser"
+	"github.com/doug/gophics/internal/gfx/naga/internal/registry"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/parser"
 )
 
 // Warning represents a compiler warning (not an error).

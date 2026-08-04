@@ -4,7 +4,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/text/emoji"
+	"github.com/doug/gophics/internal/gfx/gg/text/emoji"
 )
 
 func TestBitmapGlyphCache_NewAndSize(t *testing.T) {

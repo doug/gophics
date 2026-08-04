@@ -9,9 +9,9 @@ import (
 	"io"
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/clip"
-	"github.com/doug/gossamer/internal/gfx/gg/text"
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gg/internal/clip"
+	"github.com/doug/gophics/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // Context is the main drawing context.

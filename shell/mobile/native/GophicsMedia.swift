@@ -1,13 +1,13 @@
-// Reference iOS MediaHost for gossamer's shell/mobile media bridge.
+// Reference iOS MediaHost for gophics's shell/mobile media bridge.
 // Scaffolding — copy into the host app and verify on device. Type names from
 // `gomobile bind` (here `Mobile...`) may differ; adjust to your bind package.
 //
-// Wire once at startup:  bridge.setMediaHost(GossamerMedia(bridge: bridge))
+// Wire once at startup:  bridge.setMediaHost(GophicsMedia(bridge: bridge))
 
 import UIKit
 import AVFoundation
 
-final class GossamerMedia: NSObject {
+final class GophicsMedia: NSObject {
     private let bridge: MobileBridge
     private weak var presenter: UIViewController?
 
@@ -18,7 +18,7 @@ final class GossamerMedia: NSObject {
     private var recReq = 0
     private var recRate = 0
     private var recPCM = Data()
-    private let pcmQueue = DispatchQueue(label: "gossamer.pcm")
+    private let pcmQueue = DispatchQueue(label: "gophics.pcm")
     private var recStart = Date()
     // Playback
     private var player: AVAudioPlayer?
@@ -33,7 +33,7 @@ final class GossamerMedia: NSObject {
     private func ui(_ f: @escaping () -> Void) { DispatchQueue.main.async(execute: f) }
 }
 
-extension GossamerMedia: MobileMediaHost {
+extension GophicsMedia: MobileMediaHost {
     // MARK: Camera (UIImagePickerController — native camera UI, like web input-capture)
 
     func authorizeCamera(_ reqID: Int) {
@@ -130,7 +130,7 @@ extension GossamerMedia: MobileMediaHost {
     }
 }
 
-extension GossamerMedia: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+extension GophicsMedia: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     func imagePickerController(_ picker: UIImagePickerController,
                               didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
         picker.dismiss(animated: true)
@@ -146,7 +146,7 @@ extension GossamerMedia: UIImagePickerControllerDelegate, UINavigationController
     }
 }
 
-extension GossamerMedia: AVAudioPlayerDelegate {
+extension GophicsMedia: AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         posTimer?.invalidate(); posTimer = nil
         bridge.playbackEnded(playReq)

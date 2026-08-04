@@ -3,8 +3,8 @@
 package native
 
 import (
-	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // BackendInfo returns metadata for unsupported platforms.

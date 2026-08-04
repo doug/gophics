@@ -3,7 +3,7 @@
 
 package gpucontext
 
-import "github.com/doug/gossamer/internal/gfx/gputypes"
+import "github.com/doug/gophics/internal/gfx/gputypes"
 
 // DeviceProvider provides access to GPU device, queue, and related resources.
 // This interface enables dependency injection of GPU capabilities between
@@ -16,8 +16,8 @@ import "github.com/doug/gossamer/internal/gfx/gputypes"
 // Example usage in gg:
 //
 //	import (
-//	    "github.com/doug/gossamer/internal/gfx/gpucontext"
-//	    "github.com/doug/gossamer/internal/gfx/gputypes"
+//	    "github.com/doug/gophics/internal/gfx/gpucontext"
+//	    "github.com/doug/gophics/internal/gfx/gputypes"
 //	)
 //
 //	func NewGPUCanvas(provider gpucontext.DeviceProvider) *Canvas {

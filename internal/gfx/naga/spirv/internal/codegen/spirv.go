@@ -1,7 +1,7 @@
 // Package codegen implements SPIR-V code generation from naga IR.
 package codegen
 
-import "github.com/doug/gossamer/internal/gfx/naga/ir"
+import "github.com/doug/gophics/internal/gfx/naga/ir"
 
 // Version represents a SPIR-V version.
 type Version struct {

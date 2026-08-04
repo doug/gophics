@@ -4,8 +4,8 @@
 > WIP in `third_party/gg`).** On-device: an opacity region added to
 > `examples/gpucheck` renders correctly on a real Pixel (PowerVR D-Series Vulkan,
 > `RGBA8Unorm`, GPU present) — base survives, overlay 50%, nested 25%, matching
-> the desktop reference. Deploy: `gossamer run -p android -tags gossamer_verify
-> ./examples/hn/mobile` (needs the `replace` directives in `gossamer/go.mod` —
+> the desktop reference. Deploy: `gophics run -p android -tags gophics_verify
+> ./examples/hn/mobile` (needs the `replace` directives in `gophics/go.mod` —
 > gomobile ignores `go.work`). Route B landed: opacity groups render
 > to pooled offscreen targets via child contexts and composite with the group
 > alpha (Skia saveLayer). New driver `gg/internal/gpu/gpu_layers.go`; hook at the
@@ -165,14 +165,14 @@ every open question above. Summary of what's now known and the plan.
 `RenderDirect`) all funnel through `ggcanvas.Canvas.Draw` +
 `gg.Context.FlushGPUWithView` → the **`SDFAccelerator`'s per-`gg.Context`
 `*GPURenderContext`** (`internal/gpu/gpu_render_context.go`), whose `Flush`
-(`:850`) dispatches a **`GPURenderSession`**. gossamer replays its own display
+(`:850`) dispatches a **`GPURenderSession`**. gophics replays its own display
 list into `gg.Context` method calls (it does *not* use gg's `scene` package);
 `paint.PushOpacity`→`Context.PushLayer(BlendNormal, alpha)` (`paint/paint.go:919`).
 
 Confirmed dead (do NOT build on): `internal/gpu/renderer.go`
 `GPUSceneRenderer.pushLayer`/`blendTextures` (only test/example callers; its
 `CreateTexture` is a stub that allocates no GPU memory), and
-`scene/gpu_renderer.go` (gossamer never imports `gg/scene`).
+`scene/gpu_renderer.go` (gophics never imports `gg/scene`).
 
 ### Chosen route: B — layers in the active accelerator path
 
@@ -197,7 +197,7 @@ not separate passes). Within that pass, draws are **bucketed by primitive type**
 `GlyphMaskBatches`, `GPUTextureCommands`) and dispatched in fixed **tier order** —
 so z-order within a clip group is tier order, *not* insertion order
 (`drawsToScissorGroup`, `gpu_render_context.go:1042`). This is a pre-existing
-property gossamer's GPU renderer already lives with.
+property gophics's GPU renderer already lives with.
 
 Design consequence: **a layer renders to its own offscreen texture in a separate
 prior pass (`LoadOpClear`, TBDR-safe — never `LoadOpLoad`), and its resolved
@@ -223,7 +223,7 @@ rare in practice; the `renderref` opacity grid validates the common cases.
   `BlendNormal`+alpha, and the composite pipeline is hardcoded
   `BlendStatePremultiplied` (premultiplied source-over) — which is exactly right
   for opacity groups. Separable/HSL blend modes (Multiply/Screen/…) would need a
-  dst-sampling shader + pipeline; not reachable from gossamer today, so out of
+  dst-sampling shader + pipeline; not reachable from gophics today, so out of
   scope for this landing.
 - **Clip/transform save-restore** is largely already handled: gg bakes clip state
   into each `drawCommand` at record time (`clipRect`/`clipRRect`/`clipPath`,

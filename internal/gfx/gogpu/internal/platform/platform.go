@@ -5,7 +5,7 @@ import (
 	"image"
 	"sync/atomic"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // WindowID uniquely identifies a window. Zero is invalid.

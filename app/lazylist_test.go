@@ -6,9 +6,9 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/widget"
 )
 
 func lazyHarness(t *testing.T, count int) (*Headless, *map[int]int) {

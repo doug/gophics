@@ -5,7 +5,7 @@ package app
 import (
 	"errors"
 
-	"github.com/doug/gossamer/shell"
+	"github.com/doug/gophics/shell"
 )
 
 // Mobile hosts embed via NewHandler + shell/mobile.Bridge; there is no

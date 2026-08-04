@@ -1,4 +1,4 @@
-//go:build gossamer_gpu
+//go:build gophics_gpu
 
 package paint
 
@@ -6,8 +6,8 @@ import (
 	"image"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg"
-	_ "github.com/doug/gossamer/internal/gfx/gg/gpu" // register the GPU accelerator (as the gossamer_gpu build does)
+	"github.com/doug/gophics/internal/gfx/gg"
+	_ "github.com/doug/gophics/internal/gfx/gg/gpu" // register the GPU accelerator (as the gophics_gpu build does)
 )
 
 func countOpaque(img image.Image) int {
@@ -23,7 +23,7 @@ func countOpaque(img image.Image) int {
 	return n
 }
 
-// TestGPUDisabledContextRastersOnCPU guards the fix that gossamer's CPU
+// TestGPUDisabledContextRastersOnCPU guards the fix that gophics's CPU
 // contexts (the Painter surface and the glyph atlas) rely on: with a GPU
 // accelerator registered process-globally, a default context defers its fill
 // to the GPU and reads back blank — which made cached text runs and images

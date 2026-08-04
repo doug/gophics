@@ -1,4 +1,4 @@
-// Package shell defines the platform interface gossamer runs on: a window (or
+// Package shell defines the platform interface gophics runs on: a window (or
 // surface) that delivers input events and vsync-paced frames to a Handler.
 //
 // Platform implementations live in subpackages (shell/desktop, shell/web,
@@ -20,9 +20,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 // RendererMode selects the rasterization + presentation backend. The zero
@@ -40,13 +40,13 @@ const (
 	RendererCPU
 )
 
-// ResolveRenderer applies the GOSSAMER_RENDERER environment override (values
+// ResolveRenderer applies the GOPHICS_RENDERER environment override (values
 // "auto", "gpu", or "cpu"; case-insensitive) on top of the mode a program
 // requested, so a build can be flipped to CPU/GPU without recompiling. An
 // unset or unrecognized variable leaves the requested mode unchanged. (On the
 // web os.Getenv is empty, so the requested mode wins there.)
 func ResolveRenderer(requested RendererMode) RendererMode {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("GOSSAMER_RENDERER"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("GOPHICS_RENDERER"))) {
 	case "cpu":
 		return RendererCPU
 	case "gpu":

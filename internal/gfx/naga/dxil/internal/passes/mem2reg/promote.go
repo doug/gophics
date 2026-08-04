@@ -1,7 +1,7 @@
 package mem2reg
 
 import (
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // promotionContext bundles the per-function state needed by the

@@ -3,7 +3,7 @@ package blend
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/internal/color"
+	"github.com/doug/gophics/internal/gfx/gg/internal/color"
 )
 
 // TestLinearVsSRGBBlending verifies that linear blending produces different results than sRGB.

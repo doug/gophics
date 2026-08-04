@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gg/text"
 
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/geom"
 )
 
 // TestArabicShapingSpike probes whether gg's from-scratch GSUB engine
@@ -93,7 +93,7 @@ func TestArabicShapingSpike(t *testing.T) {
 			"through the shaper for shaped scripts", face.Advance(word), shaperAdvance)
 	}
 
-	if out := os.Getenv("GOSSAMER_RENDER_OUT"); out != "" {
+	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		p := NewPainter()
 		data, err := os.ReadFile(fontPath)
 		if err != nil {

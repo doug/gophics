@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu"
+	"github.com/doug/gophics/internal/gfx/gogpu"
 )
 
 func runAppOnce(t *testing.T, cfg gogpu.Config, setup func(app *gogpu.App), expectPanic bool) {

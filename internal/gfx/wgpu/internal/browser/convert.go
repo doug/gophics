@@ -6,7 +6,7 @@ import (
 	"math"
 	"syscall/js"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 )
 
 // PowerPreferenceToJS converts a gputypes.PowerPreference to the JS string

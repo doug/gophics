@@ -14,4 +14,4 @@ package mobile
 // (+ Vulkan via MoltenVK) on darwin/ios. Backends whose instance creation fails
 // are skipped at runtime, so importing one that the device can't support is
 // harmless.
-import _ "github.com/doug/gossamer/internal/gfx/wgpu/hal/allbackends"
+import _ "github.com/doug/gophics/internal/gfx/wgpu/hal/allbackends"

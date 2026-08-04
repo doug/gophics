@@ -3,7 +3,7 @@ package gogpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // TestEventSourceAdapterInterface verifies eventSourceAdapter implements gpucontext.EventSource.

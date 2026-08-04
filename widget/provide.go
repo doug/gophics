@@ -1,7 +1,7 @@
 package widget
 
 // Provide makes a value available to every widget below it in the tree,
-// looked up by type with Of — gossamer's InheritedWidget (PLAN.md §4.4)
+// looked up by type with Of — gophics's InheritedWidget (PLAN.md §4.4)
 // with generics instead of runtime type lookups at the call site:
 //
 //	widget.Provide[Theme]{Value: dark, Child: app}
@@ -9,7 +9,7 @@ package widget
 //	theme, ok := widget.Of[Theme](ctx)
 //
 // The nearest ancestor Provide of the type wins. Values are read at build
-// time; because gossamer rebuilds reconciled subtrees eagerly, a changed
+// time; because gophics rebuilds reconciled subtrees eagerly, a changed
 // value reaches descendants on their next build without explicit
 // dependency registration.
 type Provide[T any] struct {

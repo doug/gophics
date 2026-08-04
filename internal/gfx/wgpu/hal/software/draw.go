@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"math"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/software/raster"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/software/shader"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/software/raster"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/software/shader"
 )
 
 // executeDraw is the core draw implementation.

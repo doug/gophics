@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // createNoopBuffer creates a real wgpu.Buffer via the noop device for testing.

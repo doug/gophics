@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 )
 
 // Linux desktop environment variable names used for display scale detection.

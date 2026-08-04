@@ -8,10 +8,10 @@ package ui
 import (
 	"fmt"
 
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 var (
@@ -44,7 +44,7 @@ func (h HN) pageSize() int {
 func (h HN) Build(widget.Ctx) widget.Widget {
 	// Provide the API down the tree instead of threading it through every page.
 	// Pages then carry only data (which story), so they're plain serializable
-	// values — which is what lets `gossamer dev` restore your navigation on a
+	// values — which is what lets `gophics dev` restore your navigation on a
 	// hot-restart (see threadPage's registration below).
 	return widget.Provide[API]{
 		Value: h.API,

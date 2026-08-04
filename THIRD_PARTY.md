@@ -1,6 +1,6 @@
 # Third-party code
 
-Gossamer vendors its GPU/graphics/audio substrate directly into the module (under
+Gophics vendors its GPU/graphics/audio substrate directly into the module (under
 `internal/gfx/` and `internal/audio/`) rather than depending on separate
 repositories. These are maintained forks of the `github.com/gogpu/*` lineage,
 all MIT-licensed. Each vendored tree keeps its original `LICENSE` file; the
@@ -16,7 +16,7 @@ copyright notices there are retained as MIT requires.
 | `internal/gfx/gputypes` | `github.com/gogpu/gputypes` — shared GPU types | MIT |
 | `internal/audio` | `github.com/gogpu/audio` (via `github.com/doug/audio`) — audio output drivers | MIT |
 
-These packages are `internal/` on purpose: they are gossamer's private
+These packages are `internal/` on purpose: they are gophics's private
 implementation substrate, not a public API. See
 `docs/substrate-consolidation.md` for the rationale and structure.
 

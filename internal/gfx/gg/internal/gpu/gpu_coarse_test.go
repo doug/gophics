@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga"
+	"github.com/doug/gophics/internal/gfx/naga"
 )
 
 // TestGPUCoarseConfigSize tests that GPUCoarseConfig has correct size for GPU alignment.

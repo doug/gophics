@@ -15,14 +15,14 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/naga"
-	"github.com/doug/gossamer/internal/gfx/naga/dxil"
-	"github.com/doug/gossamer/internal/gfx/naga/hlsl"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/dx12/d3d12"
-	"github.com/doug/gossamer/internal/gfx/wgpu/hal/dx12/d3dcompile"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/naga"
+	"github.com/doug/gophics/internal/gfx/naga/dxil"
+	"github.com/doug/gophics/internal/gfx/naga/hlsl"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/dx12/d3d12"
+	"github.com/doug/gophics/internal/gfx/wgpu/hal/dx12/d3dcompile"
 	"golang.org/x/sys/windows"
 )
 

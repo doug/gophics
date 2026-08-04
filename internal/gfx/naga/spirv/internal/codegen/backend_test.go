@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // hasDecorateInBinary checks if any OpDecorate instruction targets the given ID with the given decoration.

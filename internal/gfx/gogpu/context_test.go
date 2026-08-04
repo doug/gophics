@@ -3,9 +3,9 @@ package gogpu
 import (
 	"testing"
 
-	"github.com/doug/gossamer/internal/gfx/gogpu/gmath"
-	"github.com/doug/gossamer/internal/gfx/gputypes"
-	"github.com/doug/gossamer/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/gfx/gogpu/gmath"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // newTestWgpuDevice creates a *wgpu.Device wrapping a mock HAL device for testing.

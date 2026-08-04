@@ -3,8 +3,8 @@ package viewid
 import (
 	"sort"
 
-	"github.com/doug/gossamer/internal/gfx/naga/internal/backend"
-	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gophics/internal/gfx/naga/internal/backend"
+	"github.com/doug/gophics/internal/gfx/naga/ir"
 )
 
 // scalarSet is a set of input-scalar indices that influence some value.

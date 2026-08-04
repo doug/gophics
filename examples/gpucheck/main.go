@@ -9,9 +9,9 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	gpucheck "github.com/doug/gossamer/examples/gpucheck/ui"
-	"github.com/doug/gossamer/geom"
+	"github.com/doug/gophics/app"
+	gpucheck "github.com/doug/gophics/examples/gpucheck/ui"
+	"github.com/doug/gophics/geom"
 )
 
 func main() {

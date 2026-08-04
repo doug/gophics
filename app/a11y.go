@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 )
 
 // A11yNode is one accessibility node in a flat, ID-addressed tree — the

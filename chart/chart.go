@@ -4,11 +4,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 // Chart is a widget that renders a set of marks over shared axes. Scales are

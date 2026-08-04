@@ -5,12 +5,12 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/doug/gossamer/anim"
-	"github.com/doug/gossamer/examples/solitaire/klondike"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/layout"
-	"github.com/doug/gossamer/paint"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/anim"
+	"github.com/doug/gophics/examples/solitaire/klondike"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
 )
 
 // Solitaire is the root widget: a full-screen Klondike board. Seed makes the

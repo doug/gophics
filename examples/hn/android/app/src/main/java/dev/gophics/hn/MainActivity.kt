@@ -1,4 +1,4 @@
-package dev.gossamer.hn
+package dev.gophics.hn
 
 import android.app.Activity
 import android.content.Intent
@@ -26,17 +26,17 @@ import java.nio.ByteBuffer
 import hnmobile.Hnmobile
 
 /**
- * Thin host for the gossamer HN app (M9 embedding model): the Go side owns
+ * Thin host for the gophics HN app (M9 embedding model): the Go side owns
  * the UI; this activity owns the surface, vsync, input, IME, and intents.
  */
 class MainActivity : Activity() {
-    private var view: GossamerView? = null
+    private var view: GophicsView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val err = Hnmobile.start()
-        if (err.isNotEmpty()) throw RuntimeException("gossamer start: $err")
-        val v = GossamerView(this)
+        if (err.isNotEmpty()) throw RuntimeException("gophics start: $err")
+        val v = GophicsView(this)
         view = v
         setContentView(v)
         ViewCompat.setOnApplyWindowInsetsListener(v) { _, insets ->
@@ -60,7 +60,7 @@ class MainActivity : Activity() {
     }
 }
 
-class GossamerView(private val activity: Activity) :
+class GophicsView(private val activity: Activity) :
     SurfaceView(activity), SurfaceHolder.Callback, Choreographer.FrameCallback {
 
     private var lastNanos = 0L
@@ -153,7 +153,7 @@ class GossamerView(private val activity: Activity) :
             Hnmobile.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
             gpuActive = Hnmobile.gpuActive()
             surfaceSet = true
-            Log.i("gossamer", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
+            Log.i("gophics", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
         }
         Hnmobile.resize(w.toLong(), h.toLong(), d)
     }
@@ -182,7 +182,7 @@ class GossamerView(private val activity: Activity) :
             // Frame pacing: log a rolling average every 60 rendered frames.
             frameTimeSum += (System.nanoTime() - t0) / 1e6
             if (++frameCount == 60) {
-                Log.i("gossamer", "avg frame %.2f ms over 60 frames".format(frameTimeSum / 60))
+                Log.i("gophics", "avg frame %.2f ms over 60 frames".format(frameTimeSum / 60))
                 frameCount = 0
                 frameTimeSum = 0.0
             }
@@ -229,7 +229,7 @@ class GossamerView(private val activity: Activity) :
         return true
     }
 
-    // --- Accessibility: expose gossamer's semantics tree to TalkBack as a
+    // --- Accessibility: expose gophics's semantics tree to TalkBack as a
     // virtual view hierarchy (the Go side owns the pixels, so there are no
     // real child Views). ---
 
@@ -256,13 +256,13 @@ class GossamerView(private val activity: Activity) :
 
             if (virtualViewId == HOST_VIEW_ID) {
                 refreshA11y()
-                val info = AccessibilityNodeInfo.obtain(this@GossamerView)
+                val info = AccessibilityNodeInfo.obtain(this@GophicsView)
                 onInitializeAccessibilityNodeInfo(info)
                 val ri = idToIndex[rootId]
                 if (ri != null) {
                     val cc = Hnmobile.a11yChildCount(ri.toLong()).toInt()
                     for (j in 0 until cc) {
-                        info.addChild(this@GossamerView, Hnmobile.a11yChild(ri.toLong(), j.toLong()).toInt())
+                        info.addChild(this@GophicsView, Hnmobile.a11yChild(ri.toLong(), j.toLong()).toInt())
                     }
                 }
                 return info
@@ -270,9 +270,9 @@ class GossamerView(private val activity: Activity) :
 
             val idx = idToIndex[virtualViewId] ?: return null
             val i = idx.toLong()
-            val info = AccessibilityNodeInfo.obtain(this@GossamerView, virtualViewId)
+            val info = AccessibilityNodeInfo.obtain(this@GophicsView, virtualViewId)
             info.packageName = context.packageName
-            info.className = "gossamer." + Hnmobile.a11yRole(i)
+            info.className = "gophics." + Hnmobile.a11yRole(i)
             val label = Hnmobile.a11yLabel(i)
             val value = Hnmobile.a11yValue(i)
             info.contentDescription = if (value.isNotEmpty()) "$label, $value" else label
@@ -283,14 +283,14 @@ class GossamerView(private val activity: Activity) :
             info.isVisibleToUser = true
             info.isFocusable = true
             val parent = Hnmobile.a11yParent(i).toInt()
-            info.setParent(this@GossamerView, if (parent == rootId) HOST_VIEW_ID else parent)
+            info.setParent(this@GophicsView, if (parent == rootId) HOST_VIEW_ID else parent)
             if (Hnmobile.a11yTappable(i)) {
                 info.isClickable = true
                 info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
             }
             val cc = Hnmobile.a11yChildCount(i).toInt()
             for (j in 0 until cc) {
-                info.addChild(this@GossamerView, Hnmobile.a11yChild(i, j.toLong()).toInt())
+                info.addChild(this@GophicsView, Hnmobile.a11yChild(i, j.toLong()).toInt())
             }
             return info
         }

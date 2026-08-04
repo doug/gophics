@@ -1,13 +1,13 @@
-// Command ssh serves a gossamer app over SSH, rendered with the kitty graphics
-// protocol. It shows that gossamer's terminal backend is transport-agnostic:
+// Command ssh serves a gophics app over SSH, rendered with the kitty graphics
+// protocol. It shows that gophics's terminal backend is transport-agnostic:
 // the SSH server (here gliderlabs/ssh; charmbracelet/wish works identically) is
-// the caller's concern, and gossamer only needs the session's byte stream, its
+// the caller's concern, and gophics only needs the session's byte stream, its
 // size, and resize notifications — adapted to terminal.TTY below.
 //
 // Run:  go run .        then, from a kitty-graphics terminal:  ssh -p 2222 localhost
 // Quit the app with Ctrl-Q; disconnect ends the session cleanly.
 //
-// gossamer core has no SSH dependency — this lives in its own module.
+// gophics core has no SSH dependency — this lives in its own module.
 package main
 
 import (
@@ -22,12 +22,12 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/doug/gossamer/app"
-	"github.com/doug/gossamer/geom"
-	"github.com/doug/gossamer/paint"
-	gsh "github.com/doug/gossamer/shell"
-	"github.com/doug/gossamer/shell/terminal"
-	"github.com/doug/gossamer/widget"
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	gsh "github.com/doug/gophics/shell"
+	"github.com/doug/gophics/shell/terminal"
+	"github.com/doug/gophics/widget"
 )
 
 func main() {
@@ -37,11 +37,11 @@ func main() {
 	}
 	srv := &ssh.Server{Addr: ":2222", Handler: handleSession}
 	srv.AddHostKey(signer)
-	log.Println("gossamer SSH demo on :2222 — connect with:  ssh -p 2222 localhost")
+	log.Println("gophics SSH demo on :2222 — connect with:  ssh -p 2222 localhost")
 	log.Fatal(srv.ListenAndServe())
 }
 
-// handleSession runs one gossamer app instance for the life of an SSH
+// handleSession runs one gophics app instance for the life of an SSH
 // connection. Each client gets its own widget tree and event loop, so per-user
 // state is isolated for free.
 func handleSession(s ssh.Session) {
@@ -58,7 +58,7 @@ func handleSession(s ssh.Session) {
 		return
 	}
 	// RunTTY blocks until the client disconnects (session EOF) or hits Ctrl-Q.
-	if err := terminal.RunTTY(h, gsh.Config{Title: "gossamer over ssh"}, newSSHTTY(s)); err != nil {
+	if err := terminal.RunTTY(h, gsh.Config{Title: "gophics over ssh"}, newSSHTTY(s)); err != nil {
 		log.Printf("ssh session: %v", err)
 	}
 }
@@ -121,7 +121,7 @@ func ephemeralHostKey() (gossh.Signer, error) {
 
 // --- demo app ---------------------------------------------------------------
 
-// demo is a small interactive gossamer app: an animated pulse field plus a dot
+// demo is a small interactive gophics app: an animated pulse field plus a dot
 // that tracks the pointer — enough to show rendering, animation, and mouse
 // input all working over SSH.
 type demo struct{}
@@ -173,7 +173,7 @@ func (s *demoState) Build(widget.Ctx) widget.Widget {
 			if moved {
 				c.FillRRect(geom.RectXYWH(ptr.X-9, ptr.Y-9, 18, 18), 9, colText)
 			}
-			c.Text("gossamer over ssh", geom.Pt{X: 28, Y: 50}, 30, colText)
+			c.Text("gophics over ssh", geom.Pt{X: 28, Y: 50}, 30, colText)
 			c.Text("move the mouse · Ctrl-Q to quit", geom.Pt{X: 28, Y: 76}, 14, colDim)
 		}},
 	}
