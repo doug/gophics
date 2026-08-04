@@ -19,3 +19,13 @@ examples/hn/ios/build-sim/
 # Generated docs-site artifacts (rebuilt by .github/workflows/pages.yml)
 docs/demos/
 docs/source/
+
+# stray example binaries from `go build ./examples/<x>` without -o
+/flocking
+/particles
+/flowfield
+/hello
+/canvas
+/todo
+/hn
+/notes

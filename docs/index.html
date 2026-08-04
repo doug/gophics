@@ -58,28 +58,28 @@
 <section><div class="wrap">
   <h2>A full app, in one screen of Go</h2>
   <p class="lead">Widgets are plain struct values; state is a generic base you embed. This is a complete counter — <code>go run</code> it as a window, or <code>GOOS=js</code> it into the browser.</p>
-  <pre class="code">type Counter struct{}
+  <pre class="code"><code><span class="t-kw">type</span> Counter <span class="t-kw">struct</span>{}
 
-func (Counter) CreateState() widget.State { return &amp;counterState{} }
+<span class="t-kw">func</span> (Counter) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;counterState{} }
 
-type counterState struct {
-	widget.StateBase[Counter] // gives W(), Context(), SetState()
-	n int
+<span class="t-kw">type</span> counterState <span class="t-kw">struct</span> {
+	widget.StateBase[Counter] <span class="t-com">// gives W(), Context(), SetState()</span>
+	n <span class="t-typ">int</span>
 }
 
-func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
-	return widget.Column(
-		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: ink},
+<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	<span class="t-kw">return</span> widget.<span class="t-fn">Column</span>(
+		widget.Text{S: fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;count: %d&#34;</span>, s.n), Size: <span class="t-num">28</span>, Color: ink},
 		widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
-			Child:   widget.Text{S: "increment", Size: 18, Color: accent},
+			Handler: widget.Handler{OnTap: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.n++ }) }},
+			Child:   widget.Text{S: <span class="t-str">&#34;increment&#34;</span>, Size: <span class="t-num">18</span>, Color: accent},
 		},
 	)
 }
 
-func main() {
-	app.Run(Counter{}, app.Config{Title: "counter", Size: geom.Size{W: 320, H: 200}, Font: goregular.TTF})
-}</pre>
+<span class="t-kw">func</span> <span class="t-fn">main</span>() {
+	app.<span class="t-fn">Run</span>(Counter{}, app.Config{Title: <span class="t-str">&#34;counter&#34;</span>, Size: geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">200</span>}, Font: goregular.TTF})
+}</code></pre>
   <p class="demo-cap"><a href="get-started.html">Get started →</a></p>
 </div></section>
 

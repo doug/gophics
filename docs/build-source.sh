@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-demos=(hn gallery canvas match3 solitaire roguelike todo notes)
+demos=(hn gallery canvas flowfield flocking particles match3 solitaire roguelike todo notes)
 
 nav='<nav class="top"><div class="wrap">
   <a class="brand" href="../index.html">gophics<span class="dot">.</span></a>
@@ -39,10 +39,19 @@ for name in "${demos[@]}"; do
 		printf '    <div class="links"><a href="../demo.html?demo=%s">▶ run live</a>\n' "$name"
 		printf '      <a href="https://github.com/doug/gophics/tree/main/examples/%s">on GitHub ↗</a></div>\n' "$name"
 		printf '  </div>\n'
-		multi=0; for f in examples/"$name"/*.go; do [[ "$f" == *_test.go ]] && continue; multi=$((multi+1)); done
-		for f in examples/"$name"/*.go; do
-			[[ "$f" == *_test.go ]] && continue
-			[[ $multi -gt 1 ]] && printf '  <p class="filelabel">%s</p>\n' "$(basename "$f")"
+		# All Go source under the example, recursively — so multi-package examples
+		# (hn's ui/, model, etc.) are meaningful. Skip tests and the non-Go host
+		# templates (android/ios dirs hold Kotlin/Swift/gradle, no .go anyway).
+		root_main="examples/$name/main.go"
+		rest=$(find examples/"$name" -name '*.go' ! -name '*_test.go' \
+			! -path '*/android/*' ! -path '*/ios/*' ! -path "$root_main" | sort)
+		ordered=""
+		[[ -f "$root_main" ]] && ordered="$root_main"
+		ordered="$ordered $rest"
+		multi=$(echo $ordered | wc -w)
+		for f in $ordered; do
+			[[ -f "$f" ]] || continue
+			[[ $multi -gt 1 ]] && printf '  <p class="filelabel">%s</p>\n' "${f#examples/$name/}"
 			go run ./docs/tools/highlight "$f"
 		done
 		printf '</div></section>\n'
