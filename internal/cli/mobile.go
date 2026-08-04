@@ -50,6 +50,12 @@ func gomobileBind(o buildOpts, target, out string) error {
 	args := []string{"bind", "-target", target}
 	if o.platform.name == "android" {
 		args = append(args, "-androidapi", "24")
+		// Align libgojni.so's LOAD segments to 16 KB. Devices from the Pixel 10
+		// on can boot with 16 KB pages, and Android shows a "not compatible"
+		// PageSizeMismatch dialog for apps whose native libs use the toolchain's
+		// 4 KB default. The JNI shim gets the same treatment from its
+		// CMakeLists; both libs have to be aligned for the dialog to go away.
+		args = append(args, "-ldflags", "-extldflags=-Wl,-z,max-page-size=16384")
 	}
 	args = append(args, "-o", out)
 	if t := tagList(o.platform, o.tags); t != "" {

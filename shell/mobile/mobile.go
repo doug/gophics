@@ -44,6 +44,8 @@ type Bridge struct {
 	clip         string
 	media        *mediaBridge // camera/audio capability plumbing (see media.go)
 	gpu          *mobileGPU   // GPU surface the host renders to (see gpu.go)
+	dispHandle   int64        // retained native handles so Resize can full-rebuild
+	winHandle    int64        // the GPU surface on an orientation change (see Resize)
 	snapshotting bool         // force a CPU offscreen frame (Snapshot)
 }
 
@@ -64,7 +66,17 @@ func (b *Bridge) Resize(widthPx, heightPx int, scale float32) {
 	}
 	b.widthPx, b.heightPx, b.scale = widthPx, heightPx, scale
 	if b.gpu != nil {
-		b.gpu.resize(widthPx, heightPx, float64(scale))
+		if b.gpu.orientationChanged(widthPx, heightPx) {
+			// Orientation flip: fully rebuild the GPU surface rather than resize
+			// it. Reconfiguring/resizing in place leaves the gg session's MSAA
+			// textures mismatched with the new swapchain and the resolve shears
+			// the whole frame in landscape on PowerVR (a fresh build into the
+			// same orientation is clean; a resize into it tears). Rebuilding is
+			// the proven-clean path. Rotation is rare, so the cost is fine.
+			b.SetSurface(b.dispHandle, b.winHandle, widthPx, heightPx, scale)
+		} else {
+			b.gpu.resize(widthPx, heightPx, float64(scale))
+		}
 	}
 	b.handler.Event(b, shell.Resize{Size: b.logicalSize(), Scale: scale})
 	b.dirty.Store(true)

@@ -420,6 +420,30 @@ vector backend, which presents without a CPU round-trip). Full-scene
 continuous animation stays a CPU-raster-bound worst case until M5.
 
 
+Status 2026-08-03: GPU present verified on real hardware (Pixel 10 Pro,
+Android 17, Tensor G5 / Imagination PowerVR D-Series). ~4-5 ms/frame at
+1080x2238@2.625x, against ~117 ms for the CPU blit path the app had
+silently been falling back to. This retires the CPU-present bottleneck
+above for mobile and confirms the Vulkan-Android "preview" backend is
+usable. Three bugs blocked it, all fixed: the mobile binaries linked
+**zero** GPU backends (wgpu registers backends by import; the desktop
+shell got them via gogpu, which mobile never imports — so no device could
+ever have used the GPU), a hardcoded BGRA8Unorm surface format PowerVR
+does not offer, and 4 KB ELF alignment tripping Android's 16 KB
+page-size compatibility dialog. See docs/mobile-gpu-bringup.md.
+
+The lesson generalizes past mobile: "GPU unavailable" from wgpu means
+*no backend registered*, not *no hardware*. It had been read as an
+emulator/simulator limitation for weeks on both iOS and Android.
+
+Two rendering bugs remain, both in gg's tiers rather than the shell, and
+both Vulkan-only (the Metal reference render is clean): **GPU text draws
+as solid blocks** (glyph positions correct, coverage wrong — points at
+the glyph-mask atlas format/sampler) and **rotated sprites vanish** on
+the direct-surface path. The first blocks any text-bearing Android UI.
+Rotation/backgrounding are still unverified *on the GPU path*. Tracked as
+risks #1, #2 and #6 in docs/games-plan.md.
+
 Mobile embedding (lifecycle, surfaces, touch, IME, app-store packaging) is
 a whole platform team's worth of work in Flutter. Gossamer sequences it
 last (M9): by then the shell interface has three desktop + one web

@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"log"
+	"slices"
 	"unsafe"
 
 	"github.com/doug/gg"
@@ -24,6 +25,8 @@ type mobileGPU struct {
 	surface *wgpu.Surface
 	ggc     *ggcanvas.Canvas
 	format  gputypes.TextureFormat
+	alpha   gputypes.CompositeAlphaMode
+	present gputypes.PresentMode
 	pw, ph  int
 	scale   float64
 }
@@ -37,6 +40,7 @@ type mobileGPU struct {
 // present with the CPU path (Snapshot + blit — see GPUActive).
 func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx int, scale float32) {
 	b.ClearSurface()
+	b.dispHandle, b.winHandle = displayHandle, windowHandle
 	if scale <= 0 {
 		scale = 1
 	}
@@ -70,7 +74,17 @@ func (b *Bridge) ClearSurface() {
 	}
 }
 
+// alignSurface rounds physical surface dimensions down to a multiple of 8.
+// Imagination PowerVR's MSAA resolve shears the frame when the surface width is
+// not 8-aligned (verified on a Pixel 10 Pro: portrait 1080 — 8-aligned — is
+// clean, landscape 2238 — not — tears into a horizontal shear). The Vulkan spec
+// imposes no such requirement, so this is a driver quirk; rounding down costs at
+// most 7px at the screen edge (imperceptible) and keeps the swapchain, MSAA
+// color, resolve target, and viewport all matched at an aligned size.
+func alignSurface(px int) int { return px &^ 7 }
+
 func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobileGPU, error) {
+	wPx, hPx = alignSurface(wPx), alignSurface(hPx)
 	inst, err := wgpu.CreateInstance(&wgpu.InstanceDescriptor{Backends: gputypes.BackendsPrimary})
 	if err != nil {
 		return nil, err
@@ -90,15 +104,24 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	if err != nil {
 		return nil, err
 	}
+	format, alpha, present := negotiateSurface(adapter, surface)
 	g := &mobileGPU{
 		device:  device,
 		surface: surface,
-		format:  gputypes.TextureFormatBGRA8Unorm,
+		format:  format,
+		alpha:   alpha,
+		present: present,
 		pw:      wPx,
 		ph:      hPx,
 		scale:   scale,
 	}
-	g.configure()
+	// A surface that fails to configure never yields a texture, so every frame
+	// would die in RenderGPU with "surface is not configured" and the host would
+	// show nothing at all. Fail here instead so GPUActive stays false and the
+	// host presents the CPU blit — a slow picture beats a blank screen.
+	if err := g.configure(); err != nil {
+		return nil, err
+	}
 
 	provider := &mobileProvider{device: device, queue: device.Queue(), adapter: adapter, format: g.format}
 	// gg renders in logical points; the surface is physical-sized with a device
@@ -114,7 +137,8 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	if pma, ok := gg.Accelerator().(gg.PipelineModeAware); ok {
 		pma.SetPipelineMode(gg.PipelineModeRenderPass)
 	}
-	log.Printf("gossamer/mobile: GPU ready (%s, %dx%d @%gx)", adapter.Info().Name, wPx, hPx, scale)
+	log.Printf("gossamer/mobile: GPU ready (%s, %dx%d @%gx, %v)",
+		adapter.Info().Name, wPx, hPx, scale, g.format)
 	return g, nil
 }
 
@@ -125,25 +149,77 @@ func logicalDim(px int, scale float64) int {
 	return int(float64(px) / scale)
 }
 
-func (g *mobileGPU) configure() {
-	if err := g.surface.Configure(g.device, &wgpu.SurfaceConfiguration{
+// negotiateSurface picks a format/alpha/present mode the adapter actually
+// reports for this surface. Hardcoding BGRA8Unorm + Opaque works on Metal and
+// desktop Vulkan, but not universally: the Pixel 10's PowerVR swapchain offers
+// RGBA8Unorm only, and configuring an unsupported format leaves the surface
+// unconfigured — the GPU reports ready and then no frame ever presents.
+// Preferences come first so we keep matching the desktop path where we can.
+func negotiateSurface(adapter *wgpu.Adapter, surface *wgpu.Surface) (
+	gputypes.TextureFormat, gputypes.CompositeAlphaMode, gputypes.PresentMode,
+) {
+	format, alpha := gputypes.TextureFormatBGRA8Unorm, gputypes.CompositeAlphaModeOpaque
+	present := gputypes.PresentModeFifo
+	caps := adapter.GetSurfaceCapabilities(surface)
+	if caps == nil {
+		return format, alpha, present
+	}
+	if len(caps.Formats) > 0 {
+		format = preferred(caps.Formats,
+			gputypes.TextureFormatBGRA8Unorm, gputypes.TextureFormatRGBA8Unorm)
+	}
+	if len(caps.AlphaModes) > 0 {
+		alpha = preferred(caps.AlphaModes,
+			gputypes.CompositeAlphaModeOpaque, gputypes.CompositeAlphaModeInherit)
+	}
+	if len(caps.PresentModes) > 0 {
+		// Fifo is the only mode Vulkan guarantees, so it stays first choice.
+		present = preferred(caps.PresentModes, gputypes.PresentModeFifo)
+	}
+	return format, alpha, present
+}
+
+// preferred returns the first pref that avail contains, else avail's first
+// entry. avail must be non-empty.
+func preferred[T comparable](avail []T, prefs ...T) T {
+	for _, p := range prefs {
+		if slices.Contains(avail, p) {
+			return p
+		}
+	}
+	return avail[0]
+}
+
+func (g *mobileGPU) configure() error {
+	err := g.surface.Configure(g.device, &wgpu.SurfaceConfiguration{
 		Width:       uint32(g.pw),
 		Height:      uint32(g.ph),
 		Format:      g.format,
 		Usage:       gputypes.TextureUsageRenderAttachment,
-		AlphaMode:   gputypes.CompositeAlphaModeOpaque,
-		PresentMode: gputypes.PresentModeFifo,
-	}); err != nil {
+		AlphaMode:   g.alpha,
+		PresentMode: g.present,
+	})
+	if err != nil {
 		log.Printf("gossamer/mobile: surface configure: %v", err)
 	}
+	return err
+}
+
+// orientationChanged reports whether the incoming (physical) size flips the
+// surface orientation vs the current one — i.e. a device rotation. The Bridge
+// full-rebuilds on this rather than resizing in place (see Bridge.Resize).
+func (g *mobileGPU) orientationChanged(wPx, hPx int) bool {
+	wPx, hPx = alignSurface(wPx), alignSurface(hPx)
+	return (wPx > hPx) != (g.pw > g.ph)
 }
 
 func (g *mobileGPU) resize(wPx, hPx int, scale float64) {
 	if scale <= 0 {
 		scale = g.scale
 	}
+	wPx, hPx = alignSurface(wPx), alignSurface(hPx)
 	g.pw, g.ph, g.scale = wPx, hPx, scale
-	g.configure()
+	_ = g.configure()
 	if g.ggc != nil {
 		_ = g.ggc.Resize(logicalDim(wPx, scale), logicalDim(hPx, scale))
 		g.ggc.SetDeviceScale(scale)

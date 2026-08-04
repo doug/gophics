@@ -574,6 +574,36 @@ Three layers, cheapest first:
 > multi-touch — not the from-scratch integration described below. The rest of this
 > section is kept as the original analysis.
 
+> **UPDATE 2 (2026-08-03) — bring-up ran on a real Pixel 10 Pro. The Vulkan-Android
+> preview holds; the blocker moved to gg's rendering tiers.** Full log in
+> `docs/mobile-gpu-bringup.md`. Three bugs stood between "built" and "presents on
+> device", none of them the ones this section predicted:
+>
+> 1. **The mobile binaries contained zero GPU backends.** wgpu only links backends
+>    you import; the desktop shell gets them via gogpu's renderer, which the mobile
+>    build never pulls in. So `hal/vulkan` was never in the binary and *every* device
+>    was guaranteed to fall back to the CPU blit. The Stage-0 "clear a surface red on
+>    a real Pixel" spike would have caught this in an hour — it was the right call and
+>    skipping it cost the most. Fixed by `shell/mobile/backends.go`.
+> 2. **Surface format was hardcoded `BGRA8Unorm`.** PowerVR's swapchain offers only
+>    `RGBA8Unorm`, so `Configure` failed, the GPU reported ready, and every frame died
+>    on "surface is not configured". Now negotiated from `GetSurfaceCapabilities`.
+> 3. **16 KB page alignment.** Pixel 10 reports `pagesize.max=16384`; 4 KB-aligned
+>    native libs trip Android's "app isn't compatible" dialog. Both libs now link with
+>    `-Wl,-z,max-page-size=16384`.
+>
+> **Result: ~4-5 ms/frame on Tensor G5 / PowerVR D-Series at 1080x2238 @2.625x**,
+> against ~117 ms for the CPU blit it had silently been using. That is a 23x margin
+> and it retires the "will an action game hit 60fps on a phone" question below —
+> comfortably, with room for 120 Hz.
+>
+> **The surface plumbing is correct.** Colors, gradients, path fills, device scale
+> and touch all match the desktop reference pixel-for-pixel in structure. What fails
+> is two of gg's draw tiers, detailed in the risk register (#1, #6). Note the
+> schedule risk this section named — rotation and surface loss — is **still
+> unmeasured on the GPU path**: the lifecycle exercise ran while the app was on the
+> CPU fallback, so it validated the fallback, not the handoff.
+
 **Honest assessment: a real action game will not hit 60fps on the CPU rasterizer at
 phone resolution.** The §6.4 figure was at 1.54 Mpx; a modern phone is 2.6 Mpx. And
 `asRGBA` + the `[]byte` handoff + the host's blit alone are ~10 MB/frame at 1080p —
@@ -960,29 +990,59 @@ multi-stop gradients · nine-slice · per-vertex meshes · embedding gophics' re
 
 Ordered by threat to the plan.
 
-1. **Mobile GPU present is built (this session) but unverified on-device**, and
-   `hal/vulkan` calls Android/arm64 a *preview*. The Go side compiles against
-   wgpu/ggcanvas and the hn hosts are converted; the residual risk is real-device
-   bring-up (surface loss/rotation) and whether the Vulkan-Android preview holds up.
-   **Verify on a real Pixel early**; if it fails, the mobile action tier is blocked on
-   upstream Vulkan work and must be re-scoped.
-2. **Full-scene perf is unmeasured.** The ~60ms figure predates GPU-by-default. Every
+1. **GPU text renders as solid blocks on Vulkan — the mobile blocker (confirmed on
+   device, 2026-08-03).** Every string on the Pixel 10 Pro draws as opaque blobs, one
+   per glyph, fully illegible. Glyph *positions and advances are correct* — the block
+   run matches the string's letter grouping — so shaping and layout are fine and the
+   fault is isolated to coverage. On the GPU path `paint.go:704` routes text to
+   `fillGlyphs`, which prefers gg's **glyph-mask tier** (`DrawShapedGlyphs`,
+   `paint/paint.go:746`): each glyph is rasterized into a device-resolution atlas and
+   batched as quads. Every quad sampling as fully-covered is exactly the symptom of a
+   wrong mask **texture format or sampler** on the Vulkan backend — the same class of
+   bug as the surface-format mismatch above, and worth checking first. It does not
+   reproduce through the Metal reference render, so it is Vulkan-specific. **Until
+   this is fixed no text-bearing UI is shippable on Android**, which is most of them.
+   Note the fallback below it (outline fills) is *not* obviously affected, so forcing
+   that tier is a plausible stopgap if the atlas fix is slow.
+
+2. **Mobile GPU bring-up itself is done and the Vulkan-Android preview held.** The
+   original form of this risk — "unverified on-device, and `hal/vulkan` calls
+   Android/arm64 a preview" — is **retired**: Vulkan came up on Tensor G5/PowerVR at
+   ~4-5 ms/frame (see the section above). The mobile action tier is **not** blocked on
+   upstream Vulkan work. Two residuals remain: `allbackends` registers Vulkan on
+   **android/arm64 only**, so the x86_64 emulator has no backend and stays CPU-blit by
+   design (emulator perf numbers remain meaningless); and **rotation / backgrounding
+   are still unverified on the GPU path** — Android destroys the surface on every
+   rotation, and the lifecycle test to date ran on the CPU fallback. That is now the
+   cheapest unknown left and should be run before any further mobile work.
+3. **Full-scene perf is unmeasured.** The ~60ms figure predates GPU-by-default. Every
    throughput decision in Stages 3–4 is gated on Stage 0's numbers.
-3. **gg's GPU image path rebuilds a bind group + uniform buffer + draw call per sprite
+4. **gg's GPU image path rebuilds a bind group + uniform buffer + draw call per sprite
    per frame** — the predicted bottleneck, worse than gossamer's op boxing.
-4. **A full-window Canvas defeats damage tracking twice over** (identity `PushTransform`
+5. **A full-window Canvas defeats damage tracking twice over** (identity `PushTransform`
    + `hasLayers` escalation). Cheap fix, large payoff, especially solitaire on mobile.
-5. **Rotated sprites may corrupt or tank a GPU frame today** (`isAxisAligned` bails into
-   a path that gossamer's own comment calls "fatal on the direct-surface path").
-6. **Texture cache cliffs at 64 (gg) and 256 (Painter)** — a 52-card deck is already at
+6. **Rotated sprites vanish on the direct-surface path — this prediction is now
+   CONFIRMED on device (2026-08-03).** In the gpucheck scene the plain and tinted
+   sprites draw and the **rotated one is simply absent**, while a rotated *path* in
+   the same frame draws correctly — so it is specific to the image tier, not to
+   transforms. Mechanism is exactly as predicted: `third_party/gg/context_image.go:374`
+   bails out of the tier-3 GPU image path with `return false` for any non-axis-aligned
+   quad, and the fallback is the `DrawImage` bitmap path that `paint/paint.go:702`
+   calls "fatal on the direct-surface path" because it forces a mid-frame accelerator
+   flush that drops the queued shapes. So a single rotated sprite can take *other*
+   draws down with it, not just itself. The fix is to support rotated quads in the
+   tier-3 path (the shader already takes a destination quad; it is the `isAxisAligned`
+   guard and the axis-aligned `x,y,w,h` call signature at `context_image.go:395` that
+   need to become a full quad) rather than to improve the fallback.
+7. **Texture cache cliffs at 64 (gg) and 256 (Painter)** — a 52-card deck is already at
    80% of the first.
-7. **Single-pointer input** blocks two-thumb touch. Auto-run is the designed-around
+8. **Single-pointer input** blocks two-thumb touch. Auto-run is the designed-around
    answer; multi-touch tier 1 is the real fix.
-8. **Canvas content is invisible to the a11y bridge** — the acknowledged cost of a
+9. **Canvas content is invisible to the a11y bridge** — the acknowledged cost of a
    Canvas-drawn solitaire, freshly relevant since TalkBack/VoiceOver just landed.
-9. **Art for the scroller.** Mitigated structurally by the `Skin` interface, which makes
+10. **Art for the scroller.** Mitigated structurally by the `Skin` interface, which makes
    the demo shippable before any sprite exists.
-10. **Scope creep in `game`** — the package doc gate above.
+11. **Scope creep in `game`** — the package doc gate above.
 
 ## Verification
 

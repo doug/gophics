@@ -18,7 +18,43 @@ part of the GPU path is readable at a glance.
   *rendering* is very likely correct; what's unproven is the mobile-specific
   **surface handoff + lifecycle**.
 
-## Simulator / emulator results (2026-08-02)
+## The backends were never linked (fixed 2026-08-03)
+
+Everything below about "the simulator/emulator can't create a GPU surface" was a
+**misdiagnosis**. `wgpu: no HAL instance available for surface creation` does not
+mean the host lacks a GPU — it is what wgpu says when *no HAL backend is
+registered at all*, and `core.Instance` reaches that state silently because it
+`continue`s past every failed/absent backend without logging why.
+
+wgpu only links the backends you import (each backend's `init` calls
+`hal.RegisterBackend`). The desktop shell gets them transitively through gogpu's
+renderer, which the mobile build never pulls in — so **the iOS and Android
+binaries contained zero backends** and every device was guaranteed to fall back
+to the CPU blit. `shell/mobile/backends.go` now imports `wgpu/hal/allbackends`.
+
+Verified on a **Pixel 10 Pro** (Android 17, Tensor G5 / Imagination PowerVR
+D-Series DXT-48-1536, 1080x2238 @2.625x): Vulkan comes up and the scene renders
+on the GPU at **~4-5 ms/frame**, against ~117 ms for the CPU blit it was
+silently using before.
+
+Two further device-only fixes fell out of that run:
+
+- **Surface format.** `gpu.go` hardcoded `BGRA8Unorm`; PowerVR's swapchain only
+  offers `RGBA8Unorm`, so `Configure` failed and every frame died on "surface is
+  not configured" — GPU reported ready, screen stayed blank. `negotiateSurface`
+  now picks from `GetSurfaceCapabilities` (format, alpha mode, present mode), and
+  a failed configure aborts to the CPU path instead of presenting nothing.
+- **16 KB pages.** Pixel 10 reports `ro.product.cpu.pagesize.max=16384`; the
+  4 KB-aligned `libgojni.so`/`libgossamer_surface.so` triggered Android's
+  PageSizeMismatch "app isn't compatible" dialog. Both are now linked with
+  `-Wl,-z,max-page-size=16384`. Note this is *ELF segment* alignment — APK
+  `zipalign -P 16` passed the whole time, so that check proves nothing here.
+
+Caveat: `allbackends` registers Vulkan on **android/arm64 only** (upstream's
+preview contract), so the x86_64 emulator still has no backend and stays on the
+CPU blit by design.
+
+## Simulator / emulator results (2026-08-02, superseded)
 
 The simulator/emulator **can't create a GPU surface** — as the games-plan
 predicted — but they now render the app via a **CPU-blit present fallback**, so
@@ -100,3 +136,34 @@ Checks 8–10 are the real unknowns. If 1–7 pass but 8/9 fail, the fix is
 bind/unbind on the surface-lifecycle callbacks; if the surface is corrupt from the
 start on Android, the Vulkan preview backend needs upstream work (re-scope the
 mobile action tier, per the games-plan risk register).
+
+## Device results — Pixel 10 Pro, 2026-08-03
+
+First real-hardware run of the GPU path. Compared against
+`GPUCHECK_SHOT=... go test -run TestGPUCheckRenders ./examples/gpucheck`.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Surface renders | **pass** — scene visible, not black |
+| 2 | Text crisp | **FAIL** — every string renders as blurred solid blocks, fully illegible |
+| 3 | Colors correct | **pass** — swatches and cyan→pink gradient match the reference |
+| 4 | Sprites render | **FAIL** — plain + tint draw; the **rotated sprite is missing** |
+| 5 | Animation runs | **pass** — spinning path animates, frame timings advance |
+| 6 | Fills screen at right scale | **pass** — layout matches the reference proportionally at 2.625x |
+| 7 | Touch works | **pass** — tap marker appears at the touch point |
+
+Checks 8–10 (rotation, background/foreground, stability) are **not yet run on the
+GPU path** — the earlier lifecycle exercise happened while the app was on the CPU
+fallback, so it validated the fallback, not the surface handoff.
+
+**Open GPU-backend bugs this surfaced** (both in gg's GPU rendering, not in the
+mobile surface plumbing — the surface, colors, gradients, paths, scale and touch
+are all correct):
+
+1. **Text renders as blocks.** Glyph/MSDF output is wrong on the Vulkan backend.
+   This is the blocker for calling the mobile GPU path usable.
+2. **Rotated sprites drop out.** A rotated *path* draws fine, so it is specific
+   to `DrawSprite` under rotation.
+
+Neither reproduces through the Metal reference render, so they need debugging
+against Vulkan specifically.
