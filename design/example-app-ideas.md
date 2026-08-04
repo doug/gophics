@@ -35,7 +35,7 @@ server, the cost, and the privacy problem at once.
 - **Budget** — YNAB / Actual. Envelope budgeting, transaction LazyLists, trend
   charts (Canvas), CSV/OFX import. Replaces ~$109/yr; pairs with `finance-cli`. The
   visualize-half of this ("**Ledger**") is the chosen driver for a built-in Swift
-  Charts–style `chart` package — see **`docs/charts-plan.md`**.
+  Charts–style `chart` package — see **`design/charts-plan.md`**.
 - **Journal** — Day One. Text-heavy, calendar, "on this day", local encrypted files.
   Replaces a subscription for deeply personal data. (See also the media-journal in
   section G.)
@@ -124,7 +124,7 @@ minutes or pay $0.99"). Stripped of the artificial scarcity, these are delightfu
 self-contained, and *shipped* — `examples/solitaire` is the first (deal → play →
 auto-complete → win cascade, all local). The deep framework plan behind the games
 workstream — input model, audio mixer, sprite/path primitives, mobile GPU present, the
-`game` package, staging and risks — lives in **`docs/games-plan.md`** (this section is
+`game` package, staging and risks — lives in **`design/games-plan.md`** (this section is
 the menu; that doc is the build plan).
 
 - **Solitaire collection** — Klondike (shipped) → Spider/FreeCell/Pyramid on one

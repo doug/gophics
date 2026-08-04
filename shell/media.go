@@ -12,7 +12,7 @@ import (
 // same interfaces are the contract the mobile (gomobile) and desktop shells
 // will satisfy. All callbacks fire on the UI goroutine.
 //
-// See docs/spec-media-journal.md.
+// See design/spec-media-journal.md.
 
 // MediaWindow is implemented by a Window that can capture media. The app runner
 // type-asserts the Window to it and, when present, publishes Camera()/Audio()

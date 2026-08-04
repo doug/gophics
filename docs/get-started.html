@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — get started</title>
+<meta name="description" content="Install Gophics, run an example, write your first widget, and test it headlessly with go test.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="https://github.com/doug/gophics/blob/main/PLAN.md">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap prose">
+  <h2>Get started</h2>
+  <p class="lead">You need Go (1.26+). That's the whole toolchain — no SDK, no Node, no C compiler. For the web target you also need a browser with WebGPU (recent Chrome, Edge, or Safari).</p>
+
+  <h3>Run an example</h3>
+  <pre class="code">git clone https://github.com/doug/gophics && cd gophics
+
+go run ./examples/hello    # a colored, vsynced, resizable window
+go run ./examples/todo     # a real widget app: state, taps, hover, text input
+go run ./examples/hn       # a HackerNews client: feed → comments, scroll, links</pre>
+
+  <h3>Your first widget</h3>
+  <p>Widgets are plain struct values; state is a generic base you embed. Here's a complete counter — save it as <code>main.go</code> and <code>go run .</code>:</p>
+  <pre class="code">package main
+
+import (
+	"fmt"
+	"log"
+
+	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
+)
+
+type Counter struct{}
+
+func (Counter) CreateState() widget.State { return &amp;counterState{} }
+
+type counterState struct {
+	widget.StateBase[Counter]
+	n int
+}
+
+func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
+	return widget.Column(
+		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
+		widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
+			Child:   widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.88, 0.65, 0.31)},
+		},
+	)
+}
+
+func main() {
+	if err := app.Run(Counter{}, app.Config{
+		Title:      "gophics counter",
+		Size:       geom.Size{W: 320, H: 200},
+		Background: paint.RGB(0.08, 0.07, 0.05),
+		Font:       goregular.TTF,
+	}); err != nil {
+		log.Fatal(err)
+	}
+}</pre>
+
+  <h3>Ship it everywhere with the CLI</h3>
+  <p>The <code>gophics</code> CLI drives the multi-platform loops so you don't have to remember the incantations:</p>
+  <pre class="code">go install github.com/doug/gophics/cmd/gophics@latest
+
+gophics run  -p desktop .                  # native window
+gophics dev  -p web     .                   # browser, live-reload
+gophics run  -p android ./examples/hn/mobile  # device/emulator (needs the SDK)
+gophics create my-app                       # scaffold a new cross-platform app
+gophics doctor                              # check the toolchain per platform</pre>
+
+  <h3>Test the whole UI with <code>go test</code></h3>
+  <p>This is the part no other GUI framework gives you. Mount a widget tree headless, drive it, and assert on the rendered pixels — no window, no emulator, no device farm:</p>
+  <pre class="code">func TestCounter(t *testing.T) {
+	h, _ := app.NewHeadless(Counter{}, app.Config{Size: geom.Size{W: 320, H: 200}}, 1)
+	h.Tap(geom.Pt{X: 60, Y: 140}) // "increment"
+	img := h.Render()             // *image.RGBA — diff it against a golden
+	// ... assert on img, or write it out for a golden-image test.
+}</pre>
+  <p>The same offscreen path means a server can render a widget tree to a PNG or a report with no display at all.</p>
+
+  <h3>Next</h3>
+  <ul>
+    <li><a href="gallery.html">The live gallery</a> — real apps running in your browser, with source.</li>
+    <li><a href="https://github.com/doug/gophics/blob/main/PLAN.md">PLAN.md</a> — the architecture and roadmap.</li>
+    <li><a href="https://github.com/doug/gophics">GitHub</a> — the code, issues, and the full examples.</li>
+  </ul>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>

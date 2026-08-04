@@ -1,0 +1,47 @@
+name: Pages
+
+# Build the docs site (compiling the live WASM demos + syntax-highlighted source
+# pages) and deploy it to GitHub Pages.
+# Enable once under Settings ▸ Pages ▸ Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'examples/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build WASM demos
+        run: ./docs/build-demos.sh
+      - name: Highlight source pages
+        run: ./docs/build-source.sh
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

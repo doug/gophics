@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# Test scoping (see docs/substrate-consolidation.md):
+# Test scoping (see design/substrate-consolidation.md):
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
 #   - test-framework: gophics's own packages (CPU/headless, deterministic) — the gate.
 #   - test-substrate: the vendored internal/gfx + internal/audio. Their

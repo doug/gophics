@@ -2,7 +2,7 @@
 // points, sizes, rectangles, rounded rectangles, edge insets, and 2D affine
 // transforms.
 //
-// All values are float32 in logical pixels (see docs/adr/0001-float32-geometry.md).
+// All values are float32 in logical pixels (see design/adr/0001-float32-geometry.md).
 // Types are small immutable values; methods return new values.
 package geom
 

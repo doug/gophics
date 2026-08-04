@@ -148,7 +148,7 @@ Each phase is independently instrumentable and testable; the frame budget
 ## 4. The idiomatic reimagining — key API decisions
 
 These are the decisions that make gophics Go rather than transliterated
-Dart. Each gets an ADR (`docs/adr/`) when finalized; sketches here show intent.
+Dart. Each gets an ADR (`design/adr/`) when finalized; sketches here show intent.
 
 ### 4.1 Widgets are struct values; struct literals replace named parameters
 
@@ -430,7 +430,7 @@ usable. Three bugs blocked it, all fixed: the mobile binaries linked
 shell got them via gogpu, which mobile never imports — so no device could
 ever have used the GPU), a hardcoded BGRA8Unorm surface format PowerVR
 does not offer, and 4 KB ELF alignment tripping Android's 16 KB
-page-size compatibility dialog. See docs/mobile-gpu-bringup.md.
+page-size compatibility dialog. See design/mobile-gpu-bringup.md.
 
 The lesson generalizes past mobile: "GPU unavailable" from wgpu means
 *no backend registered*, not *no hardware*. It had been read as an
@@ -442,7 +442,7 @@ as solid blocks** (glyph positions correct, coverage wrong — points at
 the glyph-mask atlas format/sampler) and **rotated sprites vanish** on
 the direct-surface path. The first blocks any text-bearing Android UI.
 Rotation/backgrounding are still unverified *on the GPU path*. Tracked as
-risks #1, #2 and #6 in docs/games-plan.md.
+risks #1, #2 and #6 in design/games-plan.md.
 
 Mobile embedding (lifecycle, surfaces, touch, IME, app-store packaging) is
 a whole platform team's worth of work in Flutter. Gophics sequences it
@@ -598,13 +598,13 @@ gophics/
   app/           # top-level runner tying shell→scene→widget (gophics.Run)
   internal/      # ffi plumbing shared by shells
   examples/
-  docs/adr/      # one file per §4/§5/§6 decision as it's made
+  design/adr/      # one file per §4/§5/§6 decision as it's made
   bench/
 ```
 
 ## 10. Working method
 
-- Every §4–§6 decision becomes a short ADR in `docs/adr/` when settled —
+- Every §4–§6 decision becomes a short ADR in `design/adr/` when settled —
   the sketches above are proposals, not commitments.
 - Flutter's source is the reference implementation: when in doubt about
   *behavior* (layout edge cases, gesture arena rules), match Flutter and

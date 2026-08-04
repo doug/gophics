@@ -1,43 +1,171 @@
-# gophics
+<div align="center">
 
-A Flutter-class UI framework in pure Go — Flutter's pipeline architecture
-(immutable widgets → element reconciliation → constraint layout → layer
-compositing), reimagined with idiomatic Go APIs, on a zero-CGo GPU stack
-(gogpu/wgpu). Desktop, web (WASM), and eventually mobile.
+<img src="docs/gophics-mascot.jpg" alt="Gophics — a bespectacled gopher studying in a gothic library, holding a gear atop a book labelled GOPHICS" width="760">
 
-**Status: M2/M3 core landed** (layout protocol + widget/element trees).
-See [PLAN.md](PLAN.md) for the full plan, architecture, and roadmap;
-[docs/adr/](docs/adr/) for decisions.
+# Gophics
+
+**Cross-platform native UI, written in pure Go.**
+
+One static binary on desktop and the WebGPU web — and the only app UI you can test headlessly with `go test`.
+
+The rendering pipeline behind the best cross-platform UIs — immutable widgets → element reconciliation → constraint layout → GPU layer compositing — reimagined with idiomatic Go APIs, on a **zero-CGo** WebGPU stack. It draws every pixel itself, so one codebase renders **pixel-identically on desktop, web, iOS, and Android — and even in a terminal**. No platform forks, no Dart, no JavaScript, no webview, no SDK.
+
+[Quick start](#quick-start) · [Why Gophics](#why-gophics) · [A taste](#a-taste-of-the-api) · [Examples](#examples) · [Architecture](PLAN.md) · [Design notes](design/)
+
+</div>
+
+---
+
+## Why Gophics
+
+Gophics borrows the *architecture* behind the best cross-platform UIs — not their APIs — and leans into what Go does that Dart and JavaScript can't:
+
+- **`go build` is the whole story.** `CGO_ENABLED=0` everywhere. One static binary per platform, cross-compiled from any OS. No SDK, no toolchain doctor, no engine artifacts to install.
+- **A library, not an app framework.** Gophics is a `go.mod` line. Pop a window from a CLI, embed a live UI inside a server, or render a widget tree straight to a PNG — headless, no display.
+- **It draws every pixel itself.** A pure-Go WebGPU renderer (vendored in-tree, zero CGo) composites the UI, so it looks identical on every platform — including GPU opacity/blend layers, gradients, shadows, and real text shaping.
+- **Real concurrency.** Goroutines plus a single UI thread. Streaming data into a live UI — a chore in most UI stacks — is the easy case here.
+- **Everything is `go test`.** Golden-image tests, fuzzing, benchmarks, pprof — ordinary Go tooling, no emulators or bespoke harnesses.
+- **No codegen.** Structs, generics, and the standard library. That's it.
+
+### Where it fits
+
+Most cross-platform stacks make you pick two of three. Gophics takes the corner nobody else occupies:
+
+- **Webview wrappers** — Wails, Tauri, Electron: near-single-binary, but you write JS/HTML and inherit each platform's webview quirks.
+- **Native-widget bridges** — React Native: real OS widgets, but a JS bridge and per-platform inconsistencies to chase.
+- **Own-rendering SDKs** — Flutter, Compose Multiplatform: pixel-perfect and consistent, but a whole SDK and a new language.
+- **Own-rendering, but not an app toolkit** — Gio, Ebitengine: the right idea in Go, but immediate-mode / game-loop, not polished widgets.
+
+Gophics is **pure Go, own-rendering, single-binary, and headless-testable** — the consistency of an own-rendering toolkit, without ever leaving Go.
+
+## Quick start
 
 ```sh
-go run ./examples/hello   # a colored, vsynced, resizable window
-go run ./examples/todo    # a widget-tree todo app: state, taps, hover, text input
-
-# the same todo app in the browser:
-GOOS=js GOARCH=wasm go build -o examples/todo/web/todo.wasm ./examples/todo
-cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/todo/web/
-python3 -m http.server -d examples/todo/web 8080   # open http://localhost:8080
+go run ./examples/hello    # a colored, vsynced, resizable window
+go run ./examples/todo     # a real widget app: state, taps, hover, text input
+go run ./examples/hn       # a HackerNews client: feed → comments, scroll, links
 ```
 
-Packages:
+Prefer a driver for the multi-platform loops? Install the CLI:
 
-- `geom` — points, rects, rrects, insets, affine transforms (float32,
-  logical pixels — ADR 0001)
-- `shell` — the platform interface: windows, frames, input events
-- `shell/desktop` — macOS/Linux/Windows shell over gogpu (pure Go, no CGo)
-- `shell/web` — browser shell (js/wasm): canvas presentation, RAF frames,
-  DOM input
-- `paint` — Canvas interface; gg CPU rasterizer backend, GPU-composited on
-  desktop, pixel-presented on web; gradients, drop shadows, offscreen
-  rendering for golden tests
-- `text` — shaping, bidi, font fallback, UAX #14 line breaking
-  (go-text/typesetting), glyph outline extraction
-- `scene` — recorded display lists, diffed for damage, replayable onto
-  any Canvas
-- `anim` — curves and controllers driven by frame tickers
-- `layout` — the box protocol (constraints down, sizes up) + core boxes:
-  flex, padding, align, sized, decorated, text
-- `widget` — immutable widgets, keyed reconciliation into a retained
-  element tree, `StateBase[W]` generics state, interaction handlers
-- `app` — the runtime: `app.Run` for a window, `app.Headless` for
-  widget tests without a display
+```sh
+go install ./cmd/gophics
+
+gophics run  -p desktop ./examples/notes      # native window
+gophics dev  -p web     ./examples/hn          # browser, live-reload
+gophics run  -p android ./examples/hn/mobile   # device/emulator (needs the SDK)
+gophics create my-app                          # scaffold a new cross-platform app
+```
+
+## A taste of the API
+
+Widgets are plain struct values; state is a generic base you embed. Here's a full counter app:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/widget"
+)
+
+type Counter struct{}
+
+func (Counter) CreateState() widget.State { return &counterState{} }
+
+type counterState struct {
+	widget.StateBase[Counter] // gives W(), Context(), SetState()
+	n int
+}
+
+func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
+	return widget.Column(
+		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
+		widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
+			Child:   widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.36, 0.62, 0.98)},
+		},
+	)
+}
+
+func main() {
+	if err := app.Run(Counter{}, app.Config{
+		Title:      "gophics counter",
+		Size:       geom.Size{W: 320, H: 200},
+		Background: paint.RGB(0.07, 0.08, 0.11),
+		Font:       goregular.TTF,
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+## Examples
+
+Every example runs on the desktop, most compile to the browser, and all are testable headless.
+
+| Example | What it shows |
+| --- | --- |
+| `hello` | the minimal window + frame loop |
+| `todo` | stateful widgets, keyed reconciliation, hover animation, text input, scrolling |
+| `hn` | a real app: networked feed, comments, rich text/links, navigation, lazy lists |
+| `notes` | a local-first Markdown editor (text editing, state-as-data) |
+| `canvas` | the custom-paint escape hatch — draw shapes/paths/text every frame |
+| `solitaire`, `match3`, `roguelike` | games — drag, sprites, sound, animation |
+| `gallery` | a tour of the widget catalog |
+
+## Platforms — one widget tree, everywhere
+
+Because Gophics draws every pixel itself, the *same* widget tree renders the *same* on every target — pixel-identical on the four GPU platforms, and it even runs in a terminal. No per-platform forks, no native-widget quirks, one design language.
+
+| Target | How | Status |
+| --- | --- | --- |
+| **Desktop** — macOS / Linux / Windows | native window, GPU-composited | ✅ single static binary, zero CGo |
+| **Web** — WASM | WebGPU present (CPU fallback) | ✅ same code, in the browser |
+| **iOS** — native | Metal, `gomobile bind` into a thin host | ✅ GPU present, verified on device |
+| **Android** — native | Vulkan, `gomobile bind` into a thin host | ✅ GPU present, verified on device |
+| **Terminal** — incl. over SSH | rendered via the kitty graphics protocol | ✅ the same UI, in your terminal |
+
+## How it fits together
+
+Layered like a modern UI pipeline, as Go packages (arrows point down):
+
+```
+widget   Widget/Element trees, State, keys, focus, reconciler
+gesture  hit testing, pointer routing, arena         anim  tickers, curves, controllers
+──────────────────────────────────────────────────────────────────────────────────────
+layout   RenderObject protocol — constraints down, sizes up; flex/stack/padding/viewport
+──────────────────────────────────────────────────────────────────────────────────────
+scene    retained display lists, damage tracking     paint  Canvas, paths, gradients, layers
+text     shaping · bidi · line-breaking (go-text)     geom   points, rects, rrects, affine
+──────────────────────────────────────────────────────────────────────────────────────
+app      the runtime (app.Run · app.Headless)         shell  per-platform window/input/present
+internal/gfx   the vendored pure-Go WebGPU + shader + 2D-renderer substrate (zero CGo)
+```
+
+## Honest status
+
+Gophics is young and moving fast — so, the real caveats up front:
+
+- **The web binary is big.** Go compiles the whole renderer into WASM, so a demo is ~5 MB gzipped. Desktop ships a lean native binary; the web is one *option* of a single codebase, and shrinking the web payload is a top roadmap item.
+- **No hot reload.** Go can't match the Dart VM here — the answer is fast rebuilds plus an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second, but close.
+- **The widget catalog compounds, not complete.** You compose primitives rather than assemble hundreds of pre-built widgets; the catalog grows every release.
+
+The hard part — own-rendering pipeline, constraint layout, GPU compositing, real text shaping, four live platforms, headless golden tests — is done.
+
+## Learn more
+
+- **[PLAN.md](PLAN.md)** — the vision, architecture, and roadmap (the thesis for building this in Go).
+- **[design/](design/)** — design notes and decision records: [positioning](design/positioning.md), the [roadmap](design/roadmap.md), ADRs (`design/adr/`), and engineering write-ups (GPU opacity layers, substrate consolidation).
+- **[docs/](docs/)** — the docs site (live demos + guides), deployed to GitHub Pages.
+
+---
+
+<div align="center"><sub>Pure Go. Zero CGo. One codebase, every screen.</sub></div>

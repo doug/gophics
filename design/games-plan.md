@@ -3,7 +3,7 @@
 ## Context
 
 Gophics is a Flutter-architecture UI framework in pure Go with four live platforms.
-`docs/example-app-ideas.md` §E already names games as the strongest *mobile* target
+`design/example-app-ideas.md` §E already names games as the strongest *mobile* target
 today — "casual/turn-based games need only touch + Canvas + animation + layout/grid —
 all present" — while noting the framework is "not a game engine — no sprites/physics."
 
@@ -576,7 +576,7 @@ Three layers, cheapest first:
 
 > **UPDATE 2 (2026-08-03) — bring-up ran on a real Pixel 10 Pro. The Vulkan-Android
 > preview holds; the blocker moved to gg's rendering tiers.** Full log in
-> `docs/mobile-gpu-bringup.md`. Three bugs stood between "built" and "presents on
+> `design/mobile-gpu-bringup.md`. Three bugs stood between "built" and "presents on
 > device", none of them the ones this section predicted:
 >
 > 1. **The mobile binaries contained zero GPU backends.** wgpu only links backends

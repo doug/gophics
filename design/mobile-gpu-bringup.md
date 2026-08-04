@@ -2,7 +2,7 @@
 
 The mobile GPU present path (`shell/mobile` `SetSurface` + `mobileGPUTarget`,
 Android `ANativeWindow` / iOS `CAMetalLayer`) was **built but never verified on a
-real device** — the #1 risk in `docs/games-plan.md`. This is the checklist to
+real device** — the #1 risk in `design/games-plan.md`. This is the checklist to
 close that gap. It uses `examples/gpucheck`, a diagnostic scene designed so every
 part of the GPU path is readable at a glance.
 

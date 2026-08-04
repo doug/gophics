@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — live gallery</title>
+<meta name="description" content="Real Gophics apps compiled to WebAssembly, running on WebGPU in your browser — with their full Go source.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="https://github.com/doug/gophics/blob/main/PLAN.md">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap">
+  <h2>Live gallery</h2>
+  <p class="lead">Every one of these is a real Gophics app, compiled to WebAssembly and running on WebGPU in your browser — the <em>same code</em> that builds a native desktop binary. Needs a recent Chrome, Edge, or Safari. Each demo links to its full Go source.</p>
+
+  <div class="gallery-grid">
+    <div class="card"><img class="thumb" src="thumbs/hn.png" alt="hn demo screenshot" loading="lazy"><div class="body">
+      <h3>HackerNews client</h3>
+      <p>Networked feed → comments, rich text &amp; links, navigation, lazy lists, pull-to-refresh.</p>
+      <div class="links"><a href="demo.html?demo=hn">▶ run live</a><a href="source/hn.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/gallery.png" alt="gallery demo screenshot" loading="lazy"><div class="body">
+      <h3>Widget catalog</h3>
+      <p>A tour of the toolkit — buttons, forms, switches, sliders, overlays, and the layout primitives.</p>
+      <div class="links"><a href="demo.html?demo=gallery">▶ run live</a><a href="source/gallery.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/canvas.png" alt="canvas demo screenshot" loading="lazy"><div class="body">
+      <h3>Custom paint</h3>
+      <p>The escape hatch — hundreds of shapes plus live text, re-recorded every frame on a raw Canvas.</p>
+      <div class="links"><a href="demo.html?demo=canvas">▶ run live</a><a href="source/canvas.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/match3.png" alt="match3 demo screenshot" loading="lazy"><div class="body">
+      <h3>Match-3 puzzle</h3>
+      <p>Drag, tween, cascades, particles and sound — a game on the same widget + paint stack.</p>
+      <div class="links"><a href="demo.html?demo=match3">▶ run live</a><a href="source/match3.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/solitaire.png" alt="solitaire demo screenshot" loading="lazy"><div class="body">
+      <h3>Klondike solitaire</h3>
+      <p>Drag-drop by overlap, deal/flip animations, auto-complete, a win cascade — real card faces, zero assets.</p>
+      <div class="links"><a href="demo.html?demo=solitaire">▶ run live</a><a href="source/solitaire.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/roguelike.png" alt="roguelike demo screenshot" loading="lazy"><div class="body">
+      <h3>Tile roguelike</h3>
+      <p>A sprite atlas, held-key movement, positional audio, torchlight tinting — the games stack end to end.</p>
+      <div class="links"><a href="demo.html?demo=roguelike">▶ run live</a><a href="source/roguelike.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/todo.png" alt="todo demo screenshot" loading="lazy"><div class="body">
+      <h3>Todo</h3>
+      <p>Stateful widgets, keyed reconciliation, hover animation, tap-to-focus text input, scrolling.</p>
+      <div class="links"><a href="demo.html?demo=todo">▶ run live</a><a href="source/todo.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/notes.png" alt="notes demo screenshot" loading="lazy"><div class="body">
+      <h3>Notes</h3>
+      <p>A local-first Markdown editor — text editing, state-as-data, file persistence (File System Access on web).</p>
+      <div class="links"><a href="demo.html?demo=notes">▶ run live</a><a href="source/notes.html">source</a></div>
+    </div></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Gophics — live demo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d0e15; overflow: hidden; font-family: system-ui, sans-serif; }
+  #msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+         color: #c9cee0; font-size: 14px; text-align: center; padding: 24px; line-height: 1.6; }
+  #msg a { color: #8aa0ff; }
+  canvas { display: block; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 20;
+         display: flex; align-items: center; gap: 14px; padding: 0 14px;
+         font-size: 13px; color: #aab; background: linear-gradient(#000a, #0000);
+         opacity: .55; transition: opacity .15s; pointer-events: none; }
+  #bar:hover { opacity: 1; }
+  #bar a, #bar .name { pointer-events: auto; }
+  #bar a { color: #cdd3e6; text-decoration: none; }
+  #bar a:hover { color: #fff; }
+  #bar .name { color: #8aa0ff; font-weight: 600; }
+  #bar .sp { flex: 1; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <a href="gallery.html">← gallery</a>
+    <span class="name" id="nm">demo</span>
+    <span class="sp"></span>
+    <a id="src" href="gallery.html">view source</a>
+  </div>
+  <div id="msg">Loading demo…</div>
+  <script src="demos/wasm_exec.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const demo = (params.get("sketch") || params.get("demo") || "hn").replace(/[^a-z0-9]/gi, "");
+    document.getElementById("nm").textContent = demo;
+    document.getElementById("src").href = "source/" + demo + ".html";
+    document.title = "gophics — " + demo;
+    const msg = document.getElementById("msg");
+    if (!navigator.gpu) {
+      msg.innerHTML = "This browser doesn't expose <b>WebGPU</b>.<br>Open in a recent Chrome, Edge, or Safari — " +
+        "or browse the recorded shots in the <a href='gallery.html'>gallery</a>.";
+    } else {
+      const go = new Go();
+      WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
+        .then((res) => { msg.remove(); return go.run(res.instance); })
+        .catch((err) => { msg.innerHTML = "Couldn't load <code>" + demo + "</code>: " + err; });
+    }
+  </script>
+</body>
+</html>

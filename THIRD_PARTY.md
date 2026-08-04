@@ -18,7 +18,7 @@ copyright notices there are retained as MIT requires.
 
 These packages are `internal/` on purpose: they are gophics's private
 implementation substrate, not a public API. See
-`docs/substrate-consolidation.md` for the rationale and structure.
+`design/substrate-consolidation.md` for the rationale and structure.
 
 ## Still-external dependencies
 

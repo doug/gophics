@@ -27,7 +27,7 @@ Android SDK (set `ANDROID_HOME` if not at `~/Library/Android/sdk`) and `gomobile
 `gophics doctor` to check.
 
 The GPU present path needs a **real device** — the emulator can't back a wgpu
-surface (it falls back to CPU). See `docs/mobile-gpu-bringup.md`.
+surface (it falls back to CPU). See `design/mobile-gpu-bringup.md`.
 
 ## Current state / known gaps
 

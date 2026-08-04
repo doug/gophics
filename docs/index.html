@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — Cross-platform native UI in pure Go</title>
+<meta name="description" content="Cross-platform native UI in pure Go on WebGPU. One codebase on desktop, web, iOS, Android — even a terminal — pixel-identical, zero CGo, and the only app UI you can test headlessly with go test.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="https://github.com/doug/gophics/blob/main/PLAN.md">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <img class="mascot" src="gophics-mascot.jpg" alt="Gophics — a bespectacled gopher studying in a gothic library, holding a gear atop a book labelled GOPHICS">
+  <h1>Cross-platform native UI, in pure Go</h1>
+  <p class="tag">One codebase on <b>desktop</b>, <b>web</b>, <b>iOS</b>, <b>Android</b> — even a <b>terminal</b> — and the only app UI you can test headlessly with <code>go&nbsp;test</code>.</p>
+  <p class="sub">Gophics brings the rendering pipeline behind the best cross-platform UIs — immutable widgets, element reconciliation, constraint layout, GPU compositing — to idiomatic Go, and draws every pixel itself, so it looks the same on every screen. No Dart, no JavaScript, no webview, no SDK. Zero CGo.</p>
+  <div class="cta">
+    <a class="btn" href="get-started.html">Get started</a>
+    <a class="btn ghost" href="gallery.html">See it live →</a>
+  </div>
+
+  <div class="demo-stage"><iframe src="demo.html?demo=hn" title="A live Gophics app (HackerNews client) compiled to WebAssembly" loading="lazy"></iframe></div>
+  <p class="demo-cap">↑ a real Gophics app — a HackerNews client — compiled to WASM, running on WebGPU in your browser (needs a recent Chrome/Edge/Safari). The same code builds a native desktop binary.</p>
+</div></header>
+
+<section><div class="wrap">
+  <h2>Why Gophics</h2>
+  <p class="lead">It borrows the <em>architecture</em> behind the best cross-platform UIs, not their APIs — and leans into what Go does that Dart and JavaScript can't.</p>
+  <div class="pillars">
+    <div class="pillar"><h3><span class="em">One binary,</span> every screen</h3><p><code>CGO_ENABLED=0</code> everywhere. Same code, one static binary — desktop, web, iOS, Android, even a terminal — pixel-identical. <code>GOOS=windows go build</code> from a Mac. No runtime, no webview.</p></div>
+    <div class="pillar"><h3><span class="em">A library,</span> not a platform</h3><p>Gophics is a <code>go.mod</code> line. Pop a window from a CLI, embed a live UI in a server, add a viz pane to a pipeline — the programs an app-owning SDK can't serve.</p></div>
+    <div class="pillar"><h3><span class="em">Your UI is</span> <code>go test</code></h3><p>Golden-image tests, headless and deterministic. A server can render a widget tree straight to a PNG. No emulator, no device farm — assert on your UI like any other code.</p></div>
+    <div class="pillar"><h3><span class="em">One language,</span> top to bottom</h3><p>Go end to end — no codegen, no context-switch. You inherit Go's infra, data, and networking ecosystem, which is exactly where these apps live.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Where it fits</h2>
+  <p class="lead">Most cross-platform stacks make you pick two of three. Gophics takes the corner nobody else occupies.</p>
+  <div class="fit">
+    <div class="col"><b>Webview wrappers</b><p>Wails, Tauri, Electron — near-single-binary, but you write JS/HTML and inherit each platform's webview quirks.</p></div>
+    <div class="col"><b>Native-widget bridges</b><p>React Native — real OS widgets, but a JS bridge and per-platform inconsistencies to chase.</p></div>
+    <div class="col"><b>Own-rendering SDKs</b><p>Flutter, Compose Multiplatform — pixel-perfect and consistent, but a whole SDK and a new language.</p></div>
+    <div class="col"><b>Own-rendering, not an app toolkit</b><p>Gio, Ebitengine — the right idea in Go, but immediate-mode / game-loop, not polished widgets.</p></div>
+    <div class="col win"><b>Gophics</b><p>Pure Go, own-rendering, single-binary, and headless-testable — that consistency, without ever leaving Go.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>A full app, in one screen of Go</h2>
+  <p class="lead">Widgets are plain struct values; state is a generic base you embed. This is a complete counter — <code>go run</code> it as a window, or <code>GOOS=js</code> it into the browser.</p>
+  <pre class="code">type Counter struct{}
+
+func (Counter) CreateState() widget.State { return &amp;counterState{} }
+
+type counterState struct {
+	widget.StateBase[Counter] // gives W(), Context(), SetState()
+	n int
+}
+
+func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
+	return widget.Column(
+		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: ink},
+		widget.Interactive{
+			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
+			Child:   widget.Text{S: "increment", Size: 18, Color: accent},
+		},
+	)
+}
+
+func main() {
+	app.Run(Counter{}, app.Config{Title: "counter", Size: geom.Size{W: 320, H: 200}, Font: goregular.TTF})
+}</pre>
+  <p class="demo-cap"><a href="get-started.html">Get started →</a></p>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Honest status</h2>
+  <p class="lead">Young and moving fast — so, the real caveats up front (the architecture is the hard part, and it's done):</p>
+  <div class="pillars">
+    <div class="pillar"><h3>The web binary is big</h3><p>Go compiles the whole renderer into WASM (~5 MB gzipped per demo). Desktop ships lean; the web is one <em>option</em> of a single codebase, and shrinking the web payload is a top roadmap item.</p></div>
+    <div class="pillar"><h3>No hot reload</h3><p>Go can't match the Dart VM — the answer is fast rebuild + an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second; close.</p></div>
+    <div class="pillar"><h3>The catalog compounds</h3><p>You compose primitives rather than assemble hundreds of pre-built widgets. It grows every release, and app-specific widgets are cheap to write.</p></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go. Zero CGo.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="gallery.html">Gallery</a>
+  <a href="get-started.html">Get started</a>
+</div></footer>
+
+</body>
+</html>

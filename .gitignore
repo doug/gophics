@@ -15,3 +15,7 @@ examples/hn/ios/build/
 
 # iOS Simulator build output (autonomous test loop)
 examples/hn/ios/build-sim/
+
+# Generated docs-site artifacts (rebuilt by .github/workflows/pages.yml)
+docs/demos/
+docs/source/

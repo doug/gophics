@@ -13,7 +13,7 @@ Reference for the *feel* (not the API): Apple's Swift Charts —
 `Chart { BarMark(x:, y:) }`. We adapt the declarative-marks idea to idiomatic Go
 (typed mark structs, not a macro DSL).
 
-The design test applied throughout, borrowed from `docs/games-plan.md`: **the `chart`
+The design test applied throughout, borrowed from `design/games-plan.md`: **the `chart`
 package holds only conveniences over `paint`/`widget`; any new *primitive* goes into
 `paint` and must earn its place from non-chart callers too.**
 
@@ -48,7 +48,7 @@ package holds only conveniences over `paint`/`widget`; any new *primitive* goes 
 **The path primitive — now BUILT (was the one real gap).** `paint.Canvas` originally
 had no filled path or polygon. It now has `FillPath` (commit `75a6c96`) and
 `StrokePath` (`9f7a5d5`), backed by a retained `paint.Path`. This was the
-**same primitive `docs/games-plan.md` §Workstream 3 specs**, so building it served
+**same primitive `design/games-plan.md` §Workstream 3 specs**, so building it served
 both. The design that made it cheap: a *retained* `*paint.Path` passed by pointer —
 the scene op stores the pointer + a `Gen()` counter, so `opEqual`'s `==` stays valid
 (the path's slices would otherwise panic) and `opBounds` returns `Bounds()`. Verified
@@ -204,7 +204,7 @@ selection tooltips, and animated re-layout on filter changes** — i.e. the whol
 - **Portfolio / stocks** (candlestick + area) — great charts, but live quotes need the
   web-networking gap; less local-first.
 
-`docs/example-app-ideas.md` already lists budget, health, and workout under §A/§D;
+`design/example-app-ideas.md` already lists budget, health, and workout under §A/§D;
 this promotes **Ledger** to the concrete chart-library driver.
 
 ---
