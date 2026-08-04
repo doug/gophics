@@ -204,6 +204,27 @@ func BlendStateReplace() BlendState {
 	}
 }
 
+// BlendStatePreserveDst returns a blend state that ignores the source and keeps
+// the destination unchanged (result = 0*src + 1*dst = dst). Use it for passes
+// that must not alter color — e.g. a stencil-only fill pass. It is a robust
+// alternative to relying on ColorWriteMaskNone, which some WebGPU backends
+// (observed on Chrome/Dawn via the browser present path) silently ignore,
+// letting a stencil-only fragment paint solid color over the target.
+func BlendStatePreserveDst() BlendState {
+	return BlendState{
+		Color: BlendComponent{
+			SrcFactor: BlendFactorZero,
+			DstFactor: BlendFactorOne,
+			Operation: BlendOperationAdd,
+		},
+		Alpha: BlendComponent{
+			SrcFactor: BlendFactorZero,
+			DstFactor: BlendFactorOne,
+			Operation: BlendOperationAdd,
+		},
+	}
+}
+
 // BlendStateAlpha returns a standard alpha blending state.
 //
 // This is the most common blend state for transparent rendering.

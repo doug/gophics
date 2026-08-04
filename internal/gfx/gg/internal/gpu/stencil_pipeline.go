@@ -123,6 +123,13 @@ func (sr *StencilRenderer) createPipelines() error { //nolint:funlen // GPU pipe
 	// Shared multisample state: MSAA sample count from GPUShared (4x or 1x).
 	multisample := multisampleState(sr.sampleCount)
 
+	// Stencil-only passes must not touch color. WriteMask=None expresses that,
+	// but some WebGPU backends (Chrome/Dawn via the browser present path) ignore
+	// it and let the fan fragment paint solid color over the whole shape (#XXX:
+	// solitaire cards render black). A src=0/dst=1 blend makes the color a no-op
+	// regardless — belt-and-suspenders with WriteMask=None.
+	stencilOnlyBlend := gputypes.BlendStatePreserveDst()
+
 	// Shared primitive state: triangle list, no culling.
 	primitive := gputypes.PrimitiveState{
 		Topology: gputypes.PrimitiveTopologyTriangleList,
@@ -149,6 +156,7 @@ func (sr *StencilRenderer) createPipelines() error { //nolint:funlen // GPU pipe
 			Targets: []gputypes.ColorTargetState{
 				{
 					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Blend:     &stencilOnlyBlend,
 					WriteMask: gputypes.ColorWriteMaskNone,
 				},
 			},
@@ -204,6 +212,7 @@ func (sr *StencilRenderer) createPipelines() error { //nolint:funlen // GPU pipe
 			Targets: []gputypes.ColorTargetState{
 				{
 					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Blend:     &stencilOnlyBlend,
 					WriteMask: gputypes.ColorWriteMaskNone,
 				},
 			},
@@ -331,6 +340,9 @@ func (sr *StencilRenderer) ensureDepthClipPipelines() error { //nolint:funlen //
 		Topology: gputypes.PrimitiveTopologyTriangleList,
 		CullMode: gputypes.CullModeNone,
 	}
+	// See createPipelines: some WebGPU backends ignore WriteMask=None on a
+	// stencil-only pass, so a src=0/dst=1 blend guarantees the color is a no-op.
+	stencilOnlyBlend := gputypes.BlendStatePreserveDst()
 
 	// --- Non-zero stencil fill + depth clip ---
 	nzPipeline, err := sr.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
@@ -345,7 +357,7 @@ func (sr *StencilRenderer) ensureDepthClipPipelines() error { //nolint:funlen //
 			Module:     sr.stencilFillShader,
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
-				{Format: gputypes.TextureFormatBGRA8Unorm, WriteMask: gputypes.ColorWriteMaskNone},
+				{Format: gputypes.TextureFormatBGRA8Unorm, Blend: &stencilOnlyBlend, WriteMask: gputypes.ColorWriteMaskNone},
 			},
 		},
 		DepthStencil: &wgpu.DepthStencilState{
@@ -386,7 +398,7 @@ func (sr *StencilRenderer) ensureDepthClipPipelines() error { //nolint:funlen //
 			Module:     sr.stencilFillShader,
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
-				{Format: gputypes.TextureFormatBGRA8Unorm, WriteMask: gputypes.ColorWriteMaskNone},
+				{Format: gputypes.TextureFormatBGRA8Unorm, Blend: &stencilOnlyBlend, WriteMask: gputypes.ColorWriteMaskNone},
 			},
 		},
 		DepthStencil: &wgpu.DepthStencilState{
