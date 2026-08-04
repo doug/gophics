@@ -1,0 +1,123 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 70
+; Schema: 0
+
+               OpCapability Shader
+               OpCapability DerivativeControl
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %_58 "fragment_main" %_21
+               OpEntryPoint Vertex %_62 "vertex_main" %_22
+               OpEntryPoint GLCompute %_66 "compute_main"
+               OpExecutionMode %_58 OriginUpperLeft
+               OpExecutionMode %_66 LocalSize 1 1 1
+               OpMemberDecorate %_12 0 Offset 0
+               OpMemberDecorate %_12 1 Offset 4
+               OpMemberDecorate %_12 2 Offset 8
+               OpMemberDecorate %_12 3 Offset 12
+               OpMemberDecorate %_13 0 Offset 0
+               OpMemberDecorate %_13 0 ColMajor
+               OpMemberDecorate %_13 0 MatrixStride 16
+               OpMemberDecorate %_13 1 Offset 64
+               OpMemberDecorate %_13 1 ColMajor
+               OpMemberDecorate %_13 1 MatrixStride 16
+               OpMemberDecorate %_13 2 Offset 112
+               OpMemberDecorate %_13 3 Offset 128
+               OpMemberDecorate %_13 4 Offset 144
+               OpMemberDecorate %_13 4 ColMajor
+               OpMemberDecorate %_13 4 MatrixStride 8
+               OpMemberDecorate %_13 5 Offset 168
+               OpMemberDecorate %_13 5 ColMajor
+               OpMemberDecorate %_13 5 MatrixStride 8
+               OpMemberDecorate %_13 6 Offset 192
+               OpMemberDecorate %_13 7 Offset 200
+               OpDecorate %_17 DescriptorSet 0
+               OpDecorate %_17 Binding 0
+               OpDecorate %_19 DescriptorSet 0
+               OpDecorate %_19 Binding 1
+               OpDecorate %_21 Location 0
+               OpDecorate %_22 BuiltIn Position
+         %_2 = OpTypeVoid
+         %_3 = OpTypeFloat 32
+         %_4 = OpTypeInt 32 0
+         %_5 = OpTypeVector %_4 2
+         %_6 = OpTypeVector %_3 2
+         %_7 = OpTypeMatrix %_6 3
+         %_8 = OpTypeVector %_3 3
+         %_9 = OpTypeMatrix %_8 3
+         %_10 = OpTypeVector %_3 4
+         %_11 = OpTypeMatrix %_10 4
+         %_12 = OpTypeStruct %_3 %_3 %_3 %_3
+         %_13 = OpTypeStruct %_11 %_9 %_12 %_12 %_7 %_7 %_5 %_4
+         %_14 = OpTypeImage %_3 2D 2 0 0 1 Unknown
+         %_15 = OpTypeSampler
+         %_16 = OpTypePointer UniformConstant %_14
+         %_18 = OpTypePointer UniformConstant %_15
+         %_20 = OpTypePointer Output %_10
+         %_23 = OpTypeFunction %_10 %_14
+         %_27 = OpTypePointer Function %_10
+         %_31 = OpTypePointer Function %_5
+         %_33 = OpConstant %_3 0
+         %_37 = OpTypeSampledImage %_14
+         %_39 = OpTypeInt 32 1
+         %_40 = OpTypeVector %_39 2
+         %_41 = OpConstant %_39 0
+         %_44 = OpConstant %_4 0
+         %_57 = OpTypeFunction %_2
+         %_17 = OpVariable %_16 UniformConstant
+         %_19 = OpVariable %_18 UniformConstant
+         %_21 = OpVariable %_20 Output
+         %_22 = OpVariable %_20 Output
+         %_24 = OpFunction %_10 None %_23
+         %_25 = OpFunctionParameter %_14
+         %_26 = OpLabel
+         %_28 = OpVariable %_27 Function
+         %_29 = OpVariable %_27 Function
+         %_30 = OpVariable %_27 Function
+         %_32 = OpVariable %_31 Function
+         %_34 = OpCompositeConstruct %_6 %_33 %_33
+         %_35 = OpLoad %_15 %_19
+         %_38 = OpSampledImage %_37 %_25 %_35
+         %_36 = OpImageSampleExplicitLod %_10 %_38 %_34 %_2 %_33
+               OpStore %_28 %_36
+         %_42 = OpCompositeConstruct %_40 %_41 %_41
+         %_43 = OpImageFetch %_10 %_25 %_42
+               OpStore %_29 %_43
+         %_45 = OpCompositeConstruct %_5 %_44 %_44
+         %_46 = OpImageFetch %_10 %_25 %_45
+               OpStore %_30 %_46
+         %_47 = OpImageQuerySizeLod %_5 %_25 %_41
+               OpStore %_32 %_47
+         %_48 = OpLoad %_10 %_28
+         %_49 = OpLoad %_10 %_29
+         %_50 = OpFAdd %_10 %_48 %_49
+         %_51 = OpLoad %_10 %_30
+         %_52 = OpFAdd %_10 %_50 %_51
+         %_53 = OpLoad %_5 %_32
+         %_54 = OpConvertUToF %_6 %_53
+         %_55 = OpVectorShuffle %_10 %_54 %_54 0 1 0 1
+         %_56 = OpFAdd %_10 %_52 %_55
+               OpReturnValue %_56
+               OpFunctionEnd
+         %_58 = OpFunction %_2 None %_57
+         %_59 = OpLabel
+         %_60 = OpLoad %_14 %_17
+         %_61 = OpFunctionCall %_10 %_24 %_60
+               OpStore %_21 %_61
+               OpReturn
+               OpFunctionEnd
+         %_62 = OpFunction %_2 None %_57
+         %_63 = OpLabel
+         %_64 = OpLoad %_14 %_17
+         %_65 = OpFunctionCall %_10 %_24 %_64
+               OpStore %_22 %_65
+               OpReturn
+               OpFunctionEnd
+         %_66 = OpFunction %_2 None %_57
+         %_67 = OpLabel
+         %_68 = OpLoad %_14 %_17
+         %_69 = OpFunctionCall %_10 %_24 %_68
+               OpReturn
+               OpFunctionEnd

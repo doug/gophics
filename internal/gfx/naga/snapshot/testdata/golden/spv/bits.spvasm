@@ -1,0 +1,300 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 225
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_15 "main"
+               OpExecutionMode %_15 LocalSize 1 1 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeInt 32 1
+         %_4 = OpTypeVector %_3 2
+         %_5 = OpTypeVector %_3 3
+         %_6 = OpTypeVector %_3 4
+         %_7 = OpTypeInt 32 0
+         %_8 = OpTypeVector %_7 2
+         %_9 = OpTypeVector %_7 3
+         %_10 = OpTypeVector %_7 4
+         %_11 = OpTypeFloat 32
+         %_12 = OpTypeVector %_11 2
+         %_13 = OpTypeVector %_11 4
+         %_14 = OpTypeFunction %_2
+         %_17 = OpTypePointer Function %_3
+         %_19 = OpTypePointer Function %_4
+         %_21 = OpTypePointer Function %_5
+         %_23 = OpTypePointer Function %_6
+         %_25 = OpTypePointer Function %_7
+         %_27 = OpTypePointer Function %_8
+         %_29 = OpTypePointer Function %_9
+         %_31 = OpTypePointer Function %_10
+         %_33 = OpTypePointer Function %_12
+         %_35 = OpTypePointer Function %_13
+         %_37 = OpConstant %_3 0
+         %_41 = OpConstant %_7 0
+         %_45 = OpConstant %_11 0
+         %_59 = OpConstant %_7 8
+         %_66 = OpConstant %_7 16
+         %_70 = OpConstant %_7 24
+         %_86 = OpConstant %_3 4294967168
+         %_87 = OpConstant %_3 127
+         %_104 = OpConstant %_7 255
+         %_141 = OpConstant %_7 5
+         %_142 = OpConstant %_7 10
+         %_15 = OpFunction %_2 None %_14
+         %_16 = OpLabel
+         %_18 = OpVariable %_17 Function
+         %_20 = OpVariable %_19 Function
+         %_22 = OpVariable %_21 Function
+         %_24 = OpVariable %_23 Function
+         %_26 = OpVariable %_25 Function
+         %_28 = OpVariable %_27 Function
+         %_30 = OpVariable %_29 Function
+         %_32 = OpVariable %_31 Function
+         %_34 = OpVariable %_33 Function
+         %_36 = OpVariable %_35 Function
+               OpStore %_18 %_37
+         %_38 = OpCompositeConstruct %_4 %_37 %_37
+               OpStore %_20 %_38
+         %_39 = OpCompositeConstruct %_5 %_37 %_37 %_37
+               OpStore %_22 %_39
+         %_40 = OpCompositeConstruct %_6 %_37 %_37 %_37 %_37
+               OpStore %_24 %_40
+               OpStore %_26 %_41
+         %_42 = OpCompositeConstruct %_8 %_41 %_41
+               OpStore %_28 %_42
+         %_43 = OpCompositeConstruct %_9 %_41 %_41 %_41
+               OpStore %_30 %_43
+         %_44 = OpCompositeConstruct %_10 %_41 %_41 %_41 %_41
+               OpStore %_32 %_44
+         %_46 = OpCompositeConstruct %_12 %_45 %_45
+               OpStore %_34 %_46
+         %_47 = OpCompositeConstruct %_13 %_45 %_45 %_45 %_45
+               OpStore %_36 %_47
+         %_48 = OpLoad %_13 %_36
+         %_49 = OpExtInst %_7 %_1 %_54 %_48
+               OpStore %_26 %_49
+         %_50 = OpLoad %_13 %_36
+         %_51 = OpExtInst %_7 %_1 %_55 %_50
+               OpStore %_26 %_51
+         %_52 = OpLoad %_12 %_34
+         %_53 = OpExtInst %_7 %_1 %_56 %_52
+               OpStore %_26 %_53
+         %_54 = OpLoad %_12 %_34
+         %_55 = OpExtInst %_7 %_1 %_57 %_54
+               OpStore %_26 %_55
+         %_56 = OpLoad %_12 %_34
+         %_57 = OpExtInst %_7 %_1 %_58 %_56
+               OpStore %_26 %_57
+         %_58 = OpLoad %_6 %_24
+         %_60 = OpCompositeExtract %_3 %_58 0
+         %_61 = OpBitcast %_7 %_60
+         %_62 = OpBitFieldInsert %_7 %_41 %_61 %_41 %_59
+         %_63 = OpCompositeExtract %_3 %_58 1
+         %_64 = OpBitcast %_7 %_63
+         %_65 = OpBitFieldInsert %_7 %_62 %_64 %_59 %_59
+         %_67 = OpCompositeExtract %_3 %_58 2
+         %_68 = OpBitcast %_7 %_67
+         %_69 = OpBitFieldInsert %_7 %_65 %_68 %_66 %_59
+         %_71 = OpCompositeExtract %_3 %_58 3
+         %_72 = OpBitcast %_7 %_71
+         %_73 = OpBitFieldInsert %_7 %_69 %_72 %_70 %_59
+               OpStore %_26 %_73
+         %_74 = OpLoad %_10 %_32
+         %_75 = OpCompositeExtract %_7 %_74 0
+         %_76 = OpBitFieldInsert %_7 %_41 %_75 %_41 %_59
+         %_77 = OpCompositeExtract %_7 %_74 1
+         %_78 = OpBitFieldInsert %_7 %_76 %_77 %_59 %_59
+         %_79 = OpCompositeExtract %_7 %_74 2
+         %_80 = OpBitFieldInsert %_7 %_78 %_79 %_66 %_59
+         %_81 = OpCompositeExtract %_7 %_74 3
+         %_82 = OpBitFieldInsert %_7 %_80 %_81 %_70 %_59
+               OpStore %_26 %_82
+         %_83 = OpLoad %_6 %_24
+         %_84 = OpCompositeExtract %_3 %_83 0
+         %_85 = OpBitcast %_7 %_84
+         %_88 = OpExtInst %_7 %_1 %_45 %_85 %_86 %_87
+         %_89 = OpBitFieldInsert %_7 %_41 %_88 %_41 %_59
+         %_90 = OpCompositeExtract %_3 %_83 1
+         %_91 = OpBitcast %_7 %_90
+         %_92 = OpExtInst %_7 %_1 %_45 %_91 %_86 %_87
+         %_93 = OpBitFieldInsert %_7 %_89 %_92 %_59 %_59
+         %_94 = OpCompositeExtract %_3 %_83 2
+         %_95 = OpBitcast %_7 %_94
+         %_96 = OpExtInst %_7 %_1 %_45 %_95 %_86 %_87
+         %_97 = OpBitFieldInsert %_7 %_93 %_96 %_66 %_59
+         %_98 = OpCompositeExtract %_3 %_83 3
+         %_99 = OpBitcast %_7 %_98
+         %_100 = OpExtInst %_7 %_1 %_45 %_99 %_86 %_87
+         %_101 = OpBitFieldInsert %_7 %_97 %_100 %_70 %_59
+               OpStore %_26 %_101
+         %_102 = OpLoad %_10 %_32
+         %_103 = OpCompositeExtract %_7 %_102 0
+         %_105 = OpExtInst %_7 %_1 %_44 %_103 %_41 %_104
+         %_106 = OpBitFieldInsert %_7 %_41 %_105 %_41 %_59
+         %_107 = OpCompositeExtract %_7 %_102 1
+         %_108 = OpExtInst %_7 %_1 %_44 %_107 %_41 %_104
+         %_109 = OpBitFieldInsert %_7 %_106 %_108 %_59 %_59
+         %_110 = OpCompositeExtract %_7 %_102 2
+         %_111 = OpExtInst %_7 %_1 %_44 %_110 %_41 %_104
+         %_112 = OpBitFieldInsert %_7 %_109 %_111 %_66 %_59
+         %_113 = OpCompositeExtract %_7 %_102 3
+         %_114 = OpExtInst %_7 %_1 %_44 %_113 %_41 %_104
+         %_115 = OpBitFieldInsert %_7 %_112 %_114 %_70 %_59
+               OpStore %_26 %_115
+         %_116 = OpLoad %_7 %_26
+         %_117 = OpExtInst %_13 %_1 %_63 %_116
+               OpStore %_36 %_117
+         %_118 = OpLoad %_7 %_26
+         %_119 = OpExtInst %_13 %_1 %_64 %_118
+               OpStore %_36 %_119
+         %_120 = OpLoad %_7 %_26
+         %_121 = OpExtInst %_12 %_1 %_60 %_120
+               OpStore %_34 %_121
+         %_122 = OpLoad %_7 %_26
+         %_123 = OpExtInst %_12 %_1 %_61 %_122
+               OpStore %_34 %_123
+         %_124 = OpLoad %_7 %_26
+         %_125 = OpExtInst %_12 %_1 %_62 %_124
+               OpStore %_34 %_125
+         %_126 = OpLoad %_7 %_26
+         %_127 = OpBitcast %_3 %_126
+         %_128 = OpBitFieldSExtract %_3 %_127 %_41 %_59
+         %_129 = OpBitFieldSExtract %_3 %_127 %_59 %_59
+         %_130 = OpBitFieldSExtract %_3 %_127 %_66 %_59
+         %_131 = OpBitFieldSExtract %_3 %_127 %_70 %_59
+         %_132 = OpCompositeConstruct %_6 %_128 %_129 %_130 %_131
+               OpStore %_24 %_132
+         %_133 = OpLoad %_7 %_26
+         %_134 = OpBitFieldUExtract %_7 %_133 %_41 %_59
+         %_135 = OpBitFieldUExtract %_7 %_133 %_59 %_59
+         %_136 = OpBitFieldUExtract %_7 %_133 %_66 %_59
+         %_137 = OpBitFieldUExtract %_7 %_133 %_70 %_59
+         %_138 = OpCompositeConstruct %_10 %_134 %_135 %_136 %_137
+               OpStore %_32 %_138
+         %_139 = OpLoad %_3 %_18
+         %_140 = OpLoad %_3 %_18
+         %_143 = OpBitFieldInsert %_3 %_139 %_140 %_141 %_142
+               OpStore %_18 %_143
+         %_144 = OpLoad %_4 %_20
+         %_145 = OpLoad %_4 %_20
+         %_146 = OpBitFieldInsert %_4 %_144 %_145 %_141 %_142
+               OpStore %_20 %_146
+         %_147 = OpLoad %_5 %_22
+         %_148 = OpLoad %_5 %_22
+         %_149 = OpBitFieldInsert %_5 %_147 %_148 %_141 %_142
+               OpStore %_22 %_149
+         %_150 = OpLoad %_6 %_24
+         %_151 = OpLoad %_6 %_24
+         %_152 = OpBitFieldInsert %_6 %_150 %_151 %_141 %_142
+               OpStore %_24 %_152
+         %_153 = OpLoad %_7 %_26
+         %_154 = OpLoad %_7 %_26
+         %_155 = OpBitFieldInsert %_7 %_153 %_154 %_141 %_142
+               OpStore %_26 %_155
+         %_156 = OpLoad %_8 %_28
+         %_157 = OpLoad %_8 %_28
+         %_158 = OpBitFieldInsert %_8 %_156 %_157 %_141 %_142
+               OpStore %_28 %_158
+         %_159 = OpLoad %_9 %_30
+         %_160 = OpLoad %_9 %_30
+         %_161 = OpBitFieldInsert %_9 %_159 %_160 %_141 %_142
+               OpStore %_30 %_161
+         %_162 = OpLoad %_10 %_32
+         %_163 = OpLoad %_10 %_32
+         %_164 = OpBitFieldInsert %_10 %_162 %_163 %_141 %_142
+               OpStore %_32 %_164
+         %_165 = OpLoad %_3 %_18
+         %_166 = OpBitFieldSExtract %_3 %_165 %_141 %_142
+               OpStore %_18 %_166
+         %_167 = OpLoad %_4 %_20
+         %_168 = OpBitFieldSExtract %_4 %_167 %_141 %_142
+               OpStore %_20 %_168
+         %_169 = OpLoad %_5 %_22
+         %_170 = OpBitFieldSExtract %_5 %_169 %_141 %_142
+               OpStore %_22 %_170
+         %_171 = OpLoad %_6 %_24
+         %_172 = OpBitFieldSExtract %_6 %_171 %_141 %_142
+               OpStore %_24 %_172
+         %_173 = OpLoad %_7 %_26
+         %_174 = OpBitFieldUExtract %_7 %_173 %_141 %_142
+               OpStore %_26 %_174
+         %_175 = OpLoad %_8 %_28
+         %_176 = OpBitFieldUExtract %_8 %_175 %_141 %_142
+               OpStore %_28 %_176
+         %_177 = OpLoad %_9 %_30
+         %_178 = OpBitFieldUExtract %_9 %_177 %_141 %_142
+               OpStore %_30 %_178
+         %_179 = OpLoad %_10 %_32
+         %_180 = OpBitFieldUExtract %_10 %_179 %_141 %_142
+               OpStore %_32 %_180
+         %_181 = OpLoad %_3 %_18
+         %_182 = OpExtInst %_3 %_1 %_73 %_181
+               OpStore %_18 %_182
+         %_183 = OpLoad %_8 %_28
+         %_184 = OpExtInst %_8 %_1 %_73 %_183
+               OpStore %_28 %_184
+         %_185 = OpLoad %_5 %_22
+         %_186 = OpExtInst %_5 %_1 %_74 %_185
+               OpStore %_22 %_186
+         %_187 = OpLoad %_9 %_30
+         %_188 = OpExtInst %_9 %_1 %_75 %_187
+               OpStore %_30 %_188
+         %_189 = OpLoad %_3 %_18
+         %_190 = OpExtInst %_3 %_1 %_74 %_189
+               OpStore %_18 %_190
+         %_191 = OpLoad %_7 %_26
+         %_192 = OpExtInst %_7 %_1 %_75 %_191
+               OpStore %_26 %_192
+         %_193 = OpLoad %_3 %_18
+         %_194 = OpBitCount %_3 %_193
+               OpStore %_18 %_194
+         %_195 = OpLoad %_4 %_20
+         %_196 = OpBitCount %_4 %_195
+               OpStore %_20 %_196
+         %_197 = OpLoad %_5 %_22
+         %_198 = OpBitCount %_5 %_197
+               OpStore %_22 %_198
+         %_199 = OpLoad %_6 %_24
+         %_200 = OpBitCount %_6 %_199
+               OpStore %_24 %_200
+         %_201 = OpLoad %_7 %_26
+         %_202 = OpBitCount %_7 %_201
+               OpStore %_26 %_202
+         %_203 = OpLoad %_8 %_28
+         %_204 = OpBitCount %_8 %_203
+               OpStore %_28 %_204
+         %_205 = OpLoad %_9 %_30
+         %_206 = OpBitCount %_9 %_205
+               OpStore %_30 %_206
+         %_207 = OpLoad %_10 %_32
+         %_208 = OpBitCount %_10 %_207
+               OpStore %_32 %_208
+         %_209 = OpLoad %_3 %_18
+         %_210 = OpBitReverse %_3 %_209
+               OpStore %_18 %_210
+         %_211 = OpLoad %_4 %_20
+         %_212 = OpBitReverse %_4 %_211
+               OpStore %_20 %_212
+         %_213 = OpLoad %_5 %_22
+         %_214 = OpBitReverse %_5 %_213
+               OpStore %_22 %_214
+         %_215 = OpLoad %_6 %_24
+         %_216 = OpBitReverse %_6 %_215
+               OpStore %_24 %_216
+         %_217 = OpLoad %_7 %_26
+         %_218 = OpBitReverse %_7 %_217
+               OpStore %_26 %_218
+         %_219 = OpLoad %_8 %_28
+         %_220 = OpBitReverse %_8 %_219
+               OpStore %_28 %_220
+         %_221 = OpLoad %_9 %_30
+         %_222 = OpBitReverse %_9 %_221
+               OpStore %_30 %_222
+         %_223 = OpLoad %_10 %_32
+         %_224 = OpBitReverse %_10 %_223
+               OpStore %_32 %_224
+               OpReturn
+               OpFunctionEnd

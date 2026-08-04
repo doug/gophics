@@ -1,0 +1,27 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec4, scalar: Float(4) }
+[2] Struct "VertexOutput" { members: [{ name: "position", type: [1], offset: 0, binding: Builtin(0)}, { name: "_varying", type: [0], offset: 16, binding: Location(1) interp=2/0}], span: 32 }
+[3] Scalar(Uint, 4)
+[4] Struct "FragmentOutput" { members: [{ name: "depth", type: [0], offset: 0, binding: Builtin(4)}, { name: "sample_mask", type: [3], offset: 4, binding: Builtin(6)}, { name: "color", type: [0], offset: 8, binding: Location(0) interp=2/0}], span: 12 }
+[5] Scalar(Bool, 1)
+[6] Array { base: [3], size: Constant(1), stride: 4 }
+[7] Vector { size: Vec3, scalar: Uint(4) }
+[8] Struct "Input1" { members: [{ name: "index", type: [3], offset: 0, binding: Builtin(1)}], span: 4 }
+[9] Struct "Input2" { members: [{ name: "index", type: [3], offset: 0, binding: Builtin(2)}], span: 4 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "output" type=[6] space=WorkGroup binding=None
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "vertex" stage=Vertex function={name="vertex", args=3, exprs=9, stmts=3, locals=0}
+[1] "fragment" stage=Fragment function={name="fragment", args=4, exprs=12, stmts=4, locals=0}
+[2] "compute" stage=Compute function={name="compute", args=5, exprs=15, stmts=3, locals=0} workgroup_size=(1,1,1)
+[3] "vertex_two_structs" stage=Vertex function={name="vertex_two_structs", args=2, exprs=12, stmts=3, locals=1}

@@ -1,0 +1,76 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Scalar(Uint, 4)
+[2] Vector { size: Vec2, scalar: Uint(4) }
+[3] Matrix { columns: Vec3, rows: Vec2, scalar: Float(4) }
+[4] Matrix { columns: Vec3, rows: Vec3, scalar: Float(4) }
+[5] Matrix { columns: Vec4, rows: Vec4, scalar: Float(4) }
+[6] Struct "NagaExternalTextureTransferFn" { members: [{ name: "a", type: [0], offset: 0}, { name: "b", type: [0], offset: 4}, { name: "g", type: [0], offset: 8}, { name: "k", type: [0], offset: 12}], span: 16 }
+[7] Struct "NagaExternalTextureParams" { members: [{ name: "yuv_conversion_matrix", type: [5], offset: 0}, { name: "gamut_conversion_matrix", type: [4], offset: 64}, { name: "src_tf", type: [6], offset: 112}, { name: "dst_tf", type: [6], offset: 128}, { name: "sample_transform", type: [3], offset: 144}, { name: "load_transform", type: [3], offset: 168}, { name: "size", type: [2], offset: 192}, { name: "num_planes", type: [1], offset: 200}], span: 208 }
+[8] Image { dim: D2, arrayed: false, class: ImageClass(2)}
+[9] Sampler(Filtering)
+[10] Vector { size: Vec4, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "tex" type=[8] space=Handle binding=(0,0)
+[1] "samp" type=[9] space=Handle binding=(0,1)
+
+=== FUNCTIONS ===
+[0] "test"
+  args: [{ name: "t", type: [8], binding: None}]
+  result: type=[10]
+  locals: 4
+    [0] "a" type=[10]
+    [1] "b" type=[10]
+    [2] "c" type=[10]
+    [3] "d" type=[2]
+  expressions: 25
+    [0] FunctionArgument(0)
+    [1] GlobalVariable([1])
+    [2] Literal(F32(0))
+    [3] Splat { size: Vec2, value: [2] }
+    [4] ImageSample { image: [0], sampler: [1], coordinate: [3] }
+    [5] LocalVariable([0])
+    [6] Literal(I32(0))
+    [7] Splat { size: Vec2, value: [6] }
+    [8] ImageLoad { image: [0], coordinate: [7] }
+    [9] LocalVariable([1])
+    [10] Literal(U32(0))
+    [11] Splat { size: Vec2, value: [10] }
+    [12] ImageLoad { image: [0], coordinate: [11] }
+    [13] LocalVariable([2])
+    [14] ImageQuery { image: [0], query: ir.ImageQuerySize }
+    [15] LocalVariable([3])
+    [16] Load { pointer: [5] }
+    [17] Load { pointer: [9] }
+    [18] Binary { op: Add, left: [16], right: [17] }
+    [19] Load { pointer: [13] }
+    [20] Binary { op: Add, left: [18], right: [19] }
+    [21] Load { pointer: [15] }
+    [22] As { expr: [21], kind: Float, convert: 4 }
+    [23] Swizzle { size: Vec4, vector: [22], pattern: [0, 1, 0, 1] }
+    [24] Binary { op: Add, left: [20], right: [23] }
+  named_expressions:
+    [0] = "t"
+  body: 10 statements
+    Emit(3..5)
+    Store { pointer: [5], value: [4] }
+    Emit(7..9)
+    Store { pointer: [9], value: [8] }
+    Emit(11..13)
+    Store { pointer: [13], value: [12] }
+    Emit(14..15)
+    Store { pointer: [15], value: [14] }
+    Emit(16..25)
+    Return { value: [24] }
+
+=== ENTRY POINTS ===
+[0] "fragment_main" stage=Fragment function={name="fragment_main", args=0, exprs=2, stmts=2, locals=0}
+[1] "vertex_main" stage=Vertex function={name="vertex_main", args=0, exprs=2, stmts=2, locals=0}
+[2] "compute_main" stage=Compute function={name="compute_main", args=0, exprs=2, stmts=2, locals=0} workgroup_size=(1,1,1)

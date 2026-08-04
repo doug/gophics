@@ -1,0 +1,48 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Array { base: [0], size: Constant(2), stride: 4 }
+[2] Array { base: [1], size: Constant(3), stride: 8 }
+[3] Vector { size: Vec4, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+[0] "ret_array"
+  args: []
+  result: type=[1]
+  locals: 0
+  expressions: 3
+    [0] Literal(F32(1))
+    [1] Literal(F32(2))
+    [2] Compose { type: [1], components: [[0], [1]] }
+  named_expressions: {}
+  body: 2 statements
+    Emit(2..3)
+    Return { value: [2] }
+
+[1] "ret_array_array"
+  args: []
+  result: type=[2]
+  locals: 0
+  expressions: 4
+    [0] CallResult(function=[0])
+    [1] CallResult(function=[0])
+    [2] CallResult(function=[0])
+    [3] Compose { type: [2], components: [[0], [1], [2]] }
+  named_expressions: {}
+  body: 5 statements
+    Call { function: [0], args: [], result: [0] }
+    Call { function: [0], args: [], result: [1] }
+    Call { function: [0], args: [], result: [2] }
+    Emit(3..4)
+    Return { value: [3] }
+
+=== ENTRY POINTS ===
+[0] "main" stage=Fragment function={name="main", args=0, exprs=8, stmts=7, locals=0}

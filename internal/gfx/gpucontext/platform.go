@@ -1,0 +1,261 @@
+// Copyright 2026 The gogpu Authors
+// SPDX-License-Identifier: MIT
+
+package gpucontext
+
+// PlatformProvider provides OS integration features.
+//
+// This interface enables UI frameworks (like gogpu/ui) to access platform
+// capabilities such as clipboard, cursor management, and system accessibility
+// preferences.
+//
+// Implementations:
+//   - gogpu.App implements PlatformProvider via platform-specific code
+//   - NullPlatformProvider provides no-op defaults for testing
+//
+// PlatformProvider is optional. Not all WindowProviders support platform
+// integration (e.g., headless or embedded systems).
+// Use type assertion to check availability:
+//
+//	if pp, ok := provider.(gpucontext.PlatformProvider); ok {
+//	    pp.SetCursor(gpucontext.CursorPointer)
+//	}
+//
+// Note: This interface is designed for gogpu <-> ui integration.
+// The rendering library (gg) does NOT use this interface.
+type PlatformProvider interface {
+	// ClipboardRead reads text content from the system clipboard.
+	// Returns empty string and nil error if clipboard is empty or not text.
+	ClipboardRead() (string, error)
+
+	// ClipboardWrite writes text content to the system clipboard.
+	ClipboardWrite(text string) error
+
+	// SetCursor changes the mouse cursor shape.
+	// The cursor is typically reset to CursorDefault at the start of each frame.
+	SetCursor(cursor CursorShape)
+
+	// DarkMode returns true if the system dark mode is active.
+	// Used for automatic theme switching.
+	DarkMode() bool
+
+	// ReduceMotion returns true if the user prefers reduced animation.
+	// Used to disable or simplify animations for accessibility.
+	ReduceMotion() bool
+
+	// HighContrast returns true if the user needs high contrast mode.
+	// Used to adjust colors and borders for accessibility.
+	HighContrast() bool
+
+	// FontScale returns the user's font size preference multiplier.
+	// 1.0 = default system font size. Used to scale Sp (scale-independent pixels).
+	FontScale() float32
+
+	// SubpixelLayout returns the display's subpixel arrangement for LCD text rendering.
+	// Used by 2D graphics libraries (gg) to enable ClearType-quality font rendering.
+	// Returns SubpixelNone when subpixel info is unavailable or on HiDPI displays
+	// where subpixels are too small to be visible.
+	SubpixelLayout() SubpixelLayout
+}
+
+// SubpixelLayout describes the physical arrangement of RGB subpixels on a display.
+// Used for LCD/ClearType font rendering to achieve sharper text by exploiting
+// the subpixel structure. Qt6 (QPlatformScreen), Wayland (wl_output.geometry),
+// and DRM/KMS (drmModeConnector) all expose this as a display property.
+type SubpixelLayout int
+
+const (
+	// SubpixelNone means no subpixel information is available or applicable.
+	// Text rendering falls back to grayscale anti-aliasing.
+	// Used on HiDPI displays where subpixels are too small to exploit.
+	SubpixelNone SubpixelLayout = iota
+
+	// SubpixelRGB is horizontal RGB ordering (most common: Windows LCD, most external monitors).
+	SubpixelRGB
+
+	// SubpixelBGR is horizontal BGR ordering (some Samsung and older displays).
+	SubpixelBGR
+
+	// SubpixelVRGB is vertical RGB ordering (rare, some rotated displays).
+	SubpixelVRGB
+
+	// SubpixelVBGR is vertical BGR ordering (rare).
+	SubpixelVBGR
+)
+
+// String returns the subpixel layout name for debugging.
+func (s SubpixelLayout) String() string {
+	switch s {
+	case SubpixelNone:
+		return stringNone
+	case SubpixelRGB:
+		return "RGB"
+	case SubpixelBGR:
+		return "BGR"
+	case SubpixelVRGB:
+		return "VRGB"
+	case SubpixelVBGR:
+		return "VBGR"
+	default:
+		return "Unknown"
+	}
+}
+
+// CursorShape represents the mouse cursor shape.
+//
+// These values cover the most common cursor shapes across platforms
+// (Windows, macOS, Linux). They map directly to platform-specific
+// cursor constants.
+//
+// For applications that need cursor changes:
+//
+//	if pp, ok := provider.(gpucontext.PlatformProvider); ok {
+//	    pp.SetCursor(gpucontext.CursorText) // I-beam for text input
+//	}
+type CursorShape int
+
+const (
+	// CursorDefault is the standard arrow cursor.
+	CursorDefault CursorShape = iota
+
+	// CursorPointer is the hand cursor for clickable elements.
+	CursorPointer
+
+	// CursorText is the I-beam cursor for text input areas.
+	CursorText
+
+	// CursorCrosshair is the crosshair cursor for precise selection.
+	CursorCrosshair
+
+	// CursorMove is the four-arrow cursor for movable elements.
+	CursorMove
+
+	// CursorResizeNS is the north-south resize cursor.
+	CursorResizeNS
+
+	// CursorResizeEW is the east-west resize cursor.
+	CursorResizeEW
+
+	// CursorResizeNWSE is the NW-SE diagonal resize cursor.
+	CursorResizeNWSE
+
+	// CursorResizeNESW is the NE-SW diagonal resize cursor.
+	CursorResizeNESW
+
+	// CursorNotAllowed is the circle-with-line cursor for forbidden actions.
+	CursorNotAllowed
+
+	// CursorWait is the busy/wait cursor.
+	CursorWait
+
+	// CursorNone hides the cursor.
+	CursorNone
+)
+
+// String returns the cursor shape name for debugging.
+func (c CursorShape) String() string {
+	switch c {
+	case CursorDefault:
+		return "Default"
+	case CursorPointer:
+		return "Pointer"
+	case CursorText:
+		return "Text"
+	case CursorCrosshair:
+		return "Crosshair"
+	case CursorMove:
+		return "Move"
+	case CursorResizeNS:
+		return "ResizeNS"
+	case CursorResizeEW:
+		return "ResizeEW"
+	case CursorResizeNWSE:
+		return "ResizeNWSE"
+	case CursorResizeNESW:
+		return "ResizeNESW"
+	case CursorNotAllowed:
+		return "NotAllowed"
+	case CursorWait:
+		return "Wait"
+	case CursorNone:
+		return stringNone
+	default:
+		return "Unknown"
+	}
+}
+
+// CursorMode controls how the mouse cursor behaves within the window.
+//
+// This follows the pattern established by SDL_SetRelativeMouseMode and
+// SDL_SetWindowMouseGrab, providing three modes that cover the common
+// use cases for games and interactive applications.
+type CursorMode int
+
+const (
+	// CursorModeNormal is the default mode: cursor is visible and moves freely.
+	CursorModeNormal CursorMode = iota
+
+	// CursorModeLocked hides the cursor and confines it to the window.
+	// Mouse movement is reported as relative deltas (DeltaX/DeltaY on PointerEvent).
+	// The cursor is warped to the window center on each frame.
+	// Equivalent to SDL_SetRelativeMouseMode(SDL_TRUE).
+	CursorModeLocked
+
+	// CursorModeConfined keeps the cursor visible but confines it to the window bounds.
+	// Equivalent to SDL_SetWindowMouseGrab(SDL_TRUE).
+	CursorModeConfined
+)
+
+// String returns the cursor mode name for debugging.
+func (m CursorMode) String() string {
+	switch m {
+	case CursorModeNormal:
+		return "Normal"
+	case CursorModeLocked:
+		return "Locked"
+	case CursorModeConfined:
+		return "Confined"
+	default:
+		return "Unknown"
+	}
+}
+
+// NullPlatformProvider implements PlatformProvider with no-op behavior.
+// Used for testing and platforms without OS integration.
+//
+// Default return values:
+//   - ClipboardRead: "", nil
+//   - ClipboardWrite: nil
+//   - SetCursor: no-op
+//   - DarkMode: false
+//   - ReduceMotion: false
+//   - HighContrast: false
+//   - FontScale: 1.0
+type NullPlatformProvider struct{}
+
+// ClipboardRead returns empty string and nil error.
+func (NullPlatformProvider) ClipboardRead() (string, error) { return "", nil }
+
+// ClipboardWrite does nothing and returns nil.
+func (NullPlatformProvider) ClipboardWrite(string) error { return nil }
+
+// SetCursor does nothing.
+func (NullPlatformProvider) SetCursor(CursorShape) {}
+
+// DarkMode returns false.
+func (NullPlatformProvider) DarkMode() bool { return false }
+
+// ReduceMotion returns false.
+func (NullPlatformProvider) ReduceMotion() bool { return false }
+
+// HighContrast returns false.
+func (NullPlatformProvider) HighContrast() bool { return false }
+
+// FontScale returns 1.0.
+func (NullPlatformProvider) FontScale() float32 { return 1.0 }
+
+// SubpixelLayout returns SubpixelNone (grayscale AA).
+func (NullPlatformProvider) SubpixelLayout() SubpixelLayout { return SubpixelNone }
+
+// Ensure NullPlatformProvider implements PlatformProvider.
+var _ PlatformProvider = NullPlatformProvider{}

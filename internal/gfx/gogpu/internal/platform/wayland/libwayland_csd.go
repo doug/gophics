@@ -1,0 +1,899 @@
+//go:build linux
+
+package wayland
+
+import (
+	"fmt"
+	"log/slog"
+	"sync"
+	"unsafe"
+
+	"github.com/go-webgpu/goffi/ffi"
+	"golang.org/x/sys/unix"
+)
+
+// CSD edge indices for the 4 decoration subsurfaces.
+const (
+	csdTop    = 0
+	csdLeft   = 1
+	csdRight  = 2
+	csdBottom = 3
+)
+
+// SetupCSD creates client-side decoration subsurfaces on the C display.
+// This must be called after the main surface and xdg_toplevel are set up.
+// subcompName/Version and shmName/Version come from the Pure Go registry.
+func (h *LibwaylandHandle) SetupCSD(subcompName, subcompVersion, shmName, shmVersion, seatName, seatVersion uint32, contentW, contentH int, title string, painter CSDPainter, onClose func()) error {
+	if painter == nil {
+		painter = DefaultCSDPainter{}
+	}
+
+	// Bind wl_subcompositor on C display
+	subcomp, err := h.registryBind(subcompName, h.subcompositorInterface, 1)
+	if err != nil {
+		return fmt.Errorf("csd: bind wl_subcompositor: %w", err)
+	}
+	h.subcompositor = subcomp
+
+	// Bind wl_shm on C display
+	shm, err := h.registryBind(shmName, h.shmInterface, 1)
+	if err != nil {
+		return fmt.Errorf("csd: bind wl_shm: %w", err)
+	}
+	h.shm = shm
+
+	// Flush to ensure binds reach compositor
+	if err := h.flush(); err != nil {
+		return fmt.Errorf("csd: flush after bind: %w", err)
+	}
+
+	// Roundtrip to get shm format events
+	_ = h.roundtrip()
+
+	tbH := painter.TitleBarHeight()
+	bW := painter.BorderWidth()
+	totalW := contentW + bW*2
+
+	// Create 4 decoration subsurfaces
+	specs := [4]struct {
+		w, h int
+		x, y int32
+	}{
+		{totalW, tbH, -int32(bW), -int32(tbH)},    // top
+		{bW, contentH, -int32(bW), 0},             // left
+		{bW, contentH, int32(contentW), 0},        // right
+		{totalW, bW, -int32(bW), int32(contentH)}, // bottom
+	}
+
+	state := CSDState{Title: title, Focused: true}
+
+	for i, spec := range specs {
+		if spec.w <= 0 || spec.h <= 0 {
+			continue
+		}
+
+		// Create wl_surface
+		surf, err := h.marshalConstructor(h.compositor, 0, h.surfaceInterface)
+		if err != nil {
+			return fmt.Errorf("csd: create surface [%d]: %w", i, err)
+		}
+		h.csdSurfaces[i] = surf
+
+		// Create wl_subsurface: get_subsurface(new_id, surface, parent)
+		// wl_subcompositor::get_subsurface opcode=1, signature "noo"
+		subsrf, err := h.marshalConstructor2Obj(h.subcompositor, 1, h.subsurfaceInterface, surf, h.surface)
+		if err != nil {
+			return fmt.Errorf("csd: get_subsurface [%d]: %w", i, err)
+		}
+		h.csdSubsurf[i] = subsrf
+
+		// set_position(x, y) — opcode 1 on subsurface
+		h.marshalVoid(subsrf, 1, uintptr(uint32(spec.x)), uintptr(uint32(spec.y)))
+
+		// set_sync — opcode 4 on subsurface
+		h.marshalVoid(subsrf, 4)
+
+		// Create SHM buffer
+		stride := spec.w * 4
+		size := stride * spec.h
+
+		fd, err := createShmFD(size)
+		if err != nil {
+			return fmt.Errorf("csd: create shm fd [%d]: %w", i, err)
+		}
+		h.csdFDs[i] = fd
+
+		data, err := unix.Mmap(fd, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+		if err != nil {
+			unix.Close(fd)
+			return fmt.Errorf("csd: mmap [%d]: %w", i, err)
+		}
+		h.csdData[i] = data
+		h.csdSizes[i] = [2]int{spec.w, spec.h}
+
+		// wl_shm::create_pool(new_id, fd, size) — opcode 0
+		// fd is passed as wl_argument with .h field
+		pool, err := h.marshalConstructorFD(h.shm, 0, h.shmPoolInterface, fd, int32(size))
+		if err != nil {
+			unix.Munmap(data)
+			unix.Close(fd)
+			return fmt.Errorf("csd: create_pool [%d]: %w", i, err)
+		}
+		h.csdPools[i] = pool
+
+		// wl_shm_pool::create_buffer(new_id, offset, width, height, stride, format) — opcode 0
+		buffer, err := h.marshalConstructorArgs(pool, 0, h.bufferInterface,
+			0,               // offset
+			uintptr(spec.w), // width
+			uintptr(spec.h), // height
+			uintptr(stride), // stride
+			0,               // format: ARGB8888 = 0
+		)
+		if err != nil {
+			unix.Munmap(data)
+			unix.Close(fd)
+			return fmt.Errorf("csd: create_buffer [%d]: %w", i, err)
+		}
+		h.csdBuffers[i] = buffer
+
+		// Paint decoration
+		switch i {
+		case csdTop:
+			painter.PaintTitleBar(data, spec.w, spec.h, state)
+		default:
+			painter.PaintBorder(data, spec.w, spec.h, CSDEdge(i))
+		}
+
+		// Attach buffer, damage, commit
+		h.marshalVoid(surf, 1, buffer, 0, 0)                                           // attach(buffer, 0, 0)
+		h.marshalVoid(surf, 2, 0, 0, uintptr(uint32(spec.w)), uintptr(uint32(spec.h))) // damage
+		h.marshalVoid(surf, 6)                                                         // commit
+	}
+
+	// Set window geometry to content area only (libdecor/GLFW/winit enterprise pattern).
+	// CSD decorations extend outside this region via negative subsurface offsets.
+	h.marshalVoid(h.xdgSurface, 3, 0, 0, uintptr(uint32(contentW)), uintptr(uint32(contentH)))
+
+	// Commit parent surface (subsurfaces apply atomically in sync mode)
+	h.marshalVoid(h.surface, 6)
+
+	if err := h.flush(); err != nil {
+		return fmt.Errorf("csd: final flush: %w", err)
+	}
+
+	h.csdActive = true
+	h.csdContentW = contentW
+	h.csdContentH = contentH
+	h.csdPainter = painter
+	h.csdState = state
+	h.onCSDClose = onClose
+
+	// Setup pointer input for CSD hit-testing
+	if err := h.setupCSDPointer(seatName, seatVersion); err != nil {
+		// Non-fatal: decorations render but aren't interactive
+		slog.Warn("CSD pointer setup failed, decorations not interactive", "err", err)
+	} else if h.cursorShapeMgr != 0 && h.csdPointer != 0 {
+		// Create cursor shape device for CSD pointer (resize/move cursors)
+		if err := h.CreateCSDCursorShapeDevice(h.csdPointer); err != nil {
+			slog.Warn("CSD cursor shape device creation failed", "err", err)
+		}
+	}
+
+	return nil
+}
+
+// CSDActive returns true if client-side decorations are active.
+func (h *LibwaylandHandle) CSDActive() bool {
+	return h.csdActive
+}
+
+// SetCSDTitleAlignment sets the title text alignment (0=left, 1=center, 2=right)
+// and triggers a CSD repaint. No-op when CSD is not active.
+func (h *LibwaylandHandle) SetCSDTitleAlignment(alignment int) {
+	if !h.csdActive {
+		return
+	}
+	h.csdState.TitleAlignment = alignment
+	h.repaintCSDTitleBar()
+}
+
+// IsMaximized returns true if the window is currently maximized.
+func (h *LibwaylandHandle) IsMaximized() bool {
+	return h.csdState.Maximized
+}
+
+// IsFullscreen returns true if the window is currently fullscreen.
+func (h *LibwaylandHandle) IsFullscreen() bool {
+	return h.csdState.Fullscreen
+}
+
+// CSDBorders returns the CSD border dimensions: titleBarHeight, borderWidth.
+// Used to subtract CSD borders from configure dimensions (GLFW pattern).
+func (h *LibwaylandHandle) CSDBorders() (titleBarH, borderW int) {
+	if !h.csdActive || h.csdPainter == nil {
+		return 0, 0
+	}
+	return h.csdPainter.TitleBarHeight(), h.csdPainter.BorderWidth()
+}
+
+// SetPendingCSDResize sets CSD content dimensions for deferred resize.
+// Called by the platform layer when it determines CSD needs to resize
+// (e.g., restore from maximize with saved dimensions).
+// The actual resize happens in xdgSurfaceConfigureCb after ack_configure.
+func (h *LibwaylandHandle) SetPendingCSDResize(contentW, contentH int) {
+	h.csdPendingResize = true
+	h.csdPendingResizeW = contentW
+	h.csdPendingResizeH = contentH
+}
+
+// DispatchCSDEvents processes pending events on the C display (non-blocking).
+// Flushes outgoing requests and dispatches any already-queued events.
+// Must be called from the event loop (PollEvents).
+// Returns error if the Wayland connection is broken.
+func (h *LibwaylandHandle) DispatchCSDEvents() error {
+	if !h.csdActive {
+		return nil
+	}
+	// Hold displayMu to serialize CSD wl_display operations (flush, dispatch_queue_pending)
+	// with the render thread's Vulkan/GLES/Software WSI calls. Without this lock, CSD flush()
+	// races with any backend's internal wl_display_flush — causing SIGSEGV (ADR-041, #292).
+	h.displayMu.Lock()
+	defer h.displayMu.Unlock()
+	if err := h.flushWithRetry(); err != nil {
+		return fmt.Errorf("csd dispatch: flush failed: %w", err)
+	}
+
+	// Dispatch CSD event queue (separate from default xdg queue).
+	h.dispatchCSDQueue()
+
+	// Process pending repaint (deferred from goffi callbacks to avoid nested FFI).
+	if h.csdPendingRepaint {
+		h.csdPendingRepaint = false
+		h.repaintCSDTitleBar()
+	}
+
+	// Process pending cursor shape update (deferred from goffi callbacks).
+	if h.csdPendingCursor {
+		h.csdPendingCursor = false
+		h.UpdateCSDCursor()
+	}
+
+	// Process pending actions (deferred from goffi callbacks to avoid nested FFI).
+	if h.csdPendingAction != CSDHitNone {
+		action := h.csdPendingAction
+		serial := h.csdPendingSerial
+		h.csdPendingAction = CSDHitNone
+		h.csdPendingSerial = 0
+		h.processCSDAction(action, serial)
+	}
+	return nil
+}
+
+// setupCSDPointer binds wl_seat on C display and gets wl_pointer with listeners.
+func (h *LibwaylandHandle) setupCSDPointer(seatName, seatVersion uint32) error {
+	if seatName == 0 {
+		return fmt.Errorf("wl_seat not available")
+	}
+
+	// Create separate event queue for CSD pointer events.
+	// This prevents CSD dispatch from interfering with xdg configure/ping
+	// callbacks on the default queue.
+	var queue uintptr
+	queueArgs := [1]unsafe.Pointer{unsafe.Pointer(&h.display)}
+	_, _ = ffi.CallFunction(&h.cifCreateQueue, h.fnCreateQueue, unsafe.Pointer(&queue), queueArgs[:])
+	if queue == 0 {
+		return fmt.Errorf("wl_display_create_queue returned NULL")
+	}
+	h.csdQueue = queue
+
+	// Bind wl_seat on C display (CSD queue — for pointer events)
+	version := seatVersion
+	if version > 5 {
+		version = 5
+	}
+	seat, err := h.registryBind(seatName, h.seatInterface, version)
+	if err != nil {
+		return fmt.Errorf("bind wl_seat: %w", err)
+	}
+	h.csdSeat = seat
+
+	// Assign seat to CSD queue
+	setQueueArgs := [2]unsafe.Pointer{unsafe.Pointer(&seat), unsafe.Pointer(&queue)}
+	_, _ = ffi.CallFunction(&h.cifSetQueue, h.fnProxySetQueue, nil, setQueueArgs[:])
+
+	// Bind SECOND seat on default queue — for move/resize (must be same queue as xdg_toplevel)
+	seatDefault, err := h.registryBind(seatName, h.seatInterface, version)
+	if err != nil {
+		return fmt.Errorf("bind wl_seat (default queue): %w", err)
+	}
+	h.csdSeatDefault = seatDefault
+	// No set_queue — stays on default queue
+
+	// Add seat capabilities listener (required before get_pointer)
+	initCSDSeatListeners()
+	if err := h.addListener(seat, uintptr(unsafe.Pointer(&csdSeatListener[0]))); err != nil {
+		return fmt.Errorf("add seat listener: %w", err)
+	}
+
+	// Flush + dispatch CSD queue to get capabilities event
+	if err := h.flush(); err != nil {
+		return fmt.Errorf("flush after seat bind: %w", err)
+	}
+	// Roundtrip dispatches default queue — we need to dispatch CSD queue instead.
+	// But for init we need capabilities, so do one roundtrip + dispatch CSD queue.
+	if err := h.roundtrip(); err != nil {
+		return fmt.Errorf("roundtrip for seat capabilities: %w", err)
+	}
+	h.dispatchCSDQueue()
+
+	// wl_seat::get_pointer (opcode 0) — returns wl_pointer
+	pointer, err := h.marshalConstructor(seat, 0, h.pointerInterface)
+	if err != nil {
+		return fmt.Errorf("get_pointer: %w", err)
+	}
+	h.csdPointer = pointer
+
+	// Assign pointer to CSD queue
+	ptrQueueArgs := [2]unsafe.Pointer{unsafe.Pointer(&pointer), unsafe.Pointer(&queue)}
+	_, _ = ffi.CallFunction(&h.cifSetQueue, h.fnProxySetQueue, nil, ptrQueueArgs[:])
+
+	// Add pointer listener (9 events). Pass h as data so each callback can
+	// identify which LibwaylandHandle to update — this avoids the single global
+	// and allows multiple concurrent CSD instances (primary + secondary windows).
+	initCSDPointerListeners()
+	if err := h.addListenerWithData(pointer, uintptr(unsafe.Pointer(&csdPointerListener[0])), uintptr(unsafe.Pointer(h))); err != nil {
+		return fmt.Errorf("add pointer listener: %w", err)
+	}
+
+	if err := h.flush(); err != nil {
+		return fmt.Errorf("flush after pointer setup: %w", err)
+	}
+
+	return nil
+}
+
+// --- CSD Pointer Callbacks (C-callable via goffi) ---
+
+var (
+	csdPointerListener [9]uintptr // 9 wl_pointer events
+	csdListenersOnce   sync.Once
+)
+
+func initCSDPointerListeners() {
+	csdListenersOnce.Do(func() {
+		csdPointerListener[0] = ffi.NewCallback(csdPointerEnterCb)        // enter
+		csdPointerListener[1] = ffi.NewCallback(csdPointerLeaveCb)        // leave
+		csdPointerListener[2] = ffi.NewCallback(csdPointerMotionCb)       // motion
+		csdPointerListener[3] = ffi.NewCallback(csdPointerButtonCb)       // button
+		csdPointerListener[4] = ffi.NewCallback(csdPointerAxisCb)         // axis
+		csdPointerListener[5] = ffi.NewCallback(csdPointerFrameCb)        // frame
+		csdPointerListener[6] = ffi.NewCallback(csdPointerAxisSourceCb)   // axis_source
+		csdPointerListener[7] = ffi.NewCallback(csdPointerAxisStopCb)     // axis_stop
+		csdPointerListener[8] = ffi.NewCallback(csdPointerAxisDiscreteCb) // axis_discrete
+	})
+}
+
+// csdPointerEnterCb: void(data, wl_pointer, serial, surface, sx_fixed, sy_fixed)
+func csdPointerEnterCb(data unsafe.Pointer, pointer, serial, surface, sxFixed, syFixed uintptr) {
+	h := (*LibwaylandHandle)(data)
+	if h == nil {
+		return
+	}
+	h.csdPointerSurface = surface
+	h.csdSerial = uint32(serial)
+	h.csdPointerX = float64(int32(sxFixed)) / 256.0
+	h.csdPointerY = float64(int32(syFixed)) / 256.0
+	h.updateCSDHitTest()
+}
+
+// csdPointerLeaveCb: void(data, wl_pointer, serial, surface)
+func csdPointerLeaveCb(data unsafe.Pointer, pointer, serial, surface uintptr) {
+	h := (*LibwaylandHandle)(data)
+	if h == nil {
+		return
+	}
+	h.csdPointerSurface = 0
+	h.csdHitResult = CSDHitNone
+	// Clear all hover states and repaint
+	h.csdState.Close.Hovered = false
+	h.csdState.Maximize.Hovered = false
+	h.csdState.Minimize.Hovered = false
+	h.csdPendingRepaint = true
+}
+
+// csdPointerMotionCb: void(data, wl_pointer, time, sx_fixed, sy_fixed)
+func csdPointerMotionCb(data unsafe.Pointer, pointer, time, sxFixed, syFixed uintptr) {
+	h := (*LibwaylandHandle)(data)
+	if h == nil {
+		return
+	}
+	h.csdPointerX = float64(int32(sxFixed)) / 256.0
+	h.csdPointerY = float64(int32(syFixed)) / 256.0
+	h.updateCSDHitTest()
+}
+
+// csdPointerButtonCb: void(data, wl_pointer, serial, time, button, state)
+func csdPointerButtonCb(data unsafe.Pointer, pointer, serial, time, button, state uintptr) {
+	h := (*LibwaylandHandle)(data)
+	if h == nil {
+		return
+	}
+	h.csdSerial = uint32(serial)
+
+	// state: 0 = released, 1 = pressed
+	if state != 1 {
+		return // only handle press
+	}
+
+	// BTN_LEFT = 0x110
+	if button != 0x110 {
+		return
+	}
+
+	// Don't call marshalVoid from inside goffi callback — nested FFI calls segfault.
+	// Store pending action; process it in DispatchCSDEvents (outside callback context).
+	h.csdPendingAction = h.csdHitResult
+	h.csdPendingSerial = h.csdSerial
+}
+
+// --- CSD Seat Callbacks ---
+
+var (
+	csdSeatListener [2]uintptr // capabilities, name
+	csdSeatListOnce sync.Once
+)
+
+func initCSDSeatListeners() {
+	csdSeatListOnce.Do(func() {
+		csdSeatListener[0] = ffi.NewCallback(csdSeatCapabilitiesCb) // capabilities
+		csdSeatListener[1] = ffi.NewCallback(csdSeatNameCb)         // name
+	})
+}
+
+// csdSeatCapabilitiesCb: void(data, wl_seat, capabilities)
+func csdSeatCapabilitiesCb(data, seat, capabilities uintptr) {
+	// WL_SEAT_CAPABILITY_POINTER = 1
+	// We just need to know it exists — we already call get_pointer unconditionally
+}
+
+// csdSeatNameCb: void(data, wl_seat, name)
+func csdSeatNameCb(data, seat, name uintptr) {
+	// No-op — we don't need the seat name
+}
+
+// No-op callbacks for unused pointer events (goffi requires fixed args, no variadic).
+func csdPointerAxisCb(data, pointer, time, axis, value uintptr)      {}
+func csdPointerFrameCb(data, pointer uintptr)                        {}
+func csdPointerAxisSourceCb(data, pointer, source uintptr)           {}
+func csdPointerAxisStopCb(data, pointer, time, axis uintptr)         {}
+func csdPointerAxisDiscreteCb(data, pointer, axis, discrete uintptr) {}
+
+// updateCSDHitTest recalculates hit-test based on current pointer position and surface.
+func (h *LibwaylandHandle) updateCSDHitTest() {
+	oldHit := h.csdHitResult
+
+	// Match surface to CSD edge
+	switch h.csdPointerSurface {
+	case h.csdSurfaces[csdTop]:
+		h.csdHitResult = h.csdPainter.HitTestTitleBar(
+			int(h.csdPointerX), int(h.csdPointerY),
+			h.csdSizes[csdTop][0], h.csdSizes[csdTop][1])
+	case h.csdSurfaces[csdLeft]:
+		h.csdHitResult = CSDHitResizeW
+	case h.csdSurfaces[csdRight]:
+		h.csdHitResult = CSDHitResizeE
+	case h.csdSurfaces[csdBottom]:
+		h.csdHitResult = CSDHitResizeS
+	default:
+		h.csdHitResult = CSDHitNone
+	}
+
+	// Update hover states and cursor shape if changed
+	if oldHit != h.csdHitResult {
+		h.csdState.Close.Hovered = h.csdHitResult == CSDHitClose
+		h.csdState.Maximize.Hovered = h.csdHitResult == CSDHitMaximize
+		h.csdState.Minimize.Hovered = h.csdHitResult == CSDHitMinimize
+		h.csdPendingRepaint = true
+		h.csdPendingCursor = true // deferred cursor shape update
+	}
+}
+
+// repaintCSDTitleBar repaints the title bar SHM buffer and commits.
+func (h *LibwaylandHandle) repaintCSDTitleBar() {
+	if !h.csdActive || h.csdData[csdTop] == nil {
+		return
+	}
+	h.csdPainter.PaintTitleBar(h.csdData[csdTop], h.csdSizes[csdTop][0], h.csdSizes[csdTop][1], h.csdState)
+	// Attach + damage + commit
+	surf := h.csdSurfaces[csdTop]
+	buf := h.csdBuffers[csdTop]
+	w, ht := h.csdSizes[csdTop][0], h.csdSizes[csdTop][1]
+	h.marshalVoid(surf, 1, buf, 0, 0)                                     // attach
+	h.marshalVoid(surf, 2, 0, 0, uintptr(uint32(w)), uintptr(uint32(ht))) // damage
+	h.marshalVoid(surf, 6)                                                // commit
+	_ = h.flush()
+}
+
+// ResizeCSD updates all 4 CSD subsurface buffers and positions when the
+// content area dimensions change (maximize, restore, interactive resize).
+//
+// GLFW pattern: surfaces and subsurfaces are NEVER destroyed on hide (only on
+// window close). Hiding attaches a null buffer and releases SHM memory; the
+// surface object stays alive so the null state is applied atomically by the
+// parent commit that follows. Destroying before the parent commit discards the
+// pending null state, leaving the previous frame visible for one compositor
+// cycle (the artifact reported in issue #300).
+//
+// Called from xdgSurfaceConfigureCb after ack_configure and before the parent
+// surface commit. Subsurfaces in sync mode cache their commits until parent commit.
+func (h *LibwaylandHandle) ResizeCSD(contentW, contentH int) { //nolint:gocognit // CSD resize with maximize/restore/fullscreen transitions
+	if !h.csdActive || h.csdPainter == nil {
+		return
+	}
+	sizeChanged := contentW != h.csdContentW || contentH != h.csdContentH
+	if !sizeChanged && !h.csdPendingRepaint {
+		return
+	}
+
+	h.csdContentW = contentW
+	h.csdContentH = contentH
+
+	tbH := h.csdPainter.TitleBarHeight()
+	bW := h.csdPainter.BorderWidth()
+	totalW := contentW + bW*2
+
+	// Subsurface layout per window state (winit/SCTK + GTK4 enterprise pattern):
+	//   Normal:     title bar at (-bW, -tbH), all 4 borders visible
+	//   Maximize:   title bar at (0, -tbH), borders null-attached (hidden)
+	//   Fullscreen: ALL decorations null-attached (hidden, including title bar)
+	fullscreen := h.csdState.Fullscreen
+	maximized := h.csdState.Maximized
+	specs := [4]struct {
+		w, h int
+		x, y int32
+	}{
+		{totalW, tbH, -int32(bW), -int32(tbH)},    // top: title bar
+		{bW, contentH, -int32(bW), 0},             // left border
+		{bW, contentH, int32(contentW), 0},        // right border
+		{totalW, bW, -int32(bW), int32(contentH)}, // bottom border
+	}
+	if maximized && !fullscreen {
+		// Title bar at (0, -tbH) — above content, no side borders.
+		// Content starts at (0,0). Geometry includes title bar via negative offset.
+		specs[0] = struct {
+			w, h int
+			x, y int32
+		}{contentW, tbH, 0, -int32(tbH)}
+	}
+
+	state := h.csdState
+
+	// Fullscreen: hide ALL decorations. Maximize: hide borders only, keep title bar.
+	// Surfaces stay alive — see docstring for why null-attach beats destroy.
+	shouldHide := func(i int) bool {
+		if fullscreen {
+			return true
+		}
+		return maximized && i != csdTop
+	}
+
+	for i, spec := range specs {
+		if shouldHide(i) {
+			if h.csdSurfaces[i] != 0 {
+				h.marshalVoid(h.csdSurfaces[i], 1, 0, 0, 0) // wl_surface.attach(null, 0, 0)
+				h.marshalVoid(h.csdSurfaces[i], 6)          // wl_surface.commit (cached, sync mode)
+				// Release SHM resources — not needed while hidden; recreated on restore.
+				if h.csdBuffers[i] != 0 {
+					h.marshalVoid(h.csdBuffers[i], 0)
+					h.csdBuffers[i] = 0
+				}
+				if h.csdPools[i] != 0 {
+					h.marshalVoid(h.csdPools[i], 1)
+					h.csdPools[i] = 0
+				}
+				if h.csdData[i] != nil {
+					unix.Munmap(h.csdData[i])
+					h.csdData[i] = nil
+				}
+				if h.csdFDs[i] >= 0 {
+					unix.Close(h.csdFDs[i])
+					h.csdFDs[i] = -1
+				}
+				h.csdSizes[i] = [2]int{0, 0}
+				// csdSurfaces[i] and csdSubsurf[i] intentionally kept alive.
+			}
+			continue
+		}
+
+		if h.csdSurfaces[i] == 0 {
+			surf, err := h.marshalConstructor(h.compositor, 0, h.surfaceInterface)
+			if err != nil {
+				slog.Warn("CSD restore: create surface failed", "edge", i, "err", err)
+				continue
+			}
+			h.csdSurfaces[i] = surf
+			if h.csdQueue != 0 {
+				surfQueueArgs := [2]unsafe.Pointer{unsafe.Pointer(&surf), unsafe.Pointer(&h.csdQueue)}
+				_, _ = ffi.CallFunction(&h.cifSetQueue, h.fnProxySetQueue, nil, surfQueueArgs[:])
+			}
+			subsrf, err := h.marshalConstructor2Obj(h.subcompositor, 1, h.subsurfaceInterface, surf, h.surface)
+			if err != nil {
+				slog.Warn("CSD restore: create subsurface failed", "edge", i, "err", err)
+				continue
+			}
+			h.csdSubsurf[i] = subsrf
+			h.marshalVoid(subsrf, 4) // set_sync
+			slog.Debug("CSD restore: recreated border", "edge", i)
+		}
+
+		if h.csdSurfaces[i] == 0 || h.csdSubsurf[i] == 0 {
+			continue
+		}
+
+		oldW, oldH := h.csdSizes[i][0], h.csdSizes[i][1]
+		if h.csdBuffers[i] == 0 || oldW != spec.w || oldH != spec.h {
+			h.resizeCSDEdge(i, spec.w, spec.h, state)
+		}
+
+		// Always update subsurface position (double-buffered, applied on parent commit).
+		h.marshalVoid(h.csdSubsurf[i], 1, uintptr(uint32(spec.x)), uintptr(uint32(spec.y)))
+	}
+
+	// Do NOT commit the parent surface here.
+	// The caller (xdgSurfaceConfigureCb) commits the parent after set_window_geometry.
+	// All sync-mode subsurface state is applied atomically with that parent commit.
+}
+
+// resizeCSDEdge recreates the SHM buffer for a single CSD edge.
+func (h *LibwaylandHandle) resizeCSDEdge(i, w, ht int, state CSDState) {
+	// Release old resources.
+	oldBuffer := h.csdBuffers[i]
+	oldPool := h.csdPools[i]
+	oldData := h.csdData[i]
+	h.csdBuffers[i] = 0
+	h.csdPools[i] = 0
+	h.csdData[i] = nil
+
+	stride := w * 4
+	size := stride * ht
+
+	if h.csdFDs[i] >= 0 {
+		unix.Close(h.csdFDs[i])
+		h.csdFDs[i] = -1
+	}
+
+	newFD, err := createShmFD(size)
+	if err != nil {
+		slog.Warn("CSD resize edge: createShmFD failed", "edge", i, "err", err)
+		return
+	}
+	h.csdFDs[i] = newFD
+
+	data, err := unix.Mmap(newFD, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	if err != nil {
+		slog.Warn("CSD resize edge: mmap failed", "edge", i, "err", err)
+		return
+	}
+	h.csdData[i] = data
+	h.csdSizes[i] = [2]int{w, ht}
+
+	pool, err := h.marshalConstructorFD(h.shm, 0, h.shmPoolInterface, h.csdFDs[i], int32(size))
+	if err != nil {
+		slog.Warn("CSD resize edge: create_pool failed", "edge", i, "err", err)
+		return
+	}
+	h.csdPools[i] = pool
+
+	buffer, err := h.marshalConstructorArgs(pool, 0, h.bufferInterface,
+		0, uintptr(w), uintptr(ht), uintptr(stride), 0)
+	if err != nil {
+		slog.Warn("CSD resize edge: create_buffer failed", "edge", i, "err", err)
+		return
+	}
+	h.csdBuffers[i] = buffer
+
+	// Paint.
+	switch i {
+	case csdTop:
+		h.csdPainter.PaintTitleBar(data, w, ht, state)
+	default:
+		h.csdPainter.PaintBorder(data, w, ht, CSDEdge(i))
+	}
+
+	// Attach + damage + commit (cached in sync mode until parent commit).
+	surf := h.csdSurfaces[i]
+	h.marshalVoid(surf, 1, buffer, 0, 0)
+	h.marshalVoid(surf, 2, 0, 0, uintptr(uint32(w)), uintptr(uint32(ht)))
+	h.marshalVoid(surf, 6) // commit
+
+	// Destroy old resources AFTER new buffer attached.
+	if oldBuffer != 0 {
+		h.marshalVoid(oldBuffer, 0)
+	}
+	if oldPool != 0 {
+		h.marshalVoid(oldPool, 1)
+	}
+	if oldData != nil {
+		unix.Munmap(oldData)
+	}
+}
+
+// csdHitToResizeEdge maps CSDHitResult to xdg_toplevel resize edge enum.
+func csdHitToResizeEdge(hit CSDHitResult) uint32 {
+	// xdg_toplevel resize_edge values:
+	// none=0, top=1, bottom=2, left=4, top_left=5, bottom_left=6, right=8, top_right=9, bottom_right=10
+	switch hit {
+	case CSDHitResizeN:
+		return 1
+	case CSDHitResizeS:
+		return 2
+	case CSDHitResizeW:
+		return 4
+	case CSDHitResizeNW:
+		return 5
+	case CSDHitResizeSW:
+		return 6
+	case CSDHitResizeE:
+		return 8
+	case CSDHitResizeNE:
+		return 9
+	case CSDHitResizeSE:
+		return 10
+	default:
+		return 0
+	}
+}
+
+// marshalConstructor2Obj creates a new proxy with 2 object arguments.
+// Signature "noo" — new_id + object + object.
+// Used for wl_subcompositor::get_subsurface(new_id, surface, parent).
+func (h *LibwaylandHandle) marshalConstructor2Obj(proxy uintptr, opcode uint32, iface unsafe.Pointer, obj1, obj2 uintptr) (uintptr, error) {
+	var argBuf [3]uintptr
+	argBuf[0] = 0    // new_id placeholder
+	argBuf[1] = obj1 // first object arg
+	argBuf[2] = obj2 // second object arg
+	argPtr := uintptr(unsafe.Pointer(&argBuf[0]))
+	ifaceAddr := uintptr(iface)
+
+	var result uintptr
+	args := [4]unsafe.Pointer{
+		unsafe.Pointer(&proxy),
+		unsafe.Pointer(&opcode),
+		unsafe.Pointer(&argPtr),
+		unsafe.Pointer(&ifaceAddr),
+	}
+	_, _ = ffi.CallFunction(&h.cifMarshal, h.fnProxyMarshal, unsafe.Pointer(&result), args[:])
+	if result == 0 {
+		return 0, fmt.Errorf("marshalConstructor2Obj returned NULL (opcode %d)", opcode)
+	}
+	return result, nil
+}
+
+// marshalConstructorFD creates a new proxy with fd + int32 arguments.
+// Used for wl_shm::create_pool(new_id, fd, size).
+// In wl_argument, fd is stored in the .h field (int32_t).
+func (h *LibwaylandHandle) marshalConstructorFD(proxy uintptr, opcode uint32, iface unsafe.Pointer, fd int, size int32) (uintptr, error) {
+	var argBuf [3]uintptr
+	argBuf[0] = 0                   // new_id placeholder
+	argBuf[1] = uintptr(uint32(fd)) // fd in wl_argument.h (int32)
+	argBuf[2] = uintptr(uint32(size))
+	argPtr := uintptr(unsafe.Pointer(&argBuf[0]))
+	ifaceAddr := uintptr(iface)
+
+	var result uintptr
+	args := [4]unsafe.Pointer{
+		unsafe.Pointer(&proxy),
+		unsafe.Pointer(&opcode),
+		unsafe.Pointer(&argPtr),
+		unsafe.Pointer(&ifaceAddr),
+	}
+	_, _ = ffi.CallFunction(&h.cifMarshal, h.fnProxyMarshal, unsafe.Pointer(&result), args[:])
+	if result == 0 {
+		return 0, fmt.Errorf("marshalConstructorFD returned NULL (opcode %d)", opcode)
+	}
+	return result, nil
+}
+
+// marshalConstructorArgs creates a new proxy with multiple int/uint arguments.
+// Used for wl_shm_pool::create_buffer(new_id, offset, width, height, stride, format).
+func (h *LibwaylandHandle) marshalConstructorArgs(proxy uintptr, opcode uint32, iface unsafe.Pointer, args ...uintptr) (uintptr, error) {
+	var argBuf [8]uintptr
+	argBuf[0] = 0 // new_id placeholder
+	copy(argBuf[1:], args)
+	argPtr := uintptr(unsafe.Pointer(&argBuf[0]))
+	ifaceAddr := uintptr(iface)
+
+	var result uintptr
+	ffiArgs := [4]unsafe.Pointer{
+		unsafe.Pointer(&proxy),
+		unsafe.Pointer(&opcode),
+		unsafe.Pointer(&argPtr),
+		unsafe.Pointer(&ifaceAddr),
+	}
+	_, _ = ffi.CallFunction(&h.cifMarshal, h.fnProxyMarshal, unsafe.Pointer(&result), ffiArgs[:])
+	if result == 0 {
+		return 0, fmt.Errorf("marshalConstructorArgs returned NULL (opcode %d)", opcode)
+	}
+	return result, nil
+}
+
+// processCSDAction executes a deferred CSD action outside of goffi callback context.
+func (h *LibwaylandHandle) processCSDAction(action CSDHitResult, serial uint32) {
+	slog.Info("CSD action", "action", action, "serial", serial, "seat", h.csdSeat, "toplevel", h.xdgToplevel)
+	switch action {
+	case CSDHitCaption:
+		if h.xdgToplevel != 0 && h.csdSeat != 0 && serial != 0 {
+			slog.Info("CSD: sending xdg_toplevel.move", "toplevel", h.xdgToplevel, "seat", h.csdSeat, "serial", serial)
+			h.marshalVoid(h.xdgToplevel, 5, h.csdSeat, uintptr(serial))
+			slog.Info("CSD: marshalVoid returned, flushing")
+			if err := h.flushWithRetry(); err != nil {
+				slog.Error("CSD move flush failed", "err", err)
+			} else {
+				slog.Info("CSD: move flushed successfully")
+			}
+		}
+	case CSDHitClose:
+		if h.onCSDClose != nil {
+			h.onCSDClose()
+		}
+	case CSDHitMinimize:
+		if h.xdgToplevel != 0 {
+			h.marshalVoid(h.xdgToplevel, 13)
+			if err := h.flushWithRetry(); err != nil {
+				slog.Warn("CSD minimize flush failed", "err", err)
+			}
+		}
+	case CSDHitMaximize:
+		if h.xdgToplevel != 0 {
+			if h.csdState.Maximized {
+				h.marshalVoid(h.xdgToplevel, 10)
+			} else {
+				h.marshalVoid(h.xdgToplevel, 9)
+			}
+			if err := h.flushWithRetry(); err != nil {
+				slog.Warn("CSD maximize flush failed", "err", err)
+			}
+		}
+	case CSDHitResizeN, CSDHitResizeS, CSDHitResizeW, CSDHitResizeE,
+		CSDHitResizeNW, CSDHitResizeNE, CSDHitResizeSW, CSDHitResizeSE:
+		if h.xdgToplevel != 0 && h.csdSeat != 0 && serial != 0 {
+			edge := csdHitToResizeEdge(action)
+			h.marshalVoid(h.xdgToplevel, 6, h.csdSeat, uintptr(serial), uintptr(edge))
+			if err := h.flushWithRetry(); err != nil {
+				slog.Warn("CSD resize flush failed", "err", err)
+			}
+		}
+	}
+}
+
+// dispatchCSDQueue dispatches pending events on the CSD event queue (non-blocking).
+func (h *LibwaylandHandle) dispatchCSDQueue() {
+	if h.csdQueue == 0 {
+		return
+	}
+	var result int32
+	args := [2]unsafe.Pointer{unsafe.Pointer(&h.display), unsafe.Pointer(&h.csdQueue)}
+	_, _ = ffi.CallFunction(&h.cifDispatchQP, h.fnDispatchQueueP, unsafe.Pointer(&result), args[:])
+}
+
+// getDisplayFD returns the file descriptor for the C display connection.
+// Uses wl_display_get_fd(display) -> int.
+func (h *LibwaylandHandle) getDisplayFD() int {
+	if h.fnGetFD == nil {
+		return -1
+	}
+	var result int32
+	args := [1]unsafe.Pointer{unsafe.Pointer(&h.display)}
+	_, _ = ffi.CallFunction(&h.cifRoundtrip, h.fnGetFD, unsafe.Pointer(&result), args[:])
+	// cifRoundtrip has same signature: int(ptr) — reuse it for get_fd
+	return int(result)
+}
+
+// socketHasData checks if a file descriptor has data ready for reading (non-blocking poll).
+func socketHasData(fd int) bool {
+	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+	n, err := unix.Poll(fds, 0) // timeout=0 = non-blocking
+	return err == nil && n > 0 && fds[0].Revents&unix.POLLIN != 0
+}
+
+// roundtrip is defined in libwayland_xdg.go

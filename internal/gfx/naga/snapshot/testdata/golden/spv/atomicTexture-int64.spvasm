@@ -1,0 +1,49 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 30
+; Schema: 0
+
+               OpCapability Shader
+               OpCapability Int64
+               OpCapability InputAttachmentArrayDynamicIndexing
+               OpCapability Int64Atomics
+         OpExtension %_1599492179 %_1599363141 %_1684105331 %_1767862885 %_1701273965 %_1953392991 %_13366
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_14 "cs_main" %_12
+               OpExecutionMode %_14 LocalSize 2 1 1
+               OpDecorate %_10 DescriptorSet 0
+               OpDecorate %_10 Binding 0
+               OpDecorate %_12 BuiltIn LocalInvocationId
+         %_2 = OpTypeVoid
+         %_3 = OpTypeInt 64 0
+         %_4 = OpTypeImage %_3 2D 0 0 0 2 Unknown 40
+         %_5 = OpTypeInt 32 0
+         %_6 = OpTypeVector %_5 3
+         %_7 = OpTypeInt 32 1
+         %_8 = OpTypeVector %_7 2
+         %_9 = OpTypePointer UniformConstant %_4
+         %_11 = OpTypePointer Input %_6
+         %_13 = OpTypeFunction %_2
+         %_16 = OpConstant %_7 0
+         %_18 = OpTypePointer Image %_3
+         %_19 = OpConstant %_5 0
+         %_21 = OpConstant %_7 1
+         %_22 = OpConstant %_3 1 0
+         %_24 = OpConstant %_5 2
+         %_25 = OpConstant %_5 264
+         %_28 = OpConstant %_3 1 0
+         %_10 = OpVariable %_9 UniformConstant
+         %_12 = OpVariable %_11 Input
+         %_14 = OpFunction %_2 None %_13
+         %_15 = OpLabel
+         %_17 = OpCompositeConstruct %_8 %_16 %_16
+         OpImageTexelPointer %_18 %_20 %_10 %_17 %_19
+         OpAtomicUMax %_3 %_23 %_20 %_21 %_19 %_22
+         OpControlBarrier %_24 %_24 %_25
+         %_26 = OpCompositeConstruct %_8 %_16 %_16
+         OpImageTexelPointer %_18 %_27 %_10 %_26 %_19
+         OpAtomicUMin %_3 %_29 %_27 %_21 %_19 %_28
+               OpReturn
+               OpFunctionEnd

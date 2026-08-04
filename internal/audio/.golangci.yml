@@ -1,0 +1,116 @@
+# GolangCI-Lint v2 Configuration for gogpu/audio
+# Mirrors gogpu/gogpu config with audio-specific adjustments.
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - gocyclo
+    - gocognit
+    - funlen
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - gosec
+    - ineffassign
+    - misspell
+    - whitespace
+    - unconvert
+    - unparam
+    - errname
+    - revive
+    - prealloc
+    - goconst
+    - gocritic
+    - nolintlint
+    - nakedret
+    - dupl
+    - durationcheck
+
+  settings:
+    gocyclo:
+      min-complexity: 20
+
+    funlen:
+      lines: 120
+      statements: 60
+
+    gocognit:
+      min-complexity: 30
+
+    misspell:
+      locale: US
+
+    revive:
+      rules:
+        - name: var-naming
+        - name: error-return
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - commentFormatting
+        - unnamedResult
+        - commentedOutCode
+        - paramTypeCombine
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - funlen
+          - errcheck
+          - gosec
+          - goconst
+          - dupl
+          - gocognit
+
+      # WASAPI COM interop: unsafe.Pointer and integer conversions are
+      # inherent to syscall-based COM vtable calls (zero-CGO pattern).
+      - path: internal/wasapi/com\.go
+        linters:
+          - gosec
+          - errcheck
+
+      - path: internal/wasapi/driver\.go
+        linters:
+          - gosec
+
+      - path: examples?/.*\.go
+        linters:
+          - errcheck
+          - errorlint
+          - funlen
+          - gocyclo
+          - gocognit
+          - revive
+          - gosec
+          - gocritic
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

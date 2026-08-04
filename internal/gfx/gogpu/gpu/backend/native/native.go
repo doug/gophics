@@ -1,0 +1,14 @@
+//go:build !windows && !linux && !darwin && !(js && wasm)
+
+package native
+
+import (
+	"github.com/doug/gossamer/internal/gfx/gogpu/gpu/types"
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+)
+
+// BackendInfo returns metadata for unsupported platforms.
+// gogpu requires Windows (Vulkan/DX12), Linux (Vulkan), or macOS (Metal).
+func BackendInfo(_ types.GraphicsAPI) (name string, variant gputypes.Backend) {
+	return "unsupported", 0
+}

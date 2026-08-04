@@ -1,0 +1,29 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec4, scalar: Float(4) }
+[2] Scalar(Sint, 4)
+[3] Vector { size: Vec4, scalar: Sint(4) }
+[4] Scalar(Uint, 4)
+[5] Vector { size: Vec4, scalar: Uint(4) }
+[6] Vector { size: Vec3, scalar: Float(4) }
+[7] Vector { size: Vec3, scalar: Sint(4) }
+[8] Vector { size: Vec3, scalar: Uint(4) }
+[9] Struct "FragmentOutputVec4Vec3" { members: [{ name: "vec4f", type: [1], offset: 0, binding: Location(0) interp=2/0}, { name: "vec4i", type: [3], offset: 16, binding: Location(1) interp=0/0}, { name: "vec4u", type: [5], offset: 32, binding: Location(2) interp=0/0}, { name: "vec3f", type: [6], offset: 48, binding: Location(3) interp=2/0}, { name: "vec3i", type: [7], offset: 64, binding: Location(4) interp=0/0}, { name: "vec3u", type: [8], offset: 80, binding: Location(5) interp=0/0}], span: 96 }
+[10] Vector { size: Vec2, scalar: Float(4) }
+[11] Vector { size: Vec2, scalar: Sint(4) }
+[12] Vector { size: Vec2, scalar: Uint(4) }
+[13] Struct "FragmentOutputVec2Scalar" { members: [{ name: "vec2f", type: [10], offset: 0, binding: Location(0) interp=2/0}, { name: "vec2i", type: [11], offset: 8, binding: Location(1) interp=0/0}, { name: "vec2u", type: [12], offset: 16, binding: Location(2) interp=0/0}, { name: "scalarf", type: [0], offset: 24, binding: Location(3) interp=2/0}, { name: "scalari", type: [2], offset: 28, binding: Location(4) interp=0/0}, { name: "scalaru", type: [4], offset: 32, binding: Location(5) interp=0/0}], span: 40 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main_vec4vec3" stage=Fragment function={name="main_vec4vec3", args=0, exprs=20, stmts=20, locals=1}
+[1] "main_vec2scalar" stage=Fragment function={name="main_vec2scalar", args=0, exprs=17, stmts=17, locals=1}

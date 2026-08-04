@@ -1,0 +1,23 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec2, scalar: Float(4) }
+[2] Vector { size: Vec4, scalar: Float(4) }
+[3] Struct "VertexOutput" { members: [{ name: "uv", type: [1], offset: 0, binding: Location(0) interp=2/0}, { name: "position", type: [2], offset: 16, binding: Builtin(0)}], span: 32 }
+[4] Image { dim: D2, arrayed: false, class: Sampled}
+[5] Sampler(Filtering)
+
+=== CONSTANTS ===
+[0] "c_scale" type=[0] init=Literal(Float(5.271833295e-315))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "u_texture" type=[4] space=Handle binding=(0,0)
+[1] "u_sampler" type=[5] space=Handle binding=(0,1)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "vert_main" stage=Vertex function={name="vert_main", args=2, exprs=8, stmts=3, locals=0}
+[1] "frag_main" stage=Fragment function={name="frag_main", args=1, exprs=9, stmts=6, locals=0}
+[2] "fs_extra" stage=Fragment function={name="fs_extra", args=0, exprs=5, stmts=2, locals=0}

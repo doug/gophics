@@ -1,0 +1,372 @@
+# GolangCI-Lint v2.10 Configuration for Naga - Pure Go Shader Compiler
+# Documentation: https://golangci-lint.run/docs/configuration/
+#
+# This is a shader compiler ported from Rust naga. Backend code generators
+# (msl/, hlsl/, glsl/, spirv/) and the WGSL lowerer (wgsl/lower.go) contain
+# large switch statements and deeply nested logic that mirrors Rust's pattern
+# matching. Refactoring for Go style would break Rust parity verification.
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  relative-path-mode: gomod
+
+linters:
+  # Enable standard set plus extras
+  enable:
+    # Code quality
+    - gocyclo
+    - gocognit
+    - funlen
+    - maintidx
+    - cyclop
+    - nestif
+
+    # Bug detection
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - gosec
+    - nilnil
+    - nilerr
+    - ineffassign
+
+    # Code style
+    - misspell
+    - whitespace
+    - unconvert
+    - unparam
+
+    # Naming
+    - errname
+    - revive
+
+    # Performance
+    - prealloc
+    - makezero
+
+    # Code practices
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - nolintlint
+    - nakedret
+
+    # Additional
+    - dupl
+    - dogsled
+    - durationcheck
+
+  settings:
+    govet:
+      enable:
+        - copylocks
+      disable:
+        - fieldalignment
+
+    gocyclo:
+      min-complexity: 20
+
+    cyclop:
+      max-complexity: 20
+
+    funlen:
+      lines: 120
+      statements: 60
+
+    gocognit:
+      min-complexity: 30
+
+    misspell:
+      locale: US
+
+    nestif:
+      min-complexity: 5
+
+    revive:
+      rules:
+        - name: var-naming
+        - name: error-return
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+
+      disabled-checks:
+        - commentFormatting
+        - whyNoLint
+        - unnamedResult
+        - commentedOutCode
+        - octalLiteral
+        - paramTypeCombine
+        - ifElseChain       # Backend code mirrors Rust match arms as if-else chains
+        - singleCaseSwitch  # Single-case switches are placeholders for future Rust match arms
+        - typeAssertChain   # Type assertion chains mirror Rust enum matching
+        - typeSwitchVar     # Redundant in switch-heavy backend code
+        - elseif            # If-else chains match Rust control flow
+        - ptrToRefParam     # Optional pointer params (*Binding) mirror Rust Option<&Binding>
+        - rangeValCopy      # IR structs copied in range loops for clarity; not perf-critical
+        - emptyStringTest   # Style preference, not a bug
+        - unnecessaryBlock  # Block in case statements aids readability for complex logic
+
+      settings:
+        hugeParam:
+          sizeThreshold: 256
+
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"      # Quickfix suggestions are stylistic, not bugs
+        - "-ST*"       # Style suggestions — naming conventions mirror Rust naga
+        - "-S1034"     # Type assertion elimination — matches Rust pattern
+        - "-S1039"     # fmt.Sprintf style — intentional for consistency
+        - "-SA4003"    # uint8 >= 0 comparison — ported from Rust where type may differ
+        - "-SA4026"    # Negative zero literal — matches Rust behavior explicitly
+        - "-SA9003"    # Empty branch — placeholder for future Rust match arms
+
+  exclusions:
+    rules:
+      # Test files - allow more flexibility
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - cyclop
+          - funlen
+          - maintidx
+          - errcheck
+          - gosec
+          - goconst
+          - dupl
+          - gocognit
+          - unparam
+          - nestif
+          - gocritic
+          - revive
+          - unconvert
+          - prealloc
+          - unused
+          - nilnil
+
+      # Parser - complex by nature
+      - path: wgsl/(internal/parser/)?(parser|errors)\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - dupl
+          - nestif
+          - gocritic
+          - unparam
+
+      # Lexer - similar patterns
+      - path: wgsl/(internal/parser/)?lexer\.go
+        linters:
+          - gocyclo
+          - cyclop
+          - funlen
+          - gocognit
+          - nestif
+          - gocritic
+          - unparam
+          - goconst      # Keyword map uses string literals as keys — constants would be worse
+
+      # Token - String() method is necessarily complex
+      - path: wgsl/(internal/parser/)?token\.go
+        linters:
+          - gocyclo
+          - cyclop
+          - goconst      # tokenNames map mirrors keyword strings from lexer — constants would be worse
+
+      # Temporary/scratch tools — not production code, not in CI
+      - path: tmp/.*\.go
+        linters:
+          - gosec
+          - errcheck
+          - goconst
+          - unused
+
+      # HLSL keyword maps - string literals as map keys (same as lexer.go)
+      - path: internal/backend/hlsl_keywords\.go
+        linters:
+          - goconst
+
+      # TypeRegistry - complex type deduplication (moved from ir/)
+      - path: internal/registry/.*\.go
+        linters:
+          - funlen
+          - gocyclo
+          - cyclop
+          - gocognit
+          - gosec
+
+      # CLI tools
+      - path: cmd/nagac/.*\.go
+        linters:
+          - gosec
+
+      - path: cmd/spvdis/.*\.go
+        linters:
+          - gosec
+
+      # dxilval — Windows-only DXIL validator CLI. Uses io.Writer
+      # parameters for testability, which trips errcheck's fmt.Print*
+      # heuristic (only fires for concrete *os.File). gosec G304 flags
+      # paths read from CLI args, which is the entire point of a CLI.
+      # corpus.go has a long mode-dispatch switch (gocognit).
+      - path: cmd/dxilval/.*\.go
+        linters:
+          - gosec
+          - errcheck
+          - gocognit
+
+      # IDxcValidator (dxil.dll) Pure Go wrapper — entire file is COM/syscall
+      # glue (vtable dispatch, IDxcBlob impl via syscall.NewCallback,
+      # process heap allocator). Every line touches unsafe.Pointer or uintptr
+      # by design. govet's unsafeptr flags every COM vtable read; dogsled
+      # flags every `_, _, _ = syscall.SyscallN(...)` discard.
+      - path: internal/dxcvalidator/.*\.go
+        linters:
+          - gosec
+          - govet
+          - dogsled
+
+      # WGSL Lowerer - ported from Rust front/wgsl/lower/mod.rs
+      # Contains 15K+ lines of complex type resolution and expression lowering
+      # that must match Rust behavior exactly. Refactoring breaks parity.
+      - path: wgsl/(internal/lower/)?lower\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+          - goconst
+          - gocritic
+          - gosec
+          - unparam
+          - dupl
+          - unused       # Scaffolding for Rust parity — functions will be used as more shaders are ported
+
+      # WGSL dependency ordering - complex graph traversal
+      - path: wgsl/(internal/parser/)?deporder\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - nestif
+          - goconst
+
+      # MSL backend - ported from Rust back/msl/writer.rs
+      - path: msl/(internal/codegen/)?.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+          - gosec
+          - goconst
+          - unparam
+          - revive        # Method naming mirrors Rust conventions
+          - unconvert     # Explicit conversions match Rust type system
+          - unused        # Scaffolding for future Rust parity features
+
+      # HLSL backend - ported from Rust back/hlsl/
+      - path: hlsl/(internal/codegen/)?.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+          - gosec
+          - goconst
+          - unparam
+          - revive        # var-naming: typeId/subgroupId match Rust naming
+          - unconvert     # Explicit conversions match Rust type system
+          - unused        # Scaffolding for future Rust parity features
+
+      # GLSL backend - ported from Rust back/glsl/
+      - path: glsl/(internal/codegen/)?.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+          - gosec
+          - goconst
+          - unparam
+          - unconvert    # Explicit conversions match Rust type system
+          - unused       # Scaffolding for future Rust parity features
+
+      # SPIR-V backend - ported from Rust back/spv/
+      - path: spirv/(internal/codegen/)?.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+          - gosec
+          - goconst
+          - unparam
+          - unconvert    # int->uint32 conversions are intentional for SPIR-V word encoding
+          - dupl          # Const blocks (OpCode, ImageFormat) have similar structure by design
+          - revive        # Naming mirrors Rust/SPIR-V spec identifiers
+          - unused        # Scaffolding for future Rust parity features
+
+      # IR package - complex type resolution and validation
+      - path: ir/.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+          - gosec
+          - goconst       # Type name strings ("f32", "i32") appear throughout resolve/registry
+          - unused        # Scaffolding for future Rust parity features
+          - unparam       # Function signatures match Rust naga interfaces
+
+      # Snapshot test infrastructure
+      - path: snapshot/.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - maintidx
+          - nestif
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

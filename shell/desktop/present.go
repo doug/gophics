@@ -12,9 +12,9 @@ import (
 	"image"
 	"log"
 
-	"github.com/doug/gg"
-	"github.com/doug/gg/integration/ggcanvas"
-	"github.com/doug/gogpu"
+	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gossamer/internal/gfx/gogpu"
 
 	"github.com/doug/gossamer/shell"
 )

@@ -1,0 +1,516 @@
+//go:build darwin
+
+package darwin
+
+import "sync"
+
+// selectors holds cached selector values.
+// Selectors are registered once and reused throughout the application lifetime.
+var selectors struct {
+	once sync.Once
+
+	// NSObject - Memory management
+	alloc   SEL
+	init    SEL
+	new     SEL
+	release SEL
+	retain  SEL
+
+	// NSApplication - Application lifecycle
+	sharedApplication                           SEL
+	setActivationPolicy                         SEL
+	activateIgnoringOtherApps                   SEL
+	run                                         SEL
+	stop                                        SEL
+	terminate                                   SEL
+	nextEventMatchingMaskUntilDateInModeDequeue SEL
+	sendEvent                                   SEL
+	finishLaunching                             SEL
+
+	// NSApplication delegate
+	setDelegate SEL
+
+	// NSWindow - Window management
+	initWithContentRectStyleMaskBackingDefer SEL
+	setTitle                                 SEL
+	title                                    SEL
+	setContentView                           SEL
+	contentView                              SEL
+	makeKeyAndOrderFront                     SEL
+	orderOut                                 SEL
+	close                                    SEL
+	miniaturize                              SEL
+	deminiaturize                            SEL
+	zoom                                     SEL
+	setFrame                                 SEL
+	frame                                    SEL
+	contentRectForFrameRect                  SEL
+	frameRectForContentRect                  SEL
+	styleMask                                SEL
+	setStyleMask                             SEL
+	setAcceptsMouseMovedEvents               SEL
+	makeFirstResponder                       SEL
+	backingScaleFactor                       SEL
+	isKeyWindow                              SEL
+	isVisible                                SEL
+	isMiniaturized                           SEL
+	isZoomed                                 SEL
+	setReleasedWhenClosed                    SEL
+	center                                   SEL
+	toggleFullScreen                         SEL
+	setCollectionBehavior                    SEL
+	windowShouldClose                        SEL
+	windowDidChangeScreen                    SEL
+	windowWillStartLiveResize                SEL
+	windowDidEndLiveResize                   SEL
+	windowDidResize                          SEL
+
+	// NSWindow titlebar transparency / title visibility
+	setTitlebarAppearsTransparent SEL
+	setTitleVisibility            SEL
+
+	// NSView - View management
+	setWantsLayer   SEL
+	wantsLayer      SEL
+	setLayer        SEL
+	layer           SEL
+	bounds          SEL
+	setBounds       SEL
+	setNeedsDisplay SEL
+
+	// NSView - view hierarchy manipulation
+	superview                      SEL
+	addSubview                     SEL
+	addSubviewPositionedRelativeTo SEL
+	removeFromSuperview            SEL
+
+	// NSWindow - button access
+	standardWindowButton SEL
+
+	// NSTextField / NSControl
+	initWithFrame      SEL
+	setEditable        SEL
+	setBezeled         SEL
+	setDrawsBackground SEL
+	setAlignment       SEL
+	setStringValue     SEL
+	setTextColor       SEL
+	setFont            SEL
+
+	// NSFont class methods
+	titleBarFontOfSize SEL
+
+	// NSColor class methods
+	labelColor SEL
+
+	// CALayer - Contents (for software blitting)
+	setContents SEL
+
+	// NSScreen
+	mainScreen   SEL
+	screens      SEL
+	visibleFrame SEL
+
+	// NSEvent
+	eventWindow SEL // [NSEvent window] → NSWindow* (nil for window-less events)
+
+	// NSDate
+	distantPast   SEL
+	distantFuture SEL
+
+	// NSString
+	initWithUTF8String SEL
+	UTF8String         SEL
+	length             SEL
+
+	// NSAutoreleasePool
+	drain SEL
+
+	// CALayer / CAMetalLayer
+	setLayerFrame           SEL // CALayer setFrame: (distinct from NSWindow setFrame:display:)
+	setAutoresizingMask     SEL
+	setContentsGravity      SEL
+	setContentsScale        SEL
+	contentsScale           SEL
+	setDrawableSize         SEL
+	drawableSize            SEL
+	setDevice               SEL
+	device                  SEL
+	setPixelFormat          SEL
+	pixelFormat             SEL
+	nextDrawable            SEL
+	setFramebufferOnly      SEL
+	setMaximumDrawableCount SEL
+	setDisplaySyncEnabled   SEL
+
+	// NSEvent
+	eventType                   SEL
+	locationInWindow            SEL
+	modifierFlags               SEL
+	keyCode                     SEL
+	characters                  SEL
+	charactersIgnoringModifiers SEL
+	isARepeat                   SEL
+	buttonNumber                SEL
+	scrollingDeltaX             SEL
+	scrollingDeltaY             SEL
+	hasPreciseScrollingDeltas   SEL
+	deltaX                      SEL
+	deltaY                      SEL
+
+	// NSEvent - scroll gesture phases (macOS trackpad)
+	phase         SEL // NSEventPhase bitmask for active gesture
+	momentumPhase SEL // NSEventPhase bitmask for momentum/inertia
+
+	// NSEvent - tablet/pen properties
+	pressure           SEL
+	tilt               SEL // Returns NSPoint {x, y} each -1.0 to 1.0
+	rotation           SEL // Degrees 0-360
+	subtype            SEL
+	pointingDeviceType SEL
+
+	// NSEvent - creation and posting
+	otherEventWithType SEL
+	postEventAtStart   SEL
+
+	// NSNotificationCenter
+	defaultCenter                 SEL
+	addObserverSelectorNameObject SEL
+	removeObserver                SEL
+
+	// NSRunLoop
+	currentRunLoop SEL
+	runMode        SEL
+
+	// NSPasteboard
+	generalPasteboard SEL
+	stringForType     SEL
+	clearContents     SEL
+	setStringForType  SEL
+
+	// NSCursor
+	arrowCursor               SEL
+	pointingHandCursor        SEL
+	IBeamCursor               SEL
+	crosshairCursor           SEL
+	openHandCursor            SEL
+	resizeUpDownCursor        SEL
+	resizeLeftRightCursor     SEL
+	operationNotAllowedCursor SEL
+	setCursor                 SEL
+	hideCursor                SEL // NSCursor class method
+	unhideCursor              SEL // NSCursor class method
+
+	// NSAppearance
+	effectiveAppearance SEL
+	name                SEL
+
+	// NSWorkspace
+	sharedWorkspace                            SEL
+	accessibilityDisplayShouldReduceMotion     SEL
+	accessibilityDisplayShouldIncreaseContrast SEL
+
+	// TabbingMode
+	setTabbingMode       SEL
+	setTabbingIdentifier SEL
+
+	// Window size constraints
+	setMinSize SEL
+	setMaxSize SEL
+}
+
+// classes holds cached class references.
+var classes struct {
+	once sync.Once
+
+	NSObject             Class
+	NSApplication        Class
+	NSWindow             Class
+	NSView               Class
+	NSScreen             Class
+	NSDate               Class
+	NSString             Class
+	NSAutoreleasePool    Class
+	NSEvent              Class
+	NSNotificationCenter Class
+	NSRunLoop            Class
+	CALayer              Class
+	CAMetalLayer         Class
+	NSPasteboard         Class
+	NSCursor             Class
+	NSWorkspace          Class
+	NSTextField          Class
+	NSColor              Class
+	NSFont               Class
+}
+
+// initSelectors registers all selectors used by the darwin package.
+func initSelectors() {
+	selectors.once.Do(func() {
+		// NSObject
+		selectors.alloc = RegisterSelector("alloc")
+		selectors.init = RegisterSelector("init")
+		selectors.new = RegisterSelector("new")
+		selectors.release = RegisterSelector("release")
+		selectors.retain = RegisterSelector("retain")
+
+		// NSApplication
+		selectors.sharedApplication = RegisterSelector("sharedApplication")
+		selectors.setActivationPolicy = RegisterSelector("setActivationPolicy:")
+		selectors.activateIgnoringOtherApps = RegisterSelector("activateIgnoringOtherApps:")
+		selectors.run = RegisterSelector("run")
+		selectors.stop = RegisterSelector("stop:")
+		selectors.terminate = RegisterSelector("terminate:")
+		selectors.nextEventMatchingMaskUntilDateInModeDequeue = RegisterSelector(
+			"nextEventMatchingMask:untilDate:inMode:dequeue:")
+		selectors.sendEvent = RegisterSelector("sendEvent:")
+		selectors.finishLaunching = RegisterSelector("finishLaunching")
+
+		// NSApplication delegate
+		selectors.setDelegate = RegisterSelector("setDelegate:")
+
+		// NSWindow
+		selectors.initWithContentRectStyleMaskBackingDefer = RegisterSelector(
+			"initWithContentRect:styleMask:backing:defer:")
+		selectors.setTitle = RegisterSelector("setTitle:")
+		selectors.title = RegisterSelector("title")
+		selectors.setContentView = RegisterSelector("setContentView:")
+		selectors.contentView = RegisterSelector("contentView")
+		selectors.makeKeyAndOrderFront = RegisterSelector("makeKeyAndOrderFront:")
+		selectors.orderOut = RegisterSelector("orderOut:")
+		selectors.close = RegisterSelector("close")
+		selectors.miniaturize = RegisterSelector("miniaturize:")
+		selectors.deminiaturize = RegisterSelector("deminiaturize:")
+		selectors.zoom = RegisterSelector("zoom:")
+		selectors.setFrame = RegisterSelector("setFrame:display:")
+		selectors.frame = RegisterSelector("frame")
+		selectors.contentRectForFrameRect = RegisterSelector("contentRectForFrameRect:")
+		selectors.frameRectForContentRect = RegisterSelector("frameRectForContentRect:")
+		selectors.styleMask = RegisterSelector("styleMask")
+		selectors.setStyleMask = RegisterSelector("setStyleMask:")
+		selectors.setAcceptsMouseMovedEvents = RegisterSelector("setAcceptsMouseMovedEvents:")
+		selectors.backingScaleFactor = RegisterSelector("backingScaleFactor")
+		selectors.makeFirstResponder = RegisterSelector("makeFirstResponder:")
+		selectors.isKeyWindow = RegisterSelector("isKeyWindow")
+		selectors.isVisible = RegisterSelector("isVisible")
+		selectors.isMiniaturized = RegisterSelector("isMiniaturized")
+		selectors.isZoomed = RegisterSelector("isZoomed")
+		selectors.setReleasedWhenClosed = RegisterSelector("setReleasedWhenClosed:")
+		selectors.center = RegisterSelector("center")
+		selectors.toggleFullScreen = RegisterSelector("toggleFullScreen:")
+		selectors.setCollectionBehavior = RegisterSelector("setCollectionBehavior:")
+		selectors.windowShouldClose = RegisterSelector("windowShouldClose:")
+		selectors.windowDidChangeScreen = RegisterSelector("windowDidChangeScreen:")
+		selectors.windowWillStartLiveResize = RegisterSelector("windowWillStartLiveResize:")
+		selectors.windowDidEndLiveResize = RegisterSelector("windowDidEndLiveResize:")
+		selectors.windowDidResize = RegisterSelector("windowDidResize:")
+		selectors.setTitlebarAppearsTransparent = RegisterSelector("setTitlebarAppearsTransparent:")
+		selectors.setTitleVisibility = RegisterSelector("setTitleVisibility:")
+
+		// NSView
+		selectors.setWantsLayer = RegisterSelector("setWantsLayer:")
+		selectors.wantsLayer = RegisterSelector("wantsLayer")
+		selectors.setLayer = RegisterSelector("setLayer:")
+		selectors.layer = RegisterSelector("layer")
+		selectors.bounds = RegisterSelector("bounds")
+		selectors.setBounds = RegisterSelector("setBounds:")
+		selectors.setNeedsDisplay = RegisterSelector("setNeedsDisplay:")
+
+		// NSView - view hierarchy manipulation
+		selectors.superview = RegisterSelector("superview")
+		selectors.addSubview = RegisterSelector("addSubview:")
+		selectors.addSubviewPositionedRelativeTo = RegisterSelector("addSubview:positioned:relativeTo:")
+		selectors.removeFromSuperview = RegisterSelector("removeFromSuperview")
+
+		// NSWindow - button access
+		selectors.standardWindowButton = RegisterSelector("standardWindowButton:")
+
+		// NSTextField / NSControl
+		selectors.initWithFrame = RegisterSelector("initWithFrame:")
+		selectors.setEditable = RegisterSelector("setEditable:")
+		selectors.setBezeled = RegisterSelector("setBezeled:")
+		selectors.setDrawsBackground = RegisterSelector("setDrawsBackground:")
+		selectors.setAlignment = RegisterSelector("setAlignment:")
+		selectors.setStringValue = RegisterSelector("setStringValue:")
+		selectors.setTextColor = RegisterSelector("setTextColor:")
+		selectors.setFont = RegisterSelector("setFont:")
+
+		// NSFont class methods
+		selectors.titleBarFontOfSize = RegisterSelector("titleBarFontOfSize:")
+
+		// NSColor class methods
+		selectors.labelColor = RegisterSelector("labelColor")
+
+		// CALayer - Contents
+		selectors.setContents = RegisterSelector("setContents:")
+
+		// NSScreen
+		selectors.mainScreen = RegisterSelector("mainScreen")
+		selectors.screens = RegisterSelector("screens")
+		selectors.visibleFrame = RegisterSelector("visibleFrame")
+
+		// NSEvent
+		selectors.eventWindow = RegisterSelector("window")
+
+		// NSDate
+		selectors.distantPast = RegisterSelector("distantPast")
+		selectors.distantFuture = RegisterSelector("distantFuture")
+
+		// NSString
+		selectors.initWithUTF8String = RegisterSelector("initWithUTF8String:")
+		selectors.UTF8String = RegisterSelector("UTF8String")
+		selectors.length = RegisterSelector("length")
+
+		// NSAutoreleasePool
+		selectors.drain = RegisterSelector("drain")
+
+		// CALayer / CAMetalLayer
+		selectors.setLayerFrame = RegisterSelector("setFrame:")
+		selectors.setAutoresizingMask = RegisterSelector("setAutoresizingMask:")
+		selectors.setContentsGravity = RegisterSelector("setContentsGravity:")
+		selectors.setContentsScale = RegisterSelector("setContentsScale:")
+		selectors.contentsScale = RegisterSelector("contentsScale")
+		selectors.setDrawableSize = RegisterSelector("setDrawableSize:")
+		selectors.drawableSize = RegisterSelector("drawableSize")
+		selectors.setDevice = RegisterSelector("setDevice:")
+		selectors.device = RegisterSelector("device")
+		selectors.setPixelFormat = RegisterSelector("setPixelFormat:")
+		selectors.pixelFormat = RegisterSelector("pixelFormat")
+		selectors.nextDrawable = RegisterSelector("nextDrawable")
+		selectors.setFramebufferOnly = RegisterSelector("setFramebufferOnly:")
+		selectors.setMaximumDrawableCount = RegisterSelector("setMaximumDrawableCount:")
+		selectors.setDisplaySyncEnabled = RegisterSelector("setDisplaySyncEnabled:")
+
+		// NSEvent
+		selectors.eventType = RegisterSelector("type")
+		selectors.locationInWindow = RegisterSelector("locationInWindow")
+		selectors.modifierFlags = RegisterSelector("modifierFlags")
+		selectors.keyCode = RegisterSelector("keyCode")
+		selectors.characters = RegisterSelector("characters")
+		selectors.charactersIgnoringModifiers = RegisterSelector("charactersIgnoringModifiers")
+		selectors.isARepeat = RegisterSelector("isARepeat")
+		selectors.buttonNumber = RegisterSelector("buttonNumber")
+		selectors.scrollingDeltaX = RegisterSelector("scrollingDeltaX")
+		selectors.scrollingDeltaY = RegisterSelector("scrollingDeltaY")
+		selectors.hasPreciseScrollingDeltas = RegisterSelector("hasPreciseScrollingDeltas")
+		selectors.deltaX = RegisterSelector("deltaX")
+		selectors.deltaY = RegisterSelector("deltaY")
+
+		// NSEvent - scroll gesture phases (macOS trackpad)
+		selectors.phase = RegisterSelector("phase")
+		selectors.momentumPhase = RegisterSelector("momentumPhase")
+
+		// NSEvent - tablet/pen properties
+		selectors.pressure = RegisterSelector("pressure")
+		selectors.tilt = RegisterSelector("tilt")
+		selectors.rotation = RegisterSelector("rotation")
+		selectors.subtype = RegisterSelector("subtype")
+		selectors.pointingDeviceType = RegisterSelector("pointingDeviceType")
+
+		// NSEvent - creation and posting
+		selectors.otherEventWithType = RegisterSelector(
+			"otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:")
+		selectors.postEventAtStart = RegisterSelector("postEvent:atStart:")
+
+		// NSNotificationCenter
+		selectors.defaultCenter = RegisterSelector("defaultCenter")
+		selectors.addObserverSelectorNameObject = RegisterSelector(
+			"addObserver:selector:name:object:")
+		selectors.removeObserver = RegisterSelector("removeObserver:")
+
+		// NSRunLoop
+		selectors.currentRunLoop = RegisterSelector("currentRunLoop")
+		selectors.runMode = RegisterSelector("runMode:beforeDate:")
+
+		// NSPasteboard
+		selectors.generalPasteboard = RegisterSelector("generalPasteboard")
+		selectors.stringForType = RegisterSelector("stringForType:")
+		selectors.clearContents = RegisterSelector("clearContents")
+		selectors.setStringForType = RegisterSelector("setString:forType:")
+
+		// NSCursor
+		selectors.arrowCursor = RegisterSelector("arrowCursor")
+		selectors.pointingHandCursor = RegisterSelector("pointingHandCursor")
+		selectors.IBeamCursor = RegisterSelector("IBeamCursor")
+		selectors.crosshairCursor = RegisterSelector("crosshairCursor")
+		selectors.openHandCursor = RegisterSelector("openHandCursor")
+		selectors.resizeUpDownCursor = RegisterSelector("resizeUpDownCursor")
+		selectors.resizeLeftRightCursor = RegisterSelector("resizeLeftRightCursor")
+		selectors.operationNotAllowedCursor = RegisterSelector("operationNotAllowedCursor")
+		selectors.setCursor = RegisterSelector("set")
+		selectors.hideCursor = RegisterSelector("hide")
+		selectors.unhideCursor = RegisterSelector("unhide")
+
+		// NSAppearance
+		selectors.effectiveAppearance = RegisterSelector("effectiveAppearance")
+		selectors.name = RegisterSelector("name")
+
+		// NSWorkspace
+		selectors.sharedWorkspace = RegisterSelector("sharedWorkspace")
+		selectors.accessibilityDisplayShouldReduceMotion = RegisterSelector(
+			"accessibilityDisplayShouldReduceMotion")
+		selectors.accessibilityDisplayShouldIncreaseContrast = RegisterSelector(
+			"accessibilityDisplayShouldIncreaseContrast")
+
+		// Window size constraints
+		selectors.setMinSize = RegisterSelector("setMinSize:")
+		selectors.setMaxSize = RegisterSelector("setMaxSize:")
+	})
+}
+
+// initClasses loads all class references used by the darwin package.
+func initClasses() {
+	classes.once.Do(func() {
+		classes.NSObject = GetClass("NSObject")
+		classes.NSApplication = GetClass("NSApplication")
+		classes.NSWindow = GetClass("NSWindow")
+		classes.NSView = GetClass("NSView")
+		classes.NSScreen = GetClass("NSScreen")
+		classes.NSDate = GetClass("NSDate")
+		classes.NSString = GetClass("NSString")
+		classes.NSAutoreleasePool = GetClass("NSAutoreleasePool")
+		classes.NSEvent = GetClass("NSEvent")
+		classes.NSNotificationCenter = GetClass("NSNotificationCenter")
+		classes.NSRunLoop = GetClass("NSRunLoop")
+		classes.CALayer = GetClass("CALayer")
+		classes.CAMetalLayer = GetClass("CAMetalLayer")
+		classes.NSPasteboard = GetClass("NSPasteboard")
+		classes.NSCursor = GetClass("NSCursor")
+		classes.NSWorkspace = GetClass("NSWorkspace")
+		classes.NSTextField = GetClass("NSTextField")
+		classes.NSColor = GetClass("NSColor")
+		classes.NSFont = GetClass("NSFont")
+	})
+}
+
+// Sel returns the cached selector for common operations.
+// This provides type-safe access to selectors.
+type Sel struct{}
+
+// Selectors returns the global selector cache.
+func Selectors() *Sel {
+	initSelectors()
+	return &Sel{}
+}
+
+// Classes initializes and returns class cache.
+func Classes() {
+	initClasses()
+}
+
+// Convenience accessors for selectors
+
+// Alloc returns the alloc selector.
+func (s *Sel) Alloc() SEL { return selectors.alloc }
+
+// Init returns the init selector.
+func (s *Sel) Init() SEL { return selectors.init }
+
+// New returns the new selector.
+func (s *Sel) New() SEL { return selectors.new }
+
+// Release returns the release selector.
+func (s *Sel) Release() SEL { return selectors.release }
+
+// Retain returns the retain selector.
+func (s *Sel) Retain() SEL { return selectors.retain }

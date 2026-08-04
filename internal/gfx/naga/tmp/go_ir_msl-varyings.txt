@@ -1,0 +1,20 @@
+=== TYPES ===
+[0] Vector { size: Vec2, scalar: Float(4) }
+[1] Struct "Vertex" { members: [{ name: "position", type: [0], offset: 0, binding: Location(0) interp=2/0}], span: 8 }
+[2] Struct "NoteInstance" { members: [{ name: "position", type: [0], offset: 0, binding: Location(1) interp=2/0}], span: 8 }
+[3] Vector { size: Vec4, scalar: Float(4) }
+[4] Struct "VertexOutput" { members: [{ name: "position", type: [3], offset: 0, binding: Builtin(0)}], span: 16 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "vs_main" stage=Vertex function={name="vs_main", args=2, exprs=4, stmts=2, locals=1}
+[1] "fs_main" stage=Fragment function={name="fs_main", args=2, exprs=5, stmts=3, locals=0}

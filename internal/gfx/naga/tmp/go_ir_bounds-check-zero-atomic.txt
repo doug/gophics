@@ -1,0 +1,156 @@
+=== TYPES ===
+[0] Atomic { base: Uint(4) }
+[1] Array { base: [0], size: Constant(10), stride: 4 }
+[2] Array { base: [0], size: Dynamic, stride: 4 }
+[3] Struct "Globals" { members: [{ name: "a", type: [0], offset: 0}, { name: "b", type: [1], offset: 4}, { name: "c", type: [2], offset: 44}], span: 48 }
+[4] Scalar(Uint, 4)
+[5] Scalar(Sint, 4)
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "globals" type=[3] space=Storage(LOAD|STORE) binding=(0,0)
+
+=== FUNCTIONS ===
+[0] "fetch_add_atomic"
+  args: []
+  result: type=[4]
+  locals: 0
+  expressions: 4
+    [0] GlobalVariable([0])
+    [1] AccessIndex { base: [0], index: 0 }
+    [2] Literal(U32(1))
+    [3] AtomicResult
+  named_expressions: {}
+  body: 3 statements
+    Emit(1..2)
+    Atomic { pointer: [1], fun: Add, value: [2], result: [3] }
+    Return { value: [3] }
+
+[1] "fetch_add_atomic_static_sized_array"
+  args: [{ name: "i", type: [5], binding: None}]
+  result: type=[4]
+  locals: 0
+  expressions: 6
+    [0] FunctionArgument(0)
+    [1] GlobalVariable([0])
+    [2] AccessIndex { base: [1], index: 1 }
+    [3] Access { base: [2], index: [0] }
+    [4] Literal(U32(1))
+    [5] AtomicResult
+  named_expressions:
+    [0] = "i"
+  body: 3 statements
+    Emit(2..4)
+    Atomic { pointer: [3], fun: Add, value: [4], result: [5] }
+    Return { value: [5] }
+
+[2] "fetch_add_atomic_dynamic_sized_array"
+  args: [{ name: "i", type: [5], binding: None}]
+  result: type=[4]
+  locals: 0
+  expressions: 6
+    [0] FunctionArgument(0)
+    [1] GlobalVariable([0])
+    [2] AccessIndex { base: [1], index: 2 }
+    [3] Access { base: [2], index: [0] }
+    [4] Literal(U32(1))
+    [5] AtomicResult
+  named_expressions:
+    [0] = "i"
+  body: 3 statements
+    Emit(2..4)
+    Atomic { pointer: [3], fun: Add, value: [4], result: [5] }
+    Return { value: [5] }
+
+[3] "exchange_atomic"
+  args: []
+  result: type=[4]
+  locals: 0
+  expressions: 4
+    [0] GlobalVariable([0])
+    [1] AccessIndex { base: [0], index: 0 }
+    [2] Literal(U32(1))
+    [3] AtomicResult
+  named_expressions: {}
+  body: 3 statements
+    Emit(1..2)
+    Atomic { pointer: [1], fun: Exchange, value: [2], result: [3] }
+    Return { value: [3] }
+
+[4] "exchange_atomic_static_sized_array"
+  args: [{ name: "i", type: [5], binding: None}]
+  result: type=[4]
+  locals: 0
+  expressions: 6
+    [0] FunctionArgument(0)
+    [1] GlobalVariable([0])
+    [2] AccessIndex { base: [1], index: 1 }
+    [3] Access { base: [2], index: [0] }
+    [4] Literal(U32(1))
+    [5] AtomicResult
+  named_expressions:
+    [0] = "i"
+  body: 3 statements
+    Emit(2..4)
+    Atomic { pointer: [3], fun: Exchange, value: [4], result: [5] }
+    Return { value: [5] }
+
+[5] "exchange_atomic_dynamic_sized_array"
+  args: [{ name: "i", type: [5], binding: None}]
+  result: type=[4]
+  locals: 0
+  expressions: 6
+    [0] FunctionArgument(0)
+    [1] GlobalVariable([0])
+    [2] AccessIndex { base: [1], index: 2 }
+    [3] Access { base: [2], index: [0] }
+    [4] Literal(U32(1))
+    [5] AtomicResult
+  named_expressions:
+    [0] = "i"
+  body: 3 statements
+    Emit(2..4)
+    Atomic { pointer: [3], fun: Exchange, value: [4], result: [5] }
+    Return { value: [5] }
+
+[6] "fetch_add_atomic_dynamic_sized_array_static_index"
+  args: []
+  result: type=[4]
+  locals: 0
+  expressions: 5
+    [0] GlobalVariable([0])
+    [1] AccessIndex { base: [0], index: 2 }
+    [2] AccessIndex { base: [1], index: 1000 }
+    [3] Literal(U32(1))
+    [4] AtomicResult
+  named_expressions: {}
+  body: 4 statements
+    Emit(1..2)
+    Emit(2..3)
+    Atomic { pointer: [2], fun: Add, value: [3], result: [4] }
+    Return { value: [4] }
+
+[7] "exchange_atomic_dynamic_sized_array_static_index"
+  args: []
+  result: type=[4]
+  locals: 0
+  expressions: 5
+    [0] GlobalVariable([0])
+    [1] AccessIndex { base: [0], index: 2 }
+    [2] AccessIndex { base: [1], index: 1000 }
+    [3] Literal(U32(1))
+    [4] AtomicResult
+  named_expressions: {}
+  body: 4 statements
+    Emit(1..2)
+    Emit(2..3)
+    Atomic { pointer: [2], fun: Exchange, value: [3], result: [4] }
+    Return { value: [4] }
+
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=12, stmts=9, locals=0} workgroup_size=(1,1,1)

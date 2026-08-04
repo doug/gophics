@@ -1,0 +1,18 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Scalar(Sint, 4)
+[2] Array { base: [1], size: Constant(128), stride: 4 }
+[3] Vector { size: Vec3, scalar: Uint(4) }
+
+=== CONSTANTS ===
+[0] "SIZE" type=[0] init=Literal(Uint(128))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "arr_i32" type=[2] space=WorkGroup binding=None
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "test_workgroupUniformLoad" stage=Compute function={name="test_workgroupUniformLoad", args=1, exprs=7, stmts=4, locals=0} workgroup_size=(4,1,1)

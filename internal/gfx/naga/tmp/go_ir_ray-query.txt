@@ -1,0 +1,101 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec3, scalar: Float(4) }
+[2] AccelerationStructure
+[3] Scalar(Uint, 4)
+[4] Vector { size: Vec2, scalar: Float(4) }
+[5] Scalar(Bool, 1)
+[6] Matrix { columns: Vec4, rows: Vec3, scalar: Float(4) }
+[7] Struct "RayIntersection" { members: [{ name: "kind", type: [3], offset: 0}, { name: "t", type: [0], offset: 4}, { name: "instance_custom_data", type: [3], offset: 8}, { name: "instance_index", type: [3], offset: 12}, { name: "sbt_record_offset", type: [3], offset: 16}, { name: "geometry_index", type: [3], offset: 20}, { name: "primitive_index", type: [3], offset: 24}, { name: "barycentrics", type: [4], offset: 28}, { name: "front_face", type: [5], offset: 36}, { name: "object_to_world", type: [6], offset: 48}, { name: "world_to_object", type: [6], offset: 112}], span: 176 }
+[8] RayQuery
+[9] Struct "RayDesc" { members: [{ name: "flags", type: [3], offset: 0}, { name: "cull_mask", type: [3], offset: 4}, { name: "tmin", type: [0], offset: 8}, { name: "tmax", type: [0], offset: 12}, { name: "origin", type: [1], offset: 16}, { name: "dir", type: [1], offset: 32}], span: 48 }
+[10] Struct "Output" { members: [{ name: "visible", type: [3], offset: 0}, { name: "normal", type: [1], offset: 16}], span: 32 }
+[11] Vector { size: Vec4, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "acc_struct" type=[2] space=Handle binding=(0,0)
+[1] "output" type=[10] space=Storage(LOAD|STORE) binding=(0,1)
+
+=== FUNCTIONS ===
+[0] "query_loop"
+  args: [{ name: "pos", type: [1], binding: None}, { name: "dir", type: [1], binding: None}, { name: "acs", type: [2], binding: None}]
+  result: type=[7]
+  locals: 1
+    [0] "rq" type=[8]
+  expressions: 11
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] LocalVariable([0])
+    [4] Literal(U32(4))
+    [5] Literal(U32(255))
+    [6] Literal(F32(0.1))
+    [7] Literal(F32(100))
+    [8] Compose { type: [9], components: [[4], [5], [6], [7], [0], [1]] }
+    [9] RayQueryProceedResult
+    [10] RayQueryGetIntersection { query: [3], committed: true }
+  named_expressions:
+    [0] = "pos"
+    [1] = "dir"
+    [2] = "acs"
+  body: 5 statements
+    Emit(8..9)
+    RayQuery { query: [3], fun: ir.RayQueryInitialize }
+    Loop
+      body:
+        RayQuery { query: [3], fun: ir.RayQueryProceed }
+        If { condition: [9] }
+          accept:
+          reject:
+            Break
+        Block
+    Emit(10..11)
+    Return { value: [10] }
+
+[1] "get_torus_normal"
+  args: [{ name: "world_point", type: [1], binding: None}, { name: "intersection", type: [7], binding: None}]
+  result: type=[1]
+  locals: 0
+  expressions: 17
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] AccessIndex { base: [1], index: 10 }
+    [3] Literal(F32(1))
+    [4] Compose { type: [11], components: [[0], [3]] }
+    [5] Binary { op: Multiply, left: [2], right: [4] }
+    [6] Swizzle { size: Vec2, vector: [5], pattern: [0, 1, 0, 0] }
+    [7] Math { fun: Normalize, args: [6] }
+    [8] Literal(F32(2.4))
+    [9] Binary { op: Multiply, left: [7], right: [8] }
+    [10] AccessIndex { base: [1], index: 9 }
+    [11] Literal(F32(0))
+    [12] Literal(F32(1))
+    [13] Compose { type: [11], components: [[9], [11], [12]] }
+    [14] Binary { op: Multiply, left: [10], right: [13] }
+    [15] Binary { op: Subtract, left: [0], right: [14] }
+    [16] Math { fun: Normalize, args: [15] }
+  named_expressions:
+    [0] = "world_point"
+    [1] = "intersection"
+    [5] = "local_point"
+    [9] = "point_on_guiding_line"
+    [14] = "world_point_on_guiding_line"
+  body: 8 statements
+    Emit(2..3)
+    Emit(4..6)
+    Emit(6..8)
+    Emit(9..10)
+    Emit(10..11)
+    Emit(13..15)
+    Emit(15..17)
+    Return { value: [16] }
+
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=19, stmts=10, locals=0} workgroup_size=(1,1,1)
+[1] "main_candidate" stage=Compute function={name="main_candidate", args=0, exprs=21, stmts=8, locals=1} workgroup_size=(1,1,1)

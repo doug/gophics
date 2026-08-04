@@ -1,0 +1,62 @@
+=== TYPES ===
+[0] Scalar(Sint, 4)
+[1] Struct "S" { members: [{ name: "x", type: [0], offset: 0}], span: 4 }
+[2] Image { dim: D2, arrayed: false, class: Sampled}
+[3] Sampler(Filtering)
+[4] Vector { size: Vec2, scalar: Float(4) }
+
+=== CONSTANTS ===
+[0] "Value" type=[0] init=Literal(Sint(1))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "Texture" type=[2] space=Handle binding=(0,0)
+[1] "Sampler" type=[3] space=Handle binding=(0,1)
+
+=== FUNCTIONS ===
+[0] "statement"
+  args: []
+  result: None
+  locals: 0
+  expressions: 0
+  named_expressions: {}
+  body: 1 statements
+    Return
+
+[1] "returns"
+  args: []
+  result: type=[1]
+  locals: 0
+  expressions: 2
+    [0] Literal(I32(1))
+    [1] Compose { type: [1], components: [[0]] }
+  named_expressions: {}
+  body: 2 statements
+    Emit(0..2)
+    Return { value: [1] }
+
+[2] "call"
+  args: []
+  result: None
+  locals: 0
+  expressions: 6
+    [0] CallResult(function=[1])
+    [1] Literal(F32(1))
+    [2] GlobalVariable([0])
+    [3] GlobalVariable([1])
+    [4] Splat { size: Vec2, value: [1] }
+    [5] ImageSample { image: [2], sampler: [3], coordinate: [4] }
+  named_expressions:
+    [0] = "x"
+    [1] = "vf"
+    [5] = "s"
+  body: 4 statements
+    Call { function: [0], args: [], result: None }
+    Call { function: [1], args: [], result: [0] }
+    Emit(4..6)
+    Return
+
+=== ENTRY POINTS ===
+[0] "main" stage=Fragment function={name="main", args=0, exprs=1, stmts=4, locals=0}

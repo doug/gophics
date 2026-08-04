@@ -1,17 +1,3 @@
-github.com/doug/audio v0.2.0 h1:TQ9l0p0c/GQqyBU4W/eWt1JS+vca5ayHWxAk2eik4P8=
-github.com/doug/audio v0.2.0/go.mod h1:sm+x3wq/0BeKwAQb9KSpK1Dvpi3RoOMkWPBePM1jYf0=
-github.com/doug/gg v0.51.0 h1:dwVn/ed7z/goifRxH12TtQZwqurM/UG9YR7SnD9XYxU=
-github.com/doug/gg v0.51.0/go.mod h1:r+hyinF7Q7tve8O2Sl7O+UiI1tFJ6tMrX3zA13jhnj0=
-github.com/doug/gogpu v0.45.0 h1:jarZocSvQ8lo9KRiGR56w0/tLEp5hPMpo7GsnUohpoM=
-github.com/doug/gogpu v0.45.0/go.mod h1:LyLwsL8hPEKtUPK2I5AAGhA7SJxaz6Q3jU6Mjqv3dRw=
-github.com/doug/gpucontext v0.22.0 h1:s9wucQLkw1iuMWJCvIxz+tG3KKvntvCtBH+grECOs4Y=
-github.com/doug/gpucontext v0.22.0/go.mod h1:7F2II1Cn6+YeQjhLAoYhnPCdZQ3zdNslajZA/xiF8Ik=
-github.com/doug/gputypes v0.6.0 h1:loudd8FuVIG7c9MxX90Eybx/EDdG0UnW0lFx3bT5JaU=
-github.com/doug/gputypes v0.6.0/go.mod h1:uOYmIN20FEZUImnGQKOf6cAnOMipNj20BT/3Xx+OJCA=
-github.com/doug/naga v0.18.0 h1:Zo25u9qIM4l6Otp1Z+ZGWno1Uw9FAjdBWkui5fI8+dU=
-github.com/doug/naga v0.18.0/go.mod h1:wLHodB7Uk8UsTmju7JHQZqUgypO1JsEWvlBgLZEYEYc=
-github.com/doug/wgpu v0.31.0 h1:OUVl77V0tFs/p60SG7dQZQciuqKU2WG37UtreutS8Bw=
-github.com/doug/wgpu v0.31.0/go.mod h1:HbBXS7gwxbKBRfBSLv50NCSxKcFMQo1sO4S0CCH2oZo=
 github.com/go-text/typesetting v0.3.4 h1:YYurUOtEb9kGSOz4uE3k4OpBGsp1dDL8+fjCeaFamAU=
 github.com/go-text/typesetting v0.3.4/go.mod h1:4qZCQphq4KSgGTAeI0uMEkVbROgfah8BuyF5LRYr7XY=
 github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3 h1:drBZzMgdYPbmyXqOto4YhhJGrFIQCX94FpR4MzTCsos=

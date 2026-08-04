@@ -1,0 +1,18 @@
+=== TYPES ===
+[0] Vector { size: Vec4, scalar: Float(4) }
+[1] Vector { size: Vec2, scalar: Float(4) }
+[2] Array { base: [1], size: Constant(2), stride: 8 }
+[3] Scalar(Sint, 4)
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "fs_main" stage=Fragment function={name="fs_main", args=0, exprs=15, stmts=6, locals=1}

@@ -1,0 +1,21 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec4, scalar: Float(4) }
+[2] Scalar(Uint, 4)
+[3] Vector { size: Vec2, scalar: Float(4) }
+[4] Vector { size: Vec3, scalar: Float(4) }
+[5] Struct "FragmentInput" { members: [{ name: "position", type: [1], offset: 0, binding: Builtin(0)}, { name: "_flat", type: [2], offset: 16, binding: Location(0) interp=0/0}, { name: "flat_either", type: [2], offset: 20, binding: Location(2) interp=0/0}, { name: "_linear", type: [0], offset: 24, binding: Location(3) interp=1/0}, { name: "linear_centroid", type: [3], offset: 32, binding: Location(4) interp=1/1}, { name: "linear_sample", type: [4], offset: 48, binding: Location(6) interp=1/2}, { name: "linear_center", type: [4], offset: 64, binding: Location(7) interp=1/0}, { name: "perspective", type: [1], offset: 80, binding: Location(8) interp=2/0}, { name: "perspective_centroid", type: [0], offset: 96, binding: Location(9) interp=2/1}, { name: "perspective_sample", type: [0], offset: 100, binding: Location(10) interp=2/2}, { name: "perspective_center", type: [0], offset: 104, binding: Location(11) interp=2/0}], span: 112 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "vert_main" stage=Vertex function={name="vert_main", args=0, exprs=40, stmts=29, locals=1}
+[1] "frag_main" stage=Fragment function={name="frag_main", args=1, exprs=1, stmts=1, locals=0}

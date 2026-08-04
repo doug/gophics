@@ -1,0 +1,27 @@
+=== TYPES ===
+[0] Scalar(Float, 2)
+[1] Scalar(Float, 4)
+[2] Vector { size: Vec2, scalar: Float(2) }
+[3] Vector { size: Vec2, scalar: Float(4) }
+[4] Vector { size: Vec3, scalar: Float(2) }
+[5] Vector { size: Vec3, scalar: Float(4) }
+[6] Vector { size: Vec4, scalar: Float(2) }
+[7] Vector { size: Vec4, scalar: Float(4) }
+[8] Struct "F16IO" { members: [{ name: "scalar_f16", type: [0], offset: 0, binding: Location(0) interp=2/0}, { name: "scalar_f32", type: [1], offset: 4, binding: Location(1) interp=2/0}, { name: "vec2_f16", type: [2], offset: 8, binding: Location(2) interp=2/0}, { name: "vec2_f32", type: [3], offset: 16, binding: Location(3) interp=2/0}, { name: "vec3_f16", type: [4], offset: 24, binding: Location(4) interp=2/0}, { name: "vec3_f32", type: [5], offset: 32, binding: Location(5) interp=2/0}, { name: "vec4_f16", type: [6], offset: 48, binding: Location(6) interp=2/0}, { name: "vec4_f32", type: [7], offset: 64, binding: Location(7) interp=2/0}], span: 80 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "test_direct" stage=Fragment function={name="test_direct", args=8, exprs=40, stmts=26, locals=1}
+[1] "test_struct" stage=Fragment function={name="test_struct", args=1, exprs=41, stmts=26, locals=1}
+[2] "test_copy_input" stage=Fragment function={name="test_copy_input", args=1, exprs=50, stmts=27, locals=2}
+[3] "test_return_partial" stage=Fragment function={name="test_return_partial", args=1, exprs=6, stmts=5, locals=1}
+[4] "test_component_access" stage=Fragment function={name="test_component_access", args=1, exprs=11, stmts=6, locals=1}

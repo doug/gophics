@@ -1,0 +1,63 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+struct _mslBufferSizes {
+    uint size0;
+};
+
+typedef uint type_2[1];
+struct DynamicArray {
+    type_2 arr;
+};
+
+void f(
+) {
+    metal::float2x2 v = {};
+    v[0] = metal::float2(10.0);
+    return;
+}
+
+void index_unsized(
+    int i,
+    uint v_1,
+    device DynamicArray& dynamic_array,
+    constant _mslBufferSizes& _buffer_sizes
+) {
+    uint val = uint(i) < 1 + (_buffer_sizes.size0 - 0 - 4) / 4 ? dynamic_array.arr[i] : DefaultConstructible();
+    if (uint(i) < 1 + (_buffer_sizes.size0 - 0 - 4) / 4) {
+        dynamic_array.arr[i] = val + v_1;
+    }
+    return;
+}
+
+void index_dynamic_array(
+    int i_1,
+    uint v_2,
+    device DynamicArray& dynamic_array,
+    constant _mslBufferSizes& _buffer_sizes
+) {
+    uint val_1 = uint(i_1) < 1 + (_buffer_sizes.size0 - 0 - 4) / 4 ? dynamic_array.arr[i_1] : DefaultConstructible();
+    if (uint(i_1) < 1 + (_buffer_sizes.size0 - 0 - 4) / 4) {
+        dynamic_array.arr[i_1] = val_1 + v_2;
+    }
+    return;
+}
+
+kernel void main_(
+  device DynamicArray& dynamic_array [[user(fake0)]]
+, constant _mslBufferSizes& _buffer_sizes [[user(fake0)]]
+) {
+    f();
+    index_unsized(1, 1u, dynamic_array, _buffer_sizes);
+    index_dynamic_array(1, 1u, dynamic_array, _buffer_sizes);
+    return;
+}

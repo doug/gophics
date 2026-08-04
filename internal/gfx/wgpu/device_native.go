@@ -1,0 +1,1060 @@
+//go:build !rust && !(js && wasm)
+
+package wgpu
+
+import (
+	"fmt"
+	"sync/atomic"
+	"time"
+
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+	naga "github.com/doug/gossamer/internal/gfx/naga"
+	"github.com/doug/gossamer/internal/gfx/naga/ir"
+	"github.com/doug/gossamer/internal/gfx/wgpu/core"
+	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+)
+
+// Device represents a logical GPU device.
+// It is the main interface for creating GPU resources.
+//
+// Device methods are safe for concurrent use, except Release() which
+// must not be called concurrently with other methods.
+type Device struct {
+	core     *core.Device
+	queue    *Queue
+	instance *Instance
+	released atomic.Bool
+
+	// cmdEncoderPool is the single shared encoder pool for the device.
+	// Used by both CreateCommandEncoder (user command encoders) and
+	// PendingWrites (internal staging encoders). Matches Rust wgpu-core's
+	// single device.command_allocator for both paths (queue.rs:1373).
+	//
+	// Encoders are acquired from the pool instead of creating expensive
+	// GPU resources (DX12 ID3D12CommandAllocator ~64KB, Vulkan VkCommandPool)
+	// every frame. After GPU completion, encoders are reset via ResetAll
+	// and returned to the pool for reuse.
+	//
+	// Lifecycle: created before PendingWrites, destroyed after PendingWrites.
+	// PendingWrites.destroy() clears its pool reference but does NOT destroy
+	// the pool. Device.Release() destroys the pool after all users are done.
+	//
+	// nil when no HAL device (e.g., core-only path).
+	cmdEncoderPool *encoderPool
+}
+
+// Queue returns the device's command queue.
+func (d *Device) Queue() *Queue {
+	return d.queue
+}
+
+// Features returns the device's enabled features.
+func (d *Device) Features() Features {
+	return d.core.Features
+}
+
+// Limits returns the device's resource limits.
+func (d *Device) Limits() Limits {
+	return d.core.Limits
+}
+
+// CreateBuffer creates a GPU buffer.
+func (d *Device) CreateBuffer(desc *BufferDescriptor) (*Buffer, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: buffer descriptor is nil")
+	}
+
+	gpuDesc := &gputypes.BufferDescriptor{
+		Label:            desc.Label,
+		Size:             desc.Size,
+		Usage:            desc.Usage,
+		MappedAtCreation: desc.MappedAtCreation,
+	}
+
+	coreBuffer, err := d.core.CreateBuffer(gpuDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize ResourceRef with onZero callback for refcount-driven destruction.
+	// When the last reference drops (either from explicit Release or Phase 2
+	// Triage after GPU completion), onZero fires and HAL-destroys the buffer.
+	// This matches Rust wgpu's Arc<Buffer> Drop behavior.
+	//
+	// Clone'd during encoding (SetBindGroup, SetVertexBuffer, CopyBufferToBuffer),
+	// Drop'd when GPU completes submission via DestroyQueue.Triage.
+	coreBuffer.Ref = core.NewResourceRef("Buffer:"+desc.Label, func() {
+		coreBuffer.Destroy()
+	})
+
+	buf := &Buffer{core: coreBuffer, device: d, released: new(atomic.Bool)}
+
+	// Safety net: if the buffer is garbage collected without Release(),
+	// schedule deferred destruction via DestroyQueue. This prevents
+	// resource leaks when callers create per-frame buffers without
+	// explicit lifecycle management (BUG-WGPU-RESOURCE-LIFECYCLE-001).
+	buf.cleanup = registerBufferCleanup(buf, d, coreBuffer, desc.Label)
+
+	return buf, nil
+}
+
+// CreateTexture creates a GPU texture.
+func (d *Device) CreateTexture(desc *TextureDescriptor) (*Texture, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: texture descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := desc.toHAL()
+
+	if err := core.ValidateTextureDescriptor(halDesc, d.core.Limits); err != nil {
+		return nil, err
+	}
+
+	halTexture, err := halDevice.CreateTexture(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create texture: %w", err)
+	}
+
+	return &Texture{hal: halTexture, device: d, format: desc.Format}, nil
+}
+
+// CreateTextureView creates a view into a texture.
+func (d *Device) CreateTextureView(texture *Texture, desc *TextureViewDescriptor) (*TextureView, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if texture == nil {
+		return nil, fmt.Errorf("wgpu: texture is nil")
+	}
+	halTexture := texture.resolveHAL()
+	if halTexture == nil {
+		return nil, ErrReleased
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := &hal.TextureViewDescriptor{}
+	if desc != nil {
+		halDesc.Label = desc.Label
+		halDesc.Format = desc.Format
+		halDesc.Dimension = desc.Dimension
+		halDesc.Aspect = desc.Aspect
+		halDesc.BaseMipLevel = desc.BaseMipLevel
+		halDesc.MipLevelCount = desc.MipLevelCount
+		halDesc.BaseArrayLayer = desc.BaseArrayLayer
+		halDesc.ArrayLayerCount = desc.ArrayLayerCount
+	}
+
+	halView, err := halDevice.CreateTextureView(halTexture, halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create texture view: %w", err)
+	}
+
+	return &TextureView{
+		hal:          halView,
+		device:       d,
+		texture:      texture,
+		surface:      texture.surface,
+		surfaceLease: texture.surfaceLease,
+	}, nil
+}
+
+// CreateSampler creates a texture sampler.
+func (d *Device) CreateSampler(desc *SamplerDescriptor) (*Sampler, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := &hal.SamplerDescriptor{}
+	if desc != nil {
+		halDesc.Label = desc.Label
+		halDesc.AddressModeU = desc.AddressModeU
+		halDesc.AddressModeV = desc.AddressModeV
+		halDesc.AddressModeW = desc.AddressModeW
+		halDesc.MagFilter = desc.MagFilter
+		halDesc.MinFilter = desc.MinFilter
+		halDesc.MipmapFilter = desc.MipmapFilter
+		halDesc.LodMinClamp = desc.LodMinClamp
+		halDesc.LodMaxClamp = desc.LodMaxClamp
+		halDesc.Compare = desc.Compare
+		halDesc.Anisotropy = desc.Anisotropy
+	}
+
+	if err := core.ValidateSamplerDescriptor(halDesc); err != nil {
+		return nil, err
+	}
+
+	halSampler, err := halDevice.CreateSampler(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create sampler: %w", err)
+	}
+
+	return &Sampler{hal: halSampler, device: d}, nil
+}
+
+// CreateShaderModule creates a shader module.
+func (d *Device) CreateShaderModule(desc *ShaderModuleDescriptor) (*ShaderModule, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: shader module descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := &hal.ShaderModuleDescriptor{
+		Label: desc.Label,
+		Source: hal.ShaderSource{
+			WGSL:  desc.WGSL,
+			SPIRV: desc.SPIRV,
+		},
+	}
+
+	if err := core.ValidateShaderModuleDescriptor(halDesc); err != nil {
+		return nil, err
+	}
+
+	halModule, err := halDevice.CreateShaderModule(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create shader module: %w", err)
+	}
+
+	sm := &ShaderModule{hal: halModule, device: d}
+
+	// Parse WGSL source to naga IR for shader introspection (late binding validation).
+	// Matches Rust wgpu-core which stores the naga Module on ShaderModule for use
+	// by Interface::check_stage during pipeline creation.
+	// SPIR-V shaders skip this — they go directly to HAL without IR-level introspection.
+	if desc.WGSL != "" {
+		ast, parseErr := naga.Parse(desc.WGSL)
+		if parseErr == nil {
+			irModule, lowerErr := naga.Lower(ast)
+			if lowerErr == nil {
+				sm.irModule = irModule
+			}
+		}
+		// Parse/lower failures are non-fatal here — the HAL already compiled the shader
+		// successfully. Late binding validation will be skipped if IR is unavailable.
+	}
+
+	return sm, nil
+}
+
+// CreateBindGroupLayout creates a bind group layout.
+func (d *Device) CreateBindGroupLayout(desc *BindGroupLayoutDescriptor) (*BindGroupLayout, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: bind group layout descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := &hal.BindGroupLayoutDescriptor{
+		Label:   desc.Label,
+		Entries: desc.Entries,
+	}
+
+	if err := core.ValidateBindGroupLayoutDescriptor(halDesc, d.core.Limits); err != nil {
+		return nil, err
+	}
+
+	halLayout, err := halDevice.CreateBindGroupLayout(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create bind group layout: %w", err)
+	}
+
+	// Store a defensive copy of entries for entry-by-entry compatibility checks.
+	// This matches Rust wgpu-core's pattern where binder compares layouts by entries.
+	entriesCopy := make([]gputypes.BindGroupLayoutEntry, len(desc.Entries))
+	copy(entriesCopy, desc.Entries)
+
+	return &BindGroupLayout{hal: halLayout, device: d, entries: entriesCopy}, nil
+}
+
+// CreatePipelineLayout creates a pipeline layout.
+func (d *Device) CreatePipelineLayout(desc *PipelineLayoutDescriptor) (*PipelineLayout, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: pipeline layout descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halLayouts := make([]hal.BindGroupLayout, len(desc.BindGroupLayouts))
+	for i, layout := range desc.BindGroupLayouts {
+		if layout == nil {
+			return nil, fmt.Errorf("wgpu: bind group layout at index %d is nil", i)
+		}
+		halLayouts[i] = layout.hal
+	}
+
+	halDesc := &hal.PipelineLayoutDescriptor{
+		Label:            desc.Label,
+		BindGroupLayouts: halLayouts,
+	}
+
+	if err := core.ValidatePipelineLayoutDescriptor(halDesc, d.core.Limits); err != nil {
+		return nil, err
+	}
+
+	halLayout, err := halDevice.CreatePipelineLayout(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create pipeline layout: %w", err)
+	}
+
+	// Store a copy of the bind group layouts slice for binder validation.
+	bgLayouts := make([]*BindGroupLayout, len(desc.BindGroupLayouts))
+	copy(bgLayouts, desc.BindGroupLayouts)
+
+	return &PipelineLayout{
+		hal:              halLayout,
+		device:           d,
+		bindGroupCount:   uint32(len(desc.BindGroupLayouts)), //nolint:gosec // layout count fits uint32
+		bindGroupLayouts: bgLayouts,
+	}, nil
+}
+
+// CreateBindGroup creates a bind group.
+func (d *Device) CreateBindGroup(desc *BindGroupDescriptor) (*BindGroup, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: bind group descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	if desc.Layout == nil {
+		return nil, &core.CreateBindGroupError{
+			Kind:  core.CreateBindGroupErrorMissingLayout,
+			Label: desc.Label,
+		}
+	}
+
+	halEntries := make([]gputypes.BindGroupEntry, len(desc.Entries))
+	for i, entry := range desc.Entries {
+		if entry.TextureView != nil && entry.TextureView.resolveHAL() == nil {
+			return nil, ErrReleased
+		}
+		halEntries[i] = entry.toHAL()
+	}
+
+	halDesc := &hal.BindGroupDescriptor{
+		Label:   desc.Label,
+		Layout:  desc.Layout.hal,
+		Entries: halEntries,
+	}
+
+	// Build buffer metadata for core validation.
+	var bufferInfos []core.BindGroupBufferInfo
+	for _, entry := range desc.Entries {
+		if entry.Buffer != nil {
+			bufferInfos = append(bufferInfos, core.BindGroupBufferInfo{
+				Binding:    entry.Binding,
+				Usage:      entry.Buffer.Usage(),
+				BufferSize: entry.Buffer.Size(),
+				Offset:     entry.Offset,
+				Size:       entry.Size,
+			})
+		}
+	}
+
+	if err := core.ValidateBindGroupDescriptor(halDesc, desc.Layout.entries, bufferInfos, d.core.Limits); err != nil {
+		return nil, err
+	}
+
+	halGroup, err := halDevice.CreateBindGroup(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create bind group: %w", err)
+	}
+
+	// Build late buffer binding info for layout entries with MinBindingSize == 0.
+	// These record the actual bound buffer size at bind group creation time,
+	// to be validated against shader requirements at draw/dispatch time.
+	// Matches Rust wgpu-core's BindGroup.late_buffer_binding_infos population
+	// in Device::create_bind_group (binding_model.rs:1187-1189).
+	var lateInfos []LateBufferBindingInfo
+	entryMap := buildBindGroupEntryMap(desc.Entries)
+	for _, layoutEntry := range desc.Layout.entries {
+		if layoutEntry.Buffer == nil || layoutEntry.Buffer.MinBindingSize != 0 {
+			continue
+		}
+		// This is a buffer entry with MinBindingSize == 0.
+		var boundSize uint64
+		if bgEntry, ok := entryMap[layoutEntry.Binding]; ok && bgEntry.Buffer != nil {
+			boundSize = bgEntry.Size
+			if boundSize == 0 {
+				// Size == 0 means "rest of buffer" — use actual buffer size minus offset.
+				bufSize := bgEntry.Buffer.Size()
+				if bgEntry.Offset < bufSize {
+					boundSize = bufSize - bgEntry.Offset
+				}
+			}
+		}
+		lateInfos = append(lateInfos, LateBufferBindingInfo{
+			BindingIndex: layoutEntry.Binding,
+			Size:         boundSize,
+		})
+	}
+
+	// Collect buffer and texture references for submit-time validation (VAL-A6).
+	boundBuffers, boundTextures := collectBindGroupResources(desc.Entries)
+
+	bg := &BindGroup{
+		hal:                    halGroup,
+		device:                 d,
+		released:               new(atomic.Bool),
+		layout:                 desc.Layout,
+		lateBufferBindingInfos: lateInfos,
+		ref:                    core.NewResourceRef("BindGroup:"+desc.Label, nil),
+		boundBuffers:           boundBuffers,
+		boundTextures:          boundTextures,
+	}
+
+	// Safety net: if the bind group is garbage collected without Release(),
+	// schedule deferred destruction via DestroyQueue (BUG-WGPU-RESOURCE-LIFECYCLE-001).
+	bg.cleanup = registerBindGroupCleanup(bg, d, desc.Label)
+
+	return bg, nil
+}
+
+// collectBindGroupResources extracts buffer and texture references from bind
+// group entries for submit-time validation (VAL-A6). Matches Rust wgpu-core
+// where bind group creation stores resource references that are later checked
+// via trackers.buffers/textures.used_resources() in validate_command_buffer.
+func collectBindGroupResources(entries []BindGroupEntry) ([]*Buffer, []*Texture) {
+	var buffers []*Buffer
+	var textures []*Texture
+	for i := range entries {
+		if entries[i].Buffer != nil {
+			buffers = append(buffers, entries[i].Buffer)
+		}
+		if entries[i].TextureView != nil && entries[i].TextureView.texture != nil {
+			textures = append(textures, entries[i].TextureView.texture)
+		}
+	}
+	return buffers, textures
+}
+
+// buildBindGroupEntryMap builds a lookup map from binding index to BindGroupEntry
+// for efficient access during late buffer binding info construction.
+func buildBindGroupEntryMap(entries []BindGroupEntry) map[uint32]*BindGroupEntry {
+	m := make(map[uint32]*BindGroupEntry, len(entries))
+	for i := range entries {
+		m[entries[i].Binding] = &entries[i]
+	}
+	return m
+}
+
+// CreateRenderPipeline creates a render pipeline.
+func (d *Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (*RenderPipeline, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: render pipeline descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := desc.toHAL()
+
+	if err := core.ValidateRenderPipelineDescriptor(halDesc, d.core.Limits); err != nil {
+		return nil, err
+	}
+
+	halPipeline, err := halDevice.CreateRenderPipeline(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create render pipeline: %w", err)
+	}
+
+	var bgCount uint32
+	var bgLayouts []*BindGroupLayout
+	if desc.Layout != nil {
+		bgCount = desc.Layout.bindGroupCount
+		bgLayouts = desc.Layout.bindGroupLayouts
+	}
+	// Check if any color target uses blend constant factors.
+	// Matches Rust wgpu-core PipelineFlags::BLEND_CONSTANT (resource.rs:4562-4569).
+	var needsBlendConstant bool
+	if desc.Fragment != nil {
+		for i := range desc.Fragment.Targets {
+			if b := desc.Fragment.Targets[i].Blend; b != nil {
+				if b.Color.UsesConstant() || b.Alpha.UsesConstant() {
+					needsBlendConstant = true
+					break
+				}
+			}
+		}
+	}
+
+	// Build shader binding sizes across all stages (vertex + fragment).
+	// Matches Rust wgpu-core's check_stage calls that accumulate shader_binding_sizes
+	// with max across stages for the same binding (validation.rs:1126-1139).
+	shaderBindingSizes := mergeShaderBindingSizes(
+		desc.Vertex.Module,
+		fragmentShaderModule(desc.Fragment),
+	)
+
+	lateGroups := makeLateSizedBufferGroups(shaderBindingSizes, bgLayouts)
+
+	return &RenderPipeline{
+		hal:                   halPipeline,
+		device:                d,
+		bindGroupCount:        bgCount,
+		bindGroupLayouts:      bgLayouts,
+		requiredVertexBuffers: uint32(len(desc.Vertex.Buffers)), //nolint:gosec // buffer count fits uint32
+		blendConstantRequired: needsBlendConstant,
+		stripIndexFormat:      desc.Primitive.StripIndexFormat,
+		lateSizedBufferGroups: lateGroups,
+		ref:                   core.NewResourceRef("RenderPipeline:"+desc.Label, nil),
+	}, nil
+}
+
+// fragmentShaderModule extracts the ShaderModule from a FragmentState, or nil if absent.
+func fragmentShaderModule(fs *FragmentState) *ShaderModule {
+	if fs == nil {
+		return nil
+	}
+	return fs.Module
+}
+
+// mergeShaderBindingSizes merges binding sizes from vertex and fragment shader stages,
+// taking the max size when both stages reference the same binding. Matches Rust
+// wgpu-core's pattern of calling check_stage for each stage with the same
+// shader_binding_sizes map, where Entry::Occupied takes max (validation.rs:1131-1133).
+func mergeShaderBindingSizes(
+	vertexModule *ShaderModule,
+	fragModule *ShaderModule,
+) map[ir.ResourceBinding]uint64 {
+	result := make(map[ir.ResourceBinding]uint64)
+
+	if vertexModule != nil && vertexModule.irModule != nil {
+		for rb, size := range extractShaderBindingSizes(vertexModule.irModule) {
+			result[rb] = size
+		}
+	}
+	if fragModule != nil && fragModule.irModule != nil {
+		for rb, size := range extractShaderBindingSizes(fragModule.irModule) {
+			if existing, ok := result[rb]; !ok || size > existing {
+				result[rb] = size
+			}
+		}
+	}
+
+	return result
+}
+
+// CreateComputePipeline creates a compute pipeline.
+func (d *Device) CreateComputePipeline(desc *ComputePipelineDescriptor) (*ComputePipeline, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("wgpu: compute pipeline descriptor is nil")
+	}
+
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halDesc := desc.toHAL()
+
+	if err := core.ValidateComputePipelineDescriptor(halDesc); err != nil {
+		return nil, err
+	}
+
+	// VAL-010: Validate workgroup_size against device limits.
+	// Matches Rust wgpu-core validation.rs:1243-1264.
+	if desc.Module != nil && desc.Module.irModule != nil {
+		if err := d.validateComputeWorkgroupSize(desc.Label, desc.EntryPoint, desc.Module); err != nil {
+			return nil, err
+		}
+	}
+
+	halPipeline, err := halDevice.CreateComputePipeline(halDesc)
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create compute pipeline: %w", err)
+	}
+
+	var bgCount uint32
+	var bgLayouts []*BindGroupLayout
+	if desc.Layout != nil {
+		bgCount = desc.Layout.bindGroupCount
+		bgLayouts = desc.Layout.bindGroupLayouts
+	}
+
+	// Build shader binding sizes for the compute stage.
+	var shaderBindingSizes map[ir.ResourceBinding]uint64
+	if desc.Module != nil && desc.Module.irModule != nil {
+		shaderBindingSizes = extractShaderBindingSizes(desc.Module.irModule)
+	}
+
+	lateGroups := makeLateSizedBufferGroups(shaderBindingSizes, bgLayouts)
+
+	return &ComputePipeline{
+		hal:                   halPipeline,
+		device:                d,
+		bindGroupCount:        bgCount,
+		bindGroupLayouts:      bgLayouts,
+		lateSizedBufferGroups: lateGroups,
+		ref:                   core.NewResourceRef("ComputePipeline:"+desc.Label, nil),
+	}, nil
+}
+
+// validateComputeWorkgroupSize checks shader workgroup_size against device limits.
+// VAL-010: Matches Rust wgpu-core validation.rs:1243-1264.
+func (d *Device) validateComputeWorkgroupSize(label, entryPoint string, module *ShaderModule) error {
+	irMod := module.irModule
+	if irMod == nil {
+		return nil
+	}
+
+	// Find the entry point matching the requested name.
+	for i := range irMod.EntryPoints {
+		ep := &irMod.EntryPoints[i]
+		if ep.Name != entryPoint || ep.Stage != ir.StageCompute {
+			continue
+		}
+
+		wg := ep.Workgroup
+		limits := d.core.Limits
+
+		// Check each dimension for zero.
+		dimNames := [3]string{"X", "Y", "Z"}
+		for dim := 0; dim < 3; dim++ {
+			if wg[dim] == 0 {
+				return &core.CreateComputePipelineError{
+					Kind:      core.CreateComputePipelineErrorWorkgroupSizeZero,
+					Label:     label,
+					Dimension: dimNames[dim],
+				}
+			}
+		}
+
+		// Check each dimension against device limits.
+		dimLimits := [3]uint32{
+			limits.MaxComputeWorkgroupSizeX,
+			limits.MaxComputeWorkgroupSizeY,
+			limits.MaxComputeWorkgroupSizeZ,
+		}
+		for dim := 0; dim < 3; dim++ {
+			if wg[dim] > dimLimits[dim] {
+				return &core.CreateComputePipelineError{
+					Kind:      core.CreateComputePipelineErrorWorkgroupSizeExceeded,
+					Label:     label,
+					Dimension: dimNames[dim],
+					Size:      wg[dim],
+					Limit:     dimLimits[dim],
+				}
+			}
+		}
+
+		// Check total invocations (x*y*z) against MaxComputeInvocationsPerWorkgroup.
+		total := uint64(wg[0]) * uint64(wg[1]) * uint64(wg[2])
+		if total > uint64(limits.MaxComputeInvocationsPerWorkgroup) {
+			return &core.CreateComputePipelineError{
+				Kind:             core.CreateComputePipelineErrorTooManyInvocations,
+				Label:            label,
+				TotalInvocations: total,
+				Limit:            limits.MaxComputeInvocationsPerWorkgroup,
+			}
+		}
+
+		break
+	}
+
+	return nil
+}
+
+// CreateCommandEncoder creates a command encoder for recording GPU commands.
+//
+// When a device-level encoder pool is available (BUG-DX12-004), the HAL encoder
+// is acquired from the pool instead of creating a new one. This avoids allocating
+// expensive GPU resources (DX12 ID3D12CommandAllocator ~64KB, Vulkan VkCommandPool)
+// on every frame. After GPU completion, the encoder is reset and returned to the
+// pool for reuse. Matches Rust wgpu-core's CommandAllocator pattern (allocator.rs).
+func (d *Device) CreateCommandEncoder(desc *CommandEncoderDescriptor) (*CommandEncoder, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+
+	label := ""
+	if desc != nil {
+		label = desc.Label
+	}
+
+	// When pool is available, acquire a recycled HAL encoder and pass it to core.
+	// This bypasses core's internal CreateCommandEncoder which would create a new
+	// HAL encoder, and instead uses CreateCommandEncoderWithHAL that accepts
+	// a pre-existing encoder already in recording state.
+	if d.cmdEncoderPool != nil {
+		halEnc, err := d.cmdEncoderPool.acquire()
+		if err != nil {
+			return nil, fmt.Errorf("wgpu: encoder pool acquire: %w", err)
+		}
+
+		if err := halEnc.BeginEncoding(label); err != nil {
+			// Failed to begin encoding — return encoder to pool for future use.
+			d.cmdEncoderPool.release(halEnc)
+			return nil, fmt.Errorf("wgpu: begin encoding: %w", err)
+		}
+
+		coreEncoder, err := d.core.CreateCommandEncoderWithHAL(halEnc, label)
+		if err != nil {
+			halEnc.DiscardEncoding()
+			d.cmdEncoderPool.release(halEnc)
+			return nil, err
+		}
+
+		return &CommandEncoder{
+			core:        coreEncoder,
+			device:      d,
+			halEncoder:  halEnc,
+			trackedRefs: make([]*core.ResourceRef, 0, 64),
+		}, nil
+	}
+
+	// Fallback: no pool available (e.g., non-HAL device). Use core's built-in
+	// encoder creation which creates a fresh HAL encoder each time.
+	coreEncoder, err := d.core.CreateCommandEncoder(label)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CommandEncoder{core: coreEncoder, device: d}, nil
+}
+
+// CreateFence creates a GPU synchronization fence.
+// Fences are primarily used by the HAL internally for synchronization.
+// Most callers should use Queue.Submit + Queue.Poll instead.
+func (d *Device) CreateFence() (*Fence, error) {
+	if d.released.Load() {
+		return nil, ErrReleased
+	}
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return nil, ErrReleased
+	}
+
+	halFence, err := halDevice.CreateFence()
+	if err != nil {
+		return nil, fmt.Errorf("wgpu: failed to create fence: %w", err)
+	}
+
+	return &Fence{hal: halFence, device: d}, nil
+}
+
+// DestroyFence destroys a fence.
+// The fence must not be in use by the GPU when destroyed.
+//
+// Deprecated: Use Fence.Release() instead.
+func (d *Device) DestroyFence(f *Fence) {
+	if f != nil {
+		f.Release()
+	}
+}
+
+// ResetFence resets a fence to the unsignaled state.
+// The fence must not be in use by the GPU.
+func (d *Device) ResetFence(f *Fence) error {
+	if d.released.Load() {
+		return ErrReleased
+	}
+	if f == nil || f.released {
+		return ErrReleased
+	}
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return ErrReleased
+	}
+	return halDevice.ResetFence(f.hal)
+}
+
+// GetFenceStatus returns true if the fence is signaled (non-blocking).
+// This is used for polling completion without blocking.
+func (d *Device) GetFenceStatus(f *Fence) (bool, error) {
+	if d.released.Load() {
+		return false, ErrReleased
+	}
+	if f == nil || f.released {
+		return false, ErrReleased
+	}
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return false, ErrReleased
+	}
+	return halDevice.GetFenceStatus(f.hal)
+}
+
+// WaitForFence waits for a fence to reach the specified value.
+// Returns true if the fence reached the value, false if timeout expired.
+func (d *Device) WaitForFence(f *Fence, value uint64, timeout time.Duration) (bool, error) {
+	if d.released.Load() {
+		return false, ErrReleased
+	}
+	if f == nil || f.released {
+		return false, ErrReleased
+	}
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return false, ErrReleased
+	}
+	return halDevice.Wait(f.hal, value, timeout)
+}
+
+// FreeCommandBuffer returns a command buffer to the command pool.
+// This must be called after the GPU has finished using the command buffer.
+// The command buffer handle becomes invalid after this call.
+func (d *Device) FreeCommandBuffer(cb *CommandBuffer) {
+	if d.released.Load() || cb == nil {
+		return
+	}
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return
+	}
+	raw := cb.halBuffer()
+	if raw != nil {
+		halDevice.FreeCommandBuffer(raw)
+	}
+}
+
+// PushErrorScope pushes a new error scope onto the device's error scope stack.
+func (d *Device) PushErrorScope(filter ErrorFilter) {
+	d.core.PushErrorScope(filter)
+}
+
+// PopErrorScope pops the most recently pushed error scope.
+// Returns the captured error, or nil if no error occurred.
+func (d *Device) PopErrorScope() *GPUError {
+	return d.core.PopErrorScope()
+}
+
+// WaitIdle waits for all GPU work to complete.
+func (d *Device) WaitIdle() error {
+	if d.released.Load() {
+		return ErrReleased
+	}
+	return d.waitIdle()
+}
+
+// waitIdle drains the HAL and deferred resource queues without consulting the
+// public released bit. Release marks the device unavailable before starting
+// teardown, but the native device must remain alive while its last submission
+// is drained.
+func (d *Device) waitIdle() error {
+	halDevice := d.halDevice()
+	if halDevice == nil {
+		return ErrReleased
+	}
+	if err := halDevice.WaitIdle(); err != nil {
+		return err
+	}
+	d.maintainAfterIdle()
+	return nil
+}
+
+// maintainAfterIdle recycles staging buffers and destroys deferred GPU resources
+// after the HAL reports the device is idle. Without this, WaitIdle only blocks
+// on the GPU — DestroyQueue entries scheduled before the wait are not processed
+// until the next Submit, keeping old textures alive across resize boundaries.
+func (d *Device) maintainAfterIdle() {
+	if d.queue == nil || d.queue.hal == nil {
+		return
+	}
+	completed := d.queue.hal.PollCompleted()
+	if dq := d.destroyQueue(); dq != nil {
+		dq.Triage(completed)
+	}
+	if d.queue.pending != nil {
+		d.queue.pending.mu.Lock()
+		d.queue.pending.maintain(completed)
+		d.queue.pending.mu.Unlock()
+	}
+}
+
+// Release releases the device and all associated resources.
+// Deferred resource destructions are flushed before the device is destroyed.
+// Shutdown order:
+//  0. Retire active surface acquisitions
+//  1. WaitIdle and maintain completed work
+//  2. Discard unsubmitted queue writes
+//  3. Triage + FlushAll — deferred callbacks fire (encoders return to pool)
+//  4. Destroy encoder pool (HAL device still alive)
+//  5. Destroy core + HAL device
+//
+// WaitIdle is required because FlushAll calls Triage(PollCompleted()),
+// but PollCompleted may return a stale index if GPU hasn't finished.
+// Without WaitIdle, deferred encoder recycling callbacks don't fire,
+// and pool.destroy() destroys encoders whose VkCommandPool is then
+// double-freed by hal.Device.Destroy() → vkDestroyCommandPool crash.
+//
+// Rust avoids this via Arc ownership + maintain loop. In Go we must
+// be explicit: WaitIdle ensures PollCompleted returns final index.
+func (d *Device) Release() {
+	if d == nil || d.released.Swap(true) {
+		return
+	}
+	var configuredSurfaces []*Surface
+	if d.instance != nil {
+		configuredSurfaces = d.instance.surfacesForDevice(d)
+	}
+	// Retire active acquisitions while the backend device is still alive.
+	// Vulkan keeps the configured swapchain itself and retires it in
+	// hal.Device.Destroy; other backends also get a chance to release borrowed
+	// drawable state before their device disappears.
+	for _, surface := range configuredSurfaces {
+		surface.discardForDevice(d)
+	}
+	if d.instance != nil {
+		defer func() {
+			d.instance.unregisterDevice(d)
+			d.instance = nil
+		}()
+	}
+
+	// Step 1: Wait for ALL GPU work to finish. Use the internal path because
+	// the public device has already been atomically marked released to close new
+	// entry points. This ensures PollCompleted() returns the final submission
+	// index before pending encoders or resources are destroyed.
+	_ = d.waitIdle()
+
+	// Step 2: Pending writes that were never submitted can now be discarded;
+	// completed inflight batches were recycled by maintainAfterIdle above.
+	if d.queue != nil {
+		d.queue.release()
+	}
+
+	// Step 3: Flush deferred destructions. WaitIdle above ensures PollCompleted()
+	// returns the final submission index, so Triage processes all submissions
+	// and deferred encoder recycling callbacks fire correctly.
+	if d.core != nil && d.core.DestroyQueueRef() != nil {
+		dq := d.core.DestroyQueueRef()
+		// Triage with latest completion index (GPU is idle, all done).
+		if d.queue != nil && d.queue.hal != nil {
+			dq.Triage(d.queue.hal.PollCompleted())
+		}
+		dq.FlushAll()
+	}
+
+	// Step 4: Destroy encoder pool. Each encoder.Destroy() calls
+	// vkDestroyCommandPool / ID3D12CommandAllocator.Release on the still-alive
+	// HAL device. After this, no native encoder resources remain.
+	if d.cmdEncoderPool != nil {
+		d.cmdEncoderPool.destroy()
+		d.cmdEncoderPool = nil
+	}
+
+	// Step 5: Destroy core + HAL device. core.Destroy() calls FlushAll again
+	// (idempotent — already flushed) then halDevice.Destroy().
+	d.core.Destroy()
+	for _, surface := range configuredSurfaces {
+		surface.retireDevice(d)
+	}
+}
+
+// destroyQueue returns the device's DestroyQueue for deferred resource destruction.
+// Returns nil if the device has no HAL integration or no DestroyQueue.
+func (d *Device) destroyQueue() *core.DestroyQueue {
+	if d.core == nil {
+		return nil
+	}
+	return d.core.DestroyQueueRef()
+}
+
+// Poll drives the per-device pending-map triage loop.
+//
+// PollPoll drains any buffer mappings whose associated GPU submissions
+// have already completed and returns immediately. This is the fast path
+// for game loops and is called automatically from Queue.Submit, so
+// beginner code paths never need to call Poll explicitly.
+//
+// PollWait blocks until every currently-pending map resolves: it issues
+// WaitIdle on the HAL device, then drains all buckets. This is the
+// primary path used by Buffer.Map and is appropriate for shutdown
+// drains and short scripts that do not run a render loop.
+//
+// The return value reports whether Poll observed any in-flight maps —
+// tests use it to assert that Submit-driven auto-polling drained
+// everything without needing an explicit Poll call.
+func (d *Device) Poll(pollType PollType) bool {
+	if d == nil || d.core == nil {
+		return false
+	}
+	switch pollType {
+	case PollWait:
+		// Wait on the HAL device so all submissions complete, then drain.
+		if halDev, ok := d.core.HalDeviceHandle(); ok {
+			_ = halDev.WaitIdle()
+		}
+		// Drain with a sentinel "all indices completed".
+		return d.core.PollMaps(^uint64(0))
+	default:
+		completed := uint64(0)
+		if d.queue != nil && d.queue.hal != nil {
+			completed = d.queue.hal.PollCompleted()
+		}
+		return d.core.PollMaps(completed)
+	}
+}
+
+// lastSubmissionIndex returns the latest submission index from the queue.
+// Used by Release() methods to schedule deferred destruction.
+func (d *Device) lastSubmissionIndex() uint64 {
+	if d.queue == nil {
+		return 0
+	}
+	return d.queue.LastSubmissionIndex()
+}
+
+// halDevice returns the underlying HAL device for direct resource creation.
+func (d *Device) halDevice() hal.Device {
+	if d.core == nil || !d.core.HasHAL() {
+		return nil
+	}
+	guard := d.core.SnatchLock().Read()
+	defer guard.Release()
+	return d.core.Raw(guard)
+}

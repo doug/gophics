@@ -1,0 +1,1736 @@
+//go:build darwin
+
+package platform
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+	"unsafe"
+
+	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/darwin"
+	"github.com/doug/gossamer/internal/gfx/gogpu/internal/platform/eventqueue"
+	"github.com/doug/gossamer/internal/gfx/gpucontext"
+)
+
+// darwinWindow holds all per-window state for a macOS window.
+type darwinWindow struct {
+	window      *darwin.Window
+	surface     *darwin.Surface
+	config      Config
+	id          WindowID
+	shouldClose bool
+	events      *eventqueue.Queue[Event]
+	eventMu     sync.Mutex // guards pollEvents/WaitEvents coordination (not the queue itself)
+
+	// Mouse state tracking
+	pointerX      float64
+	pointerY      float64
+	buttons       gpucontext.Buttons
+	modifiers     gpucontext.Modifiers
+	mouseInWindow bool
+
+	// Frameless window state
+	frameless       bool
+	hitTestCallback func(x, y float64) gpucontext.HitTestResult
+
+	callbackMu sync.RWMutex
+
+	// Timestamp reference for event timing
+	startTime time.Time
+
+	// Last known scale factor for change detection in PrepareFrame.
+	lastScale float64
+
+	// Physical framebuffer dimensions (device pixels) for cross-DPI change detection.
+	// Zero-initialized so the first pollEvents call always emits EventResize with
+	// the actual physical size, signaling the real display DPI to the app.
+	physW int
+	physH int
+
+	// Focus tracking: last known key window status for change detection.
+	lastKeyWindow bool
+	focusInited   bool // true after first pollEvents call
+}
+
+// darwinPlatform implements Platform for macOS using Cocoa/AppKit.
+// Holds process-level state and a primary window for single-window API.
+type darwinPlatform struct {
+	mu  sync.RWMutex
+	app *darwin.Application
+
+	// Primary window for backward-compatible single-window API.
+	primary *darwinWindow
+
+	windows []*darwinWindow
+
+	// pending menu set before Init() was called
+	pendingMenu []MenuItem
+	hasPending  bool
+}
+
+// newPlatformManager returns a PlatformManager for macOS.
+func newPlatformManager() PlatformManager {
+	return &darwinPlatform{}
+}
+
+// ScaleFactor implements PlatScaleProvider.
+// Returns the primary window's backing scale factor when a window exists;
+// otherwise queries [NSScreen mainScreen].backingScaleFactor directly.
+// This mirrors the Flutter/GLFW pattern: the main screen DPI is available
+// from process start, before NSApplication or any window is created.
+func (p *darwinPlatform) ScaleFactor() float64 {
+	p.mu.RLock()
+	pw := p.primary
+	p.mu.RUnlock()
+	if pw != nil && pw.window != nil {
+		return pw.window.BackingScaleFactor()
+	}
+	return darwin.MainScreenScaleFactor()
+}
+
+// --- PlatformManager implementation on darwinPlatform ---
+
+// Init initializes the macOS platform subsystem (process-level, no window).
+func (p *darwinPlatform) Init() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.app = darwin.GetApplication()
+	if err := p.app.Init(); err != nil {
+		return err
+	}
+
+	if p.hasPending {
+		p.applyMenu(p.pendingMenu)
+		p.hasPending = false
+	}
+
+	return nil
+}
+
+// CreateWindow creates a macOS window with the given configuration.
+func (p *darwinPlatform) CreateWindow(config Config) (PlatformWindow, error) {
+	id := NewWindowID()
+	w := &darwinWindow{
+		config:    config,
+		frameless: config.Frameless,
+		startTime: time.Now(),
+		id:        id,
+		events:    eventqueue.New[Event](eventqueue.DefaultCapacity),
+	}
+
+	windowConfig := darwin.WindowConfig{
+		Title:             config.Title,
+		Width:             config.Width,
+		Height:            config.Height,
+		Resizable:         config.Resizable,
+		Fullscreen:        config.Fullscreen,
+		Frameless:         config.Frameless,
+		TabbingMode:       config.TabbingMode,
+		TabbingIdentifier: config.TabbingIdentifier,
+	}
+
+	window, err := darwin.NewWindow(windowConfig)
+	if err != nil {
+		return nil, err
+	}
+	w.window = window
+
+	// Create Metal surface for GPU rendering.
+	// Note: Surface is created before window is shown, but drawable size
+	// is set after Show() when window has valid dimensions.
+	surface, err := darwin.NewSurface(window)
+	if err != nil {
+		// Non-fatal: window works without Metal surface
+		// This allows the window to still be used with software rendering
+		w.surface = nil
+	} else {
+		w.surface = surface
+	}
+
+	p.mu.Lock()
+	p.windows = append(p.windows, w)
+	if p.primary == nil {
+		p.primary = w
+	}
+	p.mu.Unlock()
+
+	dw := &darwinPlatformWindow{
+		platform:  p,
+		id:        id,
+		window:    w.window,
+		frameless: config.Frameless,
+	}
+
+	if config.MinWidth > 0 || config.MinHeight > 0 {
+		dw.SetMinSize(config.MinWidth, config.MinHeight)
+	}
+	if config.MaxWidth > 0 || config.MaxHeight > 0 {
+		dw.SetMaxSize(config.MaxWidth, config.MaxHeight)
+	}
+
+	return dw, nil
+}
+
+// PollEvents processes pending macOS events.
+func (p *darwinPlatform) PollEvents() Event {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	for _, w := range p.windows {
+		e := w.pollEvents(p.app)
+		if e.Type != EventNone {
+			return e
+		}
+	}
+	return Event{Type: EventNone}
+}
+
+// WaitEvents blocks until at least one OS event is available, then processes
+// all pending events. Uses [NSApp nextEventMatchingMask:untilDate:inMode:dequeue:]
+// with distantFuture, which blocks at kernel level via mach_msg for 0% CPU idle.
+//
+// Each NSEvent is routed to the darwinWindow that owns it via [NSEvent window].
+// This ensures pointer coordinates and event WindowIDs are attributed to the
+// correct window even when a non-key window receives input. Events without an
+// associated NSWindow (key events, system events) fall back to the key window.
+func (p *darwinPlatform) WaitEvents() {
+	p.mu.RLock()
+	keyWin := p.primary
+	for _, w := range p.windows {
+		if w.window != nil && w != p.primary && w.window.IsKeyWindow() {
+			keyWin = w
+			break
+		}
+	}
+	// Snapshot the window list for routing — avoids holding mu during dispatch.
+	wins := make([]*darwinWindow, len(p.windows))
+	copy(wins, p.windows)
+	p.mu.RUnlock()
+
+	// Route each event to the window it came from; fall back to keyWin for
+	// events that carry no NSWindow (e.g. keyboard, mouse-exited-screen).
+	routingHandler := func(event darwin.ID, eventType darwin.NSEventType) bool {
+		target := keyWin
+		if nsWin := darwin.GetEventWindow(event); !nsWin.IsNil() {
+			for _, w := range wins {
+				if w.window != nil && w.window.NSID() == nsWin {
+					target = w
+					break
+				}
+			}
+		}
+		target.eventMu.Lock()
+		result := target.handleEvent(event, eventType)
+		target.eventMu.Unlock()
+		return result
+	}
+
+	if p.app != nil {
+		p.app.WaitEventsWithHandler(routingHandler)
+	}
+
+	// Check for resize after all events have been processed.
+	keyWin.eventMu.Lock()
+	keyWin.checkResize()
+	keyWin.eventMu.Unlock()
+}
+
+// WakeUp unblocks WaitEvents from any goroutine by posting a synthetic
+// NSEventTypeApplicationDefined event. This is thread-safe per Apple
+// documentation and is the standard pattern used by GLFW, winit, SDL, and Qt.
+func (p *darwinPlatform) WakeUp() {
+	if p.app != nil {
+		p.app.PostEmptyEvent()
+	}
+}
+
+// Destroy closes all windows and releases resources.
+func (p *darwinPlatform) Destroy() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	w := p.primary
+	if w != nil {
+		if w.surface != nil {
+			w.surface.Destroy()
+			w.surface = nil
+		}
+
+		if w.window != nil {
+			w.window.Destroy()
+			w.window = nil
+		}
+	}
+
+	if p.app != nil {
+		p.app.Destroy()
+		p.app = nil
+	}
+}
+
+// --- darwinPlatformWindow implements PlatformWindow ---
+
+// darwinPlatformWindow wraps darwinPlatform to implement PlatformWindow.
+type darwinPlatformWindow struct {
+	platform        *darwinPlatform
+	id              WindowID
+	window          *darwin.Window
+	lastScale       float64
+	frameless       bool
+	hitTestCallback func(x, y float64) gpucontext.HitTestResult
+	callbackMu      sync.RWMutex
+}
+
+func (dw *darwinPlatformWindow) ID() WindowID { return dw.id }
+
+func (dw *darwinPlatformWindow) GetHandle() (instance uintptr, window uintptr) {
+	if dw.window == nil {
+		return 0, 0
+	}
+	metalLayer := dw.window.MetalLayer()
+	if metalLayer != 0 {
+		return 0, metalLayer.Ptr()
+	}
+	return 0, dw.window.ViewHandle()
+}
+
+func (dw *darwinPlatformWindow) LogicalSize() (int, int) {
+	if dw.window != nil {
+		return dw.window.Size()
+	}
+
+	return 0, 0
+}
+
+func (dw *darwinPlatformWindow) PhysicalSize() (int, int) {
+	if dw.window != nil {
+		return dw.window.FramebufferSize()
+	}
+	return 0, 0
+}
+
+func (dw *darwinPlatformWindow) ScaleFactor() float64 {
+	if dw.window == nil {
+		return 1.0
+	}
+	return dw.window.BackingScaleFactor()
+}
+
+func (dw *darwinPlatformWindow) ShouldClose() bool {
+	if dw.window != nil {
+		return dw.window.ShouldClose()
+	}
+	return false
+}
+
+// InSizeMove returns true while the user is dragging a resize handle.
+// Mirrors the Win32 WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE semantics: when true,
+// the app-level event loop suppresses resize events so the GPU surface is not
+// reconfigured on every mouse-move tick. A final resize fires on release.
+func (dw *darwinPlatformWindow) InSizeMove() bool {
+	if dw.window != nil {
+		return dw.window.InLiveResize()
+	}
+	return false
+}
+
+// SetLiveResizeHook implements platform.LiveResizeRenderer for macOS.
+// The hook is invoked on every windowDidResize: notification so the app layer
+// can reconfigure the GPU surface and render a frame during live resize.
+func (dw *darwinPlatformWindow) SetLiveResizeHook(fn func()) {
+	if dw.window != nil {
+		dw.window.SetLiveResizeHook(fn)
+	}
+}
+
+// SetLiveResizePhaseHooks implements platform.LiveResizePhaser for macOS.
+// start fires on windowWillStartLiveResize:, end on windowDidEndLiveResize:.
+func (dw *darwinPlatformWindow) SetLiveResizePhaseHooks(start, end func()) {
+	if dw.window != nil {
+		dw.window.SetLiveResizePhaseHooks(start, end)
+	}
+}
+
+// SetHeaderAlignment implements platform.HeaderAligner for macOS.
+func (dw *darwinPlatformWindow) SetHeaderAlignment(alignment int) {
+	if dw.window != nil {
+		dw.window.SetHeaderAlignment(alignment)
+	}
+}
+
+func (dw *darwinPlatformWindow) SetTitle(title string) {
+	if dw.window != nil {
+		dw.window.SetTitle(title)
+	}
+}
+
+func (dw *darwinPlatformWindow) SetMinSize(width, height int) {
+	if dw.window != nil {
+		dw.window.SetMinSize(float64(width), float64(height))
+	}
+}
+
+func (dw *darwinPlatformWindow) SetMaxSize(width, height int) {
+	if dw.window != nil {
+		dw.window.SetMaxSize(float64(width), float64(height))
+	}
+}
+
+func (dw *darwinPlatformWindow) PrepareFrame() PrepareFrameResult {
+	if dw.window == nil {
+		return PrepareFrameResult{ScaleFactor: 1.0}
+	}
+
+	scale := dw.window.BackingScaleFactor()
+	physW, physH := dw.window.FramebufferSize()
+
+	scaleChanged := dw.lastScale != 0 && dw.lastScale != scale
+	dw.lastScale = scale
+
+	return PrepareFrameResult{
+		ScaleChanged:   scaleChanged,
+		ScaleFactor:    scale,
+		PhysicalWidth:  uint32(physW),
+		PhysicalHeight: uint32(physH),
+	}
+}
+
+func (dw *darwinPlatformWindow) SetCursor(cursorID int) {
+	dw.platform.setCursorImpl(cursorID)
+}
+
+func (dw *darwinPlatformWindow) SetCursorMode(int) {}
+func (dw *darwinPlatformWindow) CursorMode() int   { return 0 }
+func (dw *darwinPlatformWindow) SyncFrame()        {}
+
+func (dw *darwinPlatformWindow) SetFrameless(frameless bool) {
+	dw.frameless = frameless
+
+	if dw.window == nil {
+		return
+	}
+
+	if frameless {
+		dw.window.SetStyleMask(darwin.NSWindowStyleMaskBorderless | darwin.NSWindowStyleMaskResizable)
+	} else {
+		dw.window.SetStyleMask(
+			darwin.NSWindowStyleMaskTitled | darwin.NSWindowStyleMaskClosable |
+				darwin.NSWindowStyleMaskMiniaturizable | darwin.NSWindowStyleMaskResizable,
+		)
+	}
+}
+
+func (dw *darwinPlatformWindow) IsFrameless() bool {
+	return dw.frameless
+}
+
+func (dw *darwinPlatformWindow) SetHitTestCallback(fn func(x, y float64) gpucontext.HitTestResult) {
+	dw.callbackMu.Lock()
+	defer dw.callbackMu.Unlock()
+	dw.hitTestCallback = fn
+}
+
+func (dw *darwinPlatformWindow) Minimize() {
+	if dw.window != nil {
+		dw.window.Miniaturize()
+	}
+}
+
+func (dw *darwinPlatformWindow) Maximize() {
+	if dw.window != nil {
+		dw.window.Zoom()
+	}
+}
+
+func (dw *darwinPlatformWindow) IsMaximized() bool {
+	if dw.window != nil {
+		return dw.window.IsZoomed()
+	}
+	return false
+}
+
+func (dw *darwinPlatformWindow) Close() {
+	if dw.window != nil {
+		dw.window.Close()
+	}
+}
+
+func (dw *darwinPlatformWindow) Show() {
+	if dw.window == nil {
+		return
+	}
+	dw.window.Show()
+	dw.platform.mu.RLock()
+	var surface *darwin.Surface
+	for _, w := range dw.platform.windows {
+		if w.id == dw.id {
+			surface = w.surface
+			break
+		}
+	}
+	dw.platform.mu.RUnlock()
+	if surface != nil {
+		surface.UpdateSize()
+	}
+}
+
+func (dw *darwinPlatformWindow) SetOnClose(fn func() bool) {
+	if dw.window != nil {
+		dw.window.SetOnClose(fn)
+	}
+}
+
+// SetFullscreen enters or exits native macOS fullscreen mode.
+// Uses NSWindow toggleFullScreen: which provides the standard animation.
+func (dw *darwinPlatformWindow) SetFullscreen(fullscreen bool) {
+	if dw.window == nil {
+		return
+	}
+	// Only toggle if current state differs from desired state.
+	if fullscreen != dw.window.IsFullScreen() {
+		dw.window.ToggleFullScreen()
+	}
+}
+
+// IsFullscreen returns true if the window is in native macOS fullscreen mode.
+func (dw *darwinPlatformWindow) IsFullscreen() bool {
+	if dw.window != nil {
+		return dw.window.IsFullScreen()
+	}
+	return false
+}
+
+func (dw *darwinPlatformWindow) SetModalFrameCallback(_ func()) {}
+
+func (dw *darwinPlatformWindow) BlitPixels(pixels []byte, width, height int) error {
+	if dw.window == nil {
+		return fmt.Errorf("gogpu: darwin BlitPixels: no window")
+	}
+
+	cgImage, err := darwin.CreateCGImageFromRGBA(pixels, width, height)
+	if err != nil {
+		return fmt.Errorf("gogpu: darwin BlitPixels: %w", err)
+	}
+	defer darwin.ReleaseCGImage(cgImage)
+
+	contentView := dw.window.ContentView()
+	if contentView.IsNil() {
+		return fmt.Errorf("gogpu: darwin BlitPixels: no content view")
+	}
+
+	contentView.SendBool(darwin.RegisterSelector("setWantsLayer:"), true)
+
+	layerID := contentView.Send(darwin.RegisterSelector("layer"))
+	if layerID.IsNil() {
+		return fmt.Errorf("gogpu: darwin BlitPixels: no layer")
+	}
+
+	layerID.SendPtr(darwin.RegisterSelector("setContents:"), cgImage)
+	layerID.SendBool(darwin.RegisterSelector("setNeedsDisplay:"), true)
+	contentView.SendBool(darwin.RegisterSelector("setNeedsDisplay:"), true)
+
+	return nil
+}
+
+func (dw *darwinPlatformWindow) Destroy() {
+	// Destruction handled by platform.Destroy()
+}
+
+func (w *darwinWindow) pollEvents(app *darwin.Application) Event {
+	w.eventMu.Lock()
+	defer w.eventMu.Unlock()
+
+	// Return queued event first (from previous processing).
+	if e, ok := w.events.Pop(); ok {
+		return e
+	}
+
+	// Process OS events with our handler — queues pointer/key/scroll events.
+	if app != nil {
+		app.PollEventsWithHandler(w.handleEvent)
+	}
+
+	// Check if window should close — queue once, not every call.
+	if !w.shouldClose && w.window != nil && w.window.ShouldClose() {
+		w.shouldClose = true
+		w.events.Push(Event{WindowID: w.id, Type: EventClose})
+	}
+
+	// Check for resize — queue if logical OR physical size changed.
+	// RETINA-002: Do NOT call w.surface.Resize() here. PollEvents runs on the
+	// main thread while the render thread operates on wgpu surface. Surface
+	// reconfiguration is handled by the render thread via RequestResize.
+	//
+	// Physical-size tracking (physW/physH) catches Retina↔1× transitions
+	// where logical dims are unchanged but the framebuffer resolution changes.
+	if w.window != nil && !w.window.InLiveResize() {
+		// Drain the screen-change signal from windowDidChangeScreen:.
+		// The signal already woke WaitEvents; draining resets the channel
+		// for the next display transition.
+		select {
+		case <-w.window.ScreenChangedCh():
+		default:
+		}
+
+		oldWidth, oldHeight := w.config.Width, w.config.Height
+		oldPhysW, oldPhysH := w.physW, w.physH
+
+		w.window.UpdateSize()
+		newWidth, newHeight := w.window.Size()
+		newPhysW, newPhysH := w.window.FramebufferSize()
+
+		if newWidth != oldWidth || newHeight != oldHeight || newPhysW != oldPhysW || newPhysH != oldPhysH {
+			w.config.Width = newWidth
+			w.config.Height = newHeight
+			w.physW = newPhysW
+			w.physH = newPhysH
+			w.events.Push(Event{
+				WindowID:       w.id,
+				Type:           EventResize,
+				Width:          newWidth,
+				Height:         newHeight,
+				PhysicalWidth:  newPhysW,
+				PhysicalHeight: newPhysH,
+			})
+		}
+	}
+
+	// Check for focus change — macOS uses key window status.
+	// NSWindow.isKeyWindow is true when the window has keyboard focus.
+	if w.window != nil {
+		isKey := w.window.IsKeyWindow()
+		if !w.focusInited {
+			w.lastKeyWindow = isKey
+			w.focusInited = true
+		} else if isKey != w.lastKeyWindow {
+			w.lastKeyWindow = isKey
+			w.events.Push(Event{WindowID: w.id, Type: EventFocus, Focused: isKey})
+		}
+	}
+
+	// Return first queued event, or EventNone.
+	if e, ok := w.events.Pop(); ok {
+		return e
+	}
+
+	return Event{Type: EventNone}
+}
+
+// handleEvent is called for each NSEvent during polling.
+// It processes pointer and scroll events and dispatches them to callbacks.
+// Returns true to let the event be dispatched to the application.
+// Called with w.eventMu held.
+func (w *darwinWindow) handleEvent(event darwin.ID, eventType darwin.NSEventType) bool {
+	// Guard: ignore pointer/scroll events that arrive without an associated
+	// NSWindow. When the cursor is over the desktop or another app's window,
+	// [NSEvent window] is nil and locationInWindow returns screen-relative
+	// coordinates that would produce phantom pointer events with garbage positions.
+	switch eventType {
+	case darwin.NSEventTypeLeftMouseDown, darwin.NSEventTypeLeftMouseUp,
+		darwin.NSEventTypeRightMouseDown, darwin.NSEventTypeRightMouseUp,
+		darwin.NSEventTypeOtherMouseDown, darwin.NSEventTypeOtherMouseUp,
+		darwin.NSEventTypeMouseMoved, darwin.NSEventTypeLeftMouseDragged,
+		darwin.NSEventTypeRightMouseDragged, darwin.NSEventTypeOtherMouseDragged,
+		darwin.NSEventTypeMouseEntered, darwin.NSEventTypeMouseExited,
+		darwin.NSEventTypeScrollWheel:
+		if darwin.GetEventWindow(event).IsNil() {
+			return true
+		}
+	}
+
+	// Get event info
+	info := darwin.GetEventInfo(event)
+
+	// RETINA-001: Coordinates are in logical points (Cocoa points / DIP).
+	// w.config.Width/Height are now logical, matching NSEvent coordinates.
+	// No scaling needed — the coordinate system is consistently logical.
+
+	// Y coordinate flip: macOS uses bottom-left origin, we need top-left.
+	y := float64(w.config.Height) - info.LocationY
+
+	// Update modifiers
+	w.modifiers = extractModifiers(info.ModifierFlags)
+
+	switch eventType {
+	// Mouse button down events
+	case darwin.NSEventTypeLeftMouseDown:
+		w.buttons |= gpucontext.ButtonsLeft
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerDown, gpucontext.ButtonLeft, info, y)
+		w.dispatchPointerEvent(ev)
+
+	case darwin.NSEventTypeRightMouseDown:
+		w.buttons |= gpucontext.ButtonsRight
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerDown, gpucontext.ButtonRight, info, y)
+		w.dispatchPointerEvent(ev)
+
+	case darwin.NSEventTypeOtherMouseDown:
+		btn := buttonFromNumber(info.ButtonNumber)
+		w.buttons |= buttonsFromNumber(info.ButtonNumber)
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerDown, btn, info, y)
+		w.dispatchPointerEvent(ev)
+
+	// Mouse button up events
+	case darwin.NSEventTypeLeftMouseUp:
+		w.buttons &^= gpucontext.ButtonsLeft
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerUp, gpucontext.ButtonLeft, info, y)
+		w.dispatchPointerEvent(ev)
+
+	case darwin.NSEventTypeRightMouseUp:
+		w.buttons &^= gpucontext.ButtonsRight
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerUp, gpucontext.ButtonRight, info, y)
+		w.dispatchPointerEvent(ev)
+
+	case darwin.NSEventTypeOtherMouseUp:
+		btn := buttonFromNumber(info.ButtonNumber)
+		w.buttons &^= buttonsFromNumber(info.ButtonNumber)
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerUp, btn, info, y)
+		w.dispatchPointerEvent(ev)
+
+	// Mouse move events
+	case darwin.NSEventTypeMouseMoved:
+		wasInWindow := w.mouseInWindow
+		w.pointerX = info.LocationX
+		w.pointerY = y
+
+		// Detect enter/leave based on position (in logical point coordinates).
+		// w.config.Width/Height are in logical points after RETINA-001.
+		inWindow := info.LocationX >= 0 && info.LocationX <= float64(w.config.Width) &&
+			y >= 0 && y <= float64(w.config.Height)
+
+		if inWindow && !wasInWindow {
+			w.mouseInWindow = true
+			ev := w.createPointerEvent(gpucontext.PointerEnter, gpucontext.ButtonNone, info, y)
+			w.dispatchPointerEvent(ev)
+		} else if !inWindow && wasInWindow {
+			w.mouseInWindow = false
+			ev := w.createPointerEvent(gpucontext.PointerLeave, gpucontext.ButtonNone, info, y)
+			w.dispatchPointerEvent(ev)
+		}
+
+		// Always send move event
+		ev := w.createPointerEvent(gpucontext.PointerMove, gpucontext.ButtonNone, info, y)
+		w.dispatchPointerEvent(ev)
+
+	// Mouse drag events (move with button pressed)
+	case darwin.NSEventTypeLeftMouseDragged,
+		darwin.NSEventTypeRightMouseDragged,
+		darwin.NSEventTypeOtherMouseDragged:
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerMove, gpucontext.ButtonNone, info, y)
+		w.dispatchPointerEvent(ev)
+
+	// Mouse enter/exit events (for tracking areas)
+	case darwin.NSEventTypeMouseEntered:
+		w.mouseInWindow = true
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerEnter, gpucontext.ButtonNone, info, y)
+		w.dispatchPointerEvent(ev)
+
+	case darwin.NSEventTypeMouseExited:
+		w.mouseInWindow = false
+		w.pointerX = info.LocationX
+		w.pointerY = y
+		ev := w.createPointerEvent(gpucontext.PointerLeave, gpucontext.ButtonNone, info, y)
+		w.dispatchPointerEvent(ev)
+
+	// Scroll wheel
+	case darwin.NSEventTypeScrollWheel:
+		// Determine delta mode based on precision
+		deltaMode := gpucontext.ScrollDeltaLine
+		deltaX := info.ScrollDeltaX
+		deltaY := -info.ScrollDeltaY // Invert Y: natural scrolling convention
+		if info.IsPrecise {
+			deltaMode = gpucontext.ScrollDeltaPixel
+			// Precise (trackpad) deltas are in logical points, matching our
+			// logical coordinate system. No scaling needed.
+		}
+
+		// Map macOS NSEventPhase to ScrollPhase.
+		// momentumPhase != None means this is an inertial scroll event.
+		isMomentum := info.MomentumPhase != darwin.NSEventPhaseNone
+		var phase gpucontext.ScrollPhase
+		if isMomentum {
+			phase = mapNSEventPhase(info.MomentumPhase)
+		} else {
+			phase = mapNSEventPhase(info.Phase)
+		}
+
+		ev := gpucontext.ScrollEvent{
+			X:          info.LocationX,
+			Y:          y,
+			DeltaX:     deltaX,
+			DeltaY:     deltaY,
+			DeltaMode:  deltaMode,
+			Modifiers:  w.modifiers,
+			Timestamp:  w.eventTimestamp(),
+			Phase:      phase,
+			IsMomentum: isMomentum,
+		}
+		w.dispatchScrollEvent(ev)
+
+	// Keyboard events
+	case darwin.NSEventTypeKeyDown:
+		keyCode := darwin.GetKeyCode(event)
+		key := macKeyCodeToKey(keyCode)
+		w.dispatchKeyEvent(key, w.modifiers, true)
+
+		// Dispatch character input from [NSEvent characters].
+		// This handles all keyboard layouts, IME, and dead key sequences.
+		w.dispatchCharFromEvent(event)
+
+	case darwin.NSEventTypeKeyUp:
+		keyCode := darwin.GetKeyCode(event)
+		key := macKeyCodeToKey(keyCode)
+		w.dispatchKeyEvent(key, w.modifiers, false)
+
+	case darwin.NSEventTypeFlagsChanged:
+		// Modifier key state changed
+		// Detect which modifier key was pressed/released by comparing flags
+		keyCode := darwin.GetKeyCode(event)
+		key, pressed := detectModifierKeyChange(keyCode, info.ModifierFlags)
+		if key != gpucontext.KeyUnknown {
+			w.dispatchKeyEvent(key, w.modifiers, pressed)
+		}
+	}
+
+	// Let all events be dispatched to the application
+	return true
+}
+
+// dispatchPointerEvent pushes a pointer event to the event queue.
+// Called from handleEvent with w.eventMu held.
+func (w *darwinWindow) dispatchPointerEvent(ev gpucontext.PointerEvent) {
+	var evType EventType
+	switch ev.Type {
+	case gpucontext.PointerDown:
+		evType = EventPointerDown
+	case gpucontext.PointerUp:
+		evType = EventPointerUp
+	case gpucontext.PointerMove:
+		evType = EventPointerMove
+	case gpucontext.PointerEnter:
+		evType = EventPointerEnter
+	case gpucontext.PointerLeave:
+		evType = EventPointerLeave
+	default:
+		evType = EventPointerMove
+	}
+	w.events.Push(Event{WindowID: w.id, Type: evType, Pointer: ev})
+}
+
+// dispatchScrollEvent pushes a scroll event to the event queue.
+// Called from handleEvent with w.eventMu held.
+func (w *darwinWindow) dispatchScrollEvent(ev gpucontext.ScrollEvent) {
+	w.events.Push(Event{WindowID: w.id, Type: EventScroll, Scroll: ev})
+}
+
+// dispatchKeyEvent pushes a keyboard event to the event queue.
+// Called from handleEvent with w.eventMu held.
+func (w *darwinWindow) dispatchKeyEvent(key gpucontext.Key, mods gpucontext.Modifiers, pressed bool) {
+	evType := EventKeyDown
+	if !pressed {
+		evType = EventKeyUp
+	}
+	w.events.Push(Event{WindowID: w.id, Type: evType, Key: key, Mods: mods})
+}
+
+// dispatchCharFromEvent extracts characters from an NSEvent and dispatches them.
+// Called from handleEvent with w.eventMu held.
+func (w *darwinWindow) dispatchCharFromEvent(event darwin.ID) {
+	// Get [NSEvent characters] → NSString
+	nsstr := darwin.GetCharacters(event)
+	if nsstr.IsNil() {
+		return
+	}
+
+	// Get UTF-8 C string pointer
+	utf8Ptr := darwin.NSStringUTF8Ptr(nsstr)
+	if utf8Ptr == 0 {
+		return
+	}
+
+	// Read C string into Go string
+	length := darwin.NSStringLength(nsstr)
+	if length == 0 {
+		return
+	}
+
+	// Convert to Go byte slice (safe: pointer valid within this autorelease pool scope)
+	data := unsafe.Slice((*byte)(unsafe.Pointer(utf8Ptr)), length*4) //nolint:govet // ObjC UTF8String pointer, bounded by NSString length
+
+	// Decode UTF-8 runes and push each non-control character to event queue.
+	// Stop at null terminator (UTF8String is a C string).
+	// Skip macOS Private Use Area function-key sentinels (U+F700-U+F8FF):
+	// arrows, F-keys, Delete, Home, End, etc. SDL/GLFW/winit all filter this range.
+	for i := 0; i < len(data); {
+		r, size := utf8.DecodeRune(data[i:])
+		if r == utf8.RuneError && size <= 1 {
+			break
+		}
+		if r == 0 {
+			break
+		}
+		if r >= 0xF700 && r <= 0xF8FF {
+			i += size
+			continue
+		}
+		if r >= 32 && r != 127 {
+			w.events.Push(Event{WindowID: w.id, Type: EventChar, Char: r})
+		}
+		i += size
+	}
+}
+
+// setCursorImpl changes the mouse cursor shape using NSCursor.
+// cursorID maps to gpucontext.CursorShape values (0-11).
+func (p *darwinPlatform) setCursorImpl(cursorID int) {
+	cursorClass := darwin.GetClass("NSCursor")
+	if cursorClass == 0 {
+		return
+	}
+
+	var cursor darwin.ID
+	switch cursorID {
+	case 0: // CursorDefault
+		cursor = cursorClass.Send(darwin.RegisterSelector("arrowCursor"))
+	case 1: // CursorPointer
+		cursor = cursorClass.Send(darwin.RegisterSelector("pointingHandCursor"))
+	case 2: // CursorText
+		cursor = cursorClass.Send(darwin.RegisterSelector("IBeamCursor"))
+	case 3: // CursorCrosshair
+		cursor = cursorClass.Send(darwin.RegisterSelector("crosshairCursor"))
+	case 4: // CursorMove
+		cursor = cursorClass.Send(darwin.RegisterSelector("openHandCursor"))
+	case 5: // CursorResizeNS
+		cursor = cursorClass.Send(darwin.RegisterSelector("resizeUpDownCursor"))
+	case 6: // CursorResizeEW
+		cursor = cursorClass.Send(darwin.RegisterSelector("resizeLeftRightCursor"))
+	case 7: // CursorResizeNWSE
+		cursor = cursorClass.Send(darwin.RegisterSelector("arrowCursor"))
+	case 8: // CursorResizeNESW
+		cursor = cursorClass.Send(darwin.RegisterSelector("arrowCursor"))
+	case 9: // CursorNotAllowed
+		cursor = cursorClass.Send(darwin.RegisterSelector("operationNotAllowedCursor"))
+	case 10: // CursorWait
+		cursor = cursorClass.Send(darwin.RegisterSelector("arrowCursor"))
+	case 11: // CursorNone
+		cursorClass.Send(darwin.RegisterSelector("hide"))
+		return
+	default:
+		cursor = cursorClass.Send(darwin.RegisterSelector("arrowCursor"))
+	}
+
+	if !cursor.IsNil() {
+		cursor.Send(darwin.RegisterSelector("set"))
+	}
+}
+
+// queueEvent adds an event to the event queue.
+func (w *darwinWindow) queueEvent(event Event) {
+	w.events.Push(event)
+}
+
+// checkResize checks for logical or physical size changes and queues EventResize.
+// RETINA-002: Does NOT call w.surface.Resize(). Surface reconfiguration
+// is handled by the render thread via RequestResize to avoid race conditions.
+// Must be called with w.eventMu held.
+func (w *darwinWindow) checkResize() {
+	if w.window == nil {
+		return
+	}
+	// During live resize, defer GPU surface reconfiguration until the user
+	// releases the mouse (windowDidEndLiveResize → WakeEventLoop → here).
+	if w.window.InLiveResize() {
+		return
+	}
+
+	oldWidth, oldHeight := w.config.Width, w.config.Height
+	oldPhysW, oldPhysH := w.physW, w.physH
+
+	w.window.UpdateSize()
+	newWidth, newHeight := w.window.Size()
+	newPhysW, newPhysH := w.window.FramebufferSize()
+
+	if newWidth != oldWidth || newHeight != oldHeight || newPhysW != oldPhysW || newPhysH != oldPhysH {
+		w.config.Width = newWidth
+		w.config.Height = newHeight
+		w.physW = newPhysW
+		w.physH = newPhysH
+
+		w.queueEvent(Event{
+			WindowID:       w.id,
+			Type:           EventResize,
+			Width:          newWidth,
+			Height:         newHeight,
+			PhysicalWidth:  newPhysW,
+			PhysicalHeight: newPhysH,
+		})
+	}
+}
+
+// eventTimestamp returns the event timestamp as duration since start.
+func (w *darwinWindow) eventTimestamp() time.Duration {
+	return time.Since(w.startTime)
+}
+
+// mapNSEventPhase converts macOS NSEventPhase bitmask to gpucontext.ScrollPhase.
+// NSEventPhase uses power-of-two values; we collapse them to sequential enum.
+func mapNSEventPhase(phase darwin.NSEventPhase) gpucontext.ScrollPhase {
+	switch {
+	case phase&darwin.NSEventPhaseBegan != 0 || phase&darwin.NSEventPhaseMayBegin != 0:
+		return gpucontext.ScrollPhaseBegan
+	case phase&darwin.NSEventPhaseChanged != 0 || phase&darwin.NSEventPhaseStationary != 0:
+		return gpucontext.ScrollPhaseChanged
+	case phase&darwin.NSEventPhaseEnded != 0:
+		return gpucontext.ScrollPhaseEnded
+	case phase&darwin.NSEventPhaseCancelled != 0:
+		return gpucontext.ScrollPhaseCanceled
+	default:
+		return gpucontext.ScrollPhaseNone
+	}
+}
+
+// extractModifiers converts NSEventModifierFlags to gpucontext.Modifiers.
+func extractModifiers(flags darwin.NSEventModifierFlags) gpucontext.Modifiers {
+	var mods gpucontext.Modifiers
+	if flags&darwin.NSEventModifierFlagShift != 0 {
+		mods |= gpucontext.ModShift
+	}
+	if flags&darwin.NSEventModifierFlagControl != 0 {
+		mods |= gpucontext.ModControl
+	}
+	if flags&darwin.NSEventModifierFlagOption != 0 {
+		mods |= gpucontext.ModAlt
+	}
+	if flags&darwin.NSEventModifierFlagCommand != 0 {
+		mods |= gpucontext.ModSuper
+	}
+	return mods
+}
+
+// buttonFromNumber converts NSEvent buttonNumber to gpucontext.Button.
+func buttonFromNumber(buttonNumber int64) gpucontext.Button {
+	switch buttonNumber {
+	case 0:
+		return gpucontext.ButtonLeft
+	case 1:
+		return gpucontext.ButtonRight
+	case 2:
+		return gpucontext.ButtonMiddle
+	case 3:
+		return gpucontext.ButtonX1
+	case 4:
+		return gpucontext.ButtonX2
+	default:
+		return gpucontext.ButtonNone
+	}
+}
+
+// buttonsFromNumber returns the Buttons bitmask for a button number.
+func buttonsFromNumber(buttonNumber int64) gpucontext.Buttons {
+	switch buttonNumber {
+	case 0:
+		return gpucontext.ButtonsLeft
+	case 1:
+		return gpucontext.ButtonsRight
+	case 2:
+		return gpucontext.ButtonsMiddle
+	case 3:
+		return gpucontext.ButtonsX1
+	case 4:
+		return gpucontext.ButtonsX2
+	default:
+		return gpucontext.ButtonsNone
+	}
+}
+
+// createPointerEvent creates a PointerEvent with common fields filled in.
+// Detects pen/tablet input from NSEvent subtype and sets PointerType,
+// Pressure, TiltX, TiltY, and Twist accordingly.
+func (w *darwinWindow) createPointerEvent(
+	eventType gpucontext.PointerEventType,
+	button gpucontext.Button,
+	info darwin.EventInfo,
+	y float64,
+) gpucontext.PointerEvent {
+	pointerType := gpucontext.PointerTypeMouse
+	var pressure float32
+	var tiltX, tiltY float32
+	var twist float32
+
+	// Detect pen/tablet input from NSEvent subtype
+	if info.Subtype == darwin.NSEventSubtypeTabletPoint {
+		pointerType = gpucontext.PointerTypePen
+		pressure = float32(info.Pressure)
+		// NSEvent tilt is -1.0 to 1.0, PointerEvent tiltX/Y is degrees -90 to 90
+		tiltX = float32(info.TiltX * 90.0)
+		tiltY = float32(info.TiltY * 90.0)
+		twist = float32(info.Rotation)
+	} else if eventType == gpucontext.PointerDown || w.buttons != gpucontext.ButtonsNone {
+		// Regular mouse: default pressure when buttons are active
+		pressure = 0.5
+	}
+
+	return gpucontext.PointerEvent{
+		Type:        eventType,
+		PointerID:   1,
+		X:           info.LocationX,
+		Y:           y,
+		Pressure:    pressure,
+		TiltX:       tiltX,
+		TiltY:       tiltY,
+		Twist:       twist,
+		Width:       1,
+		Height:      1,
+		PointerType: pointerType,
+		IsPrimary:   true,
+		Button:      button,
+		Buttons:     w.buttons,
+		Modifiers:   w.modifiers,
+		Timestamp:   w.eventTimestamp(),
+	}
+}
+
+// macKeyCodeToKey converts macOS virtual key codes to gpucontext.Key.
+func macKeyCodeToKey(keyCode uint16) gpucontext.Key { //nolint:maintidx // key mapping tables are inherently large
+	switch keyCode {
+	// Letters (QWERTY layout)
+	case 0x00:
+		return gpucontext.KeyA
+	case 0x01:
+		return gpucontext.KeyS
+	case 0x02:
+		return gpucontext.KeyD
+	case 0x03:
+		return gpucontext.KeyF
+	case 0x04:
+		return gpucontext.KeyH
+	case 0x05:
+		return gpucontext.KeyG
+	case 0x06:
+		return gpucontext.KeyZ
+	case 0x07:
+		return gpucontext.KeyX
+	case 0x08:
+		return gpucontext.KeyC
+	case 0x09:
+		return gpucontext.KeyV
+	case 0x0B:
+		return gpucontext.KeyB
+	case 0x0C:
+		return gpucontext.KeyQ
+	case 0x0D:
+		return gpucontext.KeyW
+	case 0x0E:
+		return gpucontext.KeyE
+	case 0x0F:
+		return gpucontext.KeyR
+	case 0x10:
+		return gpucontext.KeyY
+	case 0x11:
+		return gpucontext.KeyT
+	case 0x12:
+		return gpucontext.Key1
+	case 0x13:
+		return gpucontext.Key2
+	case 0x14:
+		return gpucontext.Key3
+	case 0x15:
+		return gpucontext.Key4
+	case 0x16:
+		return gpucontext.Key6
+	case 0x17:
+		return gpucontext.Key5
+	case 0x18:
+		return gpucontext.KeyEqual
+	case 0x19:
+		return gpucontext.Key9
+	case 0x1A:
+		return gpucontext.Key7
+	case 0x1B:
+		return gpucontext.KeyMinus
+	case 0x1C:
+		return gpucontext.Key8
+	case 0x1D:
+		return gpucontext.Key0
+	case 0x1E:
+		return gpucontext.KeyRightBracket
+	case 0x1F:
+		return gpucontext.KeyO
+	case 0x20:
+		return gpucontext.KeyU
+	case 0x21:
+		return gpucontext.KeyLeftBracket
+	case 0x22:
+		return gpucontext.KeyI
+	case 0x23:
+		return gpucontext.KeyP
+	case 0x25:
+		return gpucontext.KeyL
+	case 0x26:
+		return gpucontext.KeyJ
+	case 0x27:
+		return gpucontext.KeyApostrophe
+	case 0x28:
+		return gpucontext.KeyK
+	case 0x29:
+		return gpucontext.KeySemicolon
+	case 0x2A:
+		return gpucontext.KeyBackslash
+	case 0x2B:
+		return gpucontext.KeyComma
+	case 0x2C:
+		return gpucontext.KeySlash
+	case 0x2D:
+		return gpucontext.KeyN
+	case 0x2E:
+		return gpucontext.KeyM
+	case 0x2F:
+		return gpucontext.KeyPeriod
+	case 0x32:
+		return gpucontext.KeyGrave
+
+	// Special keys
+	case 0x24:
+		return gpucontext.KeyEnter
+	case 0x30:
+		return gpucontext.KeyTab
+	case 0x31:
+		return gpucontext.KeySpace
+	case 0x33:
+		return gpucontext.KeyBackspace
+	case 0x35:
+		return gpucontext.KeyEscape
+	case 0x37:
+		return gpucontext.KeyLeftSuper // Command
+	case 0x38:
+		return gpucontext.KeyLeftShift
+	case 0x39:
+		return gpucontext.KeyCapsLock
+	case 0x3A:
+		return gpucontext.KeyLeftAlt // Option
+	case 0x3B:
+		return gpucontext.KeyLeftControl
+	case 0x3C:
+		return gpucontext.KeyRightShift
+	case 0x3D:
+		return gpucontext.KeyRightAlt
+	case 0x3E:
+		return gpucontext.KeyRightControl
+	case 0x36:
+		return gpucontext.KeyRightSuper
+
+	// Function keys
+	case 0x7A:
+		return gpucontext.KeyF1
+	case 0x78:
+		return gpucontext.KeyF2
+	case 0x63:
+		return gpucontext.KeyF3
+	case 0x76:
+		return gpucontext.KeyF4
+	case 0x60:
+		return gpucontext.KeyF5
+	case 0x61:
+		return gpucontext.KeyF6
+	case 0x62:
+		return gpucontext.KeyF7
+	case 0x64:
+		return gpucontext.KeyF8
+	case 0x65:
+		return gpucontext.KeyF9
+	case 0x6D:
+		return gpucontext.KeyF10
+	case 0x67:
+		return gpucontext.KeyF11
+	case 0x6F:
+		return gpucontext.KeyF12
+
+	// Navigation
+	case 0x73:
+		return gpucontext.KeyHome
+	case 0x77:
+		return gpucontext.KeyEnd
+	case 0x74:
+		return gpucontext.KeyPageUp
+	case 0x79:
+		return gpucontext.KeyPageDown
+	case 0x75:
+		return gpucontext.KeyDelete
+	case 0x72:
+		return gpucontext.KeyInsert
+
+	// Arrow keys
+	case 0x7B:
+		return gpucontext.KeyLeft
+	case 0x7C:
+		return gpucontext.KeyRight
+	case 0x7D:
+		return gpucontext.KeyDown
+	case 0x7E:
+		return gpucontext.KeyUp
+
+	// Numpad
+	case 0x52:
+		return gpucontext.KeyNumpad0
+	case 0x53:
+		return gpucontext.KeyNumpad1
+	case 0x54:
+		return gpucontext.KeyNumpad2
+	case 0x55:
+		return gpucontext.KeyNumpad3
+	case 0x56:
+		return gpucontext.KeyNumpad4
+	case 0x57:
+		return gpucontext.KeyNumpad5
+	case 0x58:
+		return gpucontext.KeyNumpad6
+	case 0x59:
+		return gpucontext.KeyNumpad7
+	case 0x5B:
+		return gpucontext.KeyNumpad8
+	case 0x5C:
+		return gpucontext.KeyNumpad9
+	case 0x41:
+		return gpucontext.KeyNumpadDecimal
+	case 0x43:
+		return gpucontext.KeyNumpadMultiply
+	case 0x45:
+		return gpucontext.KeyNumpadAdd
+	case 0x47:
+		return gpucontext.KeyNumLock
+	case 0x4B:
+		return gpucontext.KeyNumpadDivide
+	case 0x4C:
+		return gpucontext.KeyNumpadEnter
+	case 0x4E:
+		return gpucontext.KeyNumpadSubtract
+
+	default:
+		return gpucontext.KeyUnknown
+	}
+}
+
+// ClipboardRead reads text from the system clipboard using NSPasteboard.
+func (p *darwinPlatform) ClipboardRead() (string, error) {
+	pb := darwin.GetClass("NSPasteboard").Send(darwin.RegisterSelector("generalPasteboard"))
+	if pb.IsNil() {
+		return "", nil
+	}
+
+	// Request public.utf8-plain-text type
+	typeStr := darwin.NewNSString("public.utf8-plain-text")
+	if typeStr == nil {
+		return "", nil
+	}
+	defer typeStr.Release()
+
+	nsstr := pb.SendPtr(darwin.RegisterSelector("stringForType:"), uintptr(typeStr.ID()))
+	if nsstr.IsNil() {
+		return "", nil
+	}
+
+	// Convert NSString to Go string
+	utf8Ptr := darwin.NSStringUTF8Ptr(nsstr)
+	if utf8Ptr == 0 {
+		return "", nil
+	}
+
+	length := darwin.NSStringLength(nsstr)
+	if length == 0 {
+		return "", nil
+	}
+
+	// Read UTF-8 bytes (length is character count; UTF-8 may use up to 4 bytes per char)
+	data := unsafe.Slice((*byte)(unsafe.Pointer(utf8Ptr)), length*4) //nolint:govet // ObjC UTF8String pointer, bounded by NSString length
+
+	// Find actual end of the C string
+	end := 0
+	for end < len(data) && data[end] != 0 {
+		end++
+	}
+
+	return string(data[:end]), nil
+}
+
+// ClipboardWrite writes text to the system clipboard using NSPasteboard.
+func (p *darwinPlatform) ClipboardWrite(text string) error {
+	pb := darwin.GetClass("NSPasteboard").Send(darwin.RegisterSelector("generalPasteboard"))
+	if pb.IsNil() {
+		return nil
+	}
+
+	// Clear existing contents
+	pb.Send(darwin.RegisterSelector("clearContents"))
+
+	// Create NSString with the text
+	nsStr := darwin.NewNSString(text)
+	if nsStr == nil {
+		return nil
+	}
+	defer nsStr.Release()
+
+	// Create type string
+	typeStr := darwin.NewNSString("public.utf8-plain-text")
+	if typeStr == nil {
+		return nil
+	}
+	defer typeStr.Release()
+
+	// setString:forType: takes two pointer arguments
+	pb.SendUintUint(
+		darwin.RegisterSelector("setString:forType:"),
+		uint64(nsStr.ID()),
+		uint64(typeStr.ID()),
+	)
+
+	return nil
+}
+
+// DarkMode returns true if the system dark mode is active.
+// Checks NSApplication.effectiveAppearance.name for "Dark" substring.
+func (p *darwinPlatform) DarkMode() bool {
+	app := darwin.GetClass("NSApplication").Send(darwin.RegisterSelector("sharedApplication"))
+	if app.IsNil() {
+		return false
+	}
+
+	appearance := app.Send(darwin.RegisterSelector("effectiveAppearance"))
+	if appearance.IsNil() {
+		return false
+	}
+
+	nameID := appearance.Send(darwin.RegisterSelector("name"))
+	if nameID.IsNil() {
+		return false
+	}
+
+	// Get the UTF-8 string from the appearance name
+	utf8Ptr := darwin.NSStringUTF8Ptr(nameID)
+	if utf8Ptr == 0 {
+		return false
+	}
+
+	length := darwin.NSStringLength(nameID)
+	if length == 0 {
+		return false
+	}
+
+	data := unsafe.Slice((*byte)(unsafe.Pointer(utf8Ptr)), length*4) //nolint:govet // ObjC UTF8String pointer, bounded by NSString length
+
+	// Find actual string end
+	end := 0
+	for end < len(data) && data[end] != 0 {
+		end++
+	}
+
+	name := string(data[:end])
+	// macOS dark appearance names contain "Dark" (e.g., "NSAppearanceNameDarkAqua")
+	return strings.Contains(name, "Dark")
+}
+
+// ReduceMotion returns true if the user prefers reduced animation.
+// Uses NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion.
+func (p *darwinPlatform) ReduceMotion() bool {
+	ws := darwin.GetClass("NSWorkspace").Send(darwin.RegisterSelector("sharedWorkspace"))
+	if ws.IsNil() {
+		return false
+	}
+	return ws.GetBool(darwin.RegisterSelector("accessibilityDisplayShouldReduceMotion"))
+}
+
+// HighContrast returns true if high contrast mode is active.
+// Uses NSWorkspace.sharedWorkspace.accessibilityDisplayShouldIncreaseContrast.
+func (p *darwinPlatform) HighContrast() bool {
+	ws := darwin.GetClass("NSWorkspace").Send(darwin.RegisterSelector("sharedWorkspace"))
+	if ws.IsNil() {
+		return false
+	}
+	return ws.GetBool(darwin.RegisterSelector("accessibilityDisplayShouldIncreaseContrast"))
+}
+
+// FontScale returns the font size preference multiplier.
+// macOS does not have a system-wide font scale setting like Windows or Android.
+// Individual apps control their own text sizing. Returns 1.0 (no scaling).
+func (p *darwinPlatform) FontScale() float32 { return 1.0 }
+
+// SubpixelLayout returns the display's subpixel arrangement for LCD text rendering.
+// macOS disabled subpixel antialiasing system-wide starting with Mojave (10.14, 2018).
+// All modern macOS versions use grayscale AA only.
+func (p *darwinPlatform) SubpixelLayout() gpucontext.SubpixelLayout {
+	return gpucontext.SubpixelNone
+}
+
+func (p *darwinPlatform) SetAppName(name string) {
+	if p.app != nil {
+		p.app.SetAppName(name)
+	}
+}
+
+// SetApplicationMenu replaces the native application menu with the provided items.
+// On macOS this replaces the current NSMenu. On platforms that don't support
+// native menus the call is silently ignored (the interface is optional).
+//
+// If the NSApplication has already been initialized, the menu is applied immediately.
+// Otherwise the items are stored and applied during Init() — this covers the common
+// pattern of calling SetMenu before Run().
+//
+// Thread-safe: acquires the platform mutex.
+func (p *darwinPlatform) SetApplicationMenu(items []MenuItem) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.app != nil && p.app.IsInitialized() {
+		p.applyMenu(items)
+		return
+	}
+
+	// Still before Init – store for later
+	p.pendingMenu = items
+	p.hasPending = true
+}
+
+// applyMenu does the real work when NSApp is ready.
+// It creates a new empty NSMenu, installs it as the main menu, and populates
+// it with the given items. Separators are created via NSMenuItem.separatorItem,
+// regular items via initWithTitle:action:keyEquivalent: and linked to their
+// Go callback through the application delegate (handleMenuItem:).
+//
+// Must only be called after NSApplication has been initialized.
+func (p *darwinPlatform) applyMenu(items []MenuItem) {
+	nsApp := p.app.NSApp()
+	if nsApp.IsNil() {
+		return
+	}
+	mainMenu := nsApp.Send(darwin.RegisterSelector("mainMenu"))
+	if mainMenu.IsNil() {
+		return
+	}
+
+	appMenuItem := mainMenu.SendInt(darwin.RegisterSelector("itemAtIndex:"), 0)
+
+	mainMenu.Send(darwin.RegisterSelector("removeAllItems"))
+
+	if !appMenuItem.IsNil() {
+		mainMenu.SendPtr(darwin.RegisterSelector("addItem:"), appMenuItem.Ptr())
+	}
+
+	// Add items as separate menu items.
+	for _, item := range items {
+		p.addPlatformItem(mainMenu, item)
+	}
+}
+
+func (p *darwinPlatform) addPlatformItem(parentMenu darwin.ID, item MenuItem) {
+	if item.Separator {
+		darwin.AddSeparatorItem(parentMenu)
+		return
+	}
+
+	if item.Role != MenuRoleNone {
+		roleStr := roleToString(item.Role)
+		if roleStr != "" {
+			darwin.AddMenuItemWithRole(parentMenu, item.Title, roleStr)
+			return
+		}
+	}
+
+	if len(item.Submenu) > 0 {
+		submenu := darwin.NewMenuWithTitle(item.Title)
+		if submenu.IsNil() {
+			return
+		}
+
+		for _, sub := range item.Submenu {
+			p.addPlatformItem(submenu, sub)
+		}
+
+		menuItem := darwin.NewMenuItemWithSubmenu(item.Title, submenu)
+		if !menuItem.IsNil() {
+			parentMenu.SendPtr(darwin.RegisterSelector("addItem:"), menuItem.Ptr())
+		}
+		return
+	}
+
+	darwin.AddMenuItemWithCallback(parentMenu, item.Title, item.Action, "")
+}
+
+// roleToString converts a MenuRole value to its corresponding string representation for OS-specific menu integration.
+func roleToString(role MenuRole) string {
+	switch role {
+	case MenuRoleAbout:
+		return "about"
+	case MenuRolePreferences:
+		return "preferences"
+	case MenuRoleServices:
+		return "services"
+	case MenuRoleHide:
+		return "hide"
+	case MenuRoleHideOthers:
+		return "hideOthers"
+	case MenuRoleShowAll:
+		return "showAll"
+	case MenuRoleQuit:
+		return "quit"
+	case MenuRoleClose:
+		return "close"
+	case MenuRoleMinimize:
+		return "minimize"
+	case MenuRoleZoom:
+		return "zoom"
+	case MenuRoleFullScreen:
+		return "fullScreen"
+	case MenuRoleBringAllToFront:
+		return "bringAllToFront"
+	}
+	return ""
+}
+
+// AddToSystemMenu adds items to a standard system menu (e.g., the Apple menu
+// or the Window menu). This enables the Godot-style system menu extension:
+// users can add custom items to existing menus without replacing them entirely.
+//
+// Returns false if the platform is not initialized or the requested menu
+// does not exist.
+//
+// Thread-safe: acquires the platform read lock.
+func (p *darwinPlatform) AddToSystemMenu(menu SystemMenu, items []MenuItem) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.app == nil || !p.app.IsInitialized() {
+		return false
+	}
+
+	nsMenu := p.getSystemMenu(menu)
+	if nsMenu.IsNil() {
+		return false
+	}
+
+	for _, item := range items {
+		if item.Separator {
+			darwin.AddSeparatorItem(nsMenu)
+			continue
+		}
+		if item.Role != MenuRoleNone {
+			roleStr := roleToString(item.Role)
+			if roleStr != "" {
+				darwin.AddMenuItemWithRole(nsMenu, item.Title, roleStr)
+				continue
+			}
+		}
+		darwin.AddMenuItemWithCallback(nsMenu, item.Title, item.Action, "")
+	}
+	return true
+}
+
+// getSystemMenu returns the native NSMenu for the given system menu role.
+// Currently supports SystemMenuApplication (the Apple menu) and SystemMenuWindow.
+func (p *darwinPlatform) getSystemMenu(menu SystemMenu) darwin.ID {
+	switch menu {
+	case SystemMenuApplication:
+		return p.getAppMenu()
+	case SystemMenuWindow:
+		return p.getWindowMenu()
+	}
+	return 0
+}
+
+// getAppMenu returns the NSMenu of the Apple menu (the first submenu of the main menu).
+// This is the menu that contains About, Preferences, Services, Quit, etc.
+func (p *darwinPlatform) getAppMenu() darwin.ID {
+	nsApp := p.app.NSApp()
+	if nsApp.IsNil() {
+		return 0
+	}
+	mainMenu := nsApp.Send(darwin.RegisterSelector("mainMenu"))
+	if mainMenu.IsNil() {
+		return 0
+	}
+
+	appMenuItem := mainMenu.SendInt(darwin.RegisterSelector("itemAtIndex:"), 0)
+	if appMenuItem.IsNil() {
+		return 0
+	}
+	return appMenuItem.Send(darwin.RegisterSelector("submenu"))
+}
+
+// getWindowMenu returns the NSMenu of the Window menu.
+// NSApplication automatically manages the Window menu when setWindowsMenu: is called,
+// which createMenuBar already does during Init().
+func (p *darwinPlatform) getWindowMenu() darwin.ID {
+	nsApp := p.app.NSApp()
+	if nsApp.IsNil() {
+		return 0
+	}
+	return nsApp.Send(darwin.RegisterSelector("windowsMenu"))
+}
+
+// detectModifierKeyChange detects which modifier key was pressed/released.
+// macOS sends NSEventTypeFlagsChanged for modifier keys instead of keyDown/keyUp.
+func detectModifierKeyChange(keyCode uint16, flags darwin.NSEventModifierFlags) (gpucontext.Key, bool) {
+	var key gpucontext.Key
+	var flagMask darwin.NSEventModifierFlags
+
+	switch keyCode {
+	case 0x38: // Left Shift
+		key = gpucontext.KeyLeftShift
+		flagMask = darwin.NSEventModifierFlagShift
+	case 0x3C: // Right Shift
+		key = gpucontext.KeyRightShift
+		flagMask = darwin.NSEventModifierFlagShift
+	case 0x3B: // Left Control
+		key = gpucontext.KeyLeftControl
+		flagMask = darwin.NSEventModifierFlagControl
+	case 0x3E: // Right Control
+		key = gpucontext.KeyRightControl
+		flagMask = darwin.NSEventModifierFlagControl
+	case 0x3A: // Left Option (Alt)
+		key = gpucontext.KeyLeftAlt
+		flagMask = darwin.NSEventModifierFlagOption
+	case 0x3D: // Right Option (Alt)
+		key = gpucontext.KeyRightAlt
+		flagMask = darwin.NSEventModifierFlagOption
+	case 0x37: // Left Command (Super)
+		key = gpucontext.KeyLeftSuper
+		flagMask = darwin.NSEventModifierFlagCommand
+	case 0x36: // Right Command (Super)
+		key = gpucontext.KeyRightSuper
+		flagMask = darwin.NSEventModifierFlagCommand
+	case 0x39: // Caps Lock
+		key = gpucontext.KeyCapsLock
+		flagMask = darwin.NSEventModifierFlagCapsLock
+	default:
+		return gpucontext.KeyUnknown, false
+	}
+
+	// Check if the key is pressed (flag is set) or released (flag is cleared)
+	pressed := (flags & flagMask) != 0
+	return key, pressed
+}
+
+func (p *darwinPlatform) ShowOpenFileDialog(opts FileDialogOptions) ([]string, error) {
+	return showOpenFileDialog(opts)
+}
+
+func (p *darwinPlatform) ShowSaveFileDialog(opts FileDialogOptions) (string, error) {
+	return showSaveFileDialog(opts)
+}

@@ -1,0 +1,21 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Array { base: [0], size: Constant(512), stride: 4 }
+[2] Atomic { base: Sint(4) }
+[3] Array { base: [2], size: Constant(8), stride: 4 }
+[4] Array { base: [3], size: Constant(8), stride: 32 }
+[5] Struct "WStruct" { members: [{ name: "arr", type: [1], offset: 0}, { name: "atom", type: [2], offset: 2048}, { name: "atom_arr", type: [4], offset: 2052}], span: 2308 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "w_mem" type=[5] space=WorkGroup binding=None
+[1] "output" type=[1] space=Storage(LOAD|STORE) binding=(0,0)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=4, stmts=3, locals=0} workgroup_size=(1,1,1)

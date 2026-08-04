@@ -1,0 +1,35 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+
+struct main_Input {
+};
+kernel void main_(
+  metal::uint3 gid [[thread_position_in_grid]]
+, metal::texture2d<float, metal::access::write> output_tex [[user(fake0)]]
+) {
+    bool local = {};
+    metal::uint2 dims = metal::uint2(output_tex.get_width(), output_tex.get_height());
+    if (!(gid.x >= dims.x)) {
+        local = gid.y >= dims.y;
+    } else {
+        local = true;
+    }
+    bool _e13 = local;
+    if (_e13) {
+        return;
+    }
+    metal::float2 uv = metal::float2(static_cast<float>(gid.x) / static_cast<float>(dims.x), static_cast<float>(gid.y) / static_cast<float>(dims.y));
+    metal::float4 color = metal::float4(uv.x, uv.y, 0.5, 1.0);
+    output_tex.write(color, metal::uint2(static_cast<metal::int2>(gid.xy)));
+    return;
+}

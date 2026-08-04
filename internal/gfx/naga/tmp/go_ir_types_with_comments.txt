@@ -1,0 +1,39 @@
+=== TYPES ===
+[0] Matrix { columns: Vec4, rows: Vec4, scalar: Float(4) }
+[1] Matrix { columns: Vec2, rows: Vec2, scalar: Float(4) }
+[2] Scalar(Uint, 4)
+[3] Struct "TestR" { members: [{ name: "test_m", type: [2], offset: 0}], span: 4 }
+[4] Struct "TestS" { members: [{ name: "test_m", type: [2], offset: 0}], span: 4 }
+
+=== CONSTANTS ===
+[0] "test_c" type=[2] init=Literal(Uint(1))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "mvp_matrix" type=[0] space=Uniform binding=(0,0)
+[1] "w_mem" type=[1] space=WorkGroup binding=None
+[2] "w_mem2" type=[1] space=WorkGroup binding=None
+
+=== FUNCTIONS ===
+[0] "test_f"
+  args: []
+  result: None
+  locals: 0
+  expressions: 0
+  named_expressions: {}
+  body: 1 statements
+    Return
+
+[1] "test_g"
+  args: []
+  result: None
+  locals: 0
+  expressions: 0
+  named_expressions: {}
+  body: 1 statements
+    Return
+
+=== ENTRY POINTS ===
+[0] "test_ep" stage=Compute function={name="test_ep", args=0, exprs=3, stmts=3, locals=0} workgroup_size=(1,1,1)

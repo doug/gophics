@@ -1,0 +1,64 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 43
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_9 "main"
+               OpExecutionMode %_9 LocalSize 1 1 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeFloat 32
+         %_4 = OpTypeInt 32 1
+         %_5 = OpTypeInt 32 0
+         %_6 = OpTypeVector %_3 3
+         %_7 = OpTypeVector %_5 2
+         %_8 = OpTypeFunction %_2
+         %_11 = OpTypePointer Function %_3
+         %_13 = OpTypePointer Function %_5
+         %_15 = OpTypePointer Function %_4
+         %_18 = OpTypePointer Function %_7
+         %_20 = OpConstant %_3 1092616192
+         %_21 = OpConstant %_5 0
+         %_22 = OpConstant %_3 1065353216
+         %_23 = OpConstant %_3 1073741824
+         %_29 = OpConstant %_3 1077936128
+         %_32 = OpConstant %_5 1
+         %_36 = OpConstant %_4 20
+         %_38 = OpConstant %_4 1
+         %_40 = OpConstant %_3 1084227584
+         %_41 = OpConstant %_5 2
+         %_9 = OpFunction %_2 None %_8
+         %_10 = OpLabel
+         %_12 = OpVariable %_11 Function
+         %_14 = OpVariable %_13 Function
+         %_16 = OpVariable %_15 Function
+         %_17 = OpVariable %_11 Function
+         %_19 = OpVariable %_18 Function
+               OpStore %_12 %_20
+               OpStore %_14 %_21
+         %_24 = OpFAdd %_3 %_22 %_23
+         %_25 = OpLoad %_3 %_12
+         %_26 = OpFAdd %_3 %_25 %_22
+               OpStore %_12 %_26
+         %_27 = OpLoad %_3 %_12
+         %_28 = OpFMul %_3 %_27 %_23
+               OpStore %_12 %_28
+         %_30 = OpCompositeConstruct %_6 %_22 %_23 %_29
+         %_31 = OpLoad %_5 %_14
+         %_33 = OpIAdd %_5 %_31 %_32
+               OpStore %_14 %_33
+         %_34 = OpLoad %_5 %_14
+         %_35 = OpIAdd %_5 %_34 %_32
+               OpStore %_14 %_35
+               OpStore %_16 %_36
+         %_37 = OpLoad %_4 %_16
+         %_39 = OpIAdd %_4 %_37 %_38
+               OpStore %_16 %_39
+               OpStore %_17 %_40
+         %_42 = OpCompositeConstruct %_7 %_32 %_41
+               OpStore %_19 %_42
+               OpReturn
+               OpFunctionEnd

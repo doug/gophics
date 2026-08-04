@@ -1,0 +1,654 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Vector { size: Vec3, scalar: Uint(4) }
+[2] Scalar(Sint, 4)
+[3] Struct "GlobalConst" { members: [{ name: "a", type: [0], offset: 0}, { name: "b", type: [1], offset: 16}, { name: "c", type: [2], offset: 28}], span: 32 }
+[4] Struct "AlignedWrapper" { members: [{ name: "value", type: [2], offset: 0}], span: 8 }
+[5] Scalar(Float, 4)
+[6] Matrix { columns: Vec4, rows: Vec3, scalar: Float(4) }
+[7] Matrix { columns: Vec2, rows: Vec2, scalar: Float(4) }
+[8] Array { base: [7], size: Constant(2), stride: 16 }
+[9] Atomic { base: Sint(4) }
+[10] Array { base: [9], size: Constant(10), stride: 4 }
+[11] Vector { size: Vec2, scalar: Uint(4) }
+[12] Array { base: [11], size: Constant(2), stride: 8 }
+[13] Array { base: [4], size: Dynamic, stride: 8 }
+[14] Struct "Bar" { members: [{ name: "_matrix", type: [6], offset: 0}, { name: "matrix_array", type: [8], offset: 64}, { name: "atom", type: [9], offset: 96}, { name: "atom_arr", type: [10], offset: 100}, { name: "arr", type: [12], offset: 144}, { name: "data", type: [13], offset: 160}], span: 176 }
+[15] Matrix { columns: Vec3, rows: Vec2, scalar: Float(4) }
+[16] Struct "Baz" { members: [{ name: "m", type: [15], offset: 0}], span: 24 }
+[17] Vector { size: Vec2, scalar: Sint(4) }
+[18] Matrix { columns: Vec4, rows: Vec2, scalar: Float(4) }
+[19] Array { base: [18], size: Constant(2), stride: 32 }
+[20] Struct "MatCx2InArray" { members: [{ name: "am", type: [19], offset: 0}], span: 64 }
+[21] Pointer { base: [5], space: Function }
+[22] Array { base: [5], size: Constant(10), stride: 4 }
+[23] Array { base: [22], size: Constant(5), stride: 40 }
+[24] Vector { size: Vec4, scalar: Float(4) }
+[25] Array { base: [2], size: Constant(5), stride: 4 }
+[26] Pointer { base: [0], space: Function }
+[27] Array { base: [24], size: Constant(2), stride: 16 }
+[28] Pointer { base: [27], space: Function }
+[29] Struct "AssignToMember" { members: [{ name: "x", type: [0], offset: 0}], span: 4 }
+[30] Pointer { base: [29], space: Function }
+[31] Array { base: [0], size: Constant(4), stride: 4 }
+[32] Pointer { base: [31], space: Function }
+[33] Scalar(Bool, 1)
+[34] Array { base: [33], size: Constant(1), stride: 1 }
+[35] Struct "S" { members: [{ name: "m", type: [2], offset: 0}], span: 4 }
+[36] Struct "Inner" { members: [{ name: "delicious", type: [2], offset: 0}], span: 4 }
+[37] Struct "Outer" { members: [{ name: "om_nom_nom", type: [36], offset: 0}, { name: "thing", type: [0], offset: 4}], span: 8 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "msl_padding_global_const" type=[3] space=Private binding=None
+[1] "bar" type=[14] space=Storage(LOAD|STORE) binding=(0,0)
+[2] "baz" type=[16] space=Uniform binding=(0,1)
+[3] "qux" type=[17] space=Storage(LOAD|STORE) binding=(0,2)
+[4] "nested_mat_cx2" type=[20] space=Uniform binding=(0,3)
+
+=== FUNCTIONS ===
+[0] "test_matrix_within_struct_accesses"
+  args: []
+  result: None
+  locals: 2
+    [0] "idx" type=[2] init=[0]
+    [1] "t" type=[16] init=[48]
+  expressions: 90
+    [0] Literal(I32(1))
+    [1] LocalVariable([0])
+    [2] Literal(I32(1))
+    [3] Load { pointer: [1] }
+    [4] Binary { op: Subtract, left: [3], right: [2] }
+    [5] GlobalVariable([2])
+    [6] AccessIndex { base: [5], index: 0 }
+    [7] Load { pointer: [6] }
+    [8] GlobalVariable([2])
+    [9] AccessIndex { base: [8], index: 0 }
+    [10] AccessIndex { base: [9], index: 0 }
+    [11] Load { pointer: [10] }
+    [12] GlobalVariable([2])
+    [13] AccessIndex { base: [12], index: 0 }
+    [14] Load { pointer: [1] }
+    [15] Access { base: [13], index: [14] }
+    [16] Load { pointer: [15] }
+    [17] GlobalVariable([2])
+    [18] AccessIndex { base: [17], index: 0 }
+    [19] AccessIndex { base: [18], index: 0 }
+    [20] AccessIndex { base: [19], index: 1 }
+    [21] Load { pointer: [20] }
+    [22] GlobalVariable([2])
+    [23] AccessIndex { base: [22], index: 0 }
+    [24] AccessIndex { base: [23], index: 0 }
+    [25] Load { pointer: [1] }
+    [26] Access { base: [24], index: [25] }
+    [27] Load { pointer: [26] }
+    [28] GlobalVariable([2])
+    [29] AccessIndex { base: [28], index: 0 }
+    [30] Load { pointer: [1] }
+    [31] Access { base: [29], index: [30] }
+    [32] AccessIndex { base: [31], index: 1 }
+    [33] Load { pointer: [32] }
+    [34] GlobalVariable([2])
+    [35] AccessIndex { base: [34], index: 0 }
+    [36] Load { pointer: [1] }
+    [37] Access { base: [35], index: [36] }
+    [38] Load { pointer: [1] }
+    [39] Access { base: [37], index: [38] }
+    [40] Load { pointer: [39] }
+    [41] Literal(F32(1))
+    [42] Splat { size: Vec2, value: [41] }
+    [43] Literal(F32(2))
+    [44] Splat { size: Vec2, value: [43] }
+    [45] Literal(F32(3))
+    [46] Splat { size: Vec2, value: [45] }
+    [47] Compose { type: [15], components: [[42], [44], [46]] }
+    [48] Compose { type: [16], components: [[47]] }
+    [49] LocalVariable([1])
+    [50] Literal(I32(1))
+    [51] Load { pointer: [1] }
+    [52] Binary { op: Add, left: [51], right: [50] }
+    [53] AccessIndex { base: [49], index: 0 }
+    [54] Literal(F32(6))
+    [55] Splat { size: Vec2, value: [54] }
+    [56] Literal(F32(5))
+    [57] Splat { size: Vec2, value: [56] }
+    [58] Literal(F32(4))
+    [59] Splat { size: Vec2, value: [58] }
+    [60] Compose { type: [15], components: [[55], [57], [59]] }
+    [61] AccessIndex { base: [49], index: 0 }
+    [62] AccessIndex { base: [61], index: 0 }
+    [63] Literal(F32(9))
+    [64] Splat { size: Vec2, value: [63] }
+    [65] AccessIndex { base: [49], index: 0 }
+    [66] Load { pointer: [1] }
+    [67] Access { base: [65], index: [66] }
+    [68] Literal(F32(90))
+    [69] Splat { size: Vec2, value: [68] }
+    [70] AccessIndex { base: [49], index: 0 }
+    [71] AccessIndex { base: [70], index: 0 }
+    [72] AccessIndex { base: [71], index: 1 }
+    [73] Literal(F32(10))
+    [74] AccessIndex { base: [49], index: 0 }
+    [75] AccessIndex { base: [74], index: 0 }
+    [76] Load { pointer: [1] }
+    [77] Access { base: [75], index: [76] }
+    [78] Literal(F32(20))
+    [79] AccessIndex { base: [49], index: 0 }
+    [80] Load { pointer: [1] }
+    [81] Access { base: [79], index: [80] }
+    [82] AccessIndex { base: [81], index: 1 }
+    [83] Literal(F32(30))
+    [84] AccessIndex { base: [49], index: 0 }
+    [85] Load { pointer: [1] }
+    [86] Access { base: [84], index: [85] }
+    [87] Load { pointer: [1] }
+    [88] Access { base: [86], index: [87] }
+    [89] Literal(F32(40))
+  named_expressions:
+    [7] = "l0"
+    [11] = "l1"
+    [16] = "l2"
+    [21] = "l3"
+    [27] = "l4"
+    [33] = "l5"
+    [40] = "l6"
+  body: 44 statements
+    Emit(3..5)
+    Store { pointer: [1], value: [4] }
+    Emit(6..8)
+    Emit(9..10)
+    Emit(10..12)
+    Emit(13..17)
+    Emit(18..19)
+    Emit(19..20)
+    Emit(20..22)
+    Emit(23..24)
+    Emit(24..28)
+    Emit(29..32)
+    Emit(32..34)
+    Emit(35..41)
+    Emit(42..43)
+    Emit(44..45)
+    Emit(46..49)
+    Emit(51..53)
+    Store { pointer: [1], value: [52] }
+    Emit(53..54)
+    Emit(55..56)
+    Emit(57..58)
+    Emit(59..61)
+    Store { pointer: [53], value: [60] }
+    Emit(61..62)
+    Emit(62..63)
+    Emit(64..65)
+    Store { pointer: [62], value: [64] }
+    Emit(65..68)
+    Emit(69..70)
+    Store { pointer: [67], value: [69] }
+    Emit(70..71)
+    Emit(71..72)
+    Emit(72..73)
+    Store { pointer: [72], value: [73] }
+    Emit(74..75)
+    Emit(75..78)
+    Store { pointer: [77], value: [78] }
+    Emit(79..82)
+    Emit(82..83)
+    Store { pointer: [82], value: [83] }
+    Emit(84..89)
+    Store { pointer: [88], value: [89] }
+    Return
+
+[1] "test_matrix_within_array_within_struct_accesses"
+  args: []
+  result: None
+  locals: 2
+    [0] "idx" type=[2] init=[0]
+    [1] "t" type=[20] init=[52]
+  expressions: 105
+    [0] Literal(I32(1))
+    [1] LocalVariable([0])
+    [2] Literal(I32(1))
+    [3] Load { pointer: [1] }
+    [4] Binary { op: Subtract, left: [3], right: [2] }
+    [5] GlobalVariable([4])
+    [6] AccessIndex { base: [5], index: 0 }
+    [7] Load { pointer: [6] }
+    [8] GlobalVariable([4])
+    [9] AccessIndex { base: [8], index: 0 }
+    [10] AccessIndex { base: [9], index: 0 }
+    [11] Load { pointer: [10] }
+    [12] GlobalVariable([4])
+    [13] AccessIndex { base: [12], index: 0 }
+    [14] AccessIndex { base: [13], index: 0 }
+    [15] AccessIndex { base: [14], index: 0 }
+    [16] Load { pointer: [15] }
+    [17] GlobalVariable([4])
+    [18] AccessIndex { base: [17], index: 0 }
+    [19] AccessIndex { base: [18], index: 0 }
+    [20] Load { pointer: [1] }
+    [21] Access { base: [19], index: [20] }
+    [22] Load { pointer: [21] }
+    [23] GlobalVariable([4])
+    [24] AccessIndex { base: [23], index: 0 }
+    [25] AccessIndex { base: [24], index: 0 }
+    [26] AccessIndex { base: [25], index: 0 }
+    [27] AccessIndex { base: [26], index: 1 }
+    [28] Load { pointer: [27] }
+    [29] GlobalVariable([4])
+    [30] AccessIndex { base: [29], index: 0 }
+    [31] AccessIndex { base: [30], index: 0 }
+    [32] AccessIndex { base: [31], index: 0 }
+    [33] Load { pointer: [1] }
+    [34] Access { base: [32], index: [33] }
+    [35] Load { pointer: [34] }
+    [36] GlobalVariable([4])
+    [37] AccessIndex { base: [36], index: 0 }
+    [38] AccessIndex { base: [37], index: 0 }
+    [39] Load { pointer: [1] }
+    [40] Access { base: [38], index: [39] }
+    [41] AccessIndex { base: [40], index: 1 }
+    [42] Load { pointer: [41] }
+    [43] GlobalVariable([4])
+    [44] AccessIndex { base: [43], index: 0 }
+    [45] AccessIndex { base: [44], index: 0 }
+    [46] Load { pointer: [1] }
+    [47] Access { base: [45], index: [46] }
+    [48] Load { pointer: [1] }
+    [49] Access { base: [47], index: [48] }
+    [50] Load { pointer: [49] }
+    [51] ZeroValue(type=[19])
+    [52] Compose { type: [20], components: [[51]] }
+    [53] LocalVariable([1])
+    [54] Literal(I32(1))
+    [55] Load { pointer: [1] }
+    [56] Binary { op: Add, left: [55], right: [54] }
+    [57] AccessIndex { base: [53], index: 0 }
+    [58] ZeroValue(type=[19])
+    [59] AccessIndex { base: [53], index: 0 }
+    [60] AccessIndex { base: [59], index: 0 }
+    [61] Literal(F32(8))
+    [62] Splat { size: Vec2, value: [61] }
+    [63] Literal(F32(7))
+    [64] Splat { size: Vec2, value: [63] }
+    [65] Literal(F32(6))
+    [66] Splat { size: Vec2, value: [65] }
+    [67] Literal(F32(5))
+    [68] Splat { size: Vec2, value: [67] }
+    [69] Compose { type: [18], components: [[62], [64], [66], [68]] }
+    [70] AccessIndex { base: [53], index: 0 }
+    [71] AccessIndex { base: [70], index: 0 }
+    [72] AccessIndex { base: [71], index: 0 }
+    [73] Literal(F32(9))
+    [74] Splat { size: Vec2, value: [73] }
+    [75] AccessIndex { base: [53], index: 0 }
+    [76] AccessIndex { base: [75], index: 0 }
+    [77] Load { pointer: [1] }
+    [78] Access { base: [76], index: [77] }
+    [79] Literal(F32(90))
+    [80] Splat { size: Vec2, value: [79] }
+    [81] AccessIndex { base: [53], index: 0 }
+    [82] AccessIndex { base: [81], index: 0 }
+    [83] AccessIndex { base: [82], index: 0 }
+    [84] AccessIndex { base: [83], index: 1 }
+    [85] Literal(F32(10))
+    [86] AccessIndex { base: [53], index: 0 }
+    [87] AccessIndex { base: [86], index: 0 }
+    [88] AccessIndex { base: [87], index: 0 }
+    [89] Load { pointer: [1] }
+    [90] Access { base: [88], index: [89] }
+    [91] Literal(F32(20))
+    [92] AccessIndex { base: [53], index: 0 }
+    [93] AccessIndex { base: [92], index: 0 }
+    [94] Load { pointer: [1] }
+    [95] Access { base: [93], index: [94] }
+    [96] AccessIndex { base: [95], index: 1 }
+    [97] Literal(F32(30))
+    [98] AccessIndex { base: [53], index: 0 }
+    [99] AccessIndex { base: [98], index: 0 }
+    [100] Load { pointer: [1] }
+    [101] Access { base: [99], index: [100] }
+    [102] Load { pointer: [1] }
+    [103] Access { base: [101], index: [102] }
+    [104] Literal(F32(40))
+  named_expressions:
+    [7] = "l0"
+    [11] = "l1"
+    [16] = "l2"
+    [22] = "l3"
+    [28] = "l4"
+    [35] = "l5"
+    [42] = "l6"
+    [50] = "l7"
+  body: 60 statements
+    Emit(3..5)
+    Store { pointer: [1], value: [4] }
+    Emit(6..8)
+    Emit(9..10)
+    Emit(10..12)
+    Emit(13..14)
+    Emit(14..15)
+    Emit(15..17)
+    Emit(18..19)
+    Emit(19..23)
+    Emit(24..25)
+    Emit(25..26)
+    Emit(26..27)
+    Emit(27..29)
+    Emit(30..31)
+    Emit(31..32)
+    Emit(32..36)
+    Emit(37..38)
+    Emit(38..41)
+    Emit(41..43)
+    Emit(44..45)
+    Emit(45..51)
+    Emit(52..53)
+    Emit(55..57)
+    Store { pointer: [1], value: [56] }
+    Emit(57..58)
+    Store { pointer: [57], value: [58] }
+    Emit(59..60)
+    Emit(60..61)
+    Emit(62..63)
+    Emit(64..65)
+    Emit(66..67)
+    Emit(68..70)
+    Store { pointer: [60], value: [69] }
+    Emit(70..71)
+    Emit(71..72)
+    Emit(72..73)
+    Emit(74..75)
+    Store { pointer: [72], value: [74] }
+    Emit(75..76)
+    Emit(76..79)
+    Emit(80..81)
+    Store { pointer: [78], value: [80] }
+    Emit(81..82)
+    Emit(82..83)
+    Emit(83..84)
+    Emit(84..85)
+    Store { pointer: [84], value: [85] }
+    Emit(86..87)
+    Emit(87..88)
+    Emit(88..91)
+    Store { pointer: [90], value: [91] }
+    Emit(92..93)
+    Emit(93..96)
+    Emit(96..97)
+    Store { pointer: [96], value: [97] }
+    Emit(98..99)
+    Emit(99..104)
+    Store { pointer: [103], value: [104] }
+    Return
+
+[2] "read_from_private"
+  args: [{ name: "foo", type: [21], binding: None}]
+  result: type=[5]
+  locals: 0
+  expressions: 2
+    [0] FunctionArgument(0)
+    [1] Load { pointer: [0] }
+  named_expressions:
+    [0] = "foo"
+  body: 2 statements
+    Emit(1..2)
+    Return { value: [1] }
+
+[3] "test_arr_as_arg"
+  args: [{ name: "a", type: [23], binding: None}]
+  result: type=[5]
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] AccessIndex { base: [0], index: 4 }
+    [2] AccessIndex { base: [1], index: 9 }
+  named_expressions:
+    [0] = "a"
+  body: 3 statements
+    Emit(1..2)
+    Emit(2..3)
+    Return { value: [2] }
+
+[4] "assign_through_ptr_fn"
+  args: [{ name: "p", type: [26], binding: None}]
+  result: None
+  locals: 0
+  expressions: 2
+    [0] FunctionArgument(0)
+    [1] Literal(U32(42))
+  named_expressions:
+    [0] = "p"
+  body: 2 statements
+    Store { pointer: [0], value: [1] }
+    Return
+
+[5] "assign_array_through_ptr_fn"
+  args: [{ name: "foo", type: [28], binding: None}]
+  result: None
+  locals: 0
+  expressions: 6
+    [0] FunctionArgument(0)
+    [1] Literal(F32(1))
+    [2] Splat { size: Vec4, value: [1] }
+    [3] Literal(F32(2))
+    [4] Splat { size: Vec4, value: [3] }
+    [5] Compose { type: [27], components: [[2], [4]] }
+  named_expressions:
+    [0] = "foo"
+  body: 4 statements
+    Emit(2..3)
+    Emit(4..6)
+    Store { pointer: [0], value: [5] }
+    Return
+
+[6] "assign_through_ptr"
+  args: []
+  result: None
+  locals: 2
+    [0] "val" type=[0] init=[0]
+    [1] "arr" type=[27] init=[6]
+  expressions: 8
+    [0] Literal(U32(33))
+    [1] LocalVariable([0])
+    [2] Literal(F32(6))
+    [3] Splat { size: Vec4, value: [2] }
+    [4] Literal(F32(7))
+    [5] Splat { size: Vec4, value: [4] }
+    [6] Compose { type: [27], components: [[3], [5]] }
+    [7] LocalVariable([1])
+  named_expressions: {}
+  body: 5 statements
+    Call { function: [4], args: [[1]], result: None }
+    Emit(3..4)
+    Emit(5..7)
+    Call { function: [5], args: [[7]], result: None }
+    Return
+
+[7] "fetch_arg_ptr_member"
+  args: [{ name: "p", type: [30], binding: None}]
+  result: type=[0]
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] AccessIndex { base: [0], index: 0 }
+    [2] Load { pointer: [1] }
+  named_expressions:
+    [0] = "p"
+  body: 2 statements
+    Emit(1..3)
+    Return { value: [2] }
+
+[8] "assign_to_arg_ptr_member"
+  args: [{ name: "p", type: [30], binding: None}]
+  result: None
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] AccessIndex { base: [0], index: 0 }
+    [2] Literal(U32(10))
+  named_expressions:
+    [0] = "p"
+  body: 3 statements
+    Emit(1..2)
+    Store { pointer: [1], value: [2] }
+    Return
+
+[9] "fetch_arg_ptr_array_element"
+  args: [{ name: "p", type: [32], binding: None}]
+  result: type=[0]
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] AccessIndex { base: [0], index: 1 }
+    [2] Load { pointer: [1] }
+  named_expressions:
+    [0] = "p"
+  body: 2 statements
+    Emit(1..3)
+    Return { value: [2] }
+
+[10] "assign_to_arg_ptr_array_element"
+  args: [{ name: "p", type: [32], binding: None}]
+  result: None
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] AccessIndex { base: [0], index: 1 }
+    [2] Literal(U32(10))
+  named_expressions:
+    [0] = "p"
+  body: 3 statements
+    Emit(1..2)
+    Store { pointer: [1], value: [2] }
+    Return
+
+[11] "assign_to_ptr_components"
+  args: []
+  result: None
+  locals: 2
+    [0] "s1" type=[29]
+    [1] "a1" type=[31]
+  expressions: 4
+    [0] LocalVariable([0])
+    [1] CallResult(function=[7])
+    [2] LocalVariable([1])
+    [3] CallResult(function=[9])
+  named_expressions: {}
+  body: 5 statements
+    Call { function: [8], args: [[0]], result: None }
+    Call { function: [7], args: [[0]], result: [1] }
+    Call { function: [10], args: [[2]], result: None }
+    Call { function: [9], args: [[2]], result: [3] }
+    Return
+
+[12] "index_ptr"
+  args: [{ name: "value", type: [33], binding: None}]
+  result: type=[33]
+  locals: 1
+    [0] "a" type=[34]
+  expressions: 5
+    [0] FunctionArgument(0)
+    [1] Compose { type: [34], components: [[0]] }
+    [2] LocalVariable([0])
+    [3] AccessIndex { base: [2], index: 0 }
+    [4] Load { pointer: [3] }
+  named_expressions:
+    [0] = "value"
+    [2] = "p"
+  body: 4 statements
+    Emit(1..2)
+    Store { pointer: [2], value: [1] }
+    Emit(3..5)
+    Return { value: [4] }
+
+[13] "member_ptr"
+  args: []
+  result: type=[2]
+  locals: 1
+    [0] "s" type=[35] init=[1]
+  expressions: 5
+    [0] Literal(I32(42))
+    [1] Compose { type: [35], components: [[0]] }
+    [2] LocalVariable([0])
+    [3] AccessIndex { base: [2], index: 0 }
+    [4] Load { pointer: [3] }
+  named_expressions:
+    [2] = "p"
+  body: 3 statements
+    Emit(1..2)
+    Emit(3..5)
+    Return { value: [4] }
+
+[14] "let_members_of_members"
+  args: []
+  result: type=[2]
+  locals: 0
+  expressions: 8
+    [0] ZeroValue(type=[37])
+    [1] AccessIndex { base: [0], index: 0 }
+    [2] AccessIndex { base: [1], index: 0 }
+    [3] AccessIndex { base: [0], index: 1 }
+    [4] As { expr: [2], kind: Uint, convert: 4 }
+    [5] Binary { op: NotEqual, left: [3], right: [4] }
+    [6] AccessIndex { base: [0], index: 0 }
+    [7] AccessIndex { base: [6], index: 0 }
+  named_expressions:
+    [0] = "thing"
+    [1] = "inner"
+    [2] = "delishus"
+  body: 6 statements
+    Emit(1..2)
+    Emit(2..3)
+    Emit(3..6)
+    If { condition: [5] }
+      accept:
+      reject:
+    Emit(6..8)
+    Return { value: [7] }
+
+[15] "var_members_of_members"
+  args: []
+  result: type=[2]
+  locals: 3
+    [0] "thing" type=[37] init=[0]
+    [1] "inner" type=[36]
+    [2] "delishus" type=[2]
+  expressions: 16
+    [0] ZeroValue(type=[37])
+    [1] LocalVariable([0])
+    [2] AccessIndex { base: [1], index: 0 }
+    [3] Load { pointer: [2] }
+    [4] LocalVariable([1])
+    [5] AccessIndex { base: [4], index: 0 }
+    [6] Load { pointer: [5] }
+    [7] LocalVariable([2])
+    [8] AccessIndex { base: [1], index: 1 }
+    [9] Load { pointer: [8] }
+    [10] Load { pointer: [7] }
+    [11] As { expr: [10], kind: Uint, convert: 4 }
+    [12] Binary { op: NotEqual, left: [9], right: [11] }
+    [13] AccessIndex { base: [1], index: 0 }
+    [14] AccessIndex { base: [13], index: 0 }
+    [15] Load { pointer: [14] }
+  named_expressions: {}
+  body: 8 statements
+    Emit(2..4)
+    Store { pointer: [4], value: [3] }
+    Emit(5..7)
+    Store { pointer: [7], value: [6] }
+    Emit(8..13)
+    If { condition: [12] }
+      accept:
+      reject:
+    Emit(13..16)
+    Return { value: [15] }
+
+=== ENTRY POINTS ===
+[0] "foo_vert" stage=Vertex function={name="foo_vert", args=1, exprs=55, stmts=25, locals=2}
+[1] "foo_frag" stage=Fragment function={name="foo_frag", args=0, exprs=32, stmts=19, locals=0}
+[2] "foo_compute" stage=Compute function={name="foo_compute", args=0, exprs=5, stmts=7, locals=0} workgroup_size=(1,1,1)

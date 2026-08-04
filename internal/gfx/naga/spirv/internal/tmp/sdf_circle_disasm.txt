@@ -1,0 +1,323 @@
+; SPIR-V
+; Magic:     0x07230203
+; Version:   1.3
+; Generator: 0x00000000
+; Bound:     248
+; Schema:    0
+
+     5: OpCapability Shader
+     7: OpExtInstImport %1 = "GLSL.std.450"
+    13: OpMemoryModel Logical GLSL450
+    16: OpEntryPoint GLCompute %34 "main" %17(gid)
+    22: OpExecutionMode %34 LocalSize 8 8 1
+    28: OpMemberName %5 0 "center_x"
+    34: OpMemberName %5 1 "center_y"
+    40: OpMemberName %5 2 "radius_x"
+    46: OpMemberName %5 3 "radius_y"
+    52: OpMemberName %5 4 "half_stroke_width"
+    60: OpMemberName %5 5 "is_stroked"
+    66: OpMemberName %5 6 "color_r"
+    71: OpMemberName %5 7 "color_g"
+    76: OpMemberName %5 8 "color_b"
+    81: OpMemberName %5 9 "color_a"
+    86: OpMemberName %5 10 "target_width"
+    93: OpMemberName %5 11 "target_height"
+   100: OpName %17(gid) "gid"
+   103: OpName %20(px) "px"
+   106: OpName %21(py) "py"
+   109: OpName %22(a) "a"
+   112: OpName %23(b) "b"
+   115: OpName %39(coverage) "coverage"
+   120: OpDecorate %6 ArrayStride 4
+   124: OpMemberDecorate %5 0(center_x) Offset 0
+   129: OpMemberDecorate %5 1(center_y) Offset 4
+   134: OpMemberDecorate %5 2(radius_x) Offset 8
+   139: OpMemberDecorate %5 3(radius_y) Offset 12
+   144: OpMemberDecorate %5 4(half_stroke_width) Offset 16
+   149: OpMemberDecorate %5 5(is_stroked) Offset 20
+   154: OpMemberDecorate %5 6(color_r) Offset 24
+   159: OpMemberDecorate %5 7(color_g) Offset 28
+   164: OpMemberDecorate %5 8(color_b) Offset 32
+   169: OpMemberDecorate %5 9(color_a) Offset 36
+   174: OpMemberDecorate %5 10(target_width) Offset 40
+   179: OpMemberDecorate %5 11(target_height) Offset 44
+   184: OpDecorate %10 Block
+   187: OpMemberDecorate %10 0 Offset 0
+   192: OpDecorate %12 DescriptorSet 0
+   196: OpDecorate %12 Binding 0
+   200: OpDecorate %13 Block
+   203: OpMemberDecorate %13 0 Offset 0
+   208: OpDecorate %15 DescriptorSet 0
+   212: OpDecorate %15 Binding 1
+   216: OpDecorate %17(gid) BuiltIn 28
+   220: OpTypeVoid %2
+   222: OpTypeFloat %3 32
+   225: OpTypeInt %4 32 unsigned
+   229: OpTypeStruct %5 { %3, %3, %3, %3, %3, %4, %3, %3, %3, %3, %4, %4 }
+   243: OpTypeRuntimeArray %6 %4
+   246: OpTypeVector %7 %3 2
+   250: OpTypeVector %8 %4 3
+   254: OpTypeBool %9
+   256: OpTypeStruct %10 { %5 }
+   259: OpTypePointer %11 Uniform %10
+   263: OpTypeStruct %13 { %6 }
+   266: OpTypePointer %14 StorageBuffer %13
+   270: OpTypePointer %16 Input %8
+   274: OpTypeFunction %18 %3 (%3, %3, %3, %3)
+   281: OpConstant %3 %29 = 1065353216 (0x3F800000, f32=1)
+   285: OpTypeFunction %33 %2
+   288: OpTypePointer %36 Function %9
+   292: OpTypePointer %38 Function %3
+   296: OpConstant %4 %40 = 0 (0x00000000, f32=0)
+   300: OpTypePointer %41 Input %4
+   304: OpConstant %4 %44 = 1 (0x00000001, f32=1e-45)
+   308: OpTypePointer %47 Uniform %5
+   312: OpConstant %4 %49 = 10 (0x0000000A, f32=1.4e-44)
+   316: OpTypePointer %50 Uniform %4
+   320: OpConstant %4 %62 = 11 (0x0000000B, f32=1.5e-44)
+   324: Op(41) [0x00000009 0x00000045]
+   327: OpConstant %3 %75 = 1056964608 (0x3F000000, f32=0.5)
+   331: OpTypePointer %78 Uniform %3
+   335: OpConstant %4 %95 = 2 (0x00000002, f32=3e-45)
+   339: OpConstant %4 %102 = 3 (0x00000003, f32=4e-45)
+   343: OpConstant %4 %110 = 5 (0x00000005, f32=7e-45)
+   347: OpConstant %4 %122 = 4 (0x00000004, f32=6e-45)
+   351: OpConstant %3 %129 = 3204448256 (0xBF000000, f32=-0.5)
+   355: OpConstant %3 %135 = 998277249 (0x3B808081, f32=0.003921569)
+   359: OpConstant %4 %141 = 9 (0x00000009, f32=1.3e-44)
+   363: OpConstant %4 %150 = 6 (0x00000006, f32=8e-45)
+   367: OpConstant %4 %159 = 7 (0x00000007, f32=1e-44)
+   371: OpConstant %4 %168 = 8 (0x00000008, f32=1.1e-44)
+   375: OpTypePointer %184 StorageBuffer %6
+   379: OpTypePointer %186 StorageBuffer %4
+   383: OpConstant %4 %192 = 255 (0x000000FF, f32=3.57e-43)
+   387: OpConstant %3 %195 = 1132396544 (0x437F0000, f32=255)
+   391: OpConstant %4 %201 = 16 (0x00000010, f32=2.2e-44)
+   395: OpConstant %4 %206 = 24 (0x00000018, f32=3.4e-44)
+   399: OpConstant %3 %222 = 0 (0x00000000, f32=0)
+   403: OpVariable %11 %12 Uniform
+   407: OpVariable %14 %15 StorageBuffer
+   411: OpVariable %16 %17(gid) Input
+   415: OpFunction %3 %19 None %18
+   420: OpFunctionParameter %3 %20(px)
+   423: OpFunctionParameter %3 %21(py)
+   426: OpFunctionParameter %3 %22(a)
+   429: OpFunctionParameter %3 %23(b)
+   432: OpLabel %24
+   434: OpFDiv %3 %25 = %20(px), %22(a)
+   439: OpFDiv %3 %26 = %21(py), %23(b)
+   444: OpCompositeConstruct %7 %27 = { %25, %26 }
+   449: OpExtInst %3 %28 = %1 op:66(Length) (%27)
+   455: OpFSub %3 %30 = %28, %29
+   460: OpExtInst %3 %31 = %1 op:37(FMin) (%22(a), %23(b))
+   467: OpFMul %3 %32 = %30, %31
+   472: OpReturnValue %32
+   474: OpFunctionEnd
+   475: OpFunction %2 %34 None %33
+   480: OpLabel %35
+   482: OpVariable %36 %37 Function
+   486: OpVariable %38 %39(coverage) Function
+   490: OpAccessChain %41 %42 = base:%17(gid) [%40]
+   495: OpLoad %4 %43 = load %42
+   499: OpAccessChain %41 %45 = base:%17(gid) [%44]
+   504: OpLoad %4 %46 = load %45
+   508: OpAccessChain %47 %48 = base:%12 [%40]
+   513: OpAccessChain %50 %51 = base:%48 [%49]
+   518: OpLoad %4 %52 = load %51
+   522: OpAccessChain %47 %53 = base:%12 [%40]
+   527: OpAccessChain %50 %54 = base:%53 [%49]
+   532: OpLoad %4 %55 = load %54
+   536: OpUGreaterThanEqual %9 %56 = %43, %55
+   541: OpLogicalNot [0x00000009 0x00000039 0x00000038]
+   545: OpSelectionMerge merge:%60 control:0
+   548: OpBranchConditional %57 true:%58 false:%59
+   552: OpLabel %58
+   554: OpAccessChain %47 %61 = base:%12 [%40]
+   559: OpAccessChain %50 %63 = base:%61 [%62]
+   564: OpLoad %4 %64 = load %63
+   568: OpAccessChain %47 %65 = base:%12 [%40]
+   573: OpAccessChain %50 %66 = base:%65 [%62]
+   578: OpLoad %4 %67 = load %66
+   582: OpUGreaterThanEqual %9 %68 = %46, %67
+   587: OpStore *%37 = %68
+   590: OpBranch %60
+   592: OpLabel %59
+   594: OpStore *%37 = %69
+   597: OpBranch %60
+   599: OpLabel %60
+   601: OpLoad %9 %70 = load %37
+   605: OpSelectionMerge merge:%73 control:0
+   608: OpBranchConditional %70 true:%71 false:%72
+   612: OpLabel %71
+   614: OpReturn
+   615: OpLabel %72
+   617: OpBranch %73
+   619: OpLabel %73
+   621: OpConvertUToF %3 %74 = %43
+   625: OpFAdd %3 %76 = %74, %75
+   630: OpAccessChain %47 %77 = base:%12 [%40]
+   635: OpAccessChain %78 %79 = base:%77 [%40]
+   640: OpLoad %3 %80 = load %79
+   644: OpAccessChain %47 %81 = base:%12 [%40]
+   649: OpAccessChain %78 %82 = base:%81 [%40]
+   654: OpLoad %3 %83 = load %82
+   658: OpFSub %3 %84 = %76, %83
+   663: OpConvertUToF %3 %85 = %46
+   667: OpFAdd %3 %86 = %85, %75
+   672: OpAccessChain %47 %87 = base:%12 [%40]
+   677: OpAccessChain %78 %88 = base:%87 [%44]
+   682: OpLoad %3 %89 = load %88
+   686: OpAccessChain %47 %90 = base:%12 [%40]
+   691: OpAccessChain %78 %91 = base:%90 [%44]
+   696: OpLoad %3 %92 = load %91
+   700: OpFSub %3 %93 = %86, %92
+   705: OpAccessChain %47 %94 = base:%12 [%40]
+   710: OpAccessChain %78 %96 = base:%94 [%95]
+   715: OpLoad %3 %97 = load %96
+   719: OpAccessChain %47 %98 = base:%12 [%40]
+   724: OpAccessChain %78 %99 = base:%98 [%95]
+   729: OpLoad %3 %100 = load %99
+   733: OpAccessChain %47 %101 = base:%12 [%40]
+   738: OpAccessChain %78 %103 = base:%101 [%102]
+   743: OpLoad %3 %104 = load %103
+   747: OpAccessChain %47 %105 = base:%12 [%40]
+   752: OpAccessChain %78 %106 = base:%105 [%102]
+   757: OpLoad %3 %107 = load %106
+   761: OpFunctionCall %3 %108 = call %19(%84, %93, %100, %107)
+   769: OpAccessChain %47 %109 = base:%12 [%40]
+   774: OpAccessChain %50 %111 = base:%109 [%110]
+   779: OpLoad %4 %112 = load %111
+   783: OpAccessChain %47 %113 = base:%12 [%40]
+   788: OpAccessChain %50 %114 = base:%113 [%110]
+   793: OpLoad %4 %115 = load %114
+   797: OpINotEqual %9 %116 = %115, %40
+   802: OpSelectionMerge merge:%119 control:0
+   805: OpBranchConditional %116 true:%117 false:%118
+   809: OpLabel %117
+   811: OpExtInst %3 %120 = %1 op:4(FAbs) (%108)
+   817: OpAccessChain %47 %121 = base:%12 [%40]
+   822: OpAccessChain %78 %123 = base:%121 [%122]
+   827: OpLoad %3 %124 = load %123
+   831: OpAccessChain %47 %125 = base:%12 [%40]
+   836: OpAccessChain %78 %126 = base:%125 [%122]
+   841: OpLoad %3 %127 = load %126
+   845: OpFSub %3 %128 = %120, %127
+   850: OpExtInst %3 %130 = %1 op:49(SmoothStep) (%129, %75, %128)
+   858: OpFSub %3 %131 = %29, %130
+   863: OpStore *%39(coverage) = %131
+   866: OpBranch %119
+   868: OpLabel %118
+   870: OpExtInst %3 %132 = %1 op:49(SmoothStep) (%129, %75, %108)
+   878: OpFSub %3 %133 = %29, %132
+   883: OpStore *%39(coverage) = %133
+   886: OpBranch %119
+   888: OpLabel %119
+   890: OpLoad %3 %134 = load %39(coverage)
+   894: OpFOrdLessThan %9 %136 = %134, %135
+   899: OpSelectionMerge merge:%139 control:0
+   902: OpBranchConditional %136 true:%137 false:%138
+   906: OpLabel %137
+   908: OpReturn
+   909: OpLabel %138
+   911: OpBranch %139
+   913: OpLabel %139
+   915: OpAccessChain %47 %140 = base:%12 [%40]
+   920: OpAccessChain %78 %142 = base:%140 [%141]
+   925: OpLoad %3 %143 = load %142
+   929: OpAccessChain %47 %144 = base:%12 [%40]
+   934: OpAccessChain %78 %145 = base:%144 [%141]
+   939: OpLoad %3 %146 = load %145
+   943: OpLoad %3 %147 = load %39(coverage)
+   947: OpFMul %3 %148 = %146, %147
+   952: OpAccessChain %47 %149 = base:%12 [%40]
+   957: OpAccessChain %78 %151 = base:%149 [%150]
+   962: OpLoad %3 %152 = load %151
+   966: OpAccessChain %47 %153 = base:%12 [%40]
+   971: OpAccessChain %78 %154 = base:%153 [%150]
+   976: OpLoad %3 %155 = load %154
+   980: OpLoad %3 %156 = load %39(coverage)
+   984: OpFMul %3 %157 = %155, %156
+   989: OpAccessChain %47 %158 = base:%12 [%40]
+   994: OpAccessChain %78 %160 = base:%158 [%159]
+   999: OpLoad %3 %161 = load %160
+  1003: OpAccessChain %47 %162 = base:%12 [%40]
+  1008: OpAccessChain %78 %163 = base:%162 [%159]
+  1013: OpLoad %3 %164 = load %163
+  1017: OpLoad %3 %165 = load %39(coverage)
+  1021: OpFMul %3 %166 = %164, %165
+  1026: OpAccessChain %47 %167 = base:%12 [%40]
+  1031: OpAccessChain %78 %169 = base:%167 [%168]
+  1036: OpLoad %3 %170 = load %169
+  1040: OpAccessChain %47 %171 = base:%12 [%40]
+  1045: OpAccessChain %78 %172 = base:%171 [%168]
+  1050: OpLoad %3 %173 = load %172
+  1054: OpLoad %3 %174 = load %39(coverage)
+  1058: OpFMul %3 %175 = %173, %174
+  1063: OpAccessChain %47 %176 = base:%12 [%40]
+  1068: OpAccessChain %50 %177 = base:%176 [%49]
+  1073: OpLoad %4 %178 = load %177
+  1077: OpAccessChain %47 %179 = base:%12 [%40]
+  1082: OpAccessChain %50 %180 = base:%179 [%49]
+  1087: OpLoad %4 %181 = load %180
+  1091: OpIMul %4 %182 = %46, %181
+  1096: OpIAdd %4 %183 = %182, %43
+  1101: OpAccessChain %184 %185 = base:%15 [%40]
+  1106: OpAccessChain %186 %187 = base:%185 [%183]
+  1111: OpLoad %4 %188 = load %187
+  1115: OpAccessChain %184 %189 = base:%15 [%40]
+  1120: OpAccessChain %186 %190 = base:%189 [%183]
+  1125: OpLoad %4 %191 = load %190
+  1129: OpBitwiseAnd %4 %193 = %191, %192
+  1134: OpConvertUToF %3 %194 = %193
+  1138: OpFDiv %3 %196 = %194, %195
+  1143: OpShiftRightLogical %4 %197 = %191, %168
+  1148: OpBitwiseAnd %4 %198 = %197, %192
+  1153: OpConvertUToF %3 %199 = %198
+  1157: OpFDiv %3 %200 = %199, %195
+  1162: OpShiftRightLogical %4 %202 = %191, %201
+  1167: OpBitwiseAnd %4 %203 = %202, %192
+  1172: OpConvertUToF %3 %204 = %203
+  1176: OpFDiv %3 %205 = %204, %195
+  1181: OpShiftRightLogical %4 %207 = %191, %206
+  1186: OpBitwiseAnd %4 %208 = %207, %192
+  1191: OpConvertUToF %3 %209 = %208
+  1195: OpFDiv %3 %210 = %209, %195
+  1200: OpFSub %3 %211 = %29, %148
+  1205: OpFMul %3 %212 = %196, %211
+  1210: OpFAdd %3 %213 = %157, %212
+  1215: OpFMul %3 %214 = %200, %211
+  1220: OpFAdd %3 %215 = %166, %214
+  1225: OpFMul %3 %216 = %205, %211
+  1230: OpFAdd %3 %217 = %175, %216
+  1235: OpFMul %3 %218 = %210, %211
+  1240: OpFAdd %3 %219 = %148, %218
+  1245: OpFMul %3 %220 = %213, %195
+  1250: OpFAdd %3 %221 = %220, %75
+  1255: OpExtInst %3 %223 = %1 op:43(FClamp) (%221, %222, %195)
+  1263: OpConvertFToU %4 %224 = %223
+  1267: OpFMul %3 %225 = %215, %195
+  1272: OpFAdd %3 %226 = %225, %75
+  1277: OpExtInst %3 %227 = %1 op:43(FClamp) (%226, %222, %195)
+  1285: OpConvertFToU %4 %228 = %227
+  1289: OpFMul %3 %229 = %217, %195
+  1294: OpFAdd %3 %230 = %229, %75
+  1299: OpExtInst %3 %231 = %1 op:43(FClamp) (%230, %222, %195)
+  1307: OpConvertFToU %4 %232 = %231
+  1311: OpFMul %3 %233 = %219, %195
+  1316: OpFAdd %3 %234 = %233, %75
+  1321: OpExtInst %3 %235 = %1 op:43(FClamp) (%234, %222, %195)
+  1329: OpConvertFToU %4 %236 = %235
+  1333: OpAccessChain %184 %237 = base:%15 [%40]
+  1338: OpAccessChain %186 %238 = base:%237 [%183]
+  1343: OpLoad %4 %239 = load %238
+  1347: OpShiftLeftLogical %4 %240 = %228, %168
+  1352: OpBitwiseOr %4 %241 = %224, %240
+  1357: OpShiftLeftLogical %4 %242 = %232, %201
+  1362: OpBitwiseOr %4 %243 = %241, %242
+  1367: OpShiftLeftLogical %4 %244 = %236, %206
+  1372: OpBitwiseOr %4 %245 = %243, %244
+  1377: OpAccessChain %184 %246 = base:%15 [%40]
+  1382: OpAccessChain %186 %247 = base:%246 [%183]
+  1387: OpStore *%247 = %245
+  1390: OpReturn
+  1391: OpFunctionEnd

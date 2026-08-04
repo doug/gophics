@@ -7,7 +7,7 @@ package device
 import (
 	"io"
 
-	audio "github.com/doug/audio"
+	audio "github.com/doug/gossamer/internal/audio"
 
 	"github.com/doug/gossamer/sound"
 )

@@ -1,0 +1,60 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+struct VertexOutput {
+    metal::float4 position;
+    metal::float2 uv;
+    char _pad2[8];
+};
+int naga_div(int lhs, int rhs) {
+    return lhs / metal::select(rhs, 1, (lhs == (-2147483647 - 1) & rhs == -1) | (rhs == 0));
+}
+
+int naga_mod(int lhs, int rhs) {
+    int divisor = metal::select(rhs, 1, (lhs == (-2147483647 - 1) & rhs == -1) | (rhs == 0));
+    return lhs - (lhs / divisor) * divisor;
+}
+
+
+struct vs_mainInput {
+};
+struct vs_mainOutput {
+    metal::float4 position [[position]];
+    metal::float2 uv [[user(loc0), center_perspective]];
+};
+vertex vs_mainOutput vs_main(
+  uint vi [[vertex_id]]
+) {
+    float x = (static_cast<float>(naga_div(static_cast<int>(vi), 2)) * 4.0) - 1.0;
+    float y = (static_cast<float>(naga_mod(static_cast<int>(vi), 2)) * 4.0) - 1.0;
+    metal::float2 pos = metal::float2(x, y);
+    metal::float2 uv_1 = (pos + metal::float2(1.0)) * 0.5;
+    const auto _tmp = VertexOutput {metal::float4(pos, 0.0, 1.0), uv_1};
+    return vs_mainOutput { _tmp.position, _tmp.uv };
+}
+
+
+struct fs_mainInput {
+    metal::float2 uv [[user(loc0), center_perspective]];
+};
+struct fs_mainOutput {
+    metal::float4 member_1 [[color(0)]];
+};
+fragment fs_mainOutput fs_main(
+  fs_mainInput varyings_1 [[stage_in]]
+, metal::texture2d<float, metal::access::sample> t_diffuse [[user(fake0)]]
+, metal::sampler s_diffuse [[user(fake0)]]
+) {
+    const auto uv = varyings_1.uv;
+    metal::float4 color = t_diffuse.sample(s_diffuse, uv);
+    return fs_mainOutput { color };
+}

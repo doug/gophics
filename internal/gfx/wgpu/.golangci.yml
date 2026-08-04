@@ -1,0 +1,244 @@
+# GolangCI-Lint v2.7 Configuration for wgpu - Pure Go WebGPU
+# Documentation: https://golangci-lint.run/docs/configuration/
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # Enable standard set plus extras
+  enable:
+    # Code quality
+    - gocyclo
+    - gocognit
+    - funlen
+    - maintidx
+    - cyclop
+    - nestif
+
+    # Bug detection
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - gosec
+    - nilnil
+    - nilerr
+    - ineffassign
+
+    # Code style
+    - misspell
+    - whitespace
+    - unconvert
+    - unparam
+
+    # Naming
+    - errname
+    - revive
+
+    # Performance
+    - prealloc
+    - makezero
+
+    # Code practices
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - nolintlint
+    - nakedret
+
+    # Additional
+    - dupl
+    - dogsled
+    - durationcheck
+
+  settings:
+    govet:
+      enable:
+        - copylocks
+      disable:
+        - fieldalignment
+
+    gocyclo:
+      min-complexity: 20
+
+    cyclop:
+      max-complexity: 20
+
+    funlen:
+      lines: 120
+      statements: 60
+
+    gocognit:
+      min-complexity: 30
+
+    misspell:
+      locale: US
+
+    nestif:
+      min-complexity: 4
+
+    revive:
+      rules:
+        - name: var-naming
+        - name: error-return
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+
+      disabled-checks:
+        - commentFormatting
+        - whyNoLint
+        - unnamedResult
+        - commentedOutCode
+        - octalLiteral
+        - paramTypeCombine
+
+      settings:
+        hugeParam:
+          sizeThreshold: 256
+
+  exclusions:
+    rules:
+      # types package - standard wgpu naming convention
+      - path: types/.*\.go
+        linters:
+          - revive
+        text: "var-naming: avoid meaningless package names"
+
+      # Test files - allow more flexibility
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - cyclop
+          - funlen
+          - maintidx
+          - errcheck
+          - gosec
+          - goconst
+          - dupl
+          - gocognit
+          - unparam
+
+      # HAL backends - platform-specific complexity
+      - path: hal/.*\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - cyclop
+          - funlen
+          - gosec
+
+      # GL context - requires unsafe for C interop
+      - path: hal/gles/gl/context\.go
+        linters:
+          - govet
+        text: "possible misuse of unsafe.Pointer"
+
+      # GLES command encoder - uintptr handles from gputypes.BindingResource
+      # are actually Go pointers (set in CreateBindGroup), converted back via unsafe.Pointer.
+      # Same pattern used in DX12 backend (hal/dx12/device.go).
+      - path: hal/gles/command\.go
+        linters:
+          - govet
+        text: "possible misuse of unsafe.Pointer"
+
+      # GL context - syscall returns are intentionally unchecked
+      # (GL errors are checked via glGetError, not syscall return values)
+      - path: hal/gles/gl/context\.go
+        linters:
+          - errcheck
+
+      # Internal utilities
+      - path: internal/.*\.go
+        linters:
+          - gocyclo
+          - cyclop
+
+      # Browser backend enum-to-string conversions: repeated string literals
+      # in switch/default are intentional for readability (each function is
+      # a self-contained WebGPU spec mapping).
+      - path: internal/browser/convert_enums\.go
+        linters:
+          - goconst
+
+      # DX12 COM bindings - Windows API naming conventions preserved
+      # D3D12_* types match the Windows SDK headers exactly for documentation cross-reference
+      - path: hal/dx12/d3d12/.*\.go
+        linters:
+          - revive
+          - errname
+          - dogsled
+          - staticcheck
+          - unused
+          - funlen
+          - dupl
+
+      # DXGI bindings - Windows API naming conventions
+      - path: hal/dx12/dxgi/.*\.go
+        linters:
+          - revive
+          - errname
+          - dogsled
+          - staticcheck
+          - unused
+          - funlen
+          - dupl
+
+      # DXC (shader compiler) bindings
+      - path: hal/dx12/dxc/.*\.go
+        linters:
+          - revive
+          - errname
+          - dogsled
+          - staticcheck
+          - unused
+          - funlen
+          - dupl
+
+      # Software backend platform blit — struct has real GDI fields on Windows,
+      # empty on other platforms. The `unused` linter on Linux sees it as unused.
+      # macOS software blit — self-contained ObjC/CoreGraphics/Metal bindings
+      # (contributor @k-chimi, PR #187). Same exclusion pattern as DX12 COM bindings.
+      - path: hal/software/blit_darwin\.go
+        linters:
+          - errcheck
+          - govet
+          - nestif
+          - revive
+          - staticcheck
+          - unconvert
+          - unused
+
+      - path: hal/software/blit_other\.go
+        linters:
+          - unused
+        text: "platformBlit"
+      - path: hal/software/resource\.go
+        linters:
+          - unused
+        text: "platformBlit"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

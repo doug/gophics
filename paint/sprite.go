@@ -4,7 +4,7 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/doug/gg"
+	"github.com/doug/gossamer/internal/gfx/gg"
 	"github.com/doug/gossamer/geom"
 )
 

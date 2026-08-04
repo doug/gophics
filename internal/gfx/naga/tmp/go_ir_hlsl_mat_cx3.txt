@@ -1,0 +1,836 @@
+=== TYPES ===
+[0] Matrix { columns: Vec3, rows: Vec3, scalar: Float(4) }
+[1] Scalar(Sint, 4)
+[2] Struct "StructWithMat" { members: [{ name: "m", type: [0], offset: 0}], span: 48 }
+[3] Array { base: [2], size: Constant(4), stride: 48 }
+[4] Struct "StructWithArrayOfStructOfMat" { members: [{ name: "a", type: [3], offset: 0}], span: 192 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "s_m" type=[0] space=Storage(LOAD|STORE) binding=(0,0)
+[1] "u_m" type=[0] space=Uniform binding=(0,1)
+[2] "s_sm" type=[2] space=Storage(LOAD|STORE) binding=(1,0)
+[3] "u_sm" type=[2] space=Uniform binding=(1,1)
+[4] "s_sasm" type=[4] space=Storage(LOAD|STORE) binding=(2,0)
+[5] "u_sasm" type=[4] space=Uniform binding=(2,1)
+
+=== FUNCTIONS ===
+[0] "access_m"
+  args: []
+  result: None
+  locals: 1
+    [0] "idx" type=[1] init=[0]
+  expressions: 85
+    [0] Literal(I32(1))
+    [1] LocalVariable([0])
+    [2] Literal(I32(1))
+    [3] Load { pointer: [1] }
+    [4] Binary { op: Subtract, left: [3], right: [2] }
+    [5] GlobalVariable([0])
+    [6] Load { pointer: [5] }
+    [7] GlobalVariable([0])
+    [8] AccessIndex { base: [7], index: 0 }
+    [9] Load { pointer: [8] }
+    [10] GlobalVariable([0])
+    [11] Load { pointer: [1] }
+    [12] Access { base: [10], index: [11] }
+    [13] Load { pointer: [12] }
+    [14] GlobalVariable([0])
+    [15] AccessIndex { base: [14], index: 0 }
+    [16] AccessIndex { base: [15], index: 0 }
+    [17] Load { pointer: [16] }
+    [18] GlobalVariable([0])
+    [19] AccessIndex { base: [18], index: 0 }
+    [20] Load { pointer: [1] }
+    [21] Access { base: [19], index: [20] }
+    [22] Load { pointer: [21] }
+    [23] GlobalVariable([0])
+    [24] Load { pointer: [1] }
+    [25] Access { base: [23], index: [24] }
+    [26] AccessIndex { base: [25], index: 0 }
+    [27] Load { pointer: [26] }
+    [28] GlobalVariable([0])
+    [29] Load { pointer: [1] }
+    [30] Access { base: [28], index: [29] }
+    [31] Load { pointer: [1] }
+    [32] Access { base: [30], index: [31] }
+    [33] Load { pointer: [32] }
+    [34] GlobalVariable([1])
+    [35] Load { pointer: [34] }
+    [36] GlobalVariable([1])
+    [37] AccessIndex { base: [36], index: 0 }
+    [38] Load { pointer: [37] }
+    [39] GlobalVariable([1])
+    [40] Load { pointer: [1] }
+    [41] Access { base: [39], index: [40] }
+    [42] Load { pointer: [41] }
+    [43] GlobalVariable([1])
+    [44] AccessIndex { base: [43], index: 0 }
+    [45] AccessIndex { base: [44], index: 0 }
+    [46] Load { pointer: [45] }
+    [47] GlobalVariable([1])
+    [48] AccessIndex { base: [47], index: 0 }
+    [49] Load { pointer: [1] }
+    [50] Access { base: [48], index: [49] }
+    [51] Load { pointer: [50] }
+    [52] GlobalVariable([1])
+    [53] Load { pointer: [1] }
+    [54] Access { base: [52], index: [53] }
+    [55] AccessIndex { base: [54], index: 0 }
+    [56] Load { pointer: [55] }
+    [57] GlobalVariable([1])
+    [58] Load { pointer: [1] }
+    [59] Access { base: [57], index: [58] }
+    [60] Load { pointer: [1] }
+    [61] Access { base: [59], index: [60] }
+    [62] Load { pointer: [61] }
+    [63] GlobalVariable([0])
+    [64] GlobalVariable([0])
+    [65] AccessIndex { base: [64], index: 0 }
+    [66] GlobalVariable([0])
+    [67] Load { pointer: [1] }
+    [68] Access { base: [66], index: [67] }
+    [69] GlobalVariable([0])
+    [70] AccessIndex { base: [69], index: 0 }
+    [71] AccessIndex { base: [70], index: 0 }
+    [72] GlobalVariable([0])
+    [73] AccessIndex { base: [72], index: 0 }
+    [74] Load { pointer: [1] }
+    [75] Access { base: [73], index: [74] }
+    [76] GlobalVariable([0])
+    [77] Load { pointer: [1] }
+    [78] Access { base: [76], index: [77] }
+    [79] AccessIndex { base: [78], index: 0 }
+    [80] GlobalVariable([0])
+    [81] Load { pointer: [1] }
+    [82] Access { base: [80], index: [81] }
+    [83] Load { pointer: [1] }
+    [84] Access { base: [82], index: [83] }
+  named_expressions:
+    [6] = "l_s_m"
+    [9] = "l_s_c_c"
+    [13] = "l_s_c_v"
+    [17] = "l_s_e_cc"
+    [22] = "l_s_e_cv"
+    [27] = "l_s_e_vc"
+    [33] = "l_s_e_vv"
+    [35] = "l_u_m"
+    [38] = "l_u_c_c"
+    [42] = "l_u_c_v"
+    [46] = "l_u_e_cc"
+    [51] = "l_u_e_cv"
+    [56] = "l_u_e_vc"
+    [62] = "l_u_e_vv"
+  body: 36 statements
+    Emit(3..5)
+    Store { pointer: [1], value: [4] }
+    Emit(6..7)
+    Emit(8..10)
+    Emit(11..14)
+    Emit(15..16)
+    Emit(16..18)
+    Emit(19..23)
+    Emit(24..26)
+    Emit(26..28)
+    Emit(29..34)
+    Emit(35..36)
+    Emit(37..39)
+    Emit(40..43)
+    Emit(44..45)
+    Emit(45..47)
+    Emit(48..52)
+    Emit(53..55)
+    Emit(55..57)
+    Emit(58..63)
+    Store { pointer: [63], value: [35] }
+    Emit(65..66)
+    Store { pointer: [65], value: [38] }
+    Emit(67..69)
+    Store { pointer: [68], value: [42] }
+    Emit(70..71)
+    Emit(71..72)
+    Store { pointer: [71], value: [46] }
+    Emit(73..76)
+    Store { pointer: [75], value: [51] }
+    Emit(77..79)
+    Emit(79..80)
+    Store { pointer: [79], value: [56] }
+    Emit(81..85)
+    Store { pointer: [84], value: [62] }
+    Return
+
+[1] "access_sm"
+  args: []
+  result: None
+  locals: 1
+    [0] "idx" type=[1] init=[0]
+  expressions: 111
+    [0] Literal(I32(1))
+    [1] LocalVariable([0])
+    [2] Literal(I32(1))
+    [3] Load { pointer: [1] }
+    [4] Binary { op: Subtract, left: [3], right: [2] }
+    [5] GlobalVariable([2])
+    [6] Load { pointer: [5] }
+    [7] GlobalVariable([2])
+    [8] AccessIndex { base: [7], index: 0 }
+    [9] Load { pointer: [8] }
+    [10] GlobalVariable([2])
+    [11] AccessIndex { base: [10], index: 0 }
+    [12] AccessIndex { base: [11], index: 0 }
+    [13] Load { pointer: [12] }
+    [14] GlobalVariable([2])
+    [15] AccessIndex { base: [14], index: 0 }
+    [16] Load { pointer: [1] }
+    [17] Access { base: [15], index: [16] }
+    [18] Load { pointer: [17] }
+    [19] GlobalVariable([2])
+    [20] AccessIndex { base: [19], index: 0 }
+    [21] AccessIndex { base: [20], index: 0 }
+    [22] AccessIndex { base: [21], index: 0 }
+    [23] Load { pointer: [22] }
+    [24] GlobalVariable([2])
+    [25] AccessIndex { base: [24], index: 0 }
+    [26] AccessIndex { base: [25], index: 0 }
+    [27] Load { pointer: [1] }
+    [28] Access { base: [26], index: [27] }
+    [29] Load { pointer: [28] }
+    [30] GlobalVariable([2])
+    [31] AccessIndex { base: [30], index: 0 }
+    [32] Load { pointer: [1] }
+    [33] Access { base: [31], index: [32] }
+    [34] AccessIndex { base: [33], index: 0 }
+    [35] Load { pointer: [34] }
+    [36] GlobalVariable([2])
+    [37] AccessIndex { base: [36], index: 0 }
+    [38] Load { pointer: [1] }
+    [39] Access { base: [37], index: [38] }
+    [40] Load { pointer: [1] }
+    [41] Access { base: [39], index: [40] }
+    [42] Load { pointer: [41] }
+    [43] GlobalVariable([3])
+    [44] Load { pointer: [43] }
+    [45] GlobalVariable([3])
+    [46] AccessIndex { base: [45], index: 0 }
+    [47] Load { pointer: [46] }
+    [48] GlobalVariable([3])
+    [49] AccessIndex { base: [48], index: 0 }
+    [50] AccessIndex { base: [49], index: 0 }
+    [51] Load { pointer: [50] }
+    [52] GlobalVariable([3])
+    [53] AccessIndex { base: [52], index: 0 }
+    [54] Load { pointer: [1] }
+    [55] Access { base: [53], index: [54] }
+    [56] Load { pointer: [55] }
+    [57] GlobalVariable([3])
+    [58] AccessIndex { base: [57], index: 0 }
+    [59] AccessIndex { base: [58], index: 0 }
+    [60] AccessIndex { base: [59], index: 0 }
+    [61] Load { pointer: [60] }
+    [62] GlobalVariable([3])
+    [63] AccessIndex { base: [62], index: 0 }
+    [64] AccessIndex { base: [63], index: 0 }
+    [65] Load { pointer: [1] }
+    [66] Access { base: [64], index: [65] }
+    [67] Load { pointer: [66] }
+    [68] GlobalVariable([3])
+    [69] AccessIndex { base: [68], index: 0 }
+    [70] Load { pointer: [1] }
+    [71] Access { base: [69], index: [70] }
+    [72] AccessIndex { base: [71], index: 0 }
+    [73] Load { pointer: [72] }
+    [74] GlobalVariable([3])
+    [75] AccessIndex { base: [74], index: 0 }
+    [76] Load { pointer: [1] }
+    [77] Access { base: [75], index: [76] }
+    [78] Load { pointer: [1] }
+    [79] Access { base: [77], index: [78] }
+    [80] Load { pointer: [79] }
+    [81] GlobalVariable([2])
+    [82] GlobalVariable([2])
+    [83] AccessIndex { base: [82], index: 0 }
+    [84] GlobalVariable([2])
+    [85] AccessIndex { base: [84], index: 0 }
+    [86] AccessIndex { base: [85], index: 0 }
+    [87] GlobalVariable([2])
+    [88] AccessIndex { base: [87], index: 0 }
+    [89] Load { pointer: [1] }
+    [90] Access { base: [88], index: [89] }
+    [91] GlobalVariable([2])
+    [92] AccessIndex { base: [91], index: 0 }
+    [93] AccessIndex { base: [92], index: 0 }
+    [94] AccessIndex { base: [93], index: 0 }
+    [95] GlobalVariable([2])
+    [96] AccessIndex { base: [95], index: 0 }
+    [97] AccessIndex { base: [96], index: 0 }
+    [98] Load { pointer: [1] }
+    [99] Access { base: [97], index: [98] }
+    [100] GlobalVariable([2])
+    [101] AccessIndex { base: [100], index: 0 }
+    [102] Load { pointer: [1] }
+    [103] Access { base: [101], index: [102] }
+    [104] AccessIndex { base: [103], index: 0 }
+    [105] GlobalVariable([2])
+    [106] AccessIndex { base: [105], index: 0 }
+    [107] Load { pointer: [1] }
+    [108] Access { base: [106], index: [107] }
+    [109] Load { pointer: [1] }
+    [110] Access { base: [108], index: [109] }
+  named_expressions:
+    [6] = "l_s_s"
+    [9] = "l_s_m"
+    [13] = "l_s_c_c"
+    [18] = "l_s_c_v"
+    [23] = "l_s_e_cc"
+    [29] = "l_s_e_cv"
+    [35] = "l_s_e_vc"
+    [42] = "l_s_e_vv"
+    [44] = "l_u_s"
+    [47] = "l_u_m"
+    [51] = "l_u_c_c"
+    [56] = "l_u_c_v"
+    [61] = "l_u_e_cc"
+    [67] = "l_u_e_cv"
+    [73] = "l_u_e_vc"
+    [80] = "l_u_e_vv"
+  body: 49 statements
+    Emit(3..5)
+    Store { pointer: [1], value: [4] }
+    Emit(6..7)
+    Emit(8..10)
+    Emit(11..12)
+    Emit(12..14)
+    Emit(15..19)
+    Emit(20..21)
+    Emit(21..22)
+    Emit(22..24)
+    Emit(25..26)
+    Emit(26..30)
+    Emit(31..34)
+    Emit(34..36)
+    Emit(37..43)
+    Emit(44..45)
+    Emit(46..48)
+    Emit(49..50)
+    Emit(50..52)
+    Emit(53..57)
+    Emit(58..59)
+    Emit(59..60)
+    Emit(60..62)
+    Emit(63..64)
+    Emit(64..68)
+    Emit(69..72)
+    Emit(72..74)
+    Emit(75..81)
+    Store { pointer: [81], value: [44] }
+    Emit(83..84)
+    Store { pointer: [83], value: [47] }
+    Emit(85..86)
+    Emit(86..87)
+    Store { pointer: [86], value: [51] }
+    Emit(88..91)
+    Store { pointer: [90], value: [56] }
+    Emit(92..93)
+    Emit(93..94)
+    Emit(94..95)
+    Store { pointer: [94], value: [61] }
+    Emit(96..97)
+    Emit(97..100)
+    Store { pointer: [99], value: [67] }
+    Emit(101..104)
+    Emit(104..105)
+    Store { pointer: [104], value: [73] }
+    Emit(106..111)
+    Store { pointer: [110], value: [80] }
+    Return
+
+[2] "access_sasm"
+  args: []
+  result: None
+  locals: 1
+    [0] "idx" type=[1] init=[0]
+  expressions: 325
+    [0] Literal(I32(1))
+    [1] LocalVariable([0])
+    [2] Literal(I32(1))
+    [3] Load { pointer: [1] }
+    [4] Binary { op: Subtract, left: [3], right: [2] }
+    [5] GlobalVariable([4])
+    [6] Load { pointer: [5] }
+    [7] GlobalVariable([4])
+    [8] AccessIndex { base: [7], index: 0 }
+    [9] Load { pointer: [8] }
+    [10] GlobalVariable([4])
+    [11] AccessIndex { base: [10], index: 0 }
+    [12] AccessIndex { base: [11], index: 0 }
+    [13] AccessIndex { base: [12], index: 0 }
+    [14] Load { pointer: [13] }
+    [15] GlobalVariable([4])
+    [16] AccessIndex { base: [15], index: 0 }
+    [17] Load { pointer: [1] }
+    [18] Access { base: [16], index: [17] }
+    [19] AccessIndex { base: [18], index: 0 }
+    [20] Load { pointer: [19] }
+    [21] GlobalVariable([4])
+    [22] AccessIndex { base: [21], index: 0 }
+    [23] AccessIndex { base: [22], index: 0 }
+    [24] AccessIndex { base: [23], index: 0 }
+    [25] AccessIndex { base: [24], index: 0 }
+    [26] Load { pointer: [25] }
+    [27] GlobalVariable([4])
+    [28] AccessIndex { base: [27], index: 0 }
+    [29] AccessIndex { base: [28], index: 0 }
+    [30] AccessIndex { base: [29], index: 0 }
+    [31] Load { pointer: [1] }
+    [32] Access { base: [30], index: [31] }
+    [33] Load { pointer: [32] }
+    [34] GlobalVariable([4])
+    [35] AccessIndex { base: [34], index: 0 }
+    [36] Load { pointer: [1] }
+    [37] Access { base: [35], index: [36] }
+    [38] AccessIndex { base: [37], index: 0 }
+    [39] AccessIndex { base: [38], index: 0 }
+    [40] Load { pointer: [39] }
+    [41] GlobalVariable([4])
+    [42] AccessIndex { base: [41], index: 0 }
+    [43] Load { pointer: [1] }
+    [44] Access { base: [42], index: [43] }
+    [45] AccessIndex { base: [44], index: 0 }
+    [46] Load { pointer: [1] }
+    [47] Access { base: [45], index: [46] }
+    [48] Load { pointer: [47] }
+    [49] GlobalVariable([4])
+    [50] AccessIndex { base: [49], index: 0 }
+    [51] AccessIndex { base: [50], index: 0 }
+    [52] AccessIndex { base: [51], index: 0 }
+    [53] AccessIndex { base: [52], index: 0 }
+    [54] AccessIndex { base: [53], index: 0 }
+    [55] Load { pointer: [54] }
+    [56] GlobalVariable([4])
+    [57] AccessIndex { base: [56], index: 0 }
+    [58] AccessIndex { base: [57], index: 0 }
+    [59] AccessIndex { base: [58], index: 0 }
+    [60] AccessIndex { base: [59], index: 0 }
+    [61] Load { pointer: [1] }
+    [62] Access { base: [60], index: [61] }
+    [63] Load { pointer: [62] }
+    [64] GlobalVariable([4])
+    [65] AccessIndex { base: [64], index: 0 }
+    [66] AccessIndex { base: [65], index: 0 }
+    [67] AccessIndex { base: [66], index: 0 }
+    [68] Load { pointer: [1] }
+    [69] Access { base: [67], index: [68] }
+    [70] AccessIndex { base: [69], index: 0 }
+    [71] Load { pointer: [70] }
+    [72] GlobalVariable([4])
+    [73] AccessIndex { base: [72], index: 0 }
+    [74] AccessIndex { base: [73], index: 0 }
+    [75] AccessIndex { base: [74], index: 0 }
+    [76] Load { pointer: [1] }
+    [77] Access { base: [75], index: [76] }
+    [78] Load { pointer: [1] }
+    [79] Access { base: [77], index: [78] }
+    [80] Load { pointer: [79] }
+    [81] GlobalVariable([4])
+    [82] AccessIndex { base: [81], index: 0 }
+    [83] Load { pointer: [1] }
+    [84] Access { base: [82], index: [83] }
+    [85] AccessIndex { base: [84], index: 0 }
+    [86] AccessIndex { base: [85], index: 0 }
+    [87] AccessIndex { base: [86], index: 0 }
+    [88] Load { pointer: [87] }
+    [89] GlobalVariable([4])
+    [90] AccessIndex { base: [89], index: 0 }
+    [91] Load { pointer: [1] }
+    [92] Access { base: [90], index: [91] }
+    [93] AccessIndex { base: [92], index: 0 }
+    [94] AccessIndex { base: [93], index: 0 }
+    [95] Load { pointer: [1] }
+    [96] Access { base: [94], index: [95] }
+    [97] Load { pointer: [96] }
+    [98] GlobalVariable([4])
+    [99] AccessIndex { base: [98], index: 0 }
+    [100] Load { pointer: [1] }
+    [101] Access { base: [99], index: [100] }
+    [102] AccessIndex { base: [101], index: 0 }
+    [103] Load { pointer: [1] }
+    [104] Access { base: [102], index: [103] }
+    [105] AccessIndex { base: [104], index: 0 }
+    [106] Load { pointer: [105] }
+    [107] GlobalVariable([4])
+    [108] AccessIndex { base: [107], index: 0 }
+    [109] Load { pointer: [1] }
+    [110] Access { base: [108], index: [109] }
+    [111] AccessIndex { base: [110], index: 0 }
+    [112] Load { pointer: [1] }
+    [113] Access { base: [111], index: [112] }
+    [114] Load { pointer: [1] }
+    [115] Access { base: [113], index: [114] }
+    [116] Load { pointer: [115] }
+    [117] GlobalVariable([5])
+    [118] Load { pointer: [117] }
+    [119] GlobalVariable([5])
+    [120] AccessIndex { base: [119], index: 0 }
+    [121] Load { pointer: [120] }
+    [122] GlobalVariable([5])
+    [123] AccessIndex { base: [122], index: 0 }
+    [124] AccessIndex { base: [123], index: 0 }
+    [125] AccessIndex { base: [124], index: 0 }
+    [126] Load { pointer: [125] }
+    [127] GlobalVariable([5])
+    [128] AccessIndex { base: [127], index: 0 }
+    [129] Load { pointer: [1] }
+    [130] Access { base: [128], index: [129] }
+    [131] AccessIndex { base: [130], index: 0 }
+    [132] Load { pointer: [131] }
+    [133] GlobalVariable([5])
+    [134] AccessIndex { base: [133], index: 0 }
+    [135] AccessIndex { base: [134], index: 0 }
+    [136] AccessIndex { base: [135], index: 0 }
+    [137] AccessIndex { base: [136], index: 0 }
+    [138] Load { pointer: [137] }
+    [139] GlobalVariable([5])
+    [140] AccessIndex { base: [139], index: 0 }
+    [141] AccessIndex { base: [140], index: 0 }
+    [142] AccessIndex { base: [141], index: 0 }
+    [143] Load { pointer: [1] }
+    [144] Access { base: [142], index: [143] }
+    [145] Load { pointer: [144] }
+    [146] GlobalVariable([5])
+    [147] AccessIndex { base: [146], index: 0 }
+    [148] Load { pointer: [1] }
+    [149] Access { base: [147], index: [148] }
+    [150] AccessIndex { base: [149], index: 0 }
+    [151] AccessIndex { base: [150], index: 0 }
+    [152] Load { pointer: [151] }
+    [153] GlobalVariable([5])
+    [154] AccessIndex { base: [153], index: 0 }
+    [155] Load { pointer: [1] }
+    [156] Access { base: [154], index: [155] }
+    [157] AccessIndex { base: [156], index: 0 }
+    [158] Load { pointer: [1] }
+    [159] Access { base: [157], index: [158] }
+    [160] Load { pointer: [159] }
+    [161] GlobalVariable([5])
+    [162] AccessIndex { base: [161], index: 0 }
+    [163] AccessIndex { base: [162], index: 0 }
+    [164] AccessIndex { base: [163], index: 0 }
+    [165] AccessIndex { base: [164], index: 0 }
+    [166] AccessIndex { base: [165], index: 0 }
+    [167] Load { pointer: [166] }
+    [168] GlobalVariable([5])
+    [169] AccessIndex { base: [168], index: 0 }
+    [170] AccessIndex { base: [169], index: 0 }
+    [171] AccessIndex { base: [170], index: 0 }
+    [172] AccessIndex { base: [171], index: 0 }
+    [173] Load { pointer: [1] }
+    [174] Access { base: [172], index: [173] }
+    [175] Load { pointer: [174] }
+    [176] GlobalVariable([5])
+    [177] AccessIndex { base: [176], index: 0 }
+    [178] AccessIndex { base: [177], index: 0 }
+    [179] AccessIndex { base: [178], index: 0 }
+    [180] Load { pointer: [1] }
+    [181] Access { base: [179], index: [180] }
+    [182] AccessIndex { base: [181], index: 0 }
+    [183] Load { pointer: [182] }
+    [184] GlobalVariable([5])
+    [185] AccessIndex { base: [184], index: 0 }
+    [186] AccessIndex { base: [185], index: 0 }
+    [187] AccessIndex { base: [186], index: 0 }
+    [188] Load { pointer: [1] }
+    [189] Access { base: [187], index: [188] }
+    [190] Load { pointer: [1] }
+    [191] Access { base: [189], index: [190] }
+    [192] Load { pointer: [191] }
+    [193] GlobalVariable([5])
+    [194] AccessIndex { base: [193], index: 0 }
+    [195] Load { pointer: [1] }
+    [196] Access { base: [194], index: [195] }
+    [197] AccessIndex { base: [196], index: 0 }
+    [198] AccessIndex { base: [197], index: 0 }
+    [199] AccessIndex { base: [198], index: 0 }
+    [200] Load { pointer: [199] }
+    [201] GlobalVariable([5])
+    [202] AccessIndex { base: [201], index: 0 }
+    [203] Load { pointer: [1] }
+    [204] Access { base: [202], index: [203] }
+    [205] AccessIndex { base: [204], index: 0 }
+    [206] AccessIndex { base: [205], index: 0 }
+    [207] Load { pointer: [1] }
+    [208] Access { base: [206], index: [207] }
+    [209] Load { pointer: [208] }
+    [210] GlobalVariable([5])
+    [211] AccessIndex { base: [210], index: 0 }
+    [212] Load { pointer: [1] }
+    [213] Access { base: [211], index: [212] }
+    [214] AccessIndex { base: [213], index: 0 }
+    [215] Load { pointer: [1] }
+    [216] Access { base: [214], index: [215] }
+    [217] AccessIndex { base: [216], index: 0 }
+    [218] Load { pointer: [217] }
+    [219] GlobalVariable([5])
+    [220] AccessIndex { base: [219], index: 0 }
+    [221] Load { pointer: [1] }
+    [222] Access { base: [220], index: [221] }
+    [223] AccessIndex { base: [222], index: 0 }
+    [224] Load { pointer: [1] }
+    [225] Access { base: [223], index: [224] }
+    [226] Load { pointer: [1] }
+    [227] Access { base: [225], index: [226] }
+    [228] Load { pointer: [227] }
+    [229] GlobalVariable([4])
+    [230] GlobalVariable([4])
+    [231] AccessIndex { base: [230], index: 0 }
+    [232] GlobalVariable([4])
+    [233] AccessIndex { base: [232], index: 0 }
+    [234] AccessIndex { base: [233], index: 0 }
+    [235] AccessIndex { base: [234], index: 0 }
+    [236] GlobalVariable([4])
+    [237] AccessIndex { base: [236], index: 0 }
+    [238] Load { pointer: [1] }
+    [239] Access { base: [237], index: [238] }
+    [240] AccessIndex { base: [239], index: 0 }
+    [241] GlobalVariable([4])
+    [242] AccessIndex { base: [241], index: 0 }
+    [243] AccessIndex { base: [242], index: 0 }
+    [244] AccessIndex { base: [243], index: 0 }
+    [245] AccessIndex { base: [244], index: 0 }
+    [246] GlobalVariable([4])
+    [247] AccessIndex { base: [246], index: 0 }
+    [248] AccessIndex { base: [247], index: 0 }
+    [249] AccessIndex { base: [248], index: 0 }
+    [250] Load { pointer: [1] }
+    [251] Access { base: [249], index: [250] }
+    [252] GlobalVariable([4])
+    [253] AccessIndex { base: [252], index: 0 }
+    [254] Load { pointer: [1] }
+    [255] Access { base: [253], index: [254] }
+    [256] AccessIndex { base: [255], index: 0 }
+    [257] AccessIndex { base: [256], index: 0 }
+    [258] GlobalVariable([4])
+    [259] AccessIndex { base: [258], index: 0 }
+    [260] Load { pointer: [1] }
+    [261] Access { base: [259], index: [260] }
+    [262] AccessIndex { base: [261], index: 0 }
+    [263] Load { pointer: [1] }
+    [264] Access { base: [262], index: [263] }
+    [265] GlobalVariable([4])
+    [266] AccessIndex { base: [265], index: 0 }
+    [267] AccessIndex { base: [266], index: 0 }
+    [268] AccessIndex { base: [267], index: 0 }
+    [269] AccessIndex { base: [268], index: 0 }
+    [270] AccessIndex { base: [269], index: 0 }
+    [271] GlobalVariable([4])
+    [272] AccessIndex { base: [271], index: 0 }
+    [273] AccessIndex { base: [272], index: 0 }
+    [274] AccessIndex { base: [273], index: 0 }
+    [275] AccessIndex { base: [274], index: 0 }
+    [276] Load { pointer: [1] }
+    [277] Access { base: [275], index: [276] }
+    [278] GlobalVariable([4])
+    [279] AccessIndex { base: [278], index: 0 }
+    [280] AccessIndex { base: [279], index: 0 }
+    [281] AccessIndex { base: [280], index: 0 }
+    [282] Load { pointer: [1] }
+    [283] Access { base: [281], index: [282] }
+    [284] AccessIndex { base: [283], index: 0 }
+    [285] GlobalVariable([4])
+    [286] AccessIndex { base: [285], index: 0 }
+    [287] AccessIndex { base: [286], index: 0 }
+    [288] AccessIndex { base: [287], index: 0 }
+    [289] Load { pointer: [1] }
+    [290] Access { base: [288], index: [289] }
+    [291] Load { pointer: [1] }
+    [292] Access { base: [290], index: [291] }
+    [293] GlobalVariable([4])
+    [294] AccessIndex { base: [293], index: 0 }
+    [295] Load { pointer: [1] }
+    [296] Access { base: [294], index: [295] }
+    [297] AccessIndex { base: [296], index: 0 }
+    [298] AccessIndex { base: [297], index: 0 }
+    [299] AccessIndex { base: [298], index: 0 }
+    [300] GlobalVariable([4])
+    [301] AccessIndex { base: [300], index: 0 }
+    [302] Load { pointer: [1] }
+    [303] Access { base: [301], index: [302] }
+    [304] AccessIndex { base: [303], index: 0 }
+    [305] AccessIndex { base: [304], index: 0 }
+    [306] Load { pointer: [1] }
+    [307] Access { base: [305], index: [306] }
+    [308] GlobalVariable([4])
+    [309] AccessIndex { base: [308], index: 0 }
+    [310] Load { pointer: [1] }
+    [311] Access { base: [309], index: [310] }
+    [312] AccessIndex { base: [311], index: 0 }
+    [313] Load { pointer: [1] }
+    [314] Access { base: [312], index: [313] }
+    [315] AccessIndex { base: [314], index: 0 }
+    [316] GlobalVariable([4])
+    [317] AccessIndex { base: [316], index: 0 }
+    [318] Load { pointer: [1] }
+    [319] Access { base: [317], index: [318] }
+    [320] AccessIndex { base: [319], index: 0 }
+    [321] Load { pointer: [1] }
+    [322] Access { base: [320], index: [321] }
+    [323] Load { pointer: [1] }
+    [324] Access { base: [322], index: [323] }
+  named_expressions:
+    [6] = "l_s_s"
+    [9] = "l_s_a"
+    [14] = "l_s_m_c"
+    [20] = "l_s_m_v"
+    [26] = "l_s_c_cc"
+    [33] = "l_s_c_cv"
+    [40] = "l_s_c_vc"
+    [48] = "l_s_c_vv"
+    [55] = "l_s_e_ccc"
+    [63] = "l_s_e_ccv"
+    [71] = "l_s_e_cvc"
+    [80] = "l_s_e_cvv"
+    [88] = "l_s_e_vcc"
+    [97] = "l_s_e_vcv"
+    [106] = "l_s_e_vvc"
+    [116] = "l_s_e_vvv"
+    [118] = "l_u_s"
+    [121] = "l_u_a"
+    [126] = "l_u_m_c"
+    [132] = "l_u_m_v"
+    [138] = "l_u_c_cc"
+    [145] = "l_u_c_cv"
+    [152] = "l_u_c_vc"
+    [160] = "l_u_c_vv"
+    [167] = "l_u_e_ccc"
+    [175] = "l_u_e_ccv"
+    [183] = "l_u_e_cvc"
+    [192] = "l_u_e_cvv"
+    [200] = "l_u_e_vcc"
+    [209] = "l_u_e_vcv"
+    [218] = "l_u_e_vvc"
+    [228] = "l_u_e_vvv"
+  body: 117 statements
+    Emit(3..5)
+    Store { pointer: [1], value: [4] }
+    Emit(6..7)
+    Emit(8..10)
+    Emit(11..12)
+    Emit(12..15)
+    Emit(16..21)
+    Emit(22..23)
+    Emit(23..25)
+    Emit(25..27)
+    Emit(28..29)
+    Emit(29..34)
+    Emit(35..39)
+    Emit(39..41)
+    Emit(42..49)
+    Emit(50..51)
+    Emit(51..53)
+    Emit(53..54)
+    Emit(54..56)
+    Emit(57..58)
+    Emit(58..60)
+    Emit(60..64)
+    Emit(65..66)
+    Emit(66..70)
+    Emit(70..72)
+    Emit(73..74)
+    Emit(74..81)
+    Emit(82..86)
+    Emit(86..87)
+    Emit(87..89)
+    Emit(90..94)
+    Emit(94..98)
+    Emit(99..105)
+    Emit(105..107)
+    Emit(108..117)
+    Emit(118..119)
+    Emit(120..122)
+    Emit(123..124)
+    Emit(124..127)
+    Emit(128..133)
+    Emit(134..135)
+    Emit(135..137)
+    Emit(137..139)
+    Emit(140..141)
+    Emit(141..146)
+    Emit(147..151)
+    Emit(151..153)
+    Emit(154..161)
+    Emit(162..163)
+    Emit(163..165)
+    Emit(165..166)
+    Emit(166..168)
+    Emit(169..170)
+    Emit(170..172)
+    Emit(172..176)
+    Emit(177..178)
+    Emit(178..182)
+    Emit(182..184)
+    Emit(185..186)
+    Emit(186..193)
+    Emit(194..198)
+    Emit(198..199)
+    Emit(199..201)
+    Emit(202..206)
+    Emit(206..210)
+    Emit(211..217)
+    Emit(217..219)
+    Emit(220..229)
+    Store { pointer: [229], value: [118] }
+    Emit(231..232)
+    Store { pointer: [231], value: [121] }
+    Emit(233..234)
+    Emit(234..236)
+    Store { pointer: [235], value: [126] }
+    Emit(237..241)
+    Store { pointer: [240], value: [132] }
+    Emit(242..243)
+    Emit(243..245)
+    Emit(245..246)
+    Store { pointer: [245], value: [138] }
+    Emit(247..248)
+    Emit(248..252)
+    Store { pointer: [251], value: [145] }
+    Emit(253..257)
+    Emit(257..258)
+    Store { pointer: [257], value: [152] }
+    Emit(259..265)
+    Store { pointer: [264], value: [160] }
+    Emit(266..267)
+    Emit(267..269)
+    Emit(269..270)
+    Emit(270..271)
+    Store { pointer: [270], value: [167] }
+    Emit(272..273)
+    Emit(273..275)
+    Emit(275..278)
+    Store { pointer: [277], value: [175] }
+    Emit(279..280)
+    Emit(280..284)
+    Emit(284..285)
+    Store { pointer: [284], value: [183] }
+    Emit(286..287)
+    Emit(287..293)
+    Store { pointer: [292], value: [192] }
+    Emit(294..298)
+    Emit(298..299)
+    Emit(299..300)
+    Store { pointer: [299], value: [200] }
+    Emit(301..305)
+    Emit(305..308)
+    Store { pointer: [307], value: [209] }
+    Emit(309..315)
+    Emit(315..316)
+    Store { pointer: [315], value: [218] }
+    Emit(317..325)
+    Store { pointer: [324], value: [228] }
+    Return
+
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=0, stmts=4, locals=0} workgroup_size=(1,1,1)

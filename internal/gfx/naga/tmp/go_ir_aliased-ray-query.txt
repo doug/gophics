@@ -1,0 +1,24 @@
+=== TYPES ===
+[0] RayQuery
+[1] AccelerationStructure
+[2] Scalar(Float, 4)
+[3] Vector { size: Vec3, scalar: Float(4) }
+[4] Scalar(Uint, 4)
+[5] Struct "RayDesc" { members: [{ name: "flags", type: [4], offset: 0}, { name: "cull_mask", type: [4], offset: 4}, { name: "tmin", type: [2], offset: 8}, { name: "tmax", type: [2], offset: 12}, { name: "origin", type: [3], offset: 16}, { name: "dir", type: [3], offset: 32}], span: 48 }
+[6] Vector { size: Vec2, scalar: Float(4) }
+[7] Scalar(Bool, 1)
+[8] Matrix { columns: Vec4, rows: Vec3, scalar: Float(4) }
+[9] Struct "RayIntersection" { members: [{ name: "kind", type: [4], offset: 0}, { name: "t", type: [2], offset: 4}, { name: "instance_custom_data", type: [4], offset: 8}, { name: "instance_index", type: [4], offset: 12}, { name: "sbt_record_offset", type: [4], offset: 16}, { name: "geometry_index", type: [4], offset: 20}, { name: "primitive_index", type: [4], offset: 24}, { name: "barycentrics", type: [6], offset: 28}, { name: "front_face", type: [7], offset: 36}, { name: "object_to_world", type: [8], offset: 48}, { name: "world_to_object", type: [8], offset: 112}], span: 176 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "acc_struct" type=[1] space=Handle binding=(0,0)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main_candidate" stage=Compute function={name="main_candidate", args=0, exprs=21, stmts=8, locals=1} workgroup_size=(1,1,1)

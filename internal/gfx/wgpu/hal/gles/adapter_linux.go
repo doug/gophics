@@ -1,0 +1,123 @@
+// Copyright 2025 The GoGPU Authors
+// SPDX-License-Identifier: MIT
+
+//go:build linux && !(js && wasm)
+
+package gles
+
+import (
+	"fmt"
+
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gossamer/internal/gfx/wgpu/hal"
+	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/egl"
+	"github.com/doug/gossamer/internal/gfx/wgpu/hal/gles/gl"
+)
+
+// Adapter implements hal.Adapter for OpenGL on Linux.
+type Adapter struct {
+	glCtx         *gl.Context
+	eglCtx        *egl.Context
+	displayHandle uintptr
+	windowHandle  uintptr
+	version       string
+	renderer      string
+
+	// caps holds the probed adapter capabilities (extensions, features,
+	// limits, MSAA support). Populated by queryAdapterCapabilities during
+	// adapter enumeration.
+	caps AdapterCapabilities
+}
+
+// Open creates a logical device with the requested features and limits.
+func (a *Adapter) Open(_ gputypes.Features, _ gputypes.Limits) (hal.OpenDevice, error) {
+	// EnumerateAdapters(nil) path returns an adapter with nil glCtx because no
+	// EGL context can be created without a display/window handle. Return a
+	// descriptive error instead of a nil pointer dereference at GenVertexArrays.
+	if a.glCtx == nil {
+		return hal.OpenDevice{}, fmt.Errorf("gles: adapter has no GL context — pass a surface hint to CreateSurface before RequestDevice")
+	}
+
+	// Make context current if we have one
+	if a.eglCtx != nil {
+		if err := a.eglCtx.MakeCurrent(); err != nil {
+			return hal.OpenDevice{}, err
+		}
+	}
+
+	// VAO is created lazily in CreateCommandEncoder — ensures it's allocated
+	// on the window surface (after Configure), not on the pbuffer (during Open).
+	vao := uint32(0)
+
+	// Query hardware texture unit limit for binding validation.
+	var maxTexUnits int32
+	a.glCtx.GetIntegerv(gl.MAX_TEXTURE_IMAGE_UNITS, &maxTexUnits)
+	if maxTexUnits <= 0 {
+		maxTexUnits = 8 // Conservative default
+	}
+
+	vendor := a.glCtx.GetString(gl.VENDOR)
+
+	hal.Logger().Info("gles: device opened",
+		"vendor", vendor,
+		"version", a.version,
+		"renderer", a.renderer,
+		"maxTextureUnits", maxTexUnits,
+	)
+
+	glslVer := GLSLVersionToNaga(a.caps.GLSLVersion, a.caps.IsES)
+
+	device := &Device{
+		glCtx:               a.glCtx,
+		eglCtx:              a.eglCtx,
+		displayHandle:       a.displayHandle,
+		windowHandle:        a.windowHandle,
+		vao:                 vao,
+		maxTextureUnits:     maxTexUnits,
+		maxMSAA:             a.caps.MaxMSAASamples,
+		glslVersion:         glslVer,
+		shaderBindingLayout: glslVer.SupportsExplicitLocations(),
+	}
+
+	queue := &Queue{
+		glCtx:  a.glCtx,
+		eglCtx: a.eglCtx,
+		fence:  NewFence(a.glCtx),
+	}
+
+	return hal.OpenDevice{
+		Device: device,
+		Queue:  queue,
+	}, nil
+}
+
+// TextureFormatCapabilities returns capabilities for a texture format.
+// Uses probed GL extension and MSAA information for accurate per-format detection.
+func (a *Adapter) TextureFormatCapabilities(format gputypes.TextureFormat) hal.TextureFormatCapabilities {
+	return queryTextureFormatCapabilities(format, a.caps.Features, a.caps.MaxMSAASamples, a.caps.Extensions)
+}
+
+// SurfaceCapabilities returns surface capabilities.
+func (a *Adapter) SurfaceCapabilities(_ hal.Surface) *hal.SurfaceCapabilities {
+	return &hal.SurfaceCapabilities{
+		Formats: []gputypes.TextureFormat{
+			gputypes.TextureFormatBGRA8Unorm,
+			gputypes.TextureFormatRGBA8Unorm,
+			gputypes.TextureFormatBGRA8UnormSrgb,
+			gputypes.TextureFormatRGBA8UnormSrgb,
+		},
+		PresentModes: []hal.PresentMode{
+			hal.PresentModeFifo,      // VSync on
+			hal.PresentModeImmediate, // VSync off (if supported)
+		},
+		AlphaModes: []hal.CompositeAlphaMode{
+			hal.CompositeAlphaModeOpaque,
+			hal.CompositeAlphaModePremultiplied,
+		},
+	}
+}
+
+// Destroy releases the adapter.
+func (a *Adapter) Destroy() {
+	// Adapter doesn't own the GL context
+}

@@ -1,0 +1,40 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec4, scalar: Float(4) }
+[2] Scalar(Sint, 4)
+[3] Struct "Foo" { members: [{ name: "a", type: [1], offset: 0}, { name: "b", type: [2], offset: 16}], span: 32 }
+[4] Vector { size: Vec3, scalar: Float(4) }
+[5] Matrix { columns: Vec2, rows: Vec2, scalar: Float(4) }
+[6] Vector { size: Vec2, scalar: Float(4) }
+[7] Array { base: [5], size: Constant(1), stride: 16 }
+[8] Scalar(Bool, 1)
+[9] Scalar(Uint, 4)
+[10] Vector { size: Vec2, scalar: Uint(4) }
+[11] Array { base: [3], size: Constant(3), stride: 32 }
+[12] Matrix { columns: Vec4, rows: Vec4, scalar: Float(4) }
+[13] Array { base: [2], size: Constant(4), stride: 4 }
+[14] Matrix { columns: Vec2, rows: Vec3, scalar: Float(4) }
+
+=== CONSTANTS ===
+[0] "const1" type=[4] init=Unknown(<nil>)
+[1] "const3" type=[5] init=Unknown(<nil>)
+[2] "const4" type=[7] init=Unknown(<nil>)
+[3] "cz0" type=[8] init=Unknown(ir.ZeroConstantValue)
+[4] "cz1" type=[2] init=Unknown(ir.ZeroConstantValue)
+[5] "cz2" type=[9] init=Unknown(ir.ZeroConstantValue)
+[6] "cz3" type=[0] init=Unknown(ir.ZeroConstantValue)
+[7] "cz4" type=[10] init=Unknown(<nil>)
+[8] "cz5" type=[5] init=Unknown(<nil>)
+[9] "cz6" type=[11] init=Unknown(<nil>)
+[10] "cz7" type=[3] init=Unknown(<nil>)
+[11] "cp1" type=[10] init=Unknown(<nil>)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=97, stmts=15, locals=1} workgroup_size=(1,1,1)

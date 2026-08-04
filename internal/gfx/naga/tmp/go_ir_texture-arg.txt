@@ -1,0 +1,37 @@
+=== TYPES ===
+[0] Image { dim: D2, arrayed: false, class: Sampled}
+[1] Sampler(Filtering)
+[2] Vector { size: Vec4, scalar: Float(4) }
+[3] Vector { size: Vec2, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "Texture" type=[0] space=Handle binding=(0,0)
+[1] "Sampler" type=[1] space=Handle binding=(0,1)
+
+=== FUNCTIONS ===
+[0] "test"
+  args: [{ name: "Passed_Texture", type: [0], binding: None}, { name: "Passed_Sampler", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 6
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] Literal(F32(0))
+    [3] Literal(F32(0))
+    [4] Compose { type: [3], components: [[2], [3]] }
+    [5] ImageSample { image: [0], sampler: [1], coordinate: [4] }
+  named_expressions:
+    [0] = "Passed_Texture"
+    [1] = "Passed_Sampler"
+  body: 2 statements
+    Emit(4..6)
+    Return { value: [5] }
+
+=== ENTRY POINTS ===
+[0] "main" stage=Fragment function={name="main", args=0, exprs=3, stmts=2, locals=0}

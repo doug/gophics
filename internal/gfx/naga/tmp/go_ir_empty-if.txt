@@ -1,0 +1,15 @@
+=== TYPES ===
+[0] Vector { size: Vec3, scalar: Uint(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "comp" stage=Compute function={name="comp", args=1, exprs=5, stmts=4, locals=0} workgroup_size=(1,1,1)

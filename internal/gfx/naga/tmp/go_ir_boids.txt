@@ -1,0 +1,25 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Scalar(Float, 4)
+[2] Vector { size: Vec2, scalar: Float(4) }
+[3] Struct "Particle" { members: [{ name: "pos", type: [2], offset: 0}, { name: "vel", type: [2], offset: 8}], span: 16 }
+[4] Struct "SimParams" { members: [{ name: "deltaT", type: [1], offset: 0}, { name: "rule1Distance", type: [1], offset: 4}, { name: "rule2Distance", type: [1], offset: 8}, { name: "rule3Distance", type: [1], offset: 12}, { name: "rule1Scale", type: [1], offset: 16}, { name: "rule2Scale", type: [1], offset: 20}, { name: "rule3Scale", type: [1], offset: 24}], span: 28 }
+[5] Array { base: [3], size: Dynamic, stride: 16 }
+[6] Struct "Particles" { members: [{ name: "particles", type: [5], offset: 0}], span: 16 }
+[7] Vector { size: Vec3, scalar: Uint(4) }
+[8] Scalar(Sint, 4)
+
+=== CONSTANTS ===
+[0] "NUM_PARTICLES" type=[0] init=Literal(Uint(1500))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "params" type=[4] space=Uniform binding=(0,0)
+[1] "particlesSrc" type=[6] space=Storage(LOAD) binding=(0,1)
+[2] "particlesDst" type=[6] space=Storage(LOAD|STORE) binding=(0,2)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=1, exprs=180, stmts=45, locals=10} workgroup_size=(64,1,1)

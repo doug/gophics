@@ -1,0 +1,51 @@
+=== TYPES ===
+[0] Scalar(Float, 8)
+
+=== CONSTANTS ===
+[0] "k" type=[0] init=Literal(Float(2))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "v" type=[0] space=Private binding=None
+
+=== FUNCTIONS ===
+[0] "f"
+  args: [{ name: "x", type: [0], binding: None}]
+  result: type=[0]
+  locals: 2
+    [0] "z" type=[0]
+    [1] "w" type=[0] init=[9]
+  expressions: 15
+    [0] FunctionArgument(0)
+    [1] GlobalVariable([0])
+    [2] Load { pointer: [1] }
+    [3] Literal(F64(30))
+    [4] Literal(F64(400))
+    [5] Binary { op: Add, left: [3], right: [4] }
+    [6] Literal(F64(5))
+    [7] Binary { op: Add, left: [5], right: [6] }
+    [8] LocalVariable([0])
+    [9] Literal(F64(-1))
+    [10] Binary { op: Add, left: [0], right: [5] }
+    [11] Constant([0])
+    [12] Binary { op: Add, left: [10], right: [11] }
+    [13] Literal(F64(5))
+    [14] Binary { op: Add, left: [12], right: [13] }
+  named_expressions:
+    [0] = "x"
+    [2] = "phony"
+    [5] = "y"
+  body: 8 statements
+    Emit(2..3)
+    Emit(5..6)
+    Emit(7..8)
+    Store { pointer: [8], value: [7] }
+    Emit(10..11)
+    Emit(12..13)
+    Emit(14..15)
+    Return { value: [14] }
+
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=2, stmts=2, locals=0} workgroup_size=(1,1,1)

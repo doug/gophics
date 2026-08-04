@@ -1,0 +1,84 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 70
+; Schema: 0
+
+               OpCapability Shader
+               OpCapability Linkage
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpDecorate %_10 ArrayStride 4
+               OpDecorate %_11 ArrayStride 4
+               OpDecorate %_12 ArrayStride 4
+               OpMemberDecorate %_13 0 Offset 0
+               OpMemberDecorate %_13 1 Offset 4
+               OpMemberDecorate %_13 2 Offset 8
+         %_2 = OpTypeInt 32 1
+         %_3 = OpTypeVector %_2 2
+         %_4 = OpTypeInt 32 0
+         %_5 = OpTypeVector %_4 2
+         %_6 = OpTypeFloat 32
+         %_7 = OpTypeVector %_6 2
+         %_8 = OpTypeMatrix %_7 2
+         %_9 = OpConstant %_4 2
+         %_10 = OpTypeArray %_6 %_9
+         %_11 = OpTypeArray %_2 %_9
+         %_12 = OpTypeArray %_4 %_9
+         %_13 = OpTypeStruct %_6 %_2 %_4
+         %_14 = OpTypeVector %_6 3
+         %_15 = OpConstantNull %_3
+         %_16 = OpConstantNull %_5
+         %_17 = OpConstantNull %_7
+         %_18 = OpConstantNull %_7
+         %_19 = OpConstantNull %_7
+         %_20 = OpConstantNull %_5
+         %_21 = OpConstantNull %_5
+         %_22 = OpConstantNull %_5
+         %_23 = OpConstantNull %_5
+         %_24 = OpConstantNull %_3
+         %_25 = OpConstantNull %_5
+         %_26 = OpConstantNull %_7
+         %_27 = OpConstantNull %_8
+         %_28 = OpConstantNull %_8
+         %_29 = OpConstantNull %_8
+         %_30 = OpConstantNull %_8
+         %_31 = OpConstantNull %_8
+         %_32 = OpConstantNull %_8
+         %_33 = OpConstantNull %_3
+         %_34 = OpConstantNull %_5
+         %_35 = OpConstantNull %_7
+         %_36 = OpConstantNull %_7
+         %_37 = OpConstantNull %_10
+         %_38 = OpConstantNull %_10
+         %_39 = OpConstantNull %_11
+         %_40 = OpConstantNull %_12
+         %_41 = OpConstantNull %_10
+         %_42 = OpConstantNull %_10
+         %_43 = OpConstantNull %_10
+         %_44 = OpConstantNull %_13
+         %_45 = OpConstantNull %_13
+         %_46 = OpConstantNull %_13
+         %_47 = OpConstantNull %_13
+         %_48 = OpConstantNull %_13
+         %_49 = OpConstantNull %_13
+         %_50 = OpConstantNull %_13
+         %_51 = OpConstantNull %_13
+         %_52 = OpConstantNull %_3
+         %_53 = OpConstantNull %_5
+         %_54 = OpConstantNull %_7
+         %_55 = OpConstantNull %_7
+         %_56 = OpConstantNull %_14
+         %_57 = OpConstantNull %_14
+         %_58 = OpConstantNull %_14
+         %_59 = OpConstantNull %_14
+         %_60 = OpConstantNull %_14
+         %_61 = OpConstantNull %_14
+         %_62 = OpConstantNull %_14
+         %_63 = OpConstantNull %_14
+         %_64 = OpConstantNull %_14
+         %_65 = OpConstantNull %_14
+         %_66 = OpConstantNull %_14
+         %_67 = OpConstantNull %_14
+         %_68 = OpConstantNull %_14
+         %_69 = OpConstantNull %_14

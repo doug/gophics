@@ -19,11 +19,11 @@ import (
 	"syscall/js"
 	"unsafe"
 
-	"github.com/doug/gg"
-	"github.com/doug/gg/integration/ggcanvas"
-	"github.com/doug/gpucontext"
-	"github.com/doug/gputypes"
-	"github.com/doug/wgpu"
+	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gossamer/internal/gfx/gg/integration/ggcanvas"
+	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gossamer/internal/gfx/wgpu"
 
 	"github.com/doug/gossamer/shell"
 )

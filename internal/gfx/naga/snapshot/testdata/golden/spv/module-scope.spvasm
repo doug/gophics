@@ -1,0 +1,60 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 38
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %_33 "main"
+               OpExecutionMode %_33 OriginUpperLeft
+               OpMemberDecorate %_4 0 Offset 0
+               OpDecorate %_11 DescriptorSet 0
+               OpDecorate %_11 Binding 0
+               OpDecorate %_13 DescriptorSet 0
+               OpDecorate %_13 Binding 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeInt 32 1
+         %_4 = OpTypeStruct %_3
+         %_5 = OpTypeFloat 32
+         %_6 = OpTypeImage %_5 2D 0 0 0 1 Unknown
+         %_7 = OpTypeSampler
+         %_8 = OpTypeVector %_5 2
+         %_9 = OpConstant %_3 1
+         %_10 = OpTypePointer UniformConstant %_6
+         %_12 = OpTypePointer UniformConstant %_7
+         %_14 = OpTypeFunction %_2
+         %_17 = OpTypeFunction %_4
+         %_25 = OpConstant %_5 1065353216
+         %_29 = OpTypeVector %_5 4
+         %_31 = OpTypeSampledImage %_6
+         %_11 = OpVariable %_10 UniformConstant
+         %_13 = OpVariable %_12 UniformConstant
+         %_15 = OpFunction %_2 None %_14
+         %_16 = OpLabel
+               OpReturn
+               OpFunctionEnd
+         %_18 = OpFunction %_4 None %_17
+         %_19 = OpLabel
+         %_20 = OpCompositeConstruct %_4 %_9
+               OpReturnValue %_20
+               OpFunctionEnd
+         %_21 = OpFunction %_2 None %_14
+         %_22 = OpLabel
+         %_23 = OpFunctionCall %_2 %_15
+         %_24 = OpFunctionCall %_4 %_18
+         %_26 = OpCompositeConstruct %_8 %_25 %_25
+         %_27 = OpLoad %_6 %_11
+         %_28 = OpLoad %_7 %_13
+         %_32 = OpSampledImage %_31 %_27 %_28
+         %_30 = OpImageSampleImplicitLod %_29 %_32 %_26
+               OpReturn
+               OpFunctionEnd
+         %_33 = OpFunction %_2 None %_14
+         %_34 = OpLabel
+         %_35 = OpFunctionCall %_2 %_21
+         %_36 = OpFunctionCall %_2 %_15
+         %_37 = OpFunctionCall %_4 %_18
+               OpReturn
+               OpFunctionEnd

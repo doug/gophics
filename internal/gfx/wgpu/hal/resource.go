@@ -1,0 +1,203 @@
+//go:build !(js && wasm)
+
+package hal
+
+import (
+	"image"
+
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+)
+
+// Resource is the base interface for all GPU resources.
+// Resources must be explicitly destroyed to free GPU memory.
+type Resource interface {
+	// Destroy releases the GPU resource.
+	// After this call, the resource must not be used.
+	// Calling Destroy multiple times is undefined behavior.
+	Destroy()
+}
+
+// NativeHandle provides access to the underlying API handle.
+// Used for advanced interop scenarios like bind group creation.
+type NativeHandle interface {
+	// NativeHandle returns the raw API handle as uintptr.
+	// For Vulkan: VkBuffer, VkImage, VkSampler, etc.
+	// For Metal: MTLBuffer, MTLTexture, etc.
+	NativeHandle() uintptr
+}
+
+// Buffer represents a GPU buffer.
+// Buffers are contiguous memory regions accessible by the GPU.
+type Buffer interface {
+	Resource
+	NativeHandle
+}
+
+// Texture represents a GPU texture.
+// Textures are multi-dimensional images with specific formats.
+type Texture interface {
+	Resource
+	NativeHandle
+
+	// CurrentUsage returns the texture's tracked usage state for barrier computation.
+	// On DX12, this maps the tracked D3D12 resource state back to gputypes.TextureUsage.
+	// On backends without state tracking (GLES, Software, Metal, Noop), returns 0.
+	// Used by PendingWrites to determine the correct "before" state for copy barriers.
+	CurrentUsage() gputypes.TextureUsage
+
+	// AddPendingRef/DecPendingRef manage reference counting for in-flight GPU work.
+	// PendingWrites calls AddPendingRef when recording CopyBufferToTexture, and
+	// DecPendingRef when GPU confirms completion. Destroy() is deferred if refs > 0.
+	// This prevents use-after-free on DX12 (BUG-DX12-006).
+	// No-op on backends that don't need deferred destruction.
+	AddPendingRef()
+	DecPendingRef()
+}
+
+// TextureView represents a view into a texture.
+// Views specify how a texture is interpreted (format, dimensions, layers).
+type TextureView interface {
+	Resource
+	NativeHandle
+}
+
+// Sampler represents a texture sampler.
+// Samplers define how textures are filtered and addressed.
+type Sampler interface {
+	Resource
+	NativeHandle
+}
+
+// ShaderModule represents a compiled shader module.
+// Shader modules contain executable GPU code in a backend-specific format.
+type ShaderModule interface {
+	Resource
+}
+
+// BindGroupLayout defines the layout of a bind group.
+// Layouts specify the structure of resource bindings for shaders.
+type BindGroupLayout interface {
+	Resource
+}
+
+// BindGroup represents bound resources.
+// Bind groups associate actual resources with bind group layouts.
+type BindGroup interface {
+	Resource
+}
+
+// PipelineLayout defines the layout of a pipeline.
+// Pipeline layouts specify the bind group layouts used by a pipeline.
+type PipelineLayout interface {
+	Resource
+}
+
+// RenderPipeline is a configured render pipeline.
+// Render pipelines define the complete graphics pipeline state.
+type RenderPipeline interface {
+	Resource
+}
+
+// ComputePipeline is a configured compute pipeline.
+// Compute pipelines define the compute shader and resource layout.
+type ComputePipeline interface {
+	Resource
+}
+
+// CommandBuffer holds recorded GPU commands.
+// Command buffers are immutable after encoding and can be submitted to a queue.
+type CommandBuffer interface {
+	Resource
+}
+
+// Fence is a GPU synchronization primitive.
+// Fences allow CPU-GPU synchronization via signaled values.
+type Fence interface {
+	Resource
+}
+
+// Surface represents a rendering surface.
+// Surfaces are platform-specific presentation targets (windows).
+type Surface interface {
+	Resource
+
+	// Configure configures the surface with the given device and settings.
+	// Must be called before acquiring textures.
+	Configure(device Device, config *SurfaceConfiguration) error
+
+	// Unconfigure removes the surface configuration.
+	// Call before destroying the device.
+	Unconfigure(device Device)
+
+	// AcquireTexture acquires the next surface texture for rendering.
+	// The texture must be presented via Queue.Present or discarded via DiscardTexture.
+	// Returns ErrSurfaceOutdated if the surface needs reconfiguration.
+	// Returns ErrSurfaceLost if the surface has been destroyed.
+	// Returns ErrTimeout if the timeout expires before a texture is available.
+	AcquireTexture(fence Fence) (*AcquiredSurfaceTexture, error)
+
+	// DiscardTexture discards a surface texture without presenting it.
+	// Use this if rendering failed or was canceled.
+	DiscardTexture(texture SurfaceTexture)
+
+	// ActualExtent returns the dimensions selected for the swapchain.
+	//
+	// On Vulkan, a defined CurrentExtent is compositor-owned and used verbatim
+	// (common on Android). When CurrentExtent is undefined, the requested extent
+	// is clamped to the driver's supported range. The result may therefore differ
+	// from SurfaceConfiguration.Width/Height.
+	//
+	// On non-Vulkan backends (DX12, Metal, GLES, Software), the returned
+	// values match the configured dimensions since those backends do not
+	// clamp the extent. Returns (0, 0) if the surface is not configured.
+	ActualExtent() (width, height uint32)
+}
+
+// PixelPresenter is an optional Surface capability for direct CPU pixel
+// presentation. Only the software backend implements this — GPU backends
+// use the standard AcquireTexture → render pass → Present flow.
+//
+// This follows the io.WriterTo pattern: optional capability interface
+// alongside the core Surface interface, not embedded in it.
+//
+// Extension: not part of WebGPU specification.
+type PixelPresenter interface {
+	PresentPixels(data []byte, width, height uint32, damageRects []image.Rectangle) error
+}
+
+// PixelWriter is an optional Surface capability for writing CPU pixels
+// into the surface framebuffer without presenting.
+//
+// Extension: not part of WebGPU specification.
+type PixelWriter interface {
+	WritePixels(data []byte, width, height uint32) error
+}
+
+// PixelReader is an optional Surface capability for capturing the current
+// framebuffer without exposing backend-owned memory.
+//
+// ReadPixels returns a caller-owned, tightly packed RGBA8 snapshot in top-left,
+// row-major order. The returned slice remains valid after later rendering or
+// surface destruction.
+//
+// Extension: not part of WebGPU specification.
+type PixelReader interface {
+	ReadPixels() []byte
+}
+
+// SurfaceTexture is a texture acquired from a surface.
+// Surface textures have special lifetime constraints - they must be presented
+// or discarded before the next frame.
+type SurfaceTexture interface {
+	Texture
+}
+
+// AcquiredSurfaceTexture bundles a surface texture with metadata.
+type AcquiredSurfaceTexture struct {
+	// Texture is the acquired surface texture.
+	Texture SurfaceTexture
+
+	// Suboptimal indicates the surface configuration is suboptimal but usable.
+	// Consider reconfiguring the surface at a convenient time.
+	Suboptimal bool
+}

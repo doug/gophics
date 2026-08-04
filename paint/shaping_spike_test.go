@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/doug/gg/text"
+	"github.com/doug/gossamer/internal/gfx/gg/text"
 
 	"github.com/doug/gossamer/geom"
 )

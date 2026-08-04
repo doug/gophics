@@ -1,0 +1,104 @@
+//go:build !rust && !(js && wasm)
+
+package wgpu
+
+import (
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+	"github.com/doug/gossamer/internal/gfx/wgpu/core"
+)
+
+// SetTestRequiredVertexBuffers sets the requiredVertexBuffers field for testing.
+// This method is only available in test builds.
+func (p *RenderPipeline) SetTestRequiredVertexBuffers(count uint32) {
+	p.requiredVertexBuffers = count
+}
+
+// TestRef returns the ResourceRef for a RenderPipeline (testing only).
+func (p *RenderPipeline) TestRef() *core.ResourceRef { return p.ref }
+
+// TestRef returns the ResourceRef for a ComputePipeline (testing only).
+func (p *ComputePipeline) TestRef() *core.ResourceRef { return p.ref }
+
+// TestRef returns the ResourceRef for a BindGroup (testing only).
+func (g *BindGroup) TestRef() *core.ResourceRef { return g.ref }
+
+// TestTrackedRefs returns the tracked refs of a CommandBuffer (testing only).
+func (cb *CommandBuffer) TestTrackedRefs() []*core.ResourceRef { return cb.trackedRefs }
+
+// TestTrackedRefs returns the tracked refs of a CommandEncoder (testing only).
+func (e *CommandEncoder) TestTrackedRefs() []*core.ResourceRef { return e.trackedRefs }
+
+// TestHALEncoder returns the HAL encoder reference on a CommandBuffer (testing only).
+func (cb *CommandBuffer) TestHALEncoder() interface{} { return cb.halEncoder }
+
+// TestCmdEncoderPoolSize returns the number of free encoders in the device's pool (testing only).
+// Returns -1 if no pool is configured.
+func (d *Device) TestCmdEncoderPoolSize() int {
+	if d.cmdEncoderPool == nil {
+		return -1
+	}
+	d.cmdEncoderPool.mu.Lock()
+	defer d.cmdEncoderPool.mu.Unlock()
+	return len(d.cmdEncoderPool.free)
+}
+
+// TestReleased returns true if the buffer has been released (testing only).
+func (b *Buffer) TestReleased() bool {
+	if b.released == nil {
+		return false
+	}
+	return b.released.Load()
+}
+
+// TestDestroyQueue returns the device's DestroyQueue (testing only).
+func (d *Device) TestDestroyQueue() *core.DestroyQueue {
+	return d.destroyQueue()
+}
+
+// TestResourceCounts returns resource counts from the global hub (testing only).
+func (d *Device) TestResourceCounts() map[string]uint64 {
+	return core.GetGlobal().Stats()
+}
+
+// TestBindGroupReleased returns true if the bind group has been released (testing only).
+func (g *BindGroup) TestBindGroupReleased() bool {
+	if g.released == nil {
+		return false
+	}
+	return g.released.Load()
+}
+
+// SetTestBindGroupLayouts sets the bindGroupLayouts field on a RenderPipeline for testing.
+func (p *RenderPipeline) SetTestBindGroupLayouts(layouts []*BindGroupLayout) {
+	p.bindGroupLayouts = layouts
+	p.bindGroupCount = uint32(len(layouts))
+}
+
+// SetTestBindGroupLayouts sets the bindGroupLayouts field on a ComputePipeline for testing.
+func (p *ComputePipeline) SetTestBindGroupLayouts(layouts []*BindGroupLayout) {
+	p.bindGroupLayouts = layouts
+	p.bindGroupCount = uint32(len(layouts))
+}
+
+// SetTestEntries sets the entries field on a BindGroupLayout for testing.
+func (l *BindGroupLayout) SetTestEntries(entries []gputypes.BindGroupLayoutEntry) {
+	l.entries = entries
+}
+
+// SetTestLayout sets the layout field on a BindGroup for testing.
+func (g *BindGroup) SetTestLayout(layout *BindGroupLayout) {
+	g.layout = layout
+}
+
+// SetTestStripIndexFormat sets the stripIndexFormat field on a RenderPipeline for testing.
+// Pass nil for non-strip topologies, or a pointer to the expected IndexFormat for strip topologies.
+func (p *RenderPipeline) SetTestStripIndexFormat(format *IndexFormat) {
+	p.stripIndexFormat = format
+}
+
+// TestMaintainAfterIdle exposes the private maintainAfterIdle for targeted coverage tests.
+func (d *Device) TestMaintainAfterIdle() { d.maintainAfterIdle() }
+
+// NewBareDeviceForTest returns a Device with no queue or HAL state (testing only).
+// Used to exercise nil-queue guard clauses in maintainAfterIdle.
+func NewBareDeviceForTest() *Device { return &Device{} }

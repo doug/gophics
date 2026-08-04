@@ -1,0 +1,61 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+struct Uniforms {
+    metal::float4x4 model;
+    metal::float4x4 view;
+    metal::float4x4 projection;
+};
+struct VertexOutput {
+    metal::float4 position;
+    metal::float3 world_pos;
+};
+
+struct vs_mainInput {
+    metal::float3 position [[attribute(0)]];
+};
+struct vs_mainOutput {
+    metal::float4 position [[position]];
+    metal::float3 world_pos [[user(loc0), center_perspective]];
+};
+vertex vs_mainOutput vs_main(
+  vs_mainInput varyings [[stage_in]]
+, constant Uniforms& uniforms [[user(fake0)]]
+) {
+    const auto position = varyings.position;
+    VertexOutput out = {};
+    metal::float4x4 _e3 = uniforms.model;
+    metal::float4 world = _e3 * metal::float4(position, 1.0);
+    metal::float4x4 _e9 = uniforms.projection;
+    metal::float4x4 _e12 = uniforms.view;
+    metal::float4 clip = (_e9 * _e12) * world;
+    out.position = clip;
+    out.world_pos = world.xyz;
+    VertexOutput _e19 = out;
+    const auto _tmp = _e19;
+    return vs_mainOutput { _tmp.position, _tmp.world_pos };
+}
+
+
+struct fs_mainInput {
+    metal::float3 world_pos [[user(loc0), center_perspective]];
+};
+struct fs_mainOutput {
+    metal::float4 member_1 [[color(0)]];
+};
+fragment fs_mainOutput fs_main(
+  fs_mainInput varyings_1 [[stage_in]]
+) {
+    const auto world_pos = varyings_1.world_pos;
+    metal::float3 color = (metal::normalize(world_pos) * 0.5) + metal::float3(0.5);
+    return fs_mainOutput { metal::float4(color, 1.0) };
+}

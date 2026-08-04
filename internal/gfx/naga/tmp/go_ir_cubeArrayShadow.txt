@@ -1,0 +1,19 @@
+=== TYPES ===
+[0] Image { dim: Cube, arrayed: true, class: Depth}
+[1] Sampler(Comparison)
+[2] Vector { size: Vec4, scalar: Float(4) }
+[3] Vector { size: Vec3, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "point_shadow_textures" type=[0] space=Handle binding=(0,4)
+[1] "point_shadow_textures_sampler" type=[1] space=Handle binding=(0,5)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "fragment" stage=Fragment function={name="fragment", args=0, exprs=13, stmts=4, locals=0}

@@ -1,0 +1,922 @@
+package gg
+
+import (
+	"fmt"
+	"hash/fnv"
+	"image"
+	"math"
+	"os"
+	"strings"
+
+	"github.com/doug/gossamer/internal/gfx/gg/text"
+)
+
+// forceTextMode lets a developer override text rendering globally via the
+// GOGPU_TEXT_MODE env var (vector|glyphmask|msdf|bitmap|aliased) to A/B the
+// rendering paths without a code change. Empty = no override.
+func forceTextMode() (TextMode, bool) {
+	switch os.Getenv("GOGPU_TEXT_MODE") {
+	case "vector":
+		return TextModeVector, true
+	case "glyphmask":
+		return TextModeGlyphMask, true
+	case "msdf":
+		return TextModeMSDF, true
+	case "bitmap":
+		return TextModeBitmap, true
+	case "aliased":
+		return TextModeAliased, true
+	default:
+		return TextModeAuto, false
+	}
+}
+
+// Align specifies text horizontal alignment.
+// This is a type alias for text.Alignment, provided for fogleman/gg compatibility.
+type Align = text.Alignment
+
+// Alignment constants re-exported from the text package for convenience.
+const (
+	AlignLeft   = text.AlignLeft
+	AlignCenter = text.AlignCenter
+	AlignRight  = text.AlignRight
+)
+
+// SetFont sets the current font face for text drawing.
+// The face should be created from a FontSource.
+//
+// Example:
+//
+//	source, _ := text.NewFontSourceFromFile("font.ttf")
+//	face := source.Face(12.0)
+//	ctx.SetFont(face)
+func (c *Context) SetFont(face text.Face) {
+	c.face = face
+}
+
+// Font returns the current font face.
+// Returns nil if no font has been set.
+func (c *Context) Font() text.Face {
+	return c.face
+}
+
+// DrawString draws text at position (x, y) where y is the baseline.
+// If no font has been set with SetFont, this function does nothing.
+//
+// If a GPU accelerator is registered and supports text rendering (implements
+// GPUTextAccelerator), the text is rendered via the GPU MSDF pipeline.
+// The CTM (Current Transform Matrix) is passed to the GPU so that Scale,
+// Rotate, and Skew transforms affect text rendering, not just position.
+// Otherwise, the CPU text pipeline is used with transform-aware rendering:
+//   - Translation-only: bitmap fast path (zero quality loss)
+//   - Uniform scale ≤256px: bitmap at device size (Strategy A, Skia pattern)
+//   - Everything else: glyph outlines as vector paths (Strategy B, Vello pattern)
+//
+// The baseline is the line on which most letters sit. Characters with
+// descenders (like 'g', 'j', 'p', 'q', 'y') extend below the baseline.
+func (c *Context) DrawString(s string, x, y float64) {
+	if c.face == nil {
+		return
+	}
+
+	// Track damage for partial present (ADR-021 Phase 5).
+	// Text bounding box: baseline at y, ascent above, descent below.
+	if c.damageTrackingEnabled {
+		w, _ := text.Measure(s, c.face)
+		m := c.face.Metrics()
+		c.trackDamage(image.Rect(
+			int(x), int(y-m.Ascent),
+			int(math.Ceil(x+w))+1, int(math.Ceil(y+m.Descent))+1,
+		))
+	}
+
+	// Set GPU scissor rect for rectangular clips.
+	defer c.setGPUClipRect()()
+
+	switch c.selectTextStrategy() {
+	case TextModeGlyphMask:
+		// Try GPU glyph mask (Tier 6) first; fall back to MSDF, then CPU.
+		if c.tryGPUGlyphMaskText(s, x, y) {
+			return
+		}
+		if c.tryGPUText(s, x, y) {
+			return
+		}
+		c.drawStringCPU(s, x, y)
+	case TextModeAliased:
+		// Aliased text through glyph mask pipeline with binary rasterization.
+		// Same Tier 6 atlas + GPU path, but NoAAFiller instead of AnalyticFiller.
+		if c.tryGPUGlyphMaskTextAliased(s, x, y) {
+			return
+		}
+		// CPU fallback: per-glyph NoAAFiller rasterization (binary 0/255 masks).
+		c.drawStringCPUAliased(s, x, y)
+	case TextModeMSDF:
+		// Try GPU MSDF first; fall back to CPU if unavailable.
+		if c.tryGPUText(s, x, y) {
+			return
+		}
+		c.drawStringCPU(s, x, y)
+	case TextModeVector:
+		// Vector text is rendered as glyph outline paths through the normal
+		// fill pipeline (doFill). This routes through GPU stencil+cover when
+		// a SurfaceTarget is active, or CPU when standalone. No explicit
+		// flush here — doFill() manages GPU/CPU routing and any necessary
+		// flush internally. An explicit flush would create a mid-frame
+		// render pass with LoadOpClear, wiping previously drawn content.
+		c.drawStringAsOutlines(s, x, y)
+	case TextModeBitmap:
+		// Skip GPU entirely, use CPU pipeline directly.
+		c.flushGPUAccelerator()
+		c.drawStringCPU(s, x, y)
+	default: // TextModeAuto — current behavior
+		// ADR-027: CJK ≤64px → prefer Tier 6 (bitmap) over MSDF.
+		// MSDF at 64px reference produces stroke fusion on dense CJK characters.
+		if c.isCJKText(s) && c.glyphMaskDeviceSize() <= glyphMaskMaxSizeCJK {
+			if c.tryGPUGlyphMaskText(s, x, y) {
+				return
+			}
+		}
+		if c.tryGPUText(s, x, y) {
+			return
+		}
+		c.drawStringCPU(s, x, y)
+	}
+}
+
+// DrawShapedGlyphs renders pre-shaped glyphs through the GPU text pipeline
+// without re-shaping. This implements the ADR-022 "shape once" guarantee:
+// glyphs are shaped at scene recording time, then rendered here with stored
+// positions. Falls back to DrawString (re-shaping) if the GPU accelerator
+// doesn't implement GPUShapedTextAccelerator.
+//
+// Enterprise pattern: matches Skia drawTextBlob, Vello draw_glyphs.
+func (c *Context) DrawShapedGlyphs(glyphs []text.ShapedGlyph, face text.Face, x, y float64) {
+	if face == nil || len(glyphs) == 0 {
+		return
+	}
+
+	defer c.setGPUClipRect()()
+
+	// TextModeVector opts out of the glyph-mask accelerator and renders the
+	// pre-shaped glyphs as vector outlines (same glyph.X positions). Other
+	// modes need the original string to re-render, which we don't have here.
+	// The GOGPU_TEXT_MODE=vector env override also routes here.
+	mode := c.textMode
+	if m, ok := forceTextMode(); ok {
+		mode = m
+	}
+	if mode == TextModeVector {
+		c.drawShapedGlyphsAsOutlines(glyphs, face, x, y)
+		return
+	}
+
+	col := FromColor(c.currentColor())
+	target := c.gpuRenderTarget()
+
+	if rc := c.gpuCtxOps(); rc != nil {
+		if sta, ok := rc.(GPUShapedTextAccelerator); ok {
+			if sta.DrawShapedGlyphMaskText(target, face, glyphs, x, y, col, c.totalMatrix(), c.deviceScale) == nil {
+				return
+			}
+		}
+	}
+
+	a := Accelerator()
+	if a != nil {
+		if sta, ok := a.(GPUShapedTextAccelerator); ok {
+			if sta.DrawShapedGlyphMaskText(target, face, glyphs, x, y, col, c.totalMatrix(), c.deviceScale) == nil {
+				return
+			}
+		}
+	}
+
+	// Fallback: reconstruct string is not possible from glyphs,
+	// so render each glyph outline through the fill pipeline.
+	c.drawShapedGlyphsAsOutlines(glyphs, face, x, y)
+}
+
+// drawShapedGlyphsAsOutlines renders pre-shaped glyphs as vector outlines.
+// CPU fallback when GPU shaped text is unavailable.
+// ADR-054: uses ExtractOutlineHintedVar to apply gvar deltas for variable fonts.
+func (c *Context) drawShapedGlyphsAsOutlines(glyphs []text.ShapedGlyph, face text.Face, x, y float64) {
+	source := face.Source()
+	if source == nil {
+		return
+	}
+
+	parsed := source.Parsed()
+	extractor := text.NewOutlineExtractor()
+	variations := face.Variations()
+
+	outlineFunc := func(gid text.GlyphID) *text.GlyphOutline {
+		outline, err := extractor.ExtractOutlineHintedVar(parsed, gid, face.Size(), text.HintingNone, variations)
+		if err != nil {
+			return nil
+		}
+		return outline
+	}
+
+	for _, glyph := range glyphs {
+		outline := outlineFunc(glyph.GID)
+		if outline == nil || outline.IsEmpty() {
+			continue
+		}
+
+		glyphX := x + glyph.X
+		glyphY := y + glyph.Y
+		path := NewPath()
+		for _, seg := range outline.Segments {
+			switch seg.Op {
+			case text.OutlineOpMoveTo:
+				path.MoveTo(glyphX+float64(seg.Points[0].X), glyphY+float64(seg.Points[0].Y))
+			case text.OutlineOpLineTo:
+				path.LineTo(glyphX+float64(seg.Points[0].X), glyphY+float64(seg.Points[0].Y))
+			case text.OutlineOpQuadTo:
+				path.QuadraticTo(
+					glyphX+float64(seg.Points[0].X), glyphY+float64(seg.Points[0].Y),
+					glyphX+float64(seg.Points[1].X), glyphY+float64(seg.Points[1].Y))
+			case text.OutlineOpCubicTo:
+				path.CubicTo(
+					glyphX+float64(seg.Points[0].X), glyphY+float64(seg.Points[0].Y),
+					glyphX+float64(seg.Points[1].X), glyphY+float64(seg.Points[1].Y),
+					glyphX+float64(seg.Points[2].X), glyphY+float64(seg.Points[2].Y))
+			}
+		}
+		c.SetFillRule(FillRuleNonZero)
+		_ = c.FillPath(path)
+	}
+}
+
+// tryGPUText attempts to render text via the GPU MSDF pipeline.
+// The x, y coordinates are in user space (not pre-transformed by the CTM).
+// The CTM is passed to the GPU pipeline so it can apply the full transform
+// in the vertex shader, enabling correct scaling, rotation, and skew of text.
+// Returns true if GPU text rendering was successful (queued for batch render).
+func (c *Context) tryGPUText(s string, x, y float64) bool {
+	col := FromColor(c.currentColor())
+	target := c.gpuRenderTarget()
+	if rc := c.gpuCtxOps(); rc != nil {
+		return rc.DrawText(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
+	}
+	a := Accelerator()
+	if a == nil {
+		return false
+	}
+	c.warnGPUFallback("tryGPUText")
+	if !a.CanAccelerate(AccelText) {
+		return false
+	}
+	ta, ok := a.(GPUTextAccelerator)
+	if !ok {
+		return false
+	}
+	return ta.DrawText(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
+}
+
+// glyphMaskMaxSize is the maximum font size (in device pixels) for which
+// the glyph mask pipeline is preferred over MSDF in TextModeAuto.
+// Above this threshold, MSDF provides better quality per atlas byte.
+const glyphMaskMaxSize = 48.0
+
+// glyphMaskMaxSizeCJK is the extended threshold for CJK text (ADR-027).
+// CJK glyphs use bitmap (Tier 6) up to 64px because MSDF at 64px reference
+// produces stroke fusion on dense characters. No production engine uses
+// MSDF for CJK body text (Skia, Vello, Flutter all use bitmap/vector).
+const glyphMaskMaxSizeCJK = 64.0
+
+// tryGPUGlyphMaskText attempts to render text via the GPU glyph mask pipeline
+// (Tier 6). Glyphs are CPU-rasterized at the exact device pixel size into an
+// R8 alpha atlas, then drawn as textured quads by the GPU.
+// Returns true if text was successfully queued for glyph mask rendering.
+func (c *Context) tryGPUGlyphMaskText(s string, x, y float64) bool {
+	col := FromColor(c.currentColor())
+	target := c.gpuRenderTarget()
+	if rc := c.gpuCtxOps(); rc != nil {
+		return rc.DrawGlyphMaskText(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
+	}
+	a := Accelerator()
+	if a == nil {
+		return false
+	}
+	c.warnGPUFallback("tryGPUGlyphMaskText")
+	gma, ok := a.(GPUGlyphMaskAccelerator)
+	if !ok {
+		return false
+	}
+	return gma.DrawGlyphMaskText(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
+}
+
+// tryGPUGlyphMaskTextAliased attempts to render aliased text via the GPU glyph
+// mask pipeline. Same Tier 6 pipeline but with binary (0/255) rasterization.
+// Returns true if text was successfully queued for aliased glyph mask rendering.
+func (c *Context) tryGPUGlyphMaskTextAliased(s string, x, y float64) bool {
+	col := FromColor(c.currentColor())
+	target := c.gpuRenderTarget()
+	if rc := c.gpuCtxOps(); rc != nil {
+		return rc.DrawGlyphMaskTextAliased(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
+	}
+	a := Accelerator()
+	if a == nil {
+		return false
+	}
+	ata, ok := a.(GPUAliasedTextAccelerator)
+	if !ok {
+		return false
+	}
+	return ata.DrawGlyphMaskTextAliased(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
+}
+
+// selectTextStrategy returns the effective text rendering strategy.
+//
+// When TextModeAuto, the strategy is selected based on the current
+// transformation matrix and font size:
+//   - Horizontal text (no rotation/skew) at size < 48px: GlyphMask (Tier 6)
+//     if a GPUGlyphMaskAccelerator is registered.
+//   - Everything else: falls through to TextModeAuto (MSDF -> CPU).
+//
+// Explicit modes (MSDF, Vector, Bitmap, GlyphMask) are returned as-is.
+func (c *Context) selectTextStrategy() TextMode {
+	if m, ok := forceTextMode(); ok {
+		return m
+	}
+	if c.textMode != TextModeAuto {
+		return c.textMode
+	}
+	if c.shouldUseGlyphMask() {
+		return TextModeGlyphMask
+	}
+	return TextModeAuto
+}
+
+// shouldUseGlyphMask returns true when auto-selection should prefer glyph
+// mask rendering (Tier 6). Conditions: GPU with glyph mask support, horizontal
+// matrix (no rotation/skew), font size in device pixels <= glyphMaskMaxSize.
+func (c *Context) shouldUseGlyphMask() bool {
+	a := Accelerator()
+	if a == nil {
+		return false
+	}
+	if _, ok := a.(GPUGlyphMaskAccelerator); !ok {
+		return false
+	}
+
+	// Check if the matrix is horizontal-only (no rotation or skew).
+	// Matrix [A B C; D E F]: B == 0 && D == 0 means no rotation/skew.
+	m := c.matrix
+	if m.B != 0 || m.D != 0 {
+		return false
+	}
+
+	if c.face == nil {
+		return false
+	}
+
+	return c.glyphMaskDeviceSize() <= glyphMaskMaxSize
+}
+
+// isCJKText checks the first rune of text for CJK script (ADR-027).
+func (c *Context) isCJKText(s string) bool {
+	for _, r := range s {
+		return text.IsCJKRune(r)
+	}
+	return false
+}
+
+// glyphMaskDeviceSize returns the effective font size in device pixels,
+// accounting for deviceScale and the Y scale component of the matrix.
+func (c *Context) glyphMaskDeviceSize() float64 {
+	deviceSize := c.face.Size() * c.deviceScale
+	absScale := c.matrix.E
+	if absScale < 0 {
+		absScale = -absScale
+	}
+	if absScale != 0 {
+		deviceSize *= absScale
+	}
+	return deviceSize
+}
+
+// DrawStringAnchored draws text with an anchor point.
+// The anchor point is specified by ax and ay, which are in the range [0, 1].
+//
+//	(0, 0) = top-left
+//	(0.5, 0.5) = center
+//	(1, 1) = bottom-right
+//
+// The text is positioned so that the anchor point is at (x, y).
+func (c *Context) DrawStringAnchored(s string, x, y, ax, ay float64) {
+	if c.face == nil {
+		return
+	}
+
+	// Measure the text and calculate offset based on anchor.
+	// The anchor maps linearly within the text bounding box:
+	//   ay=0 → y is the top of the text (baseline = y + ascent)
+	//   ay=0.5 → y is the vertical center (baseline = y + ascent - h/2)
+	//   ay=1 → y is the bottom (baseline = y + ascent - h)
+	// Formula: baseline = y + ascent - ay * h
+	// where h = ascent + descent (visual bounding box, no lineGap).
+	w, _ := text.Measure(s, c.face)
+	metrics := c.face.Metrics()
+	h := metrics.Ascent + metrics.Descent
+	x -= w * ax
+	y = y + metrics.Ascent - ay*h
+
+	// Delegate to DrawString which handles TextMode routing.
+	c.DrawString(s, x, y)
+}
+
+// MeasureString returns the dimensions of text in pixels.
+// Returns (width, height) where:
+//   - width is the horizontal advance of the text
+//   - height is the line height (ascent + descent + line gap)
+//
+// If no font has been set, returns (0, 0).
+func (c *Context) MeasureString(s string) (w, h float64) {
+	if c.face == nil {
+		return 0, 0
+	}
+	return text.Measure(s, c.face)
+}
+
+// LoadFontFace loads a font from a file and sets it as the current font.
+// The size is specified in points.
+//
+// Deprecated: Use text.NewFontSourceFromFile and SetFont instead.
+// This method is provided for convenience and backward compatibility.
+//
+// Example (new way):
+//
+//	source, err := text.NewFontSourceFromFile("font.ttf")
+//	if err != nil {
+//	    return err
+//	}
+//	face := source.Face(12.0)
+//	ctx.SetFont(face)
+func (c *Context) LoadFontFace(path string, points float64) error {
+	source, err := text.NewFontSourceFromFile(path)
+	if err != nil {
+		return err
+	}
+	c.face = source.Face(points)
+	return nil
+}
+
+// WordWrap wraps text to fit within the given width using word boundaries.
+// Returns a slice of strings, one per wrapped line.
+// If no font face is set, returns the input string as a single-element slice.
+//
+// This method is compatible with fogleman/gg's WordWrap.
+func (c *Context) WordWrap(s string, w float64) []string {
+	if c.face == nil {
+		return []string{s}
+	}
+	results := text.WrapText(s, c.face, w, text.WrapWord)
+	lines := make([]string, len(results))
+	for i, r := range results {
+		lines[i] = r.Text
+	}
+	return lines
+}
+
+// MeasureMultilineString measures text that may contain newlines.
+// The lineSpacing parameter is a multiplier for the font's natural line height
+// (1.0 = normal spacing, 1.5 = 50% extra space between lines).
+// Returns (width, height) where width is the maximum line width and height
+// is the total height of all lines with the given line spacing.
+// If no font face is set, returns (0, 0).
+//
+// This method is compatible with fogleman/gg's MeasureMultilineString.
+func (c *Context) MeasureMultilineString(s string, lineSpacing float64) (width, height float64) {
+	if c.face == nil {
+		return 0, 0
+	}
+	lines := splitLines(s)
+	metrics := c.face.Metrics()
+	fh := metrics.LineHeight()
+	for _, line := range lines {
+		lw, _ := text.Measure(line, c.face)
+		if lw > width {
+			width = lw
+		}
+	}
+	// Visual height: ascent above first baseline + (n-1) inter-line gaps + descent below last baseline.
+	n := float64(len(lines))
+	height = (n-1)*fh*lineSpacing + metrics.Ascent + metrics.Descent
+	return
+}
+
+// DrawStringWrapped wraps text to the given width and draws it with alignment.
+// The text is positioned relative to (x, y) using the anchor (ax, ay):
+//
+//	(0, 0) = top-left of the text block is at (x, y)
+//	(0.5, 0.5) = center of the text block is at (x, y)
+//	(1, 1) = bottom-right of the text block is at (x, y)
+//
+// The lineSpacing parameter multiplies the font's natural line height
+// (1.0 = normal, 1.5 = 50% extra space between lines).
+// The align parameter controls horizontal alignment within the wrapped width.
+// If no font face is set, this method does nothing.
+//
+// This method is compatible with fogleman/gg's DrawStringWrapped.
+func (c *Context) DrawStringWrapped(s string, x, y, ax, ay, width, lineSpacing float64, align Align) {
+	if c.face == nil {
+		return
+	}
+	lines := c.WordWrap(s, width)
+	if len(lines) == 0 {
+		return
+	}
+
+	metrics := c.face.Metrics()
+	fh := metrics.LineHeight()
+
+	// Visual height of the text block:
+	// - (n-1) inter-line gaps of fh*lineSpacing
+	// - ascent above first baseline + descent below last baseline
+	n := float64(len(lines))
+	h := (n-1)*fh*lineSpacing + metrics.Ascent + metrics.Descent
+
+	// Adjust starting position by anchor (bounding-box model):
+	//   ay=0 → y is the top of the block (first baseline = y + ascent)
+	//   ay=0.5 → y is the vertical center
+	//   ay=1 → y is the bottom of the block
+	// Formula: first_baseline = y + ascent - ay * h
+	x -= ax * width
+	y = y + metrics.Ascent - ay*h
+
+	// Adjust x base for alignment
+	switch align {
+	case text.AlignCenter:
+		x += width / 2
+	case text.AlignRight:
+		x += width
+	}
+
+	for _, line := range lines {
+		drawX := x
+		switch align {
+		case text.AlignCenter:
+			lw, _ := c.MeasureString(line)
+			drawX = x - lw/2
+		case text.AlignRight:
+			lw, _ := c.MeasureString(line)
+			drawX = x - lw
+		}
+		c.DrawString(line, drawX, y)
+		y += fh * lineSpacing
+	}
+}
+
+// drawStringCPU selects the optimal CPU text rendering strategy based on the CTM.
+// Three-tier decision tree modeled after Skia (QR decomposition, 256px threshold)
+// and Cairo (three-matrix model):
+//
+//   - Tier 0: Translation-only → bitmap fast path (no quality loss)
+//   - Tier 1: Uniform positive scale ≤256px → bitmap at device size (Strategy A)
+//   - Tier 2: Everything else → glyph outlines as vector paths (Strategy B)
+func (c *Context) drawStringCPU(s string, x, y float64) {
+	m := c.matrix
+
+	// Tier 0: Translation-only → bitmap fast path (no quality loss).
+	if m.IsTranslationOnly() {
+		c.drawStringBitmap(s, x, y)
+		return
+	}
+
+	// Tier 1: Uniform positive scale ≤256px → bitmap at device size (Strategy A).
+	// Skia threshold: kSkSideTooBigForAtlas = 256.
+	// deviceSize here is in user-scaled units; drawStringScaled multiplies by
+	// c.deviceScale to get the physical pixel size for the face.
+	if m.B == 0 && m.D == 0 && m.A == m.E && m.A > 0 {
+		deviceSize := c.face.Size() * m.A
+		if deviceSize > 0 && deviceSize <= 256 {
+			c.drawStringScaled(s, x, y, deviceSize)
+			return
+		}
+	}
+
+	// Tier 2: Everything else → glyph outlines as paths (Strategy B, Vello pattern).
+	c.drawStringAsOutlines(s, x, y)
+}
+
+// drawStringBitmap renders text via the bitmap rasterizer at the transformed position.
+// This is the fast path for identity/translation-only CTMs where no quality loss occurs.
+func (c *Context) drawStringBitmap(s string, x, y float64) {
+	p := c.totalMatrix().TransformPoint(Pt(x, y))
+	c.flushGPUAccelerator()
+	face := c.face
+	if c.deviceScale != 1.0 {
+		if source := c.face.Source(); source != nil {
+			face = source.Face(c.face.Size() * c.deviceScale)
+		}
+	}
+	text.Draw(c.pixmap, s, face, p.X, p.Y, c.currentColor())
+}
+
+// drawStringScaled renders text via bitmap rasterization at the device pixel size.
+// Strategy A: Create a face at the scaled size, render at the transformed position.
+// Falls back to drawStringBitmap if the face doesn't have a FontSource (e.g. MultiFace).
+func (c *Context) drawStringScaled(s string, x, y float64, deviceSize float64) {
+	source := c.face.Source()
+	if source == nil {
+		c.drawStringBitmap(s, x, y) // MultiFace fallback
+		return
+	}
+	// Scale deviceSize by deviceScale for actual physical pixel rendering.
+	deviceFace := source.Face(deviceSize * c.deviceScale)
+	p := c.totalMatrix().TransformPoint(Pt(x, y))
+	c.flushGPUAccelerator()
+	text.Draw(c.pixmap, s, deviceFace, p.X, p.Y, c.currentColor())
+}
+
+// drawStringCPUAliased renders text with binary (non-anti-aliased) coverage on CPU.
+// Uses GlyphMaskRasterizer.RasterizeAliased (NoAAFiller) to produce per-glyph R8
+// masks with only 0 or 255 values, then composites via draw.DrawMask.
+//
+// For rotation/skew, routes through drawStringAsOutlines with AA disabled so the
+// normal fill pipeline uses NoAAFiller for vector outlines.
+func (c *Context) drawStringCPUAliased(s string, x, y float64) {
+	m := c.matrix
+
+	// Non-trivial transforms: route through vector outlines with AA disabled.
+	// IsTranslationOnly = identity + translation.
+	// Uniform positive scale: B=0, D=0, A=E, A>0.
+	if !m.IsTranslationOnly() && !(m.B == 0 && m.D == 0 && m.A == m.E && m.A > 0) {
+		saved := c.paint.Antialias
+		c.paint.Antialias = false
+		c.drawStringAsOutlines(s, x, y)
+		c.paint.Antialias = saved
+		return
+	}
+
+	p := c.totalMatrix().TransformPoint(Pt(x, y))
+	c.flushGPUAccelerator()
+
+	face := c.face
+	if c.deviceScale != 1.0 {
+		if source := c.face.Source(); source != nil {
+			face = source.Face(c.face.Size() * c.deviceScale)
+		}
+	}
+
+	// Uniform scale: create device-size face for crisp rendering.
+	if !m.IsTranslationOnly() && m.B == 0 && m.D == 0 && m.A == m.E && m.A > 0 {
+		deviceSize := c.face.Size() * m.A
+		if source := c.face.Source(); source != nil {
+			face = source.Face(deviceSize * c.deviceScale)
+		}
+	}
+
+	text.DrawAliased(c.pixmap, s, face, p.X, p.Y, c.currentColor())
+}
+
+// StrokeString strokes text outlines at position (x, y) where y is the baseline.
+// The stroke width, cap, join, and dash come from the current paint state.
+//
+// For thick strokes (lineWidth > 2), use [Context.SetLineJoin] with [LineJoinRound]
+// to avoid miter spikes at glyph segment junctions. Glyph outlines contain many
+// short curve segments, and the default [LineJoinMiter] produces sharp spikes at
+// each junction. All enterprise text renderers (Skia, Cairo, Qt) recommend or
+// default to round joins for stroked text.
+//
+// Unlike DrawString, StrokeString always uses vector outlines regardless of the
+// current TextMode — MSDF and glyph mask pipelines cannot produce stroked text.
+// If no font has been set with SetFont, this function does nothing.
+//
+// Enterprise pattern: matches HTML5 Canvas strokeText(), Cairo show_text() + stroke(),
+// Skia SkPaint::kStroke_Style + drawTextBlob.
+func (c *Context) StrokeString(s string, x, y float64) {
+	if c.face == nil {
+		return
+	}
+	path := c.textOutlinePath(s, x, y)
+	if path == nil {
+		return
+	}
+
+	// User matrix only — doStroke() applies deviceMatrix via deviceSpacePath().
+	transformedPath := path.Transform(c.matrix)
+	c.trackDamage(transformedPath.Bounds())
+
+	// Set GPU scissor rect for rectangular clips.
+	defer c.setGPUClipRect()()
+
+	// Save and restore context path — doStroke uses c.path.
+	savedPath := c.path
+	c.path = transformedPath
+	_ = c.doStroke()
+	c.path = savedPath
+}
+
+// StrokeStringAnchored strokes text outlines with an anchor point.
+// The anchor point is specified by ax and ay, which are in the range [0, 1].
+//
+//	(0, 0) = top-left
+//	(0.5, 0.5) = center
+//	(1, 1) = bottom-right
+//
+// The text is positioned so that the anchor point is at (x, y).
+// The stroke width, cap, join, and dash come from the current paint state.
+// Always uses vector outlines regardless of TextMode.
+func (c *Context) StrokeStringAnchored(s string, x, y, ax, ay float64) {
+	if c.face == nil {
+		return
+	}
+
+	w, _ := text.Measure(s, c.face)
+	metrics := c.face.Metrics()
+	h := metrics.Ascent + metrics.Descent
+	x -= w * ax
+	y = y + metrics.Ascent - ay*h
+
+	c.StrokeString(s, x, y)
+}
+
+// TextPath returns a user-space Path containing the vector outlines of text s
+// positioned at (x, y) where y is the baseline. The returned path can be filled,
+// stroked, or used for hit-testing with the caller's own pipeline.
+//
+// Returns nil if no font is set or the text produces no outlines.
+//
+// Enterprise pattern: matches HTML5 Canvas addText() (proposed), Cairo text_path(),
+// Skia SkTextBlob → SkPath (via getPath).
+func (c *Context) TextPath(s string, x, y float64) *Path {
+	if c.face == nil {
+		return nil
+	}
+	return c.textOutlinePath(s, x, y)
+}
+
+// textOutlinePath builds a user-space Path containing glyph outlines for text s
+// at user-space position (x, y). Uses glyph cache for efficiency.
+// Returns nil if the font has no FontSource (e.g. MultiFace) or the text
+// produces no outlines.
+func (c *Context) textOutlinePath(s string, x, y float64) *Path {
+	source := c.face.Source()
+	if source == nil {
+		return nil
+	}
+
+	extractor := c.ensureOutlineExtractor()
+	parsed := source.Parsed()
+	fontSize := c.face.Size()
+
+	// Use glyph cache to avoid repeated outline extraction.
+	cache := c.ensureGlyphCache()
+	fontID := computeTextFontID(source)
+	var sizeKey int16
+	switch {
+	case fontSize < 0:
+		sizeKey = 0
+	case fontSize > 32767:
+		sizeKey = 32767
+	default:
+		sizeKey = int16(fontSize) //nolint:gosec // bounds checked above
+	}
+
+	// ADR-054: pass variations for variable font gvar deltas (enterprise invariant).
+	variations := c.face.Variations()
+	varHash := text.VariationHash(variations)
+
+	path := NewPath()
+	hasContour := false
+
+	shaped := text.Shape(s, c.face)
+	for _, sg := range shaped {
+		cacheKey := text.OutlineCacheKey{
+			FontID:        fontID,
+			GID:           sg.GID,
+			Size:          sizeKey,
+			Hinting:       text.HintingNone,
+			VariationHash: varHash,
+		}
+		outline := cache.GetOrCreate(cacheKey, func() *text.GlyphOutline {
+			o, err := extractor.ExtractOutlineHintedVar(parsed, sg.GID, fontSize, text.HintingNone, variations)
+			if err != nil || o == nil || o.IsEmpty() {
+				return nil
+			}
+			return o
+		})
+		if outline == nil {
+			continue
+		}
+
+		gx := x + sg.X
+
+		for _, seg := range outline.Segments {
+			// sfnt.LoadGlyph returns Y-down coordinates (screen convention):
+			// Y=0 at baseline, Y<0 above baseline, Y>0 below baseline.
+			// So we ADD outlineY to baseline (no flip needed).
+			switch seg.Op {
+			case text.OutlineOpMoveTo:
+				if hasContour {
+					path.Close()
+				}
+				path.MoveTo(gx+float64(seg.Points[0].X), y+float64(seg.Points[0].Y))
+				hasContour = true
+			case text.OutlineOpLineTo:
+				path.LineTo(gx+float64(seg.Points[0].X), y+float64(seg.Points[0].Y))
+			case text.OutlineOpQuadTo:
+				path.QuadraticTo(
+					gx+float64(seg.Points[0].X), y+float64(seg.Points[0].Y),
+					gx+float64(seg.Points[1].X), y+float64(seg.Points[1].Y))
+			case text.OutlineOpCubicTo:
+				path.CubicTo(
+					gx+float64(seg.Points[0].X), y+float64(seg.Points[0].Y),
+					gx+float64(seg.Points[1].X), y+float64(seg.Points[1].Y),
+					gx+float64(seg.Points[2].X), y+float64(seg.Points[2].Y))
+			}
+		}
+	}
+	if hasContour {
+		path.Close()
+	}
+	if path.isEmpty() {
+		return nil
+	}
+	return path
+}
+
+// drawStringAsOutlines renders text by converting glyph vector outlines to a Path
+// and filling through the normal multi-tier pipeline (GPU → CoverageFiller → Analytic).
+// Strategy B (Vello pattern): handles rotation, non-uniform scale, shear, mirroring,
+// and extreme scales that exceed the bitmap threshold.
+//
+// Design: all glyphs are composed into ONE path for a single efficient fill call.
+// Outlines are built in user space, then path.Transform(CTM) converts to device space.
+// The device-space path is routed through doFill() so that GPU accelerator can render
+// it to the surface (stencil+cover) when SurfaceTarget is active, or CPU renders
+// to pixmap in standalone mode.
+func (c *Context) drawStringAsOutlines(s string, x, y float64) {
+	path := c.textOutlinePath(s, x, y)
+	if path == nil {
+		// MultiFace fallback: textOutlinePath returns nil when Source() is nil.
+		if c.face != nil && c.face.Source() == nil {
+			c.drawStringBitmap(s, x, y)
+		}
+		return
+	}
+
+	// User matrix only — doFill() applies deviceMatrix via deviceSpacePath().
+	transformedPath := path.Transform(c.matrix)
+
+	// Route through the normal fill pipeline (doFill) so GPU accelerator
+	// can render to the surface when SurfaceTarget is active. Without this,
+	// text rendered via renderer.Fill() goes to CPU pixmap which is never
+	// composited in zero-copy RenderDirect mode. (#184)
+	//
+	// Save and restore context path/paint state — doFill uses c.path and c.paint.
+	savedPath := c.path
+	savedFillRule := c.paint.FillRule
+	c.path = transformedPath
+	c.paint.FillRule = FillRuleNonZero
+	_ = c.doFill()
+	c.path = savedPath
+	c.paint.FillRule = savedFillRule
+}
+
+// ensureOutlineExtractor lazily initializes the outline extractor.
+func (c *Context) ensureOutlineExtractor() *text.OutlineExtractor {
+	if c.outlineExtractor == nil {
+		c.outlineExtractor = text.NewOutlineExtractor()
+	}
+	return c.outlineExtractor
+}
+
+// ensureGlyphCache lazily initializes the glyph cache reference.
+// Uses the global shared cache to benefit from cross-Context reuse.
+func (c *Context) ensureGlyphCache() *text.GlyphCache {
+	if c.glyphCache == nil {
+		c.glyphCache = text.GetGlobalGlyphCache()
+	}
+	return c.glyphCache
+}
+
+// computeTextFontID generates a stable hash identifier for a font source.
+// Uses FNV-1a hash of font name and glyph count as a lightweight fingerprint.
+// Same algorithm as internal/gpu/gpu_text.go:computeFontID.
+func computeTextFontID(source *text.FontSource) uint64 {
+	if source == nil {
+		return 0
+	}
+	h := fnv.New64a()
+	_, _ = fmt.Fprintf(h, "%s:%d", source.Name(), source.Parsed().NumGlyphs())
+	return h.Sum64()
+}
+
+// fontHeight returns the font's natural line height (ascent + descent + line gap).
+func (c *Context) fontHeight() float64 {
+	if c.face == nil {
+		return 0
+	}
+	return c.face.Metrics().LineHeight()
+}
+
+// splitLines splits text by line breaks, normalizing \r\n and \r to \n.
+func splitLines(s string) []string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.Split(s, "\n")
+}

@@ -1,0 +1,16 @@
+=== TYPES ===
+[0] Vector { size: Vec4, scalar: Float(4) }
+[1] Struct "FragmentOutput" { members: [{ name: "output0", type: [0], offset: 0, binding: Location(0) interp=2/0}, { name: "output1", type: [0], offset: 16, binding: Location(0) interp=2/0}], span: 32 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Fragment function={name="main", args=0, exprs=11, stmts=3, locals=0}

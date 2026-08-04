@@ -1,0 +1,55 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 44
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_6 "main"
+               OpExecutionMode %_6 LocalSize 1 1 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeFloat 32
+         %_4 = OpTypeVector %_3 3
+         %_5 = OpTypeFunction %_2
+         %_8 = OpConstant %_3 1065353216
+         %_9 = OpConstant %_3 1073741824
+         %_11 = OpConstant %_3 1077936128
+         %_12 = OpConstant %_3 1082130432
+         %_24 = OpTypeBool
+         %_25 = OpConstantTrue %_24
+         %_27 = OpConstant %_3 0
+         %_30 = OpTypeInt 32 1
+         %_31 = OpConstant %_30 20
+         %_32 = OpConstant %_30 10
+         %_6 = OpFunction %_2 None %_5
+         %_7 = OpLabel
+         %_10 = OpFMul %_3 %_8 %_9
+         %_13 = OpFMul %_3 %_11 %_12
+         %_14 = OpFAdd %_3 %_10 %_13
+         %_15 = OpFAdd %_3 %_8 %_9
+         %_16 = OpFSub %_3 %_11 %_12
+         %_17 = OpFMul %_3 %_15 %_16
+         %_18 = OpFDiv %_3 %_8 %_9
+         %_19 = OpFDiv %_3 %_11 %_12
+         %_20 = OpFSub %_3 %_18 %_19
+         %_21 = OpFAdd %_3 %_8 %_9
+         %_22 = OpFAdd %_3 %_21 %_11
+         %_23 = OpFMul %_3 %_22 %_12
+         %_26 = OpIsNormal %_3 %_25 %_9 %_8
+         %_28 = OpCompositeConstruct %_4 %_27 %_27 %_27
+         %_29 = OpULessThan %_24 %_8 %_9
+         %_33 = OpIsNormal %_30 %_29 %_31 %_32
+         %_34 = OpCompositeConstruct %_4 %_8 %_9 %_11
+         %_35 = OpCompositeConstruct %_4 %_12 %_11 %_9
+         %_36 = OpFMul %_4 %_34 %_35
+         %_37 = OpCompositeConstruct %_4 %_8 %_8 %_8
+         %_38 = OpFAdd %_4 %_36 %_37
+         %_39 = OpExtInst %_3 %_1 %_66 %_34
+         %_40 = OpDot %_3 %_34 %_35
+         %_41 = OpFMul %_3 %_39 %_40
+         %_42 = OpFAdd %_4 %_34 %_35
+         %_43 = OpExtInst %_4 %_1 %_69 %_42
+               OpReturn
+               OpFunctionEnd

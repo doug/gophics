@@ -1,0 +1,85 @@
+=== TYPES ===
+[0] Matrix { columns: Vec3, rows: Vec2, scalar: Float(4) }
+[1] Struct "Baz" { members: [{ name: "m", type: [0], offset: 0}], span: 24 }
+[2] Vector { size: Vec4, scalar: Sint(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "baz" type=[1] space=Uniform binding=(0,1)
+
+=== FUNCTIONS ===
+[0] "pattern1_local_var_vector"
+  args: []
+  result: None
+  locals: 1
+    [0] "vec0" type=[2] init=[4]
+  expressions: 10
+    [0] Literal(I32(1))
+    [1] Literal(I32(2))
+    [2] Literal(I32(3))
+    [3] Literal(I32(4))
+    [4] Compose { type: [2], components: [[0], [1], [2], [3]] }
+    [5] LocalVariable([0])
+    [6] AccessIndex { base: [5], index: 0 }
+    [7] Load { pointer: [6] }
+    [8] AccessIndex { base: [5], index: 1 }
+    [9] Load { pointer: [8] }
+  named_expressions:
+    [7] = "x"
+    [9] = "y"
+  body: 4 statements
+    Emit(4..5)
+    Emit(6..8)
+    Emit(8..10)
+    Return
+
+[1] "pattern2_storage_buffer_matrix"
+  args: []
+  result: None
+  locals: 0
+  expressions: 5
+    [0] GlobalVariable([0])
+    [1] AccessIndex { base: [0], index: 0 }
+    [2] AccessIndex { base: [1], index: 0 }
+    [3] AccessIndex { base: [2], index: 1 }
+    [4] Load { pointer: [3] }
+  named_expressions:
+    [4] = "l3_"
+  body: 4 statements
+    Emit(1..2)
+    Emit(2..3)
+    Emit(3..5)
+    Return
+
+[2] "pattern3_read_modify_write"
+  args: []
+  result: None
+  locals: 1
+    [0] "vec0" type=[2] init=[4]
+  expressions: 11
+    [0] Literal(I32(1))
+    [1] Literal(I32(2))
+    [2] Literal(I32(3))
+    [3] Literal(I32(4))
+    [4] Compose { type: [2], components: [[0], [1], [2], [3]] }
+    [5] LocalVariable([0])
+    [6] AccessIndex { base: [5], index: 1 }
+    [7] AccessIndex { base: [5], index: 1 }
+    [8] Load { pointer: [7] }
+    [9] Literal(I32(1))
+    [10] Binary { op: Add, left: [8], right: [9] }
+  named_expressions: {}
+  body: 6 statements
+    Emit(4..5)
+    Emit(6..7)
+    Emit(7..9)
+    Emit(10..11)
+    Store { pointer: [6], value: [10] }
+    Return
+
+=== ENTRY POINTS ===

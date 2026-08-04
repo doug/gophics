@@ -1,0 +1,66 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Scalar(Float, 4)
+[2] Array { base: [1], size: Constant(4), stride: 4 }
+[3] Scalar(Sint, 4)
+[4] Array { base: [3], size: Constant(3), stride: 4 }
+[5] Vector { size: Vec2, scalar: Float(4) }
+[6] Array { base: [5], size: Constant(2), stride: 8 }
+[7] Array { base: [0], size: Constant(4), stride: 4 }
+
+=== CONSTANTS ===
+[0] "DATA_SIZE" type=[0] init=Literal(Uint(8))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+[0] "sum_array"
+  args: [{ name: "arr", type: [2], binding: None}]
+  result: type=[1]
+  locals: 2
+    [0] "total" type=[1] init=[1]
+    [1] "i" type=[0] init=[3]
+  expressions: 16
+    [0] FunctionArgument(0)
+    [1] Literal(F32(0))
+    [2] LocalVariable([0])
+    [3] Literal(U32(0))
+    [4] LocalVariable([1])
+    [5] Load { pointer: [4] }
+    [6] Literal(U32(4))
+    [7] Binary { op: Less, left: [5], right: [6] }
+    [8] Load { pointer: [2] }
+    [9] Load { pointer: [4] }
+    [10] Access { base: [0], index: [9] }
+    [11] Binary { op: Add, left: [8], right: [10] }
+    [12] Load { pointer: [4] }
+    [13] Literal(U32(1))
+    [14] Binary { op: Add, left: [12], right: [13] }
+    [15] Load { pointer: [2] }
+  named_expressions:
+    [0] = "arr"
+  body: 3 statements
+    Loop
+      body:
+        Emit(5..6)
+        Emit(7..8)
+        If { condition: [7] }
+          accept:
+          reject:
+            Break
+        Block
+          Emit(8..12)
+          Store { pointer: [2], value: [11] }
+      continuing:
+        Emit(12..13)
+        Emit(14..15)
+        Store { pointer: [4], value: [14] }
+    Emit(15..16)
+    Return { value: [15] }
+
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=42, stmts=22, locals=2} workgroup_size=(1,1,1)

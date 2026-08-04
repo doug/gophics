@@ -1,0 +1,416 @@
+//go:build !rust && !(js && wasm)
+
+package wgpu
+
+import (
+	"testing"
+
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+)
+
+func TestBufferDescriptorToHAL(t *testing.T) {
+	tests := []struct {
+		name  string
+		desc  BufferDescriptor
+		check func(t *testing.T, desc *BufferDescriptor)
+	}{
+		{
+			name: "basic fields",
+			desc: BufferDescriptor{
+				Label: "test-buf",
+				Size:  1024,
+				Usage: BufferUsageVertex | BufferUsageCopyDst,
+			},
+			check: func(t *testing.T, desc *BufferDescriptor) {
+				halDesc := desc.toHAL()
+				if halDesc.Label != desc.Label {
+					t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+				}
+				if halDesc.Size != desc.Size {
+					t.Errorf("Size = %d, want %d", halDesc.Size, desc.Size)
+				}
+				if halDesc.Usage != desc.Usage {
+					t.Errorf("Usage = %v, want %v", halDesc.Usage, desc.Usage)
+				}
+				if halDesc.MappedAtCreation != desc.MappedAtCreation {
+					t.Errorf("MappedAtCreation = %v, want %v", halDesc.MappedAtCreation, desc.MappedAtCreation)
+				}
+			},
+		},
+		{
+			name: "mapped at creation",
+			desc: BufferDescriptor{
+				Label:            "mapped",
+				Size:             256,
+				Usage:            BufferUsageMapRead | BufferUsageCopyDst,
+				MappedAtCreation: true,
+			},
+			check: func(t *testing.T, desc *BufferDescriptor) {
+				halDesc := desc.toHAL()
+				if !halDesc.MappedAtCreation {
+					t.Error("MappedAtCreation should be true")
+				}
+			},
+		},
+		{
+			name: "zero values",
+			desc: BufferDescriptor{},
+			check: func(t *testing.T, desc *BufferDescriptor) {
+				halDesc := desc.toHAL()
+				if halDesc.Label != "" {
+					t.Errorf("Label = %q, want empty", halDesc.Label)
+				}
+				if halDesc.Size != 0 {
+					t.Errorf("Size = %d, want 0", halDesc.Size)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.check(t, &tt.desc)
+		})
+	}
+}
+
+func TestTextureDescriptorToHAL(t *testing.T) {
+	desc := TextureDescriptor{
+		Label:         "test-tex",
+		Size:          Extent3D{Width: 128, Height: 64, DepthOrArrayLayers: 1},
+		MipLevelCount: 4,
+		SampleCount:   1,
+		Format:        TextureFormatRGBA8Unorm,
+		Usage:         TextureUsageTextureBinding | TextureUsageCopyDst,
+		ViewFormats:   []TextureFormat{TextureFormatRGBA8Unorm},
+	}
+
+	halDesc := desc.toHAL()
+
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+	if halDesc.Size.Width != desc.Size.Width {
+		t.Errorf("Size.Width = %d, want %d", halDesc.Size.Width, desc.Size.Width)
+	}
+	if halDesc.Size.Height != desc.Size.Height {
+		t.Errorf("Size.Height = %d, want %d", halDesc.Size.Height, desc.Size.Height)
+	}
+	if halDesc.Size.DepthOrArrayLayers != desc.Size.DepthOrArrayLayers {
+		t.Errorf("Size.DepthOrArrayLayers = %d, want %d", halDesc.Size.DepthOrArrayLayers, desc.Size.DepthOrArrayLayers)
+	}
+	if halDesc.MipLevelCount != desc.MipLevelCount {
+		t.Errorf("MipLevelCount = %d, want %d", halDesc.MipLevelCount, desc.MipLevelCount)
+	}
+	if halDesc.SampleCount != desc.SampleCount {
+		t.Errorf("SampleCount = %d, want %d", halDesc.SampleCount, desc.SampleCount)
+	}
+	if halDesc.Format != desc.Format {
+		t.Errorf("Format = %v, want %v", halDesc.Format, desc.Format)
+	}
+	if halDesc.Usage != desc.Usage {
+		t.Errorf("Usage = %v, want %v", halDesc.Usage, desc.Usage)
+	}
+	if len(halDesc.ViewFormats) != len(desc.ViewFormats) {
+		t.Errorf("ViewFormats length = %d, want %d", len(halDesc.ViewFormats), len(desc.ViewFormats))
+	}
+}
+
+func TestSamplerDescriptorToHAL(t *testing.T) {
+	desc := SamplerDescriptor{
+		Label:       "test-sampler",
+		LodMinClamp: 0.0,
+		LodMaxClamp: 32.0,
+		Anisotropy:  16,
+	}
+
+	halDesc := desc.toHAL()
+
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+	if halDesc.LodMinClamp != desc.LodMinClamp {
+		t.Errorf("LodMinClamp = %f, want %f", halDesc.LodMinClamp, desc.LodMinClamp)
+	}
+	if halDesc.LodMaxClamp != desc.LodMaxClamp {
+		t.Errorf("LodMaxClamp = %f, want %f", halDesc.LodMaxClamp, desc.LodMaxClamp)
+	}
+	if halDesc.Anisotropy != desc.Anisotropy {
+		t.Errorf("Anisotropy = %d, want %d", halDesc.Anisotropy, desc.Anisotropy)
+	}
+}
+
+func TestShaderModuleDescriptorToHAL(t *testing.T) {
+	t.Run("WGSL source", func(t *testing.T) {
+		desc := ShaderModuleDescriptor{
+			Label: "wgsl-shader",
+			WGSL:  "@vertex fn main() -> @builtin(position) vec4f { return vec4f(0.0); }",
+		}
+		halDesc := desc.toHAL()
+		if halDesc.Label != desc.Label {
+			t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+		}
+		if halDesc.Source.WGSL != desc.WGSL {
+			t.Errorf("Source.WGSL = %q, want %q", halDesc.Source.WGSL, desc.WGSL)
+		}
+	})
+
+	t.Run("SPIRV source", func(t *testing.T) {
+		spirv := []uint32{0x07230203, 0x00010000}
+		desc := ShaderModuleDescriptor{
+			Label: "spirv-shader",
+			SPIRV: spirv,
+		}
+		halDesc := desc.toHAL()
+		if len(halDesc.Source.SPIRV) != len(spirv) {
+			t.Errorf("Source.SPIRV length = %d, want %d", len(halDesc.Source.SPIRV), len(spirv))
+		}
+	})
+}
+
+func TestCommandEncoderDescriptorToHAL(t *testing.T) {
+	desc := CommandEncoderDescriptor{Label: "test-encoder"}
+	halDesc := desc.toHAL()
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+}
+
+func TestBindGroupLayoutDescriptorToHAL(t *testing.T) {
+	desc := BindGroupLayoutDescriptor{
+		Label:   "test-bgl",
+		Entries: []BindGroupLayoutEntry{},
+	}
+	halDesc := desc.toHAL()
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+	if len(halDesc.Entries) != 0 {
+		t.Errorf("Entries length = %d, want 0", len(halDesc.Entries))
+	}
+}
+
+func TestTextureViewDescriptorToHAL(t *testing.T) {
+	desc := TextureViewDescriptor{
+		Label:           "test-view",
+		Format:          TextureFormatRGBA8Unorm,
+		BaseMipLevel:    1,
+		MipLevelCount:   3,
+		BaseArrayLayer:  0,
+		ArrayLayerCount: 1,
+	}
+	halDesc := desc.toHAL()
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+	if halDesc.Format != desc.Format {
+		t.Errorf("Format = %v, want %v", halDesc.Format, desc.Format)
+	}
+	if halDesc.BaseMipLevel != desc.BaseMipLevel {
+		t.Errorf("BaseMipLevel = %d, want %d", halDesc.BaseMipLevel, desc.BaseMipLevel)
+	}
+	if halDesc.MipLevelCount != desc.MipLevelCount {
+		t.Errorf("MipLevelCount = %d, want %d", halDesc.MipLevelCount, desc.MipLevelCount)
+	}
+}
+
+func TestComputePipelineDescriptorToHAL(t *testing.T) {
+	t.Run("basic fields", func(t *testing.T) {
+		desc := ComputePipelineDescriptor{
+			Label:      "compute-pipe",
+			EntryPoint: "main",
+			// Module is nil -- toHAL should handle this gracefully.
+		}
+		halDesc := desc.toHAL()
+		if halDesc.Label != desc.Label {
+			t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+		}
+	})
+
+	t.Run("constants passthrough", func(t *testing.T) {
+		constants := map[string]float64{
+			"BLOCK_SIZE": 256,
+			"EPSILON":    0.001,
+		}
+		desc := ComputePipelineDescriptor{
+			Label:      "compute-with-constants",
+			EntryPoint: "main",
+			Constants:  constants,
+		}
+		halDesc := desc.toHAL()
+		// Module is nil so ComputeState is not populated; constants are only set
+		// when Module != nil (mirrors real usage). Verify HAL descriptor label.
+		if halDesc.Label != desc.Label {
+			t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+		}
+	})
+
+	t.Run("zero init workgroup memory defaults to true", func(t *testing.T) {
+		// When ZeroInitializeWorkgroupMemory is nil (not set), the default
+		// should be true per WebGPU spec.
+		desc := ComputePipelineDescriptor{
+			Label:      "compute-default-zero-init",
+			EntryPoint: "main",
+		}
+		halDesc := desc.toHAL()
+		// Module is nil so ComputeState won't be filled; verify by checking
+		// the conversion logic directly.
+		if desc.ZeroInitializeWorkgroupMemory != nil {
+			t.Error("ZeroInitializeWorkgroupMemory should be nil by default")
+		}
+
+		// Verify the default logic: nil -> true
+		zeroInit := true
+		if desc.ZeroInitializeWorkgroupMemory != nil {
+			zeroInit = *desc.ZeroInitializeWorkgroupMemory
+		}
+		if !zeroInit {
+			t.Error("default zero_initialize_workgroup_memory should be true")
+		}
+
+		_ = halDesc // used above
+	})
+
+	t.Run("zero init workgroup memory explicit false", func(t *testing.T) {
+		explicitFalse := false
+		desc := ComputePipelineDescriptor{
+			Label:                         "compute-no-zero-init",
+			EntryPoint:                    "main",
+			ZeroInitializeWorkgroupMemory: &explicitFalse,
+		}
+
+		// Verify the conversion logic: explicit false -> false
+		zeroInit := true
+		if desc.ZeroInitializeWorkgroupMemory != nil {
+			zeroInit = *desc.ZeroInitializeWorkgroupMemory
+		}
+		if zeroInit {
+			t.Error("explicit false should yield zero_initialize_workgroup_memory=false")
+		}
+
+		halDesc := desc.toHAL()
+		_ = halDesc
+	})
+
+	t.Run("zero init workgroup memory explicit true", func(t *testing.T) {
+		explicitTrue := true
+		desc := ComputePipelineDescriptor{
+			Label:                         "compute-explicit-zero-init",
+			EntryPoint:                    "main",
+			ZeroInitializeWorkgroupMemory: &explicitTrue,
+		}
+
+		zeroInit := true
+		if desc.ZeroInitializeWorkgroupMemory != nil {
+			zeroInit = *desc.ZeroInitializeWorkgroupMemory
+		}
+		if !zeroInit {
+			t.Error("explicit true should yield zero_initialize_workgroup_memory=true")
+		}
+
+		halDesc := desc.toHAL()
+		_ = halDesc
+	})
+}
+
+func TestRenderPipelineDescriptorToHAL(t *testing.T) {
+	desc := RenderPipelineDescriptor{
+		Label: "render-pipe",
+		Vertex: VertexState{
+			EntryPoint: "vs_main",
+			// Module is nil -- toHAL should handle this.
+		},
+	}
+	halDesc := desc.toHAL()
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+}
+
+func TestComputePassDescriptorToHAL(t *testing.T) {
+	desc := ComputePassDescriptor{Label: "compute-pass"}
+	halDesc := desc.toHAL()
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+}
+
+func TestSurfaceConfigurationToHAL(t *testing.T) {
+	desc := SurfaceConfiguration{
+		Width:       800,
+		Height:      600,
+		Format:      TextureFormatBGRA8Unorm,
+		Usage:       TextureUsageRenderAttachment,
+		PresentMode: PresentModeFifo,
+	}
+	halDesc := desc.toHAL()
+	if halDesc.Width != desc.Width {
+		t.Errorf("Width = %d, want %d", halDesc.Width, desc.Width)
+	}
+	if halDesc.Height != desc.Height {
+		t.Errorf("Height = %d, want %d", halDesc.Height, desc.Height)
+	}
+	if halDesc.Format != desc.Format {
+		t.Errorf("Format = %v, want %v", halDesc.Format, desc.Format)
+	}
+	if halDesc.Usage != desc.Usage {
+		t.Errorf("Usage = %v, want %v", halDesc.Usage, desc.Usage)
+	}
+	if halDesc.PresentMode != desc.PresentMode {
+		t.Errorf("PresentMode = %v, want %v", halDesc.PresentMode, desc.PresentMode)
+	}
+}
+
+func TestRenderPassDescriptorToHAL(t *testing.T) {
+	desc := RenderPassDescriptor{
+		Label: "render-pass",
+		ColorAttachments: []RenderPassColorAttachment{
+			{
+				ClearValue: Color{R: 1, G: 0, B: 0, A: 1},
+			},
+		},
+		DepthStencilAttachment: &RenderPassDepthStencilAttachment{
+			DepthClearValue:   1.0,
+			StencilClearValue: 0,
+		},
+	}
+	halDesc := desc.toHAL()
+	if halDesc.Label != desc.Label {
+		t.Errorf("Label = %q, want %q", halDesc.Label, desc.Label)
+	}
+	if len(halDesc.ColorAttachments) != 1 {
+		t.Errorf("ColorAttachments length = %d, want 1", len(halDesc.ColorAttachments))
+	}
+	if halDesc.DepthStencilAttachment == nil {
+		t.Error("DepthStencilAttachment should not be nil")
+	} else if halDesc.DepthStencilAttachment.DepthClearValue != 1.0 {
+		t.Errorf("DepthClearValue = %f, want 1.0", halDesc.DepthStencilAttachment.DepthClearValue)
+	}
+}
+
+func TestImageCopyTextureToHAL(t *testing.T) {
+	tex := ImageCopyTexture{
+		Texture: &Texture{
+			hal:      nil,
+			device:   &Device{},
+			format:   TextureFormatBGRA8Unorm,
+			released: false,
+		},
+		MipLevel: 1,
+		Origin:   Origin3D{X: 10, Y: 20, Z: 0},
+		Aspect:   gputypes.TextureAspectAll,
+	}
+	halTex := tex.toHAL()
+	if halTex.Texture != tex.Texture.hal {
+		t.Errorf("Texture HAL = %v, want %v", halTex.Texture, tex.Texture.hal)
+	}
+	if halTex.MipLevel != tex.MipLevel {
+		t.Errorf("MipLevel = %d, want %d", halTex.MipLevel, tex.MipLevel)
+	}
+	if halTex.Origin.X != tex.Origin.X || halTex.Origin.Y != tex.Origin.Y || halTex.Origin.Z != tex.Origin.Z {
+		t.Errorf("Origin = (%d, %d, %d), want (%d, %d, %d)", halTex.Origin.X, halTex.Origin.Y, halTex.Origin.Z, tex.Origin.X, tex.Origin.Y, tex.Origin.Z)
+	}
+	if halTex.Aspect != tex.Aspect {
+		t.Errorf("Aspect = %v, want %v", halTex.Aspect, tex.Aspect)
+	}
+}

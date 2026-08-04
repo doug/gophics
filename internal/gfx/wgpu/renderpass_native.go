@@ -1,0 +1,358 @@
+//go:build !rust && !(js && wasm)
+
+package wgpu
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/doug/gossamer/internal/gfx/wgpu/core"
+)
+
+// RenderPassEncoder records draw commands within a render pass.
+//
+// Created by CommandEncoder.BeginRenderPass().
+// Must be ended with End() before the CommandEncoder can be finished.
+//
+// NOT thread-safe.
+type RenderPassEncoder struct {
+	core    *core.CoreRenderPassEncoder
+	encoder *CommandEncoder
+	// currentPipelineBindGroupCount tracks the bind group count of the
+	// currently set pipeline. Used by SetBindGroup to validate that the
+	// group index is within the pipeline layout bounds. Zero means no
+	// pipeline has been set yet.
+	currentPipelineBindGroupCount uint32
+	// pipelineSet tracks whether SetPipeline has been called.
+	// Draw commands require a pipeline to be set first.
+	pipelineSet bool
+	// binder tracks bind group assignments and validates compatibility
+	// at draw time, matching Rust wgpu-core's Binder pattern.
+	binder binder
+	// vertexBufferCount tracks the highest vertex buffer slot set + 1.
+	// Updated by SetVertexBuffer; validated against pipeline requirements at draw time.
+	vertexBufferCount uint32
+	// requiredVertexBuffers is the number of vertex buffers required by the
+	// current pipeline. Set by SetPipeline from RenderPipeline.requiredVertexBuffers.
+	requiredVertexBuffers uint32
+	// indexBufferSet tracks whether SetIndexBuffer has been called.
+	// DrawIndexed and DrawIndexedIndirect require an index buffer.
+	indexBufferSet bool
+	// indexBufferFormat stores the format passed to the most recent SetIndexBuffer call.
+	// Used to validate against the pipeline's StripIndexFormat at DrawIndexed/DrawIndexedIndirect time.
+	// Matches Rust wgpu-core State.index.buffer_format (render.rs:568-582).
+	indexBufferFormat IndexFormat
+	// currentStripIndexFormat stores the pipeline's StripIndexFormat for draw-time validation.
+	// Set by SetPipeline from RenderPipeline.stripIndexFormat.
+	currentStripIndexFormat *IndexFormat
+	// blendConstantRequired is true if the current pipeline uses
+	// BlendFactorConstant or BlendFactorOneMinusConstant.
+	// Set by SetPipeline from RenderPipeline.blendConstantRequired.
+	blendConstantRequired bool
+	// blendConstantSet tracks whether SetBlendConstant has been called.
+	// Matches Rust wgpu-core OptionalState for blend_constant.
+	blendConstantSet bool
+}
+
+// trackRef Clone()'s a ResourceRef and appends directly to the parent
+// CommandEncoder's trackedRefs. No intermediate pass-level slice.
+func (p *RenderPassEncoder) trackRef(ref *core.ResourceRef) {
+	if ref != nil {
+		ref.Clone()
+		p.encoder.trackedRefs = append(p.encoder.trackedRefs, ref)
+	}
+}
+
+// SetPipeline sets the active render pipeline.
+func (p *RenderPassEncoder) SetPipeline(pipeline *RenderPipeline) {
+	if pipeline == nil {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.SetPipeline: pipeline is nil"))
+		return
+	}
+	p.currentPipelineBindGroupCount = pipeline.bindGroupCount
+	p.pipelineSet = true
+	p.requiredVertexBuffers = pipeline.requiredVertexBuffers
+	p.currentStripIndexFormat = pipeline.stripIndexFormat
+	if pipeline.blendConstantRequired {
+		p.blendConstantRequired = true
+	}
+	p.binder.updateExpectations(pipeline.bindGroupLayouts)
+	p.binder.updateLateBufferBindingsFromPipeline(pipeline.lateSizedBufferGroups)
+	p.trackRef(pipeline.ref)
+	raw := p.core.RawPass()
+	if raw != nil && pipeline.hal != nil {
+		raw.SetPipeline(pipeline.hal)
+	}
+}
+
+// SetBindGroup sets a bind group for the given index.
+func (p *RenderPassEncoder) SetBindGroup(index uint32, group *BindGroup, offsets []uint32) {
+	if err := validateSetBindGroup("RenderPass", index, group, offsets, p.currentPipelineBindGroupCount); err != nil {
+		p.encoder.setError(err)
+		return
+	}
+	p.binder.assign(index, group.layout)
+	p.binder.assignBindGroup(index, group)
+	p.trackRef(group.ref)
+	// Clone individual buffer ResourceRefs to keep them alive until GPU completes.
+	// Matches Rust wgpu merge_bind_group → ResourceMetadata.insert(Arc<Buffer>).
+	// Without this, Buffer.Release() before Submit can HAL-destroy buffers
+	// that are still referenced by a pending command buffer.
+	for _, buf := range group.boundBuffers {
+		if buf.core != nil && buf.core.Ref != nil {
+			p.trackRef(buf.core.Ref)
+		}
+	}
+	// Track bind group itself for submit-time validation (VAL-B5).
+	p.encoder.trackBindGroup(group)
+	// Track bind group resources for submit-time validation (VAL-A6).
+	for _, buf := range group.boundBuffers {
+		p.encoder.trackBuffer(buf)
+	}
+	for _, tex := range group.boundTextures {
+		p.encoder.trackTexture(tex)
+	}
+	raw := p.core.RawPass()
+	if raw != nil && group.hal != nil {
+		raw.SetBindGroup(index, group.hal, offsets)
+	}
+}
+
+// SetVertexBuffer sets a vertex buffer for the given slot.
+func (p *RenderPassEncoder) SetVertexBuffer(slot uint32, buffer *Buffer, offset uint64) {
+	if buffer == nil {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.SetVertexBuffer: buffer is nil"))
+		return
+	}
+	if slot+1 > p.vertexBufferCount {
+		p.vertexBufferCount = slot + 1
+	}
+	p.trackRef(buffer.core.Ref)
+	p.encoder.trackBuffer(buffer)
+	p.core.SetVertexBuffer(slot, buffer.coreBuffer(), offset)
+}
+
+// SetIndexBuffer sets the index buffer.
+func (p *RenderPassEncoder) SetIndexBuffer(buffer *Buffer, format IndexFormat, offset uint64) {
+	if buffer == nil {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.SetIndexBuffer: buffer is nil"))
+		return
+	}
+	p.indexBufferSet = true
+	p.indexBufferFormat = format
+	p.trackRef(buffer.core.Ref)
+	p.encoder.trackBuffer(buffer)
+	p.core.SetIndexBuffer(buffer.coreBuffer(), format, offset)
+}
+
+// SetViewport sets the viewport transformation.
+func (p *RenderPassEncoder) SetViewport(x, y, width, height, minDepth, maxDepth float32) {
+	p.core.SetViewport(x, y, width, height, minDepth, maxDepth)
+}
+
+// SetScissorRect sets the scissor rectangle for clipping.
+func (p *RenderPassEncoder) SetScissorRect(x, y, width, height uint32) {
+	p.core.SetScissorRect(x, y, width, height)
+}
+
+// SetBlendConstant sets the blend constant color.
+func (p *RenderPassEncoder) SetBlendConstant(color *Color) {
+	p.blendConstantSet = true
+	p.core.SetBlendConstant(color)
+}
+
+// SetStencilReference sets the stencil reference value.
+func (p *RenderPassEncoder) SetStencilReference(reference uint32) {
+	p.core.SetStencilReference(reference)
+}
+
+// validateDrawState checks that a pipeline has been set, all bind groups
+// are compatible, and enough vertex buffers have been set before a draw call.
+// Returns true if validation passes, false if an error was recorded.
+//
+// Each validation failure wraps a typed sentinel error so that callers can
+// use errors.Is() to identify the failure category programmatically.
+// Matches Rust wgpu-core State::is_ready (command/render.rs:542-593).
+func (p *RenderPassEncoder) validateDrawState(method string) bool {
+	if !p.pipelineSet {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.%s: no pipeline set (call SetPipeline first): %w",
+			method, ErrDrawMissingPipeline))
+		return false
+	}
+	if err := p.binder.checkCompatibility(); err != nil {
+		// Wrap the binder error with the appropriate draw-time sentinel
+		// so errors.Is works for both the specific binder cause and the
+		// public draw-time category.
+		sentinel := ErrDrawMissingBindGroup
+		if errors.Is(err, errBindGroupIncompatible) {
+			sentinel = ErrDrawIncompatibleBindGroup
+		}
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.%s: %w: %w", method, sentinel, err))
+		return false
+	}
+	if p.vertexBufferCount < p.requiredVertexBuffers {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.%s: pipeline requires %d vertex buffer(s) but only %d set: %w",
+			method, p.requiredVertexBuffers, p.vertexBufferCount,
+			ErrDrawMissingVertexBuffer,
+		))
+		return false
+	}
+	if p.blendConstantRequired && !p.blendConstantSet {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.%s: %w",
+			method, ErrDrawMissingBlendConstant,
+		))
+		return false
+	}
+	// Late buffer binding size validation: check that bound buffers are large enough
+	// for bindings with MinBindingSize == 0. Matches Rust wgpu-core's is_ready()
+	// call to check_late_buffer_bindings before draw (render.rs:542-545).
+	if err := p.binder.checkLateBufferBindings(); err != nil {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.%s: %w: %w", method, ErrDrawLateBufferTooSmall, err))
+		return false
+	}
+	return true
+}
+
+// Draw draws primitives.
+func (p *RenderPassEncoder) Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) {
+	if !p.validateDrawState("Draw") {
+		return
+	}
+	p.core.Draw(vertexCount, instanceCount, firstVertex, firstInstance)
+}
+
+// DrawIndexed draws indexed primitives.
+func (p *RenderPassEncoder) DrawIndexed(indexCount, instanceCount, firstIndex uint32, baseVertex int32, firstInstance uint32) {
+	if !p.validateDrawState("DrawIndexed") {
+		return
+	}
+	if !p.indexBufferSet {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.DrawIndexed: no index buffer set (call SetIndexBuffer first): %w",
+			ErrDrawMissingIndexBuffer))
+		return
+	}
+	// VAL-B2: Validate index format matches pipeline's strip index format.
+	// Matches Rust wgpu-core render.rs:568-582 (UnmatchedIndexFormats).
+	if p.currentStripIndexFormat != nil && p.indexBufferFormat != *p.currentStripIndexFormat {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.DrawIndexed: index buffer format %v does not match pipeline strip index format %v: %w",
+			p.indexBufferFormat, *p.currentStripIndexFormat, ErrDrawIndexFormatMismatch))
+		return
+	}
+	p.core.DrawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance)
+}
+
+// DrawIndirect draws primitives with GPU-generated parameters.
+func (p *RenderPassEncoder) DrawIndirect(buffer *Buffer, offset uint64) {
+	p.MultiDrawIndirect(buffer, offset, 1)
+}
+
+// MultiDrawIndirect draws consecutive primitives with GPU-generated parameters.
+// Each argument record is 16 bytes.
+func (p *RenderPassEncoder) MultiDrawIndirect(buffer *Buffer, offset uint64, drawCount uint32) {
+	if drawCount == 0 {
+		return
+	}
+	if !p.validateDrawState("DrawIndirect") {
+		return
+	}
+	if buffer == nil {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.DrawIndirect: buffer is nil"))
+		return
+	}
+	// VAL-B3: Validate indirect buffer has INDIRECT usage.
+	// Matches Rust wgpu-core render.rs:2763 (check_usage(BufferUsages::INDIRECT)).
+	if buffer.Usage()&BufferUsageIndirect == 0 {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.DrawIndirect: buffer %q missing BufferUsageIndirect usage: %w",
+			buffer.Label(), ErrDrawIndirectBufferUsage))
+		return
+	}
+	// VAL-B3: Validate indirect buffer offset is 4-byte aligned.
+	// Matches Rust wgpu-core render.rs:2766 (offset % 4 != 0).
+	if offset%4 != 0 {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.DrawIndirect: offset %d is not 4-byte aligned: %w",
+			offset, ErrDrawIndirectOffsetAlignment))
+		return
+	}
+	// VAL-B3: Validate indirect args fit within buffer.
+	// DrawIndirect args: 4 × uint32 = 16 bytes. Matches Rust render.rs:2772-2779.
+	if !drawIndirectRangeFits(buffer.Size(), offset, drawCount) {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.MultiDrawIndirect: offset %d + %d draw(s) exceeds buffer size %d: %w",
+			offset, drawCount, buffer.Size(), ErrDrawIndirectBufferOverrun))
+		return
+	}
+	p.trackRef(buffer.core.Ref)
+	p.encoder.trackBuffer(buffer)
+	p.core.MultiDrawIndirect(buffer.coreBuffer(), offset, drawCount)
+}
+
+// DrawIndexedIndirect draws indexed primitives with GPU-generated parameters.
+func (p *RenderPassEncoder) DrawIndexedIndirect(buffer *Buffer, offset uint64) {
+	p.MultiDrawIndexedIndirect(buffer, offset, 1)
+}
+
+// MultiDrawIndexedIndirect draws consecutive indexed primitives with
+// GPU-generated parameters. Each argument record is 20 bytes.
+func (p *RenderPassEncoder) MultiDrawIndexedIndirect(buffer *Buffer, offset uint64, drawCount uint32) {
+	if drawCount == 0 {
+		return
+	}
+	if !p.validateDrawState("DrawIndexedIndirect") {
+		return
+	}
+	if !p.indexBufferSet {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.DrawIndexedIndirect: no index buffer set (call SetIndexBuffer first): %w",
+			ErrDrawMissingIndexBuffer))
+		return
+	}
+	// VAL-B2: Validate index format matches pipeline's strip index format.
+	// Matches Rust wgpu-core render.rs:568-582 (UnmatchedIndexFormats).
+	if p.currentStripIndexFormat != nil && p.indexBufferFormat != *p.currentStripIndexFormat {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.DrawIndexedIndirect: index buffer format %v does not match pipeline strip index format %v: %w",
+			p.indexBufferFormat, *p.currentStripIndexFormat, ErrDrawIndexFormatMismatch))
+		return
+	}
+	if buffer == nil {
+		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.DrawIndexedIndirect: buffer is nil"))
+		return
+	}
+	// VAL-B3: Validate indirect buffer has INDIRECT usage.
+	// Matches Rust wgpu-core render.rs:2763 (check_usage(BufferUsages::INDIRECT)).
+	if buffer.Usage()&BufferUsageIndirect == 0 {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.DrawIndexedIndirect: buffer %q missing BufferUsageIndirect usage: %w",
+			buffer.Label(), ErrDrawIndirectBufferUsage))
+		return
+	}
+	// VAL-B3: Validate indirect buffer offset is 4-byte aligned.
+	// Matches Rust wgpu-core render.rs:2766 (offset % 4 != 0).
+	if offset%4 != 0 {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.DrawIndexedIndirect: offset %d is not 4-byte aligned: %w",
+			offset, ErrDrawIndirectOffsetAlignment))
+		return
+	}
+	// VAL-B3: Validate all indirect args fit within the buffer without allowing
+	// offset+drawCount*20 to wrap around uint64.
+	if !indexedIndirectRangeFits(buffer.Size(), offset, drawCount) {
+		p.encoder.setError(fmt.Errorf(
+			"wgpu: RenderPass.MultiDrawIndexedIndirect: offset %d + %d draw(s) exceeds buffer size %d: %w",
+			offset, drawCount, buffer.Size(), ErrDrawIndirectBufferOverrun))
+		return
+	}
+	p.trackRef(buffer.core.Ref)
+	p.encoder.trackBuffer(buffer)
+	p.core.MultiDrawIndexedIndirect(buffer.coreBuffer(), offset, drawCount)
+}
+
+// End ends the render pass.
+// After this call, the encoder cannot be used again.
+func (p *RenderPassEncoder) End() error {
+	return p.core.End()
+}

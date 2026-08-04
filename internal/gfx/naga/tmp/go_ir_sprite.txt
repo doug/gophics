@@ -1,0 +1,19 @@
+=== TYPES ===
+[0] Image { dim: D2, arrayed: false, class: Sampled}
+[1] Sampler(Filtering)
+[2] Vector { size: Vec2, scalar: Float(4) }
+[3] Vector { size: Vec4, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "u_texture" type=[0] space=Handle binding=(0,0)
+[1] "u_sampler" type=[1] space=Handle binding=(0,1)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Fragment function={name="main", args=1, exprs=4, stmts=2, locals=0}

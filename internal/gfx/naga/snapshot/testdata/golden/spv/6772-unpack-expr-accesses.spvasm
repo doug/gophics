@@ -1,0 +1,40 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 29
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_4 "main"
+               OpExecutionMode %_4 LocalSize 1 1 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeFunction %_2
+         %_6 = OpTypeInt 32 0
+         %_7 = OpConstant %_6 12
+         %_8 = OpTypeInt 32 1
+         %_9 = OpTypeVector %_8 4
+         %_10 = OpConstant %_6 8
+         %_12 = OpConstant %_6 0
+         %_15 = OpConstant %_6 16
+         %_17 = OpConstant %_6 24
+         %_20 = OpConstant %_8 2
+         %_22 = OpTypeVector %_6 4
+         %_4 = OpFunction %_2 None %_3
+         %_5 = OpLabel
+         %_11 = OpBitcast %_8 %_7
+         %_13 = OpBitFieldSExtract %_8 %_11 %_12 %_10
+         %_14 = OpBitFieldSExtract %_8 %_11 %_10 %_10
+         %_16 = OpBitFieldSExtract %_8 %_11 %_15 %_10
+         %_18 = OpBitFieldSExtract %_8 %_11 %_17 %_10
+         %_19 = OpCompositeConstruct %_9 %_13 %_14 %_16 %_18
+         %_21 = OpVectorExtractDynamic %_8 %_19 %_20
+         %_23 = OpBitFieldUExtract %_6 %_7 %_12 %_10
+         %_24 = OpBitFieldUExtract %_6 %_7 %_10 %_10
+         %_25 = OpBitFieldUExtract %_6 %_7 %_15 %_10
+         %_26 = OpBitFieldUExtract %_6 %_7 %_17 %_10
+         %_27 = OpCompositeConstruct %_22 %_23 %_24 %_25 %_26
+         %_28 = OpCompositeExtract %_6 %_27 1
+               OpReturn
+               OpFunctionEnd

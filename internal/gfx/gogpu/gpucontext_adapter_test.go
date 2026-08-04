@@ -1,0 +1,296 @@
+package gogpu
+
+import (
+	"testing"
+
+	"github.com/doug/gossamer/internal/gfx/gpucontext"
+	"github.com/doug/gossamer/internal/gfx/gputypes"
+)
+
+// TestGPUContextAdapterInterface verifies the gpuContextAdapter implements gpucontext.DeviceProvider.
+func TestGPUContextAdapterInterface(t *testing.T) {
+	var _ gpucontext.DeviceProvider = (*gpuContextAdapter)(nil)
+}
+
+// TestGPUContextProviderNilBeforeRun verifies GPUContextProvider returns nil before Run().
+func TestGPUContextProviderNilBeforeRun(t *testing.T) {
+	app := NewApp(DefaultConfig())
+
+	provider := app.GPUContextProvider()
+	if provider != nil {
+		t.Error("GPUContextProvider should return nil before Run() is called")
+	}
+}
+
+// TestGPUContextAdapterMethods tests the methods of gpuContextAdapter.
+func TestGPUContextAdapterMethods(t *testing.T) {
+	// Create a renderer with nil wgpu objects (no actual GPU needed).
+	// Surface format is stored on the primary RenderTarget.
+	renderer := newTestRendererFull(800, 600, gputypes.TextureFormatBGRA8Unorm, "test")
+	renderer.adapter = nil
+	renderer.device = nil
+
+	adapter := &gpuContextAdapter{renderer: renderer}
+
+	t.Run("Device", func(t *testing.T) {
+		device := adapter.Device()
+		if !device.IsNil() {
+			t.Error("Device() should return nil handle when renderer.device is nil")
+		}
+	})
+
+	t.Run("Queue", func(t *testing.T) {
+		queue := adapter.Queue()
+		if !queue.IsNil() {
+			t.Error("Queue() should return nil handle when renderer.device is nil")
+		}
+	})
+
+	t.Run("Adapter", func(t *testing.T) {
+		adpt := adapter.Adapter()
+		if !adpt.IsNil() {
+			t.Error("Adapter() should return nil handle when renderer.adapter is nil")
+		}
+	})
+
+	t.Run("SurfaceFormat", func(t *testing.T) {
+		format := adapter.SurfaceFormat()
+		if format != gputypes.TextureFormatBGRA8Unorm {
+			t.Errorf("SurfaceFormat() = %v, want %v", format, gputypes.TextureFormatBGRA8Unorm)
+		}
+	})
+}
+
+// TestGPUContextAdapterNilRenderer tests methods with nil renderer.
+func TestGPUContextAdapterNilRenderer(t *testing.T) {
+	adapter := &gpuContextAdapter{renderer: nil}
+
+	t.Run("Device", func(t *testing.T) {
+		if !adapter.Device().IsNil() {
+			t.Error("Device() should return nil handle with nil renderer")
+		}
+	})
+
+	t.Run("Queue", func(t *testing.T) {
+		if !adapter.Queue().IsNil() {
+			t.Error("Queue() should return nil handle with nil renderer")
+		}
+	})
+
+	t.Run("Adapter", func(t *testing.T) {
+		if !adapter.Adapter().IsNil() {
+			t.Error("Adapter() should return nil handle with nil renderer")
+		}
+	})
+
+	t.Run("SurfaceFormat", func(t *testing.T) {
+		if adapter.SurfaceFormat() != gputypes.TextureFormatUndefined {
+			t.Errorf("SurfaceFormat() should return Undefined with nil renderer")
+		}
+	})
+}
+
+// TestMapTextureFormat tests texture format conversion.
+func TestMapTextureFormat(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  gputypes.TextureFormat
+		output gputypes.TextureFormat
+	}{
+		{"RGBA8Unorm", gputypes.TextureFormatRGBA8Unorm, gputypes.TextureFormatRGBA8Unorm},
+		{"BGRA8Unorm", gputypes.TextureFormatBGRA8Unorm, gputypes.TextureFormatBGRA8Unorm},
+		{"Unknown", gputypes.TextureFormat(0x99), gputypes.TextureFormatUndefined},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mapTextureFormat(tt.input)
+			if result != tt.output {
+				t.Errorf("mapTextureFormat(%v) = %v, want %v", tt.input, result, tt.output)
+			}
+		})
+	}
+}
+
+// TestGPUContextAdapterWindowProvider tests WindowProvider delegation.
+func TestGPUContextAdapterWindowProvider(t *testing.T) {
+	t.Run("Size with app", func(t *testing.T) {
+		mock := &mockWindow{width: 1280, height: 720, scaleFactor: 1.0}
+		app := &App{platWindow: mock}
+		adapter := &gpuContextAdapter{app: app}
+
+		w, h := adapter.Size()
+		if w != 1280 || h != 720 {
+			t.Errorf("Size() = (%d, %d), want (1280, 720)", w, h)
+		}
+	})
+
+	t.Run("Size without app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+
+		w, h := adapter.Size()
+		if w != 0 || h != 0 {
+			t.Errorf("Size() = (%d, %d), want (0, 0)", w, h)
+		}
+	})
+
+	t.Run("ScaleFactor with app", func(t *testing.T) {
+		mock := &mockWindow{scaleFactor: 2.0}
+		app := &App{platWindow: mock}
+		adapter := &gpuContextAdapter{app: app}
+
+		sf := adapter.ScaleFactor()
+		if sf != 2.0 {
+			t.Errorf("ScaleFactor() = %f, want 2.0", sf)
+		}
+	})
+
+	t.Run("ScaleFactor without app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+
+		sf := adapter.ScaleFactor()
+		if sf != 1.0 {
+			t.Errorf("ScaleFactor() = %f, want 1.0", sf)
+		}
+	})
+
+	t.Run("RequestRedraw with app", func(t *testing.T) {
+		wokenUp := false
+		app := &App{
+			invalidator: newInvalidator(func() { wokenUp = true }),
+		}
+		adapter := &gpuContextAdapter{app: app}
+
+		adapter.RequestRedraw()
+
+		if !wokenUp {
+			t.Error("RequestRedraw should trigger wakeup")
+		}
+	})
+
+	t.Run("RequestRedraw without app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		// Should not panic
+		adapter.RequestRedraw()
+	})
+}
+
+// TestGPUContextAdapterPlatformProvider verifies PlatformProvider delegation to App.
+func TestGPUContextAdapterPlatformProvider(t *testing.T) {
+	t.Run("type assertion succeeds", func(t *testing.T) {
+		app := &App{}
+		adapter := &gpuContextAdapter{app: app}
+		var provider gpucontext.DeviceProvider = adapter
+
+		if _, ok := provider.(gpucontext.PlatformProvider); !ok {
+			t.Fatal("gpuContextAdapter must implement PlatformProvider (ggcanvas LCD auto-detection depends on this)")
+		}
+	})
+
+	t.Run("SubpixelLayout delegates to app", func(t *testing.T) {
+		app := &App{}
+		adapter := &gpuContextAdapter{app: app}
+
+		layout := adapter.SubpixelLayout()
+		if layout != gpucontext.SubpixelNone {
+			t.Errorf("SubpixelLayout() = %v, want SubpixelNone (no platform manager)", layout)
+		}
+	})
+
+	t.Run("SubpixelLayout nil app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		layout := adapter.SubpixelLayout()
+		if layout != gpucontext.SubpixelNone {
+			t.Errorf("SubpixelLayout() = %v, want SubpixelNone", layout)
+		}
+	})
+
+	t.Run("DarkMode nil app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		if adapter.DarkMode() {
+			t.Error("DarkMode() should return false with nil app")
+		}
+	})
+
+	t.Run("FontScale nil app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		if adapter.FontScale() != 1.0 {
+			t.Errorf("FontScale() = %f, want 1.0", adapter.FontScale())
+		}
+	})
+
+	t.Run("Clipboard nil app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		text, err := adapter.ClipboardRead()
+		if text != "" || err != nil {
+			t.Errorf("ClipboardRead() = (%q, %v), want (\"\", nil)", text, err)
+		}
+		if adapter.ClipboardWrite("test") != nil {
+			t.Error("ClipboardWrite() should return nil with nil app")
+		}
+	})
+
+	t.Run("SetCursor nil app no panic", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		adapter.SetCursor(gpucontext.CursorDefault)
+	})
+
+	t.Run("ReduceMotion nil app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		if adapter.ReduceMotion() {
+			t.Error("ReduceMotion() should return false with nil app")
+		}
+	})
+
+	t.Run("HighContrast nil app", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		if adapter.HighContrast() {
+			t.Error("HighContrast() should return false with nil app")
+		}
+	})
+}
+
+// TestGPUContextAdapterResourceTracker tests resource tracking via adapter.
+func TestGPUContextAdapterResourceTracker(t *testing.T) {
+	t.Run("TrackResource with tracker", func(t *testing.T) {
+		tracker := &resourceTracker{}
+		adapter := &gpuContextAdapter{tracker: tracker}
+
+		m := newMockCloser("test")
+		adapter.TrackResource(m)
+
+		err := tracker.CloseAll()
+		if err != nil {
+			t.Fatalf("CloseAll error: %v", err)
+		}
+		if !m.closed {
+			t.Error("Resource should have been closed via tracker")
+		}
+	})
+
+	t.Run("TrackResource nil tracker", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		// Should not panic
+		adapter.TrackResource(newMockCloser("test"))
+	})
+
+	t.Run("UntrackResource with tracker", func(t *testing.T) {
+		tracker := &resourceTracker{}
+		adapter := &gpuContextAdapter{tracker: tracker}
+
+		m := newMockCloser("test")
+		adapter.TrackResource(m)
+		adapter.UntrackResource(m)
+
+		_ = tracker.CloseAll()
+		if m.closed {
+			t.Error("Resource should NOT have been closed (was untracked)")
+		}
+	})
+
+	t.Run("UntrackResource nil tracker", func(t *testing.T) {
+		adapter := &gpuContextAdapter{}
+		// Should not panic
+		adapter.UntrackResource(newMockCloser("test"))
+	})
+}

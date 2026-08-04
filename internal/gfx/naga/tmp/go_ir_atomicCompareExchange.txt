@@ -1,0 +1,25 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Atomic { base: Sint(4) }
+[2] Array { base: [1], size: Constant(128), stride: 4 }
+[3] Atomic { base: Uint(4) }
+[4] Array { base: [3], size: Constant(128), stride: 4 }
+[5] Scalar(Sint, 4)
+[6] Scalar(Bool, 1)
+[7] Struct "__atomic_compare_exchange_result<Sint,4>" { members: [{ name: "old_value", type: [5], offset: 0}, { name: "exchanged", type: [6], offset: 4}], span: 8 }
+[8] Struct "__atomic_compare_exchange_result<Uint,4>" { members: [{ name: "old_value", type: [0], offset: 0}, { name: "exchanged", type: [6], offset: 4}], span: 8 }
+
+=== CONSTANTS ===
+[0] "SIZE" type=[0] init=Literal(Uint(128))
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "arr_i32" type=[2] space=Storage(LOAD|STORE) binding=(0,0)
+[1] "arr_u32" type=[4] space=Storage(LOAD|STORE) binding=(0,1)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "test_atomic_compare_exchange_i32" stage=Compute function={name="test_atomic_compare_exchange_i32", args=0, exprs=29, stmts=2, locals=3} workgroup_size=(1,1,1)
+[1] "test_atomic_compare_exchange_u32" stage=Compute function={name="test_atomic_compare_exchange_u32", args=0, exprs=29, stmts=2, locals=3} workgroup_size=(1,1,1)

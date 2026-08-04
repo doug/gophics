@@ -1,0 +1,23 @@
+=== TYPES ===
+[0] Scalar(Uint, 4)
+[1] Array { base: [0], size: Dynamic, stride: 4 }
+[2] Struct "T" { members: [{ name: "t", type: [0], offset: 0}], span: 16 }
+[3] Array { base: [2], size: Constant(1), stride: 16 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "in" type=[0] space=Storage(LOAD|STORE) binding=(0,0)
+[1] "out" type=[1] space=Storage(LOAD|STORE) binding=(0,1)
+[2] "in_data_uniform" type=[3] space=Uniform binding=(0,2)
+[3] "in_data_storage_g0_b3" type=[3] space=Storage(LOAD|STORE) binding=(0,3)
+[4] "in_data_storage_g0_b4" type=[3] space=Storage(LOAD|STORE) binding=(0,4)
+[5] "in_data_storage_g1_b0" type=[3] space=Storage(LOAD|STORE) binding=(1,0)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=26, stmts=14, locals=0} workgroup_size=(1,1,1)

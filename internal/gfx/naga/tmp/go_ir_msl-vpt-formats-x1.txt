@@ -1,0 +1,20 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec4, scalar: Float(4) }
+[2] Struct "VertexOutput" { members: [{ name: "position", type: [1], offset: 0, binding: Builtin(0)}], span: 16 }
+[3] Scalar(Uint, 4)
+[4] Scalar(Sint, 4)
+[5] Struct "VertexInput" { members: [{ name: "v_uint8", type: [3], offset: 0, binding: Location(0) interp=0/0}, { name: "v_uint8x2", type: [3], offset: 4, binding: Location(1) interp=0/0}, { name: "v_uint8x4", type: [3], offset: 8, binding: Location(2) interp=0/0}, { name: "v_sint8", type: [4], offset: 12, binding: Location(3) interp=0/0}, { name: "v_sint8x2", type: [4], offset: 16, binding: Location(4) interp=0/0}, { name: "v_sint8x4", type: [4], offset: 20, binding: Location(5) interp=0/0}, { name: "v_unorm8", type: [0], offset: 24, binding: Location(6) interp=2/0}, { name: "v_unorm8x2", type: [0], offset: 28, binding: Location(7) interp=2/0}, { name: "v_unorm8x4", type: [0], offset: 32, binding: Location(8) interp=2/0}, { name: "v_snorm8", type: [0], offset: 36, binding: Location(9) interp=2/0}, { name: "v_snorm8x2", type: [0], offset: 40, binding: Location(10) interp=2/0}, { name: "v_snorm8x4", type: [0], offset: 44, binding: Location(11) interp=2/0}, { name: "v_uint16", type: [3], offset: 48, binding: Location(12) interp=0/0}, { name: "v_uint16x2", type: [3], offset: 52, binding: Location(13) interp=0/0}, { name: "v_uint16x4", type: [3], offset: 56, binding: Location(14) interp=0/0}, { name: "v_sint16", type: [4], offset: 60, binding: Location(15) interp=0/0}, { name: "v_sint16x2", type: [4], offset: 64, binding: Location(16) interp=0/0}, { name: "v_sint16x4", type: [4], offset: 68, binding: Location(17) interp=0/0}, { name: "v_unorm16", type: [0], offset: 72, binding: Location(18) interp=2/0}, { name: "v_unorm16x2", type: [0], offset: 76, binding: Location(19) interp=2/0}, { name: "v_unorm16x4", type: [0], offset: 80, binding: Location(20) interp=2/0}, { name: "v_snorm16", type: [0], offset: 84, binding: Location(21) interp=2/0}, { name: "v_snorm16x2", type: [0], offset: 88, binding: Location(22) interp=2/0}, { name: "v_snorm16x4", type: [0], offset: 92, binding: Location(23) interp=2/0}, { name: "v_float16", type: [0], offset: 96, binding: Location(24) interp=2/0}, { name: "v_float16x2", type: [0], offset: 100, binding: Location(25) interp=2/0}, { name: "v_float16x4", type: [0], offset: 104, binding: Location(26) interp=2/0}, { name: "v_float32", type: [0], offset: 108, binding: Location(27) interp=2/0}, { name: "v_float32x2", type: [0], offset: 112, binding: Location(28) interp=2/0}, { name: "v_float32x3", type: [0], offset: 116, binding: Location(29) interp=2/0}, { name: "v_float32x4", type: [0], offset: 120, binding: Location(30) interp=2/0}, { name: "v_uint32", type: [3], offset: 124, binding: Location(31) interp=0/0}, { name: "v_uint32x2", type: [3], offset: 128, binding: Location(32) interp=0/0}, { name: "v_uint32x3", type: [3], offset: 132, binding: Location(33) interp=0/0}, { name: "v_uint32x4", type: [3], offset: 136, binding: Location(34) interp=0/0}, { name: "v_sint32", type: [4], offset: 140, binding: Location(35) interp=0/0}, { name: "v_sint32x2", type: [4], offset: 144, binding: Location(36) interp=0/0}, { name: "v_sint32x3", type: [4], offset: 148, binding: Location(37) interp=0/0}, { name: "v_sint32x4", type: [4], offset: 152, binding: Location(38) interp=0/0}, { name: "v_unorm10_10_10_2", type: [0], offset: 156, binding: Location(39) interp=2/0}, { name: "v_unorm8x4_bgra", type: [0], offset: 160, binding: Location(40) interp=2/0}], span: 164 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "render_vertex" stage=Vertex function={name="render_vertex", args=1, exprs=5, stmts=2, locals=0}

@@ -1,0 +1,76 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 60
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_16 "cs_main" %_14
+               OpExecutionMode %_16 LocalSize 2 1 1
+               OpDecorate %_10 DescriptorSet 0
+               OpDecorate %_10 Binding 0
+               OpDecorate %_12 DescriptorSet 0
+               OpDecorate %_12 Binding 1
+               OpDecorate %_14 BuiltIn LocalInvocationId
+         %_2 = OpTypeVoid
+         %_3 = OpTypeInt 32 0
+         %_4 = OpTypeImage %_3 2D 0 0 0 2 Unknown 33
+         %_5 = OpTypeInt 32 1
+         %_6 = OpTypeImage %_5 2D 0 0 0 2 Unknown 24
+         %_7 = OpTypeVector %_3 3
+         %_8 = OpTypeVector %_5 2
+         %_9 = OpTypePointer UniformConstant %_4
+         %_11 = OpTypePointer UniformConstant %_6
+         %_13 = OpTypePointer Input %_7
+         %_15 = OpTypeFunction %_2
+         %_18 = OpConstant %_5 0
+         %_20 = OpTypePointer Image %_3
+         %_21 = OpConstant %_3 0
+         %_23 = OpConstant %_5 1
+         %_24 = OpConstant %_3 1
+         %_42 = OpTypePointer Image %_5
+         %_10 = OpVariable %_9 UniformConstant
+         %_12 = OpVariable %_11 UniformConstant
+         %_14 = OpVariable %_13 Input
+         %_16 = OpFunction %_2 None %_15
+         %_17 = OpLabel
+         %_19 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_20 %_22 %_10 %_19 %_21
+         OpAtomicUMax %_3 %_25 %_22 %_23 %_21 %_24
+         %_26 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_20 %_27 %_10 %_26 %_21
+         OpAtomicUMin %_3 %_28 %_27 %_23 %_21 %_24
+         %_29 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_20 %_30 %_10 %_29 %_21
+         OpAtomicIAdd %_3 %_31 %_30 %_23 %_21 %_24
+         %_32 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_20 %_33 %_10 %_32 %_21
+         OpAtomicAnd %_3 %_34 %_33 %_23 %_21 %_24
+         %_35 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_20 %_36 %_10 %_35 %_21
+         OpAtomicOr %_3 %_37 %_36 %_23 %_21 %_24
+         %_38 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_20 %_39 %_10 %_38 %_21
+         OpAtomicXor %_3 %_40 %_39 %_23 %_21 %_24
+         %_41 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_42 %_43 %_12 %_41 %_21
+         OpAtomicSMax %_5 %_44 %_43 %_23 %_21 %_23
+         %_45 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_42 %_46 %_12 %_45 %_21
+         OpAtomicSMin %_5 %_47 %_46 %_23 %_21 %_23
+         %_48 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_42 %_49 %_12 %_48 %_21
+         OpAtomicIAdd %_5 %_50 %_49 %_23 %_21 %_23
+         %_51 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_42 %_52 %_12 %_51 %_21
+         OpAtomicAnd %_5 %_53 %_52 %_23 %_21 %_23
+         %_54 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_42 %_55 %_12 %_54 %_21
+         OpAtomicOr %_5 %_56 %_55 %_23 %_21 %_23
+         %_57 = OpCompositeConstruct %_8 %_18 %_18
+         OpImageTexelPointer %_42 %_58 %_12 %_57 %_21
+         OpAtomicXor %_5 %_59 %_58 %_23 %_21 %_23
+               OpReturn
+               OpFunctionEnd

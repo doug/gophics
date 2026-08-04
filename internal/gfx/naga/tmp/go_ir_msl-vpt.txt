@@ -1,0 +1,37 @@
+=== TYPES ===
+[0] Vector { size: Vec4, scalar: Float(4) }
+[1] Vector { size: Vec2, scalar: Float(4) }
+[2] Struct "VertexOutput" { members: [{ name: "position", type: [0], offset: 0, binding: Builtin(0)}, { name: "color", type: [0], offset: 16, binding: Location(0) interp=2/0}, { name: "texcoord", type: [1], offset: 32, binding: Location(1) interp=2/0}], span: 48 }
+[3] Vector { size: Vec3, scalar: Float(4) }
+[4] Struct "VertexInput" { members: [{ name: "position", type: [0], offset: 0, binding: Location(0) interp=2/0}, { name: "normal", type: [3], offset: 16, binding: Location(1) interp=2/0}, { name: "texcoord", type: [1], offset: 32, binding: Location(2) interp=2/0}], span: 48 }
+[5] Matrix { columns: Vec4, rows: Vec4, scalar: Float(4) }
+[6] Scalar(Uint, 4)
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "mvp_matrix" type=[5] space=Uniform binding=(0,0)
+
+=== FUNCTIONS ===
+[0] "do_lighting"
+  args: [{ name: "position", type: [0], binding: None}, { name: "normal", type: [3], binding: None}]
+  result: type=[0]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] Literal(F32(0))
+    [3] Splat { size: Vec4, value: [2] }
+  named_expressions:
+    [0] = "position"
+    [1] = "normal"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+=== ENTRY POINTS ===
+[0] "render_vertex" stage=Vertex function={name="render_vertex", args=2, exprs=15, stmts=10, locals=1}

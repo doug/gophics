@@ -1,0 +1,23 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+
+struct main_Input {
+};
+struct main_Output {
+    metal::float4 member [[position]];
+};
+vertex main_Output main_(
+  uint idx [[vertex_id]]
+) {
+    return main_Output { metal::float4(0.0, 0.0, 0.0, 1.0) };
+}

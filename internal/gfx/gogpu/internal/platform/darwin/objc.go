@@ -1,0 +1,1392 @@
+//go:build darwin
+
+package darwin
+
+import (
+	"errors"
+	"runtime"
+	"sync"
+	"unsafe"
+
+	"github.com/go-webgpu/goffi/ffi"
+	"github.com/go-webgpu/goffi/types"
+)
+
+// Errors returned by Objective-C runtime operations.
+var (
+	ErrLibraryNotLoaded = errors.New("darwin: failed to load library")
+	ErrSymbolNotFound   = errors.New("darwin: symbol not found")
+	ErrClassNotFound    = errors.New("darwin: class not found")
+	ErrSendFailed       = errors.New("darwin: objc_msgSend failed")
+)
+
+// ID represents an Objective-C object pointer.
+// It wraps uintptr for type safety when working with objc objects.
+type ID uintptr
+
+// Class represents an Objective-C class pointer.
+type Class uintptr
+
+// SEL represents an Objective-C selector (method name).
+type SEL uintptr
+
+// objcRuntime holds the loaded Objective-C runtime library and function pointers.
+type objcRuntime struct {
+	once sync.Once
+	err  error
+
+	// Library handles
+	libobjc        unsafe.Pointer
+	foundation     unsafe.Pointer
+	appKit         unsafe.Pointer
+	quartzCore     unsafe.Pointer
+	coreFoundation unsafe.Pointer
+
+	// Function pointers
+	objcGetClass              unsafe.Pointer
+	objcMsgSend               unsafe.Pointer
+	objcMsgSendFpret          unsafe.Pointer
+	objcMsgSendStret          unsafe.Pointer
+	selRegisterName           unsafe.Pointer
+	objcAllocateClassPair     unsafe.Pointer
+	classAddMethod            unsafe.Pointer
+	objcRegisterClassPair     unsafe.Pointer
+	objcSetAssociatedObjectFn unsafe.Pointer
+	objcGetAssociatedObjectFn unsafe.Pointer
+
+	// Call interfaces (reusable)
+	cifVoidPtr  *types.CallInterface // Returns void*, takes variadic args
+	cifFpret    *types.CallInterface // Returns floating point
+	cifSelector *types.CallInterface // For sel_registerName
+	cifSend5Ptr *types.CallInterface // self, _cmd, arg0, arg1, arg2 (5 ptr)
+
+	// Protect shared CIF usage; CallInterface is not concurrency-safe.
+	cifMu sync.Mutex
+}
+
+// objcRT is the global Objective-C runtime state.
+// Named to avoid conflict with the standard library "runtime" package.
+var objcRT objcRuntime
+
+var (
+	nsRectType = &types.TypeDescriptor{
+		Size:      32,
+		Alignment: 8,
+		Kind:      types.StructType,
+		Members: []*types.TypeDescriptor{
+			types.DoubleTypeDescriptor,
+			types.DoubleTypeDescriptor,
+			types.DoubleTypeDescriptor,
+			types.DoubleTypeDescriptor,
+		},
+	}
+	nsSizeType = &types.TypeDescriptor{
+		Size:      16,
+		Alignment: 8,
+		Kind:      types.StructType,
+		Members: []*types.TypeDescriptor{
+			types.DoubleTypeDescriptor,
+			types.DoubleTypeDescriptor,
+		},
+	}
+	// nsPointType has the same layout as nsSizeType (two doubles),
+	// but is kept as a separate variable for clarity when used with
+	// NSPoint parameters (e.g., event location).
+	nsPointType = &types.TypeDescriptor{
+		Size:      16,
+		Alignment: 8,
+		Kind:      types.StructType,
+		Members: []*types.TypeDescriptor{
+			types.DoubleTypeDescriptor,
+			types.DoubleTypeDescriptor,
+		},
+	}
+)
+
+// initRuntime initializes the Objective-C runtime by loading required libraries
+// and resolving function symbols. This is called once on first use.
+func initRuntime() error {
+	objcRT.once.Do(func() {
+		objcRT.err = loadRuntime()
+	})
+	return objcRT.err
+}
+
+// loadRuntime loads all required macOS libraries and resolves symbols.
+func loadRuntime() error {
+	var err error
+
+	// Load libobjc.A.dylib (Objective-C runtime)
+	objcRT.libobjc, err = ffi.LoadLibrary("/usr/lib/libobjc.A.dylib")
+	if err != nil {
+		return errors.Join(ErrLibraryNotLoaded, err)
+	}
+
+	// Load Foundation framework
+	objcRT.foundation, err = ffi.LoadLibrary(
+		"/System/Library/Frameworks/Foundation.framework/Foundation")
+	if err != nil {
+		return errors.Join(ErrLibraryNotLoaded, err)
+	}
+
+	// Load AppKit framework
+	objcRT.appKit, err = ffi.LoadLibrary("/System/Library/Frameworks/AppKit.framework/AppKit")
+	if err != nil {
+		return errors.Join(ErrLibraryNotLoaded, err)
+	}
+
+	// Load QuartzCore framework (for CAMetalLayer)
+	objcRT.quartzCore, err = ffi.LoadLibrary(
+		"/System/Library/Frameworks/QuartzCore.framework/QuartzCore")
+	if err != nil {
+		return errors.Join(ErrLibraryNotLoaded, err)
+	}
+
+	// Load CoreFoundation framework
+	objcRT.coreFoundation, err = ffi.LoadLibrary(
+		"/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+	if err != nil {
+		return errors.Join(ErrLibraryNotLoaded, err)
+	}
+
+	// Resolve objc_getClass
+	objcRT.objcGetClass, err = ffi.GetSymbol(objcRT.libobjc, "objc_getClass")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+
+	// Resolve objc_msgSend
+	objcRT.objcMsgSend, err = ffi.GetSymbol(objcRT.libobjc, "objc_msgSend")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+
+	// Resolve objc_msgSend_fpret (for floating point returns)
+	objcRT.objcMsgSendFpret, err = ffi.GetSymbol(objcRT.libobjc, "objc_msgSend_fpret")
+	if err != nil {
+		// Some platforms may not have this, fall back to objc_msgSend
+		objcRT.objcMsgSendFpret = objcRT.objcMsgSend
+	}
+
+	// Resolve objc_msgSend_stret (for struct returns on x86_64).
+	// On ARM64, this symbol doesn't exist — fall back to objc_msgSend.
+	objcRT.objcMsgSendStret, err = ffi.GetSymbol(objcRT.libobjc, "objc_msgSend_stret")
+	if err != nil {
+		objcRT.objcMsgSendStret = objcRT.objcMsgSend
+	}
+
+	// Resolve sel_registerName
+	objcRT.selRegisterName, err = ffi.GetSymbol(objcRT.libobjc, "sel_registerName")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+
+	// Resolve associated object functions (for storing Go state in ObjC objects)
+	objcRT.objcSetAssociatedObjectFn, err = ffi.GetSymbol(objcRT.libobjc, "objc_setAssociatedObject")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+	objcRT.objcGetAssociatedObjectFn, err = ffi.GetSymbol(objcRT.libobjc, "objc_getAssociatedObject")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+
+	// Resolve class registration functions (for custom NSView subclass)
+	objcRT.objcAllocateClassPair, err = ffi.GetSymbol(objcRT.libobjc, "objc_allocateClassPair")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+	objcRT.classAddMethod, err = ffi.GetSymbol(objcRT.libobjc, "class_addMethod")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+	objcRT.objcRegisterClassPair, err = ffi.GetSymbol(objcRT.libobjc, "objc_registerClassPair")
+	if err != nil {
+		return errors.Join(ErrSymbolNotFound, err)
+	}
+
+	// Prepare reusable call interfaces
+	objcRT.cifVoidPtr = &types.CallInterface{}
+	objcRT.cifFpret = &types.CallInterface{}
+	objcRT.cifSelector = &types.CallInterface{}
+	objcRT.cifSend5Ptr = &types.CallInterface{}
+
+	// CIF for generic pointer-returning calls (2 args: self, _cmd)
+	err = ffi.PrepareCallInterface(
+		objcRT.cifVoidPtr,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		[]*types.TypeDescriptor{
+			types.PointerTypeDescriptor, // self (ID)
+			types.PointerTypeDescriptor, // _cmd (SEL)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// CIF for sel_registerName (1 arg: const char*)
+	err = ffi.PrepareCallInterface(
+		objcRT.cifSelector,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		[]*types.TypeDescriptor{
+			types.PointerTypeDescriptor, // name
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// CIF for Send5Ptr (self, _cmd, arg0, arg1, arg2)
+	err = ffi.PrepareCallInterface(
+		objcRT.cifSend5Ptr,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		[]*types.TypeDescriptor{
+			types.PointerTypeDescriptor, // self
+			types.PointerTypeDescriptor, // _cmd
+			types.PointerTypeDescriptor, // arg0
+			types.PointerTypeDescriptor, // arg1
+			types.PointerTypeDescriptor, // arg2
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// objcMsgSendFn returns the correct objc_msgSend variant for the given return type.
+// On x86_64, struct returns > 16 bytes require objc_msgSend_stret per the SysV ABI.
+// On ARM64, objc_msgSend handles all return types directly.
+func objcMsgSendFn(retType *types.TypeDescriptor) unsafe.Pointer {
+	if retType != nil && retType.Kind == types.StructType && runtime.GOARCH == "amd64" {
+		if objcRT.objcMsgSendStret != nil && retType.Size > 16 {
+			return objcRT.objcMsgSendStret
+		}
+	}
+	return objcRT.objcMsgSend
+}
+
+// GetClass returns the Objective-C class with the given name.
+// Returns 0 if the class is not found.
+func GetClass(name string) Class {
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	// Convert string to C string (null-terminated)
+	cname := append([]byte(name), 0)
+
+	var result uintptr
+	namePtr := unsafe.Pointer(&cname[0])
+	argBox := &struct {
+		name unsafe.Pointer
+	}{
+		name: namePtr,
+	}
+
+	err := objcCallLocked(
+		objcRT.cifSelector,
+		objcRT.objcGetClass,
+		unsafe.Pointer(&result),
+		[]unsafe.Pointer{unsafe.Pointer(&argBox.name)},
+	)
+	if err != nil {
+		return 0
+	}
+
+	return Class(result)
+}
+
+// RegisterSelector registers a selector name and returns its SEL.
+// Selectors are cached by the runtime, so calling this multiple times
+// with the same name returns the same SEL.
+func RegisterSelector(name string) SEL {
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	// Convert string to C string (null-terminated)
+	cname := append([]byte(name), 0)
+
+	var result uintptr
+	namePtr := unsafe.Pointer(&cname[0])
+	argBox := &struct {
+		name unsafe.Pointer
+	}{
+		name: namePtr,
+	}
+
+	err := objcCallLocked(
+		objcRT.cifSelector,
+		objcRT.selRegisterName,
+		unsafe.Pointer(&result),
+		[]unsafe.Pointer{unsafe.Pointer(&argBox.name)},
+	)
+	if err != nil {
+		return 0
+	}
+
+	return SEL(result)
+}
+
+// Send sends a message to an Objective-C object and returns the result.
+// This is equivalent to calling objc_msgSend(self, sel).
+// For methods with arguments, use SendArgs.
+func (id ID) Send(sel SEL) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	initSelectors()
+	switch sel {
+	case selectors.frame,
+		selectors.bounds,
+		selectors.visibleFrame,
+		selectors.drawableSize,
+		selectors.contentRectForFrameRect,
+		selectors.frameRectForContentRect:
+		panic("objc: Send used with struct-return selector")
+	}
+
+	var result uintptr
+	argBox := &struct {
+		self uintptr
+		cmd  uintptr
+	}{
+		self: uintptr(id),
+		cmd:  uintptr(sel),
+	}
+
+	err := objcCallLocked(
+		objcRT.cifVoidPtr,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		[]unsafe.Pointer{
+			unsafe.Pointer(&argBox.self),
+			unsafe.Pointer(&argBox.cmd),
+		},
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+func objcCallLocked(cif *types.CallInterface, fn unsafe.Pointer, rvalue unsafe.Pointer, avalue []unsafe.Pointer) error {
+	_, err := ffi.CallFunction(cif, fn, rvalue, avalue)
+	return err
+}
+
+// SendClass sends a message to a Class and returns the result.
+// This is used for class methods like [NSApplication sharedApplication].
+func (c Class) Send(sel SEL) ID {
+	return ID(c).Send(sel)
+}
+
+// SendSuper sends a message to the superclass implementation.
+// This is useful for delegate callbacks that need to call super.
+func (id ID) SendSuper(sel SEL) ID {
+	// For simplicity, we just call the regular Send here.
+	// A full implementation would use objc_msgSendSuper.
+	return id.Send(sel)
+}
+
+// IsNil returns true if the ID is nil (0).
+func (id ID) IsNil() bool {
+	return id == 0
+}
+
+// Ptr returns the ID as a uintptr for use with FFI.
+func (id ID) Ptr() uintptr {
+	return uintptr(id)
+}
+
+// ClassPtr returns the Class as a uintptr for use with FFI.
+func (c Class) ClassPtr() uintptr {
+	return uintptr(c)
+}
+
+// SELPtr returns the SEL as a uintptr for use with FFI.
+func (s SEL) SELPtr() uintptr {
+	return uintptr(s)
+}
+
+// msgSend is a low-level helper that calls objc_msgSend with arbitrary arguments.
+// The arguments slice contains the values to pass after self and _cmd.
+// This function creates a new CIF for each call, which is not optimal for
+// performance-critical code paths. For hot paths, create a dedicated CIF.
+func msgSend(self ID, sel SEL, args ...uintptr) ID {
+	if self == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	initSelectors()
+	if len(args) > 6 {
+		panic("objc: msgSend stack args unsupported")
+	}
+	switch sel {
+	case selectors.setDrawableSize,
+		selectors.setContentsScale,
+		selectors.setFrame,
+		selectors.setBounds,
+		selectors.initWithContentRectStyleMaskBackingDefer,
+		selectors.contentRectForFrameRect,
+		selectors.frameRectForContentRect:
+		panic("objc: msgSend requires typed args")
+	}
+
+	// Build argument type list: self, _cmd, then user args
+	argTypes := make([]*types.TypeDescriptor, 2+len(args))
+	argTypes[0] = types.PointerTypeDescriptor // self
+	argTypes[1] = types.PointerTypeDescriptor // _cmd
+	for i := range args {
+		argTypes[2+i] = types.PointerTypeDescriptor // Each arg as pointer
+	}
+
+	// Prepare CIF
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	// Build argument pointers: self, sel, then user args. Use a heap-backed slice.
+	argVals := make([]uintptr, 2+len(args))
+	argVals[0] = uintptr(self)
+	argVals[1] = uintptr(sel)
+	copy(argVals[2:], args)
+
+	argPtrs := make([]unsafe.Pointer, 2+len(args))
+	for i := range argVals {
+		argPtrs[i] = unsafe.Pointer(&argVals[i])
+	}
+
+	var result uintptr
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+// SendPtr sends a message with one pointer argument.
+func (id ID) SendPtr(sel SEL, arg uintptr) ID {
+	return msgSend(id, sel, arg)
+}
+
+// Send5Ptr calls objc_msgSend with three additional pointer arguments.
+func (id ID) Send5Ptr(sel SEL, arg0, arg1, arg2 uintptr) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+		arg0 uintptr
+		arg1 uintptr
+		arg2 uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+		arg0: arg0,
+		arg1: arg1,
+		arg2: arg2,
+	}
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+		unsafe.Pointer(&argBox.arg0),
+		unsafe.Pointer(&argBox.arg1),
+		unsafe.Pointer(&argBox.arg2),
+	}
+
+	var result uintptr
+	if _, err := ffi.CallFunction(objcRT.cifSend5Ptr, objcRT.objcMsgSend,
+		unsafe.Pointer(&result), argPtrs); err != nil {
+		return 0
+	}
+	return ID(result)
+}
+
+// SendBool sends a message with one boolean argument.
+func (id ID) SendBool(sel SEL, arg bool) ID {
+	var val uintptr
+	if arg {
+		val = 1
+	}
+	return msgSend(id, sel, val)
+}
+
+// SendInt sends a message with one integer argument.
+func (id ID) SendInt(sel SEL, arg int64) ID {
+	return msgSend(id, sel, uintptr(arg))
+}
+
+// SendUint sends a message with one unsigned integer argument.
+func (id ID) SendUint(sel SEL, arg uint64) ID {
+	return msgSend(id, sel, uintptr(arg))
+}
+
+// SendUintUint sends a message with two uint64 arguments.
+func (id ID) SendUintUint(sel SEL, arg0, arg1 uint64) ID {
+	return msgSend(id, sel, uintptr(arg0), uintptr(arg1))
+}
+
+// SendDouble sends a message with one double argument.
+func (id ID) SendDouble(sel SEL, arg float64) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+		types.DoubleTypeDescriptor,  // arg
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+		arg  float64
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+		arg:  arg,
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+		unsafe.Pointer(&argBox.arg),
+	}
+
+	var result uintptr
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+// SendDoubleDouble sends a message with two double arguments.
+func (id ID) SendDoubleDouble(sel SEL, arg0, arg1 float64) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+		types.DoubleTypeDescriptor,  // arg0
+		types.DoubleTypeDescriptor,  // arg1
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+		arg0 float64
+		arg1 float64
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+		arg0: arg0,
+		arg1: arg1,
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+		unsafe.Pointer(&argBox.arg0),
+		unsafe.Pointer(&argBox.arg1),
+	}
+
+	var result uintptr
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+// SendRect sends a message with an NSRect argument.
+// On x86_64, NSRect is passed by value in registers.
+// On ARM64, it may be passed differently.
+func (id ID) SendRect(sel SEL, rect NSRect) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+		nsRectType,                  // rect
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+		rect NSRect
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+		rect: rect,
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+		unsafe.Pointer(&argBox.rect),
+	}
+
+	var result uintptr
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+// SendRectUintUintBool sends a message for initWithContentRect:styleMask:backing:defer:
+// This is the standard NSWindow initialization method.
+func (id ID) SendRectUintUintBool(sel SEL, rect NSRect, style NSUInteger, backing NSBackingStoreType, deferFlag bool) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	// Arguments: self, _cmd, rect, styleMask, backing, defer
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+		nsRectType,                  // rect
+		types.UInt64TypeDescriptor,  // styleMask
+		types.UInt64TypeDescriptor,  // backing
+		types.UInt8TypeDescriptor,   // defer (BOOL)
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	var deferVal uint8
+	if deferFlag {
+		deferVal = 1
+	}
+	argBox := &struct {
+		self     uintptr
+		sel      uintptr
+		rect     NSRect
+		style    NSUInteger
+		backing  NSBackingStoreType
+		deferVal uint8
+	}{
+		self:     uintptr(id),
+		sel:      uintptr(sel),
+		rect:     rect,
+		style:    style,
+		backing:  backing,
+		deferVal: deferVal,
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+		unsafe.Pointer(&argBox.rect),
+		unsafe.Pointer(&argBox.style),
+		unsafe.Pointer(&argBox.backing),
+		unsafe.Pointer(&argBox.deferVal),
+	}
+
+	var result uintptr
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+// GetRect receives an NSRect return value from a method like frame.
+// On x86_64, NSRect (32 bytes) exceeds the 16-byte register-return limit,
+// so objc_msgSend_stret is used. On ARM64, objc_msgSend handles all returns.
+func (id ID) GetRect(sel SEL) NSRect {
+	if id == 0 || sel == 0 {
+		return NSRect{}
+	}
+
+	if err := initRuntime(); err != nil {
+		return NSRect{}
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		nsRectType,
+		argTypes,
+	)
+	if err != nil {
+		return NSRect{}
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+	}
+
+	// Result buffer for the struct
+	var result [4]float64
+	_, err = ffi.CallFunction(
+		cif,
+		objcMsgSendFn(nsRectType),
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return NSRect{}
+	}
+
+	return NSRect{
+		Origin: NSPoint{X: result[0], Y: result[1]},
+		Size:   NSSize{Width: result[2], Height: result[3]},
+	}
+}
+
+// GetPoint receives an NSPoint return value from a method like locationInWindow.
+// On x86_64 and ARM64, NSPoint (two doubles) is returned in registers.
+func (id ID) GetPoint(sel SEL) NSPoint {
+	if id == 0 || sel == 0 {
+		return NSPoint{}
+	}
+
+	if err := initRuntime(); err != nil {
+		return NSPoint{}
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		nsSizeType, // NSPoint and NSSize have the same layout (two doubles)
+		argTypes,
+	)
+	if err != nil {
+		return NSPoint{}
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+	}
+
+	// Result buffer sized to [4]float64 because goffi's handleHFAReturn always
+	// casts rvalue to *[4]float64 regardless of the actual element count, and
+	// Go 1.26's checkptr (enabled by -race) rejects a smaller allocation.
+	var result [4]float64
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return NSPoint{}
+	}
+
+	return NSPoint{X: result[0], Y: result[1]}
+}
+
+// GetUint64 receives a uint64 return value from a method.
+func (id ID) GetUint64(sel SEL) uint64 {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.UInt64TypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+	}
+
+	var result uint64
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	return result
+}
+
+// GetInt64 receives an int64 return value from a method.
+func (id ID) GetInt64(sel SEL) int64 {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.SInt64TypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+	}
+
+	var result int64
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	return result
+}
+
+// GetDouble receives a float64 return value from a method.
+func (id ID) GetDouble(sel SEL) float64 {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.DoubleTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+	}
+
+	var result float64
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSendFpret,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	return result
+}
+
+// GetBool receives a bool return value from a method.
+func (id ID) GetBool(sel SEL) bool {
+	if id == 0 || sel == 0 {
+		return false
+	}
+
+	if err := initRuntime(); err != nil {
+		return false
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.UInt8TypeDescriptor, // BOOL is char (uint8)
+		argTypes,
+	)
+	if err != nil {
+		return false
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+	}
+
+	var result uint8
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return false
+	}
+
+	return result != 0
+}
+
+// SendSize sends a message with an NSSize argument.
+func (id ID) SendSize(sel SEL, size NSSize) ID {
+	if id == 0 || sel == 0 {
+		return 0
+	}
+
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // self
+		types.PointerTypeDescriptor, // _cmd
+		nsSizeType,                  // size
+	}
+
+	cif := &types.CallInterface{}
+	err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	)
+	if err != nil {
+		return 0
+	}
+
+	argBox := &struct {
+		self uintptr
+		sel  uintptr
+		size NSSize
+	}{
+		self: uintptr(id),
+		sel:  uintptr(sel),
+		size: size,
+	}
+
+	argPtrs := []unsafe.Pointer{
+		unsafe.Pointer(&argBox.self),
+		unsafe.Pointer(&argBox.sel),
+		unsafe.Pointer(&argBox.size),
+	}
+
+	var result uintptr
+	_, err = ffi.CallFunction(
+		cif,
+		objcRT.objcMsgSend,
+		unsafe.Pointer(&result),
+		argPtrs,
+	)
+	if err != nil {
+		return 0
+	}
+
+	ret := ID(result)
+	return ret
+}
+
+// AllocateClassPair creates a new ObjC class as a subclass of superclass.
+// Returns the new Class, or 0 if allocation fails.
+// Call RegisterClassPair after adding methods.
+func AllocateClassPair(superclass Class, name string) Class {
+	if err := initRuntime(); err != nil {
+		return 0
+	}
+
+	nameBytes := append([]byte(name), 0)
+
+	cif := &types.CallInterface{}
+	if err := ffi.PrepareCallInterface(cif, types.DefaultCall,
+		types.PointerTypeDescriptor,
+		[]*types.TypeDescriptor{
+			types.PointerTypeDescriptor,
+			types.PointerTypeDescriptor,
+			types.PointerTypeDescriptor,
+		},
+	); err != nil {
+		return 0
+	}
+
+	super := uintptr(superclass)
+	namePtr := uintptr(unsafe.Pointer(&nameBytes[0]))
+	var extraBytes uintptr
+
+	var result uintptr
+	if _, err := ffi.CallFunction(cif,
+		objcRT.objcAllocateClassPair,
+		unsafe.Pointer(&result),
+		[]unsafe.Pointer{
+			unsafe.Pointer(&super),
+			unsafe.Pointer(&namePtr),
+			unsafe.Pointer(&extraBytes),
+		},
+	); err != nil {
+		return 0
+	}
+	return Class(result)
+}
+
+// ClassAddMethod adds a method to a class. imp is a C function pointer
+// (use ffi.NewCallback to create from Go function). types is the ObjC
+// type encoding string (e.g., "v@:@" for void(id,SEL,id)).
+func ClassAddMethod(cls Class, sel SEL, imp uintptr, typeEncoding string) bool {
+	if err := initRuntime(); err != nil {
+		return false
+	}
+
+	typeBytes := append([]byte(typeEncoding), 0)
+
+	cif := &types.CallInterface{}
+	if err := ffi.PrepareCallInterface(cif, types.DefaultCall,
+		types.PointerTypeDescriptor,
+		[]*types.TypeDescriptor{
+			types.PointerTypeDescriptor,
+			types.PointerTypeDescriptor,
+			types.PointerTypeDescriptor,
+			types.PointerTypeDescriptor,
+		},
+	); err != nil {
+		return false
+	}
+
+	clsPtr := uintptr(cls)
+	selPtr := uintptr(sel)
+	typePtr := uintptr(unsafe.Pointer(&typeBytes[0]))
+
+	var result uintptr
+	if _, err := ffi.CallFunction(cif,
+		objcRT.classAddMethod,
+		unsafe.Pointer(&result),
+		[]unsafe.Pointer{
+			unsafe.Pointer(&clsPtr),
+			unsafe.Pointer(&selPtr),
+			unsafe.Pointer(&imp),
+			unsafe.Pointer(&typePtr),
+		},
+	); err != nil {
+		return false
+	}
+	return result != 0
+}
+
+// RegisterClassPair registers a class that was allocated with AllocateClassPair.
+func RegisterClassPair(cls Class) {
+	if err := initRuntime(); err != nil {
+		return
+	}
+
+	cif := &types.CallInterface{}
+	if err := ffi.PrepareCallInterface(cif, types.DefaultCall,
+		types.VoidTypeDescriptor,
+		[]*types.TypeDescriptor{
+			types.PointerTypeDescriptor,
+		},
+	); err != nil {
+		return
+	}
+
+	clsPtr := uintptr(cls)
+	_, _ = ffi.CallFunction(cif,
+		objcRT.objcRegisterClassPair,
+		nil,
+		[]unsafe.Pointer{
+			unsafe.Pointer(&clsPtr),
+		},
+	)
+}
+
+// SetAssociatedObject sets an associated object on the given ObjC object.
+func SetAssociatedObject(object ID, key unsafe.Pointer, value unsafe.Pointer, policy uintptr) {
+	if object == 0 {
+		return
+	}
+	if err := initRuntime(); err != nil {
+		return
+	}
+
+	objVal := uintptr(object)
+	keyVal := uintptr(key) // unsafe.Pointer -> uintptr
+	valVal := uintptr(value)
+	polVal := uint64(policy)
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // object (id)
+		types.PointerTypeDescriptor, // key (void*)
+		types.PointerTypeDescriptor, // value (id)
+		types.UInt64TypeDescriptor,  // policy (objc_AssociationPolicy)
+	}
+
+	cif := &types.CallInterface{}
+	if err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.VoidTypeDescriptor,
+		argTypes,
+	); err != nil {
+		return
+	}
+
+	args := []unsafe.Pointer{
+		unsafe.Pointer(&objVal),
+		unsafe.Pointer(&keyVal),
+		unsafe.Pointer(&valVal),
+		unsafe.Pointer(&polVal),
+	}
+
+	_, _ = ffi.CallFunction(cif, objcRT.objcSetAssociatedObjectFn, nil, args)
+}
+
+// GetAssociatedObject retrieves the associated object for the given key.
+func GetAssociatedObject(object ID, key unsafe.Pointer) unsafe.Pointer {
+	if object == 0 {
+		return nil
+	}
+	if err := initRuntime(); err != nil {
+		return nil
+	}
+
+	objVal := uintptr(object)
+	keyVal := uintptr(key)
+
+	argTypes := []*types.TypeDescriptor{
+		types.PointerTypeDescriptor, // object
+		types.PointerTypeDescriptor, // key
+	}
+
+	cif := &types.CallInterface{}
+	if err := ffi.PrepareCallInterface(
+		cif,
+		types.DefaultCall,
+		types.PointerTypeDescriptor,
+		argTypes,
+	); err != nil {
+		return nil
+	}
+
+	var ret uintptr
+	args := []unsafe.Pointer{
+		unsafe.Pointer(&objVal),
+		unsafe.Pointer(&keyVal),
+	}
+	_, _ = ffi.CallFunction(cif, objcRT.objcGetAssociatedObjectFn, unsafe.Pointer(&ret), args)
+	return unsafe.Pointer(ret) //nolint:govet // ret holds an ObjC pointer from C FFI, not a Go GC-managed pointer
+}

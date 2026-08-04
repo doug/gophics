@@ -1,0 +1,477 @@
+package gg
+
+import (
+	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
+	"image/png"
+	"io"
+	"os"
+	"sync/atomic"
+)
+
+// Compile-time interface checks.
+var (
+	_ image.Image = (*Pixmap)(nil)
+	_ draw.Image  = (*Pixmap)(nil)
+)
+
+// nextPixmapGenID is a process-global monotonic counter for Pixmap identity.
+// Follows the Skia SkPixelRef::getGenerationID() pattern (ADR-014).
+var nextPixmapGenID atomic.Uint64
+
+// Pixmap represents a rectangular pixel buffer.
+// It implements both image.Image (read-only) and draw.Image (read-write)
+// interfaces, making it compatible with Go's standard image ecosystem
+// including text rendering via golang.org/x/image/font.
+type Pixmap struct {
+	width  int
+	height int
+	data   []uint8 // Premultiplied RGBA format, 4 bytes per pixel
+	genID  uint64  // Unique generation ID for GPU texture cache keying
+}
+
+// NewPixmap creates a new pixmap with the given dimensions.
+func NewPixmap(width, height int) *Pixmap {
+	return &Pixmap{
+		width:  width,
+		height: height,
+		data:   make([]uint8, width*height*4),
+		genID:  nextPixmapGenID.Add(1),
+	}
+}
+
+// NewPixmapFromBuffer wraps an existing premultiplied-RGBA buffer as a Pixmap
+// without allocating. The Pixmap aliases buf[:width*height*4]; the caller
+// keeps ownership and must not reuse buf until the Pixmap is done.
+// Panics on non-positive dimensions, dimensions that overflow int, or undersized buf.
+//
+// After modifying the buffer externally, call NotifyPixelsChanged() to
+// invalidate cached GPU textures (ADR-014).
+//
+// The Pixmap holds a reference to buf's backing array; the garbage collector
+// will not free the array while the Pixmap exists.
+//
+// The Pixmap is not safe for concurrent use. External writes to buf must
+// not overlap with gg drawing operations on this Pixmap.
+func NewPixmapFromBuffer(buf []uint8, width, height int) *Pixmap {
+	if width <= 0 || height <= 0 {
+		panic("gg: NewPixmapFromBuffer: width and height must be > 0")
+	}
+	// Guard against silent overflow on 32-bit platforms (GOARCH=386/arm):
+	// e.g. 32768*32768*4 wraps to 0 in a 32-bit int, defeating the size check.
+	// Capping each dimension at 2^30 keeps width*height*4 within int64 range
+	// (max 2^62 < 2^63-1) before the int conversion check below.
+	const maxDim = 1 << 30
+	if width > maxDim || height > maxDim {
+		panic("gg: NewPixmapFromBuffer: width or height too large")
+	}
+	need64 := int64(width) * int64(height) * 4
+	if need64 > int64(^uint(0)>>1) {
+		panic("gg: NewPixmapFromBuffer: width*height*4 overflows int")
+	}
+	need := int(need64)
+	if len(buf) < need {
+		panic("gg: NewPixmapFromBuffer: buffer too small")
+	}
+	return &Pixmap{
+		width:  width,
+		height: height,
+		data:   buf[:need],
+		genID:  nextPixmapGenID.Add(1),
+	}
+}
+
+// GenerationID returns the unique identifier for this pixmap's current content.
+// Used by GPU texture cache to avoid stale texture reuse (ADR-014).
+// The ID changes when NotifyPixelsChanged() is called.
+func (p *Pixmap) GenerationID() uint64 {
+	return p.genID
+}
+
+// NotifyPixelsChanged assigns a new generation ID, invalidating any cached
+// GPU textures. Call after modifying pixel data directly (e.g., bulk writes).
+// Individual SetPixel/Clear calls do NOT auto-notify — call explicitly after
+// batch mutations. Follows Skia's SkPixelRef::notifyPixelsChanged() pattern.
+func (p *Pixmap) NotifyPixelsChanged() {
+	p.genID = nextPixmapGenID.Add(1)
+}
+
+// Width returns the width of the pixmap.
+func (p *Pixmap) Width() int {
+	return p.width
+}
+
+// Height returns the height of the pixmap.
+func (p *Pixmap) Height() int {
+	return p.height
+}
+
+// Data returns the raw pixel data (RGBA format).
+func (p *Pixmap) Data() []uint8 {
+	return p.data
+}
+
+// SetPixel sets the color of a single pixel.
+// The color is stored in premultiplied alpha format internally.
+func (p *Pixmap) SetPixel(x, y int, c RGBA) {
+	if x < 0 || x >= p.width || y < 0 || y >= p.height {
+		return
+	}
+	i := (y*p.width + x) * 4
+	p.data[i+0] = uint8(clamp255(c.R * c.A * 255))
+	p.data[i+1] = uint8(clamp255(c.G * c.A * 255))
+	p.data[i+2] = uint8(clamp255(c.B * c.A * 255))
+	p.data[i+3] = uint8(clamp255(c.A * 255))
+}
+
+// SetPixelPremul sets a pixel using premultiplied RGBA uint8 values directly.
+// This skips the float-to-uint8 conversion, clamping, and premultiplication
+// overhead of SetPixel. Use this when colors are precomputed for batch operations.
+//
+// Values must already be in premultiplied alpha form and clamped to [0, 255].
+// Out-of-bounds coordinates are silently ignored.
+func (p *Pixmap) SetPixelPremul(x, y int, r, g, b, a uint8) {
+	if x < 0 || x >= p.width || y < 0 || y >= p.height {
+		return
+	}
+	i := (y*p.width + x) * 4
+	p.data[i+0] = r
+	p.data[i+1] = g
+	p.data[i+2] = b
+	p.data[i+3] = a
+}
+
+// FillRect fills a rectangular region with a solid premultiplied color.
+// The rectangle is clamped to pixmap bounds. This is a CPU-only operation —
+// it writes directly to the pixel buffer without engaging the GPU accelerator.
+//
+// Use for dirty-region clearing in retained-mode compositors where GPU
+// acceleration is counterproductive (would block the non-MSAA blit path).
+func (p *Pixmap) FillRect(r image.Rectangle, pr, pg, pb, pa uint8) {
+	r = r.Intersect(image.Rect(0, 0, p.width, p.height))
+	if r.Empty() {
+		return
+	}
+
+	stride := p.width * 4
+	pixel := [4]uint8{pr, pg, pb, pa}
+
+	y0, y1 := r.Min.Y, r.Max.Y
+	x0, x1 := r.Min.X, r.Max.X
+	rowBytes := (x1 - x0) * 4
+
+	first := y0*stride + x0*4
+	for x := x0; x < x1; x++ {
+		off := first + (x-x0)*4
+		p.data[off+0] = pixel[0]
+		p.data[off+1] = pixel[1]
+		p.data[off+2] = pixel[2]
+		p.data[off+3] = pixel[3]
+	}
+
+	src := p.data[first : first+rowBytes]
+	for y := y0 + 1; y < y1; y++ {
+		dst := y*stride + x0*4
+		copy(p.data[dst:dst+rowBytes], src)
+	}
+
+	p.genID = nextPixmapGenID.Add(1)
+}
+
+// GetPixel returns the color of a single pixel as straight (non-premultiplied) RGBA.
+// Internally the pixel is stored as premultiplied alpha; this method un-premultiplies.
+func (p *Pixmap) GetPixel(x, y int) RGBA {
+	if x < 0 || x >= p.width || y < 0 || y >= p.height {
+		return Transparent
+	}
+	i := (y*p.width + x) * 4
+	a := float64(p.data[i+3]) / 255
+	if a <= 0 {
+		return RGBA{0, 0, 0, 0}
+	}
+	return RGBA{
+		R: float64(p.data[i+0]) / 255 / a,
+		G: float64(p.data[i+1]) / 255 / a,
+		B: float64(p.data[i+2]) / 255 / a,
+		A: a,
+	}
+}
+
+// getPremul returns the pixel as premultiplied RGBA values.
+// This reads raw bytes directly without un-premultiplying.
+// Used internally by compositing code that operates in premultiplied space.
+func (p *Pixmap) getPremul(x, y int) (r, g, b, a float64) {
+	if x < 0 || x >= p.width || y < 0 || y >= p.height {
+		return 0, 0, 0, 0
+	}
+	i := (y*p.width + x) * 4
+	return float64(p.data[i+0]) / 255,
+		float64(p.data[i+1]) / 255,
+		float64(p.data[i+2]) / 255,
+		float64(p.data[i+3]) / 255
+}
+
+// setPremul writes premultiplied RGBA values directly.
+// Used internally by compositing code that operates in premultiplied space.
+func (p *Pixmap) setPremul(x, y int, r, g, b, a float64) {
+	if x < 0 || x >= p.width || y < 0 || y >= p.height {
+		return
+	}
+	i := (y*p.width + x) * 4
+	p.data[i+0] = uint8(clamp255(r * 255))
+	p.data[i+1] = uint8(clamp255(g * 255))
+	p.data[i+2] = uint8(clamp255(b * 255))
+	p.data[i+3] = uint8(clamp255(a * 255))
+}
+
+// Clear fills the entire pixmap with a color.
+// The color is stored in premultiplied alpha format.
+func (p *Pixmap) Clear(c RGBA) {
+	r := uint8(clamp255(c.R * c.A * 255))
+	g := uint8(clamp255(c.G * c.A * 255))
+	b := uint8(clamp255(c.B * c.A * 255))
+	a := uint8(clamp255(c.A * 255))
+
+	for i := 0; i < len(p.data); i += 4 {
+		p.data[i+0] = r
+		p.data[i+1] = g
+		p.data[i+2] = b
+		p.data[i+3] = a
+	}
+}
+
+// ToImage converts the pixmap to an image.RGBA.
+func (p *Pixmap) ToImage() *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, p.width, p.height))
+	copy(img.Pix, p.data)
+	return img
+}
+
+// ImageView returns an *image.RGBA whose Pix aliases the pixmap's buffer
+// (zero-copy alternative to ToImage). External writes through the returned
+// image must be followed by NotifyPixelsChanged for GPU cache correctness.
+func (p *Pixmap) ImageView() *image.RGBA {
+	return &image.RGBA{
+		Pix:    p.data,
+		Stride: p.width * 4,
+		Rect:   image.Rect(0, 0, p.width, p.height),
+	}
+}
+
+// FromImage creates a pixmap from an image.
+func FromImage(img image.Image) *Pixmap {
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	pm := NewPixmap(width, height)
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			c := img.At(bounds.Min.X+x, bounds.Min.Y+y)
+			pm.SetPixel(x, y, FromColor(c))
+		}
+	}
+
+	return pm
+}
+
+// SavePNG saves the pixmap to a PNG file.
+func (p *Pixmap) SavePNG(path string) error {
+	f, err := os.Create(path) //nolint:gosec // path is user-provided intentionally
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	img := p.ToImage()
+	return png.Encode(f, img)
+}
+
+// At implements the image.Image interface.
+// Returns premultiplied color.RGBA directly from the internal buffer.
+func (p *Pixmap) At(x, y int) color.Color {
+	if x < 0 || x >= p.width || y < 0 || y >= p.height {
+		return color.Transparent
+	}
+	i := (y*p.width + x) * 4
+	return color.RGBA{R: p.data[i+0], G: p.data[i+1], B: p.data[i+2], A: p.data[i+3]}
+}
+
+// Set implements the draw.Image interface.
+// This allows Pixmap to be used as a destination for image drawing operations,
+// including text rendering via golang.org/x/image/font.
+func (p *Pixmap) Set(x, y int, c color.Color) {
+	p.SetPixel(x, y, FromColor(c))
+}
+
+// Bounds implements the image.Image interface.
+func (p *Pixmap) Bounds() image.Rectangle {
+	return image.Rect(0, 0, p.width, p.height)
+}
+
+// ColorModel implements the image.Image interface.
+// Returns RGBAModel because the pixmap stores premultiplied alpha data.
+func (p *Pixmap) ColorModel() color.Model {
+	return color.RGBAModel
+}
+
+// FillSpan fills a horizontal span of pixels with a solid color (no blending).
+// This is optimized for batch operations when the span is >= 16 pixels.
+// The span is from x1 (inclusive) to x2 (exclusive) on row y.
+func (p *Pixmap) FillSpan(x1, x2, y int, c RGBA) {
+	// Bounds checking
+	if y < 0 || y >= p.height {
+		return
+	}
+	if x1 >= x2 {
+		return
+	}
+	if x1 < 0 {
+		x1 = 0
+	}
+	if x2 > p.width {
+		x2 = p.width
+	}
+	if x1 >= x2 {
+		return
+	}
+
+	// Convert color to premultiplied bytes once
+	r := uint8(clamp255(c.R * c.A * 255))
+	g := uint8(clamp255(c.G * c.A * 255))
+	b := uint8(clamp255(c.B * c.A * 255))
+	a := uint8(clamp255(c.A * 255))
+
+	// Calculate start position in data buffer
+	startIdx := (y*p.width + x1) * 4
+	length := x2 - x1
+
+	// For short spans (< 16 pixels), use simple loop
+	if length < 16 {
+		for i := 0; i < length; i++ {
+			idx := startIdx + i*4
+			p.data[idx+0] = r
+			p.data[idx+1] = g
+			p.data[idx+2] = b
+			p.data[idx+3] = a
+		}
+		return
+	}
+
+	// For longer spans, fill first pixel then copy in batches
+	// First pixel
+	p.data[startIdx+0] = r
+	p.data[startIdx+1] = g
+	p.data[startIdx+2] = b
+	p.data[startIdx+3] = a
+
+	// Double the pattern until we have at least 16 pixels
+	filled := 1
+	for filled < 16 && filled < length {
+		copyLen := filled
+		if filled+copyLen > length {
+			copyLen = length - filled
+		}
+		copy(p.data[startIdx+filled*4:], p.data[startIdx:startIdx+copyLen*4])
+		filled += copyLen
+	}
+
+	// Copy the 16-pixel pattern to fill the rest
+	if filled < length {
+		patternSize := filled * 4
+		for offset := filled * 4; offset < length*4; {
+			copyLen := patternSize
+			if offset+copyLen > length*4 {
+				copyLen = length*4 - offset
+			}
+			copy(p.data[startIdx+offset:], p.data[startIdx:startIdx+copyLen])
+			offset += copyLen
+		}
+	}
+}
+
+// FillSpanBlend fills a horizontal span with blending.
+// This uses batch blending operations for spans >= 16 pixels.
+func (p *Pixmap) FillSpanBlend(x1, x2, y int, c RGBA) {
+	// Bounds checking
+	if y < 0 || y >= p.height {
+		return
+	}
+	if x1 >= x2 {
+		return
+	}
+	if x1 < 0 {
+		x1 = 0
+	}
+	if x2 > p.width {
+		x2 = p.width
+	}
+	if x1 >= x2 {
+		return
+	}
+
+	// If alpha is 1.0 (fully opaque), use direct fill (no blending needed)
+	if c.A >= 0.9999 {
+		p.FillSpan(x1, x2, y, c)
+		return
+	}
+
+	// Convert color to premultiplied RGBA bytes
+	r := uint8(clamp255(c.R * c.A * 255))
+	g := uint8(clamp255(c.G * c.A * 255))
+	b := uint8(clamp255(c.B * c.A * 255))
+	a := uint8(clamp255(c.A * 255))
+
+	length := x2 - x1
+	startIdx := (y*p.width + x1) * 4
+
+	// For short spans, use scalar blending
+	if length < 16 {
+		for i := 0; i < length; i++ {
+			idx := startIdx + i*4
+			dr := p.data[idx+0]
+			dg := p.data[idx+1]
+			db := p.data[idx+2]
+			da := p.data[idx+3]
+
+			// Source-over blending: Result = S + D * (1 - Sa)
+			invSa := 255 - a
+			p.data[idx+0] = r + uint8((uint32(dr)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+			p.data[idx+1] = g + uint8((uint32(dg)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+			p.data[idx+2] = b + uint8((uint32(db)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+			p.data[idx+3] = a + uint8((uint32(da)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+		}
+		return
+	}
+
+	// For longer spans, use the same scalar blending
+	// TODO: Integrate batch blending without import cycle
+	invSa := 255 - a
+	for i := 0; i < length; i++ {
+		idx := startIdx + i*4
+		dr := p.data[idx+0]
+		dg := p.data[idx+1]
+		db := p.data[idx+2]
+		da := p.data[idx+3]
+
+		p.data[idx+0] = r + uint8((uint32(dr)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+		p.data[idx+1] = g + uint8((uint32(dg)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+		p.data[idx+2] = b + uint8((uint32(db)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+		p.data[idx+3] = a + uint8((uint32(da)*uint32(invSa)+127)/255) //nolint:gosec // bounded by 255
+	}
+}
+
+// EncodePNG writes the pixmap as PNG to the given writer.
+// This is useful for streaming, network output, or custom storage.
+func (p *Pixmap) EncodePNG(w io.Writer) error {
+	return png.Encode(w, p.ToImage())
+}
+
+// EncodeJPEG writes the pixmap as JPEG with the given quality (1-100).
+func (p *Pixmap) EncodeJPEG(w io.Writer, quality int) error {
+	return jpeg.Encode(w, p.ToImage(), &jpeg.Options{Quality: quality})
+}

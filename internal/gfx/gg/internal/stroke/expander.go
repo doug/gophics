@@ -1,0 +1,852 @@
+// Package stroke provides stroke expansion algorithms for converting stroked paths to filled outlines.
+//
+// This package implements CPU-side stroke expansion following tiny-skia and kurbo patterns.
+// The algorithm converts a path with stroke style into a filled path suitable for GPU rasterization.
+//
+// Key algorithm insight: A stroke is converted to a FILL path where:
+//   - The outer offset path goes forward
+//   - The inner offset path is reversed
+//   - Line caps connect the endpoints
+//   - Line joins connect the segments
+package stroke
+
+import (
+	"math"
+)
+
+// Point represents a 2D point (internal copy to avoid import cycle).
+type Point struct {
+	X, Y float64
+}
+
+// Vec2 returns the point as a vector from the origin.
+func (p Point) Vec2() Vec2 {
+	return Vec2(p)
+}
+
+// Add returns the sum of two points.
+func (p Point) Add(v Vec2) Point {
+	return Point{X: p.X + v.X, Y: p.Y + v.Y}
+}
+
+// Sub returns the difference between two points as a vector.
+func (p Point) Sub(q Point) Vec2 {
+	return Vec2{X: p.X - q.X, Y: p.Y - q.Y}
+}
+
+// Distance returns the distance between two points.
+func (p Point) Distance(q Point) float64 {
+	return p.Sub(q).Length()
+}
+
+// Lerp performs linear interpolation between two points.
+func (p Point) Lerp(q Point, t float64) Point {
+	return Point{
+		X: p.X + (q.X-p.X)*t,
+		Y: p.Y + (q.Y-p.Y)*t,
+	}
+}
+
+// Vec2 represents a 2D vector.
+type Vec2 struct {
+	X, Y float64
+}
+
+// Add returns the sum of two vectors.
+func (v Vec2) Add(w Vec2) Vec2 {
+	return Vec2{X: v.X + w.X, Y: v.Y + w.Y}
+}
+
+// Sub returns the difference of two vectors.
+func (v Vec2) Sub(w Vec2) Vec2 {
+	return Vec2{X: v.X - w.X, Y: v.Y - w.Y}
+}
+
+// Scale returns the vector scaled by s.
+func (v Vec2) Scale(s float64) Vec2 {
+	return Vec2{X: v.X * s, Y: v.Y * s}
+}
+
+// Neg returns the negated vector.
+func (v Vec2) Neg() Vec2 {
+	return Vec2{X: -v.X, Y: -v.Y}
+}
+
+// Dot returns the dot product of two vectors.
+func (v Vec2) Dot(w Vec2) float64 {
+	return v.X*w.X + v.Y*w.Y
+}
+
+// Cross returns the 2D cross product (z-component of 3D cross).
+func (v Vec2) Cross(w Vec2) float64 {
+	return v.X*w.Y - v.Y*w.X
+}
+
+// Length returns the length of the vector.
+func (v Vec2) Length() float64 {
+	return math.Sqrt(v.X*v.X + v.Y*v.Y)
+}
+
+// LengthSquared returns the squared length of the vector.
+func (v Vec2) LengthSquared() float64 {
+	return v.X*v.X + v.Y*v.Y
+}
+
+// Normalize returns a unit vector in the same direction.
+func (v Vec2) Normalize() Vec2 {
+	length := v.Length()
+	if length < 1e-10 {
+		return Vec2{X: 0, Y: 0}
+	}
+	return Vec2{X: v.X / length, Y: v.Y / length}
+}
+
+// Perp returns the perpendicular vector (rotated 90 degrees counter-clockwise).
+func (v Vec2) Perp() Vec2 {
+	return Vec2{X: -v.Y, Y: v.X}
+}
+
+// ToPoint converts the vector to a point.
+func (v Vec2) ToPoint() Point {
+	return Point(v)
+}
+
+// Angle returns the angle of the vector in radians.
+func (v Vec2) Angle() float64 {
+	return math.Atan2(v.Y, v.X)
+}
+
+// LineCap specifies the shape of line endpoints.
+type LineCap int
+
+const (
+	// LineCapButt specifies a flat line cap.
+	LineCapButt LineCap = iota
+	// LineCapRound specifies a rounded line cap.
+	LineCapRound
+	// LineCapSquare specifies a square line cap.
+	LineCapSquare
+)
+
+// LineJoin specifies the shape of line joins.
+type LineJoin int
+
+const (
+	// LineJoinMiter specifies a sharp (mitered) join.
+	LineJoinMiter LineJoin = iota
+	// LineJoinRound specifies a rounded join.
+	LineJoinRound
+	// LineJoinBevel specifies a beveled join.
+	LineJoinBevel
+)
+
+// Stroke defines the style for stroke expansion.
+type Stroke struct {
+	Width      float64
+	Cap        LineCap
+	Join       LineJoin
+	MiterLimit float64
+}
+
+// DefaultStroke returns a stroke with default settings.
+func DefaultStroke() Stroke {
+	return Stroke{
+		Width:      1.0,
+		Cap:        LineCapButt,
+		Join:       LineJoinMiter,
+		MiterLimit: 4.0,
+	}
+}
+
+// PathVerb represents a path construction command.
+// Values match gg.PathVerb for zero-cost conversion.
+type PathVerb byte
+
+const (
+	// VerbMoveTo moves the current point without drawing. Consumes 2 coords (x, y).
+	VerbMoveTo PathVerb = iota
+	// VerbLineTo draws a line to the specified point. Consumes 2 coords (x, y).
+	VerbLineTo
+	// VerbQuadTo draws a quadratic Bezier curve. Consumes 4 coords (cx, cy, x, y).
+	VerbQuadTo
+	// VerbCubicTo draws a cubic Bezier curve. Consumes 6 coords (c1x, c1y, c2x, c2y, x, y).
+	VerbCubicTo
+	// VerbClose closes the current subpath. Consumes 0 coords.
+	VerbClose
+)
+
+// verbCoordCount returns the number of float64 coordinates consumed by a verb.
+func verbCoordCount(v PathVerb) int {
+	switch v {
+	case VerbMoveTo, VerbLineTo:
+		return 2
+	case VerbQuadTo:
+		return 4
+	case VerbCubicTo:
+		return 6
+	default:
+		return 0
+	}
+}
+
+// StrokeExpander converts stroked paths to filled paths.
+// This follows the tiny-skia/Skia stroke expansion algorithm.
+//
+// StrokeExpander is designed for reuse: call Expand() multiple times on the same
+// instance. Internal buffers are retained and reused between calls to minimize
+// heap allocations.
+type StrokeExpander struct {
+	style Stroke
+
+	// Tolerance for curve flattening and arc approximation.
+	// Smaller values produce more accurate results but more segments.
+	tolerance float64
+
+	// Build state — embedded structs, reused between Expand() calls.
+	forward  pathBuilder
+	backward pathBuilder
+	output   pathBuilder
+
+	// Current segment state
+	startPt   Point
+	startNorm Vec2
+	startTan  Vec2
+	lastPt    Point
+	lastTan   Vec2
+	lastNorm  Vec2 // Normal at lastPt (scaled by radius), used for end cap
+
+	// Join threshold for skipping small joins
+	joinThresh float64
+
+	// hadInnerJoin is true if handleInnerJoin was called during the last Expand.
+	// When false, the expanded path has no inner-pivot V-shapes and can be
+	// rendered with NonZero fill rule (avoids StencilOperationInvert).
+	hadInnerJoin bool
+
+	// Reusable buffer for curve flattening (flattenQuad/flattenCubic).
+	// Retained between calls to avoid per-curve allocations.
+	flattenBuf []Point
+}
+
+// NewStrokeExpander creates a new stroke expander with the given style.
+func NewStrokeExpander(style Stroke) *StrokeExpander {
+	return &StrokeExpander{
+		style:     style,
+		tolerance: 0.25, // Default tolerance
+	}
+}
+
+// SetTolerance sets the curve flattening tolerance.
+func (e *StrokeExpander) SetTolerance(tolerance float64) {
+	if tolerance > 0 {
+		e.tolerance = tolerance
+	}
+}
+
+// Expand converts a stroked path (given as SOA verb+coords) to a filled path.
+// Returns the expanded path as (verbs, coords) slices.
+func (e *StrokeExpander) Expand(verbs []PathVerb, coords []float64) ([]PathVerb, []float64) {
+	e.reset()
+
+	ci := 0
+	for _, v := range verbs {
+		switch v {
+		case VerbMoveTo:
+			pt := Point{X: coords[ci], Y: coords[ci+1]}
+			e.finish()
+			e.startPt = pt
+			e.lastPt = pt
+			ci += 2
+		case VerbLineTo:
+			pt := Point{X: coords[ci], Y: coords[ci+1]}
+			if pt != e.lastPt {
+				tangent := pt.Sub(e.lastPt)
+				e.doJoin(tangent)
+				e.lastTan = tangent
+				e.doLine(tangent, pt)
+			}
+			ci += 2
+		case VerbQuadTo:
+			ctrl := Point{X: coords[ci], Y: coords[ci+1]}
+			pt := Point{X: coords[ci+2], Y: coords[ci+3]}
+			if ctrl != e.lastPt || pt != e.lastPt {
+				e.doQuad(ctrl, pt)
+			}
+			ci += 4
+		case VerbCubicTo:
+			c1 := Point{X: coords[ci], Y: coords[ci+1]}
+			c2 := Point{X: coords[ci+2], Y: coords[ci+3]}
+			pt := Point{X: coords[ci+4], Y: coords[ci+5]}
+			if c1 != e.lastPt || c2 != e.lastPt || pt != e.lastPt {
+				e.doCubic(c1, c2, pt)
+			}
+			ci += 6
+		case VerbClose:
+			if e.lastPt != e.startPt {
+				tangent := e.startPt.Sub(e.lastPt)
+				e.doJoin(tangent)
+				e.lastTan = tangent
+				e.doLine(tangent, e.startPt)
+			}
+			e.finishClosed()
+		}
+	}
+
+	e.finish()
+	return e.output.verbs, e.output.coords
+}
+
+// HadInnerJoin reports whether handleInnerJoin was called during the last Expand.
+// When false, all joins were skipped (smooth path) and the expansion produces
+// no inner-pivot V-shapes, making it safe to use NonZero fill rule.
+func (e *StrokeExpander) HadInnerJoin() bool {
+	return e.hadInnerJoin
+}
+
+// reset clears the expander state for a new expansion.
+// Buffers are truncated but retain their backing arrays for reuse.
+func (e *StrokeExpander) reset() {
+	e.forward.reset()
+	e.backward.reset()
+	e.output.reset()
+	e.startPt = Point{}
+	e.startNorm = Vec2{}
+	e.startTan = Vec2{}
+	e.lastPt = Point{}
+	e.lastTan = Vec2{}
+	e.lastNorm = Vec2{}
+	e.joinThresh = 2.0 * e.tolerance / e.style.Width
+	e.hadInnerJoin = false
+}
+
+// doJoin handles joining the current segment to the previous one.
+func (e *StrokeExpander) doJoin(tan0 Vec2) {
+	scale := 0.5 * e.style.Width / tan0.Length()
+	norm := tan0.Perp().Scale(scale)
+	p0 := e.lastPt
+
+	if e.forward.isEmpty() {
+		e.startFirstSegment(p0, norm, tan0)
+		return
+	}
+	e.joinWithPrevious(p0, norm, tan0)
+}
+
+// startFirstSegment initializes the forward and backward paths for the first segment.
+func (e *StrokeExpander) startFirstSegment(p0 Point, norm, tan0 Vec2) {
+	e.forward.moveTo(p0.Add(norm.Neg()))
+	e.backward.moveTo(p0.Add(norm))
+	e.startTan = tan0
+	e.startNorm = norm
+}
+
+// joinWithPrevious handles joining with the previous segment.
+//
+// The key insight (from Skia/tiny-skia/Cairo) is that the two sides of a join
+// must be treated asymmetrically:
+//   - Outer (convex) side: receives join decoration (miter/bevel/round)
+//   - Inner (concave) side: routes through the pivot point to prevent self-intersection
+//
+// The cross product of consecutive tangents determines which side is which:
+//   - cross > 0 (left turn): forward is outer, backward is inner
+//   - cross < 0 (right turn): backward is outer, forward is inner
+func (e *StrokeExpander) joinWithPrevious(p0 Point, norm, tan0 Vec2) {
+	ab := e.lastTan
+	cd := tan0
+	cross := ab.Cross(cd)
+	dot := ab.Dot(cd)
+	hypot := math.Hypot(cross, dot)
+
+	// Skip join if angle change is insignificant (kurbo stroke.rs:428).
+	// Rust kurbo emits nothing here — the paths continue without explicit
+	// connecting segments. The connection happens implicitly from the next
+	// doLine() which adds lineTo for both forward and backward paths.
+	if dot > 0.0 && math.Abs(cross) < hypot*e.joinThresh {
+		return
+	}
+
+	// Compute the previous segment's normal (needed for miter point and round arc).
+	lastScale := 0.5 * e.style.Width / ab.Length()
+	lastNorm := ab.Perp().Scale(lastScale)
+
+	switch {
+	case cross > 0.0:
+		// Left turn: forward path is outer (convex), backward is inner (concave).
+		e.applyOuterJoin(&e.forward, p0, lastNorm.Neg(), norm.Neg(), ab, cd, cross, dot, hypot)
+		e.handleInnerJoin(&e.backward, p0, norm)
+	case cross < 0.0:
+		// Right turn: backward path is outer (convex), forward is inner (concave).
+		e.applyOuterJoin(&e.backward, p0, lastNorm, norm, ab, cd, -cross, dot, hypot)
+		e.handleInnerJoin(&e.forward, p0, norm.Neg())
+	default:
+		// Exactly parallel (cross == 0). This includes near-180-degree reversals
+		// (dot < 0) and exactly collinear (dot > 0). Just connect both sides.
+		e.forward.lineTo(p0.Add(norm.Neg()))
+		e.backward.lineTo(p0.Add(norm))
+	}
+}
+
+// handleInnerJoin handles the concave (inner) side of a join.
+//
+// Two-step routing (tiny-skia stroker.rs:1370-1379, Skia SkStrokerPriv):
+//  1. lineTo(pivot) — route through the center to prevent self-intersection
+//  2. lineTo(pivot + afterNorm) — place at correct normal offset for next segment
+//
+// afterNorm points toward the inner path's side (already oriented by the caller:
+// cross>0 passes norm toward backward, cross<0 passes norm.Neg() toward forward).
+// Without step 2, the inner path "jumps" diagonally from pivot to the next
+// doLine() position, creating visible teeth on thick strokes (#354).
+func (e *StrokeExpander) handleInnerJoin(path *pathBuilder, pivot Point, afterNorm Vec2) {
+	e.hadInnerJoin = true
+	path.lineTo(pivot)
+	path.lineTo(pivot.Add(afterNorm))
+}
+
+// applyOuterJoin applies the requested join type to the outer (convex) side of a join.
+// The inner side is handled separately by handleInnerJoin.
+//
+// Parameters:
+//   - outerPath: the path builder for the outer (convex) side
+//   - p0: the join vertex (pivot point)
+//   - lastNorm: normal of the previous segment (pointing away from center, toward this outer path)
+//   - norm: normal of the current segment (pointing away from center, toward this outer path)
+//   - ab, cd: tangent vectors of previous and current segments
+//   - crossAbs: absolute value of cross product (always positive)
+//   - dot: dot product of tangents
+//   - hypot: hypot(cross, dot)
+func (e *StrokeExpander) applyOuterJoin(
+	outerPath *pathBuilder, p0 Point, lastNorm, norm, ab, cd Vec2,
+	crossAbs, dot, hypot float64,
+) {
+	switch e.style.Join {
+	case LineJoinBevel:
+		outerPath.lineTo(p0.Add(norm))
+	case LineJoinMiter:
+		e.applyOuterMiterJoin(outerPath, p0, lastNorm, norm, ab, cd, crossAbs, dot, hypot)
+	case LineJoinRound:
+		e.applyOuterRoundJoin(outerPath, p0, lastNorm, norm)
+	}
+}
+
+// applyOuterMiterJoin applies a miter join on the outer (convex) side.
+// If the miter limit is exceeded, falls back to bevel.
+func (e *StrokeExpander) applyOuterMiterJoin(
+	outerPath *pathBuilder, p0 Point, lastNorm, norm, ab, cd Vec2,
+	crossAbs, dot, hypot float64,
+) {
+	miterLimitSq := e.style.MiterLimit * e.style.MiterLimit
+	if 2.0*hypot < (hypot+dot)*miterLimitSq {
+		// Compute miter point: intersection of the two offset lines.
+		fpLast := p0.Add(lastNorm)
+		fpThis := p0.Add(norm)
+		h := ab.Cross(fpThis.Sub(fpLast.Vec2().ToPoint())) / crossAbs
+		miterPt := fpThis.Add(cd.Scale(-h))
+		outerPath.lineTo(miterPt)
+	}
+	outerPath.lineTo(p0.Add(norm))
+}
+
+// applyOuterRoundJoin applies a round join arc on the outer (convex) side.
+// The arc sweeps from lastNorm to norm around the pivot point p0.
+func (e *StrokeExpander) applyOuterRoundJoin(outerPath *pathBuilder, p0 Point, lastNorm, norm Vec2) {
+	// Compute the sweep angle between the two normals.
+	// Both normals point outward on the same (convex) side, so the angle
+	// between them is the exterior angle at the join.
+	crossN := lastNorm.Cross(norm)
+	dotN := lastNorm.Dot(norm)
+	angle := math.Atan2(crossN, dotN)
+
+	if math.Abs(angle) < 1e-6 {
+		// Normals are nearly identical; just connect with a line.
+		outerPath.lineTo(p0.Add(norm))
+		return
+	}
+
+	e.roundJoin(outerPath, p0, lastNorm, angle)
+}
+
+// doLine extends both paths with a line segment.
+func (e *StrokeExpander) doLine(tangent Vec2, p1 Point) {
+	scale := 0.5 * e.style.Width / tangent.Length()
+	norm := tangent.Perp().Scale(scale)
+
+	e.forward.lineTo(p1.Add(norm.Neg()))
+	e.backward.lineTo(p1.Add(norm))
+	e.lastPt = p1
+	e.lastNorm = norm // Save normal for end cap (tiny-skia pattern)
+}
+
+// doQuad handles a quadratic Bezier curve by flattening it.
+func (e *StrokeExpander) doQuad(control, end Point) {
+	// Flatten quadratic to lines
+	points := e.flattenQuad(e.lastPt, control, end)
+	for i := 1; i < len(points); i++ {
+		tangent := points[i].Sub(points[i-1])
+		if tangent.LengthSquared() > 1e-10 {
+			e.doJoin(tangent)
+			e.lastTan = tangent
+			e.doLine(tangent, points[i])
+		}
+	}
+}
+
+// doCubic handles a cubic Bezier curve by flattening it.
+func (e *StrokeExpander) doCubic(c1, c2, end Point) {
+	// Flatten cubic to lines
+	points := e.flattenCubic(e.lastPt, c1, c2, end)
+	for i := 1; i < len(points); i++ {
+		tangent := points[i].Sub(points[i-1])
+		if tangent.LengthSquared() > 1e-10 {
+			e.doJoin(tangent)
+			e.lastTan = tangent
+			e.doLine(tangent, points[i])
+		}
+	}
+}
+
+// finish completes an open subpath with end caps.
+func (e *StrokeExpander) finish() {
+	if e.forward.isEmpty() {
+		return
+	}
+
+	// Copy forward path to output
+	e.output.appendPath(&e.forward)
+
+	// Apply end cap using saved normal from last line segment.
+	// This follows the tiny-skia pattern: use prev_normal instead of
+	// computing from points, which would give incorrect cap direction.
+	// Note: lastNorm points toward backward path, but applyCap expects
+	// the normal pointing toward forward path (from where we're drawing),
+	// so we negate it.
+	if len(e.backward.verbs) > 0 {
+		e.applyCap(e.style.Cap, e.lastPt, e.lastNorm.Neg(), false)
+	}
+
+	// Append reversed backward path
+	e.appendReversed(&e.backward)
+
+	// Apply start cap and close
+	e.applyCap(e.style.Cap, e.startPt, e.startNorm, true)
+
+	// Clear for next subpath (truncate, keep backing arrays)
+	e.forward.reset()
+	e.backward.reset()
+}
+
+// finishClosed completes a closed subpath.
+func (e *StrokeExpander) finishClosed() {
+	if e.forward.isEmpty() {
+		return
+	}
+
+	// Join back to start
+	e.doJoin(e.startTan)
+
+	// Copy forward path and close
+	e.output.appendPath(&e.forward)
+	e.output.close()
+
+	// Handle backward path separately
+	if len(e.backward.verbs) > 0 {
+		lastPt := e.backward.endPointOfLastVerb()
+		e.output.moveTo(lastPt)
+	}
+	e.appendReversed(&e.backward)
+	e.output.close()
+
+	// Clear for next subpath (truncate, keep backing arrays)
+	e.forward.reset()
+	e.backward.reset()
+}
+
+// applyCap applies a line cap at the given position.
+func (e *StrokeExpander) applyCap(capStyle LineCap, center Point, norm Vec2, closePath bool) {
+	switch capStyle {
+	case LineCapButt:
+		if closePath {
+			e.output.close()
+		} else {
+			// Line to the other side
+			returnPt := center.Add(norm.Neg())
+			e.output.lineTo(returnPt)
+		}
+
+	case LineCapRound:
+		e.roundCap(center, norm)
+		if closePath {
+			e.output.close()
+		}
+
+	case LineCapSquare:
+		e.squareCap(&e.output, center, norm, closePath)
+	}
+}
+
+// roundCap adds a rounded cap using the output path builder.
+func (e *StrokeExpander) roundCap(center Point, norm Vec2) {
+	e.roundJoin(&e.output, center, norm, math.Pi)
+}
+
+// roundJoin adds a round join arc.
+func (e *StrokeExpander) roundJoin(out *pathBuilder, center Point, norm Vec2, angle float64) {
+	// Approximate arc with cubic Beziers
+	// For a 90-degree arc, we use the standard k = 0.5522847498
+	numSegments := int(math.Ceil(math.Abs(angle) / (math.Pi / 2)))
+	if numSegments < 1 {
+		numSegments = 1
+	}
+
+	angleStep := angle / float64(numSegments)
+	currentAngle := norm.Angle()
+	radius := norm.Length()
+
+	for i := 0; i < numSegments; i++ {
+		a0 := currentAngle
+		a1 := currentAngle + angleStep
+		e.arcSegment(out, center, radius, a0, a1)
+		currentAngle = a1
+	}
+}
+
+// arcSegment adds a single arc segment (up to 90 degrees) using cubic Bezier.
+func (e *StrokeExpander) arcSegment(out *pathBuilder, center Point, radius, a0, a1 float64) {
+	// Calculate control points for cubic Bezier approximation of arc
+	// Using formula from "Drawing an elliptical arc using polylines, quadratic or cubic Bezier curves"
+	da := a1 - a0
+	alpha := math.Sin(da) * (math.Sqrt(4+3*math.Tan(da/2)*math.Tan(da/2)) - 1) / 3
+
+	cos0, sin0 := math.Cos(a0), math.Sin(a0)
+	cos1, sin1 := math.Cos(a1), math.Sin(a1)
+
+	p1 := Point{X: center.X + radius*cos0, Y: center.Y + radius*sin0}
+	p2 := Point{X: center.X + radius*cos1, Y: center.Y + radius*sin1}
+
+	c1 := Point{X: p1.X - alpha*radius*sin0, Y: p1.Y + alpha*radius*cos0}
+	c2 := Point{X: p2.X + alpha*radius*sin1, Y: p2.Y - alpha*radius*cos1}
+
+	out.cubicTo(c1, c2, p2)
+}
+
+// squareCap adds a square cap.
+func (e *StrokeExpander) squareCap(out *pathBuilder, center Point, norm Vec2, closePath bool) {
+	// Create affine transform: norm.x, norm.y, -norm.y, norm.x, center.x, center.y
+	// Apply to square corners at (+1, +1), (-1, +1), (-1, 0)
+	p1 := e.transformPoint(center, norm, Point{X: 1, Y: 1})
+	p2 := e.transformPoint(center, norm, Point{X: -1, Y: 1})
+
+	out.lineTo(p1)
+	out.lineTo(p2)
+
+	if closePath {
+		out.close()
+	} else {
+		p3 := e.transformPoint(center, norm, Point{X: -1, Y: 0})
+		out.lineTo(p3)
+	}
+}
+
+// transformPoint applies the affine transform: [norm.x, norm.y, -norm.y, norm.x, center.x, center.y].
+func (e *StrokeExpander) transformPoint(center Point, norm Vec2, p Point) Point {
+	return Point{
+		X: norm.X*p.X - norm.Y*p.Y + center.X,
+		Y: norm.Y*p.X + norm.X*p.Y + center.Y,
+	}
+}
+
+// appendReversed appends the backward path in reverse order.
+func (e *StrokeExpander) appendReversed(pb *pathBuilder) {
+	nv := len(pb.verbs)
+	if nv <= 1 {
+		return
+	}
+	// Build coord offsets for each verb
+	offsets := make([]int, nv+1)
+	off := 0
+	for j, v := range pb.verbs {
+		offsets[j] = off
+		off += verbCoordCount(v)
+	}
+	offsets[nv] = off
+
+	for i := nv - 1; i >= 1; i-- {
+		// endPt = endpoint of verb[i-1]
+		prevOff := offsets[i-1]
+		prevN := verbCoordCount(pb.verbs[i-1])
+		var endPt Point
+		if prevN >= 2 {
+			endPt = Point{X: pb.coords[prevOff+prevN-2], Y: pb.coords[prevOff+prevN-1]}
+		}
+
+		curOff := offsets[i]
+		switch pb.verbs[i] {
+		case VerbLineTo:
+			e.output.lineTo(endPt)
+		case VerbQuadTo:
+			ctrl := Point{X: pb.coords[curOff], Y: pb.coords[curOff+1]}
+			e.output.quadTo(ctrl, endPt)
+		case VerbCubicTo:
+			// Reverse: swap control1 and control2
+			ctrl2 := Point{X: pb.coords[curOff+2], Y: pb.coords[curOff+3]}
+			ctrl1 := Point{X: pb.coords[curOff], Y: pb.coords[curOff+1]}
+			e.output.cubicTo(ctrl2, ctrl1, endPt)
+		}
+	}
+}
+
+// flattenQuad flattens a quadratic Bezier curve to line segments.
+// Uses the reusable flattenBuf to avoid per-curve allocations.
+func (e *StrokeExpander) flattenQuad(p0, p1, p2 Point) []Point {
+	e.flattenBuf = append(e.flattenBuf[:0], p0)
+	e.flattenQuadRec(p0, p1, p2, 0)
+	return e.flattenBuf
+}
+
+func (e *StrokeExpander) flattenQuadRec(p0, p1, p2 Point, depth int) {
+	// Max recursion depth to prevent stack overflow (e.g. NaN coordinates)
+	if depth > 10 {
+		e.flattenBuf = append(e.flattenBuf, p2)
+		return
+	}
+
+	// Check if curve is flat enough
+	dist := distanceToLine(p1, p0, p2)
+	if dist < e.tolerance {
+		e.flattenBuf = append(e.flattenBuf, p2)
+		return
+	}
+
+	// Subdivide
+	q0 := p0.Lerp(p1, 0.5)
+	q1 := p1.Lerp(p2, 0.5)
+	q2 := q0.Lerp(q1, 0.5)
+
+	e.flattenQuadRec(p0, q0, q2, depth+1)
+	e.flattenQuadRec(q2, q1, p2, depth+1)
+}
+
+// flattenCubic flattens a cubic Bezier curve to line segments.
+// Uses the reusable flattenBuf to avoid per-curve allocations.
+func (e *StrokeExpander) flattenCubic(p0, p1, p2, p3 Point) []Point {
+	e.flattenBuf = append(e.flattenBuf[:0], p0)
+	e.flattenCubicRec(p0, p1, p2, p3, 0)
+	return e.flattenBuf
+}
+
+func (e *StrokeExpander) flattenCubicRec(p0, p1, p2, p3 Point, depth int) {
+	// Max recursion depth to prevent stack overflow (e.g. NaN coordinates)
+	if depth > 10 {
+		e.flattenBuf = append(e.flattenBuf, p3)
+		return
+	}
+
+	// Check if curve is flat enough
+	d1 := distanceToLine(p1, p0, p3)
+	d2 := distanceToLine(p2, p0, p3)
+	dist := math.Max(d1, d2)
+
+	if dist < e.tolerance {
+		e.flattenBuf = append(e.flattenBuf, p3)
+		return
+	}
+
+	// Subdivide using de Casteljau's algorithm
+	q0 := p0.Lerp(p1, 0.5)
+	q1 := p1.Lerp(p2, 0.5)
+	q2 := p2.Lerp(p3, 0.5)
+	r0 := q0.Lerp(q1, 0.5)
+	r1 := q1.Lerp(q2, 0.5)
+	s := r0.Lerp(r1, 0.5)
+
+	e.flattenCubicRec(p0, q0, r0, s, depth+1)
+	e.flattenCubicRec(s, r1, q2, p3, depth+1)
+}
+
+// distanceToLine calculates the perpendicular distance from point p to line segment (a, b).
+func distanceToLine(p, a, b Point) float64 {
+	ab := b.Sub(a)
+	abLen := ab.Length()
+
+	if abLen < 1e-10 {
+		return p.Distance(a)
+	}
+
+	// Project p onto the line
+	ap := p.Sub(a)
+	t := ap.Dot(ab) / (abLen * abLen)
+
+	if t < 0 {
+		return p.Distance(a)
+	}
+	if t > 1 {
+		return p.Distance(b)
+	}
+
+	closest := a.Add(ab.Scale(t))
+	return p.Distance(closest)
+}
+
+// pathBuilder is a helper for building paths using SOA (verb+coords) layout.
+type pathBuilder struct {
+	verbs   []PathVerb
+	coords  []float64
+	current Point
+}
+
+// reset clears the path builder for reuse, retaining the backing arrays.
+func (b *pathBuilder) reset() {
+	b.verbs = b.verbs[:0]
+	b.coords = b.coords[:0]
+	b.current = Point{}
+}
+
+func (b *pathBuilder) isEmpty() bool {
+	return len(b.verbs) == 0
+}
+
+func (b *pathBuilder) moveTo(p Point) {
+	b.verbs = append(b.verbs, VerbMoveTo)
+	b.coords = append(b.coords, p.X, p.Y)
+	b.current = p
+}
+
+func (b *pathBuilder) lineTo(p Point) {
+	b.verbs = append(b.verbs, VerbLineTo)
+	b.coords = append(b.coords, p.X, p.Y)
+	b.current = p
+}
+
+func (b *pathBuilder) quadTo(c, p Point) {
+	b.verbs = append(b.verbs, VerbQuadTo)
+	b.coords = append(b.coords, c.X, c.Y, p.X, p.Y)
+	b.current = p
+}
+
+func (b *pathBuilder) cubicTo(c1, c2, p Point) {
+	b.verbs = append(b.verbs, VerbCubicTo)
+	b.coords = append(b.coords, c1.X, c1.Y, c2.X, c2.Y, p.X, p.Y)
+	b.current = p
+}
+
+func (b *pathBuilder) close() {
+	b.verbs = append(b.verbs, VerbClose)
+}
+
+func (b *pathBuilder) appendPath(other *pathBuilder) {
+	b.verbs = append(b.verbs, other.verbs...)
+	b.coords = append(b.coords, other.coords...)
+}
+
+// endPointOfLastVerb returns the endpoint of the last verb in the path.
+func (b *pathBuilder) endPointOfLastVerb() Point {
+	if len(b.verbs) == 0 {
+		return Point{}
+	}
+	lastVerb := b.verbs[len(b.verbs)-1]
+	n := verbCoordCount(lastVerb)
+	if n >= 2 {
+		cl := len(b.coords)
+		return Point{X: b.coords[cl-2], Y: b.coords[cl-1]}
+	}
+	return Point{}
+}

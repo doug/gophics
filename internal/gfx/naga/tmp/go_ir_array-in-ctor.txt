@@ -1,0 +1,17 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Array { base: [0], size: Constant(2), stride: 4 }
+[2] Struct "Ah" { members: [{ name: "inner", type: [1], offset: 0}], span: 8 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "ah" type=[2] space=Storage(LOAD) binding=(0,0)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "cs_main" stage=Compute function={name="cs_main", args=0, exprs=2, stmts=2, locals=0} workgroup_size=(1,1,1)

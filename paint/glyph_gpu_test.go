@@ -6,8 +6,8 @@ import (
 	"image"
 	"testing"
 
-	"github.com/doug/gg"
-	_ "github.com/doug/gg/gpu" // register the GPU accelerator (as the gossamer_gpu build does)
+	"github.com/doug/gossamer/internal/gfx/gg"
+	_ "github.com/doug/gossamer/internal/gfx/gg/gpu" // register the GPU accelerator (as the gossamer_gpu build does)
 )
 
 func countOpaque(img image.Image) int {

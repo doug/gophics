@@ -1,0 +1,67 @@
+=== TYPES ===
+[0] Image { dim: D2, arrayed: false, class: Sampled}
+[1] Image { dim: D2, arrayed: false, class: Sampled, multisampled: true}
+[2] Image { dim: D2, arrayed: false, class: Depth, multisampled: true}
+[3] Image { dim: D2, arrayed: false, class: Storage}
+[4] Image { dim: D2, arrayed: true, class: Sampled}
+[5] Image { dim: D1, arrayed: false, class: Storage}
+[6] Image { dim: D1, arrayed: false, class: Sampled}
+[7] Image { dim: D1, arrayed: false, class: Storage}
+[8] Vector { size: Vec3, scalar: Uint(4) }
+[9] Vector { size: Vec2, scalar: Sint(4) }
+[10] Scalar(Float, 4)
+[11] Image { dim: D1, arrayed: false, class: Sampled}
+[12] Image { dim: D2, arrayed: false, class: Sampled}
+[13] Image { dim: D2, arrayed: false, class: Sampled}
+[14] Image { dim: D2, arrayed: true, class: Sampled}
+[15] Image { dim: Cube, arrayed: false, class: Sampled}
+[16] Image { dim: Cube, arrayed: true, class: Sampled}
+[17] Image { dim: D3, arrayed: false, class: Sampled}
+[18] Image { dim: D2, arrayed: false, class: Sampled, multisampled: true}
+[19] Vector { size: Vec4, scalar: Float(4) }
+[20] Sampler(Filtering)
+[21] Sampler(Comparison)
+[22] Image { dim: D2, arrayed: false, class: Depth}
+[23] Image { dim: D2, arrayed: true, class: Depth}
+[24] Image { dim: Cube, arrayed: false, class: Depth}
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "image_mipmapped_src" type=[0] space=Handle binding=(0,0)
+[1] "image_multisampled_src" type=[1] space=Handle binding=(0,3)
+[2] "image_depth_multisampled_src" type=[2] space=Handle binding=(0,4)
+[3] "image_storage_src" type=[3] space=Handle binding=(0,1)
+[4] "image_array_src" type=[4] space=Handle binding=(0,5)
+[5] "image_dup_src" type=[5] space=Handle binding=(0,6)
+[6] "image_1d_src" type=[6] space=Handle binding=(0,7)
+[7] "image_dst" type=[7] space=Handle binding=(0,2)
+[8] "image_1d" type=[11] space=Handle binding=(0,0)
+[9] "image_2d" type=[12] space=Handle binding=(0,1)
+[10] "image_2d_u32" type=[0] space=Handle binding=(0,2)
+[11] "image_2d_i32" type=[13] space=Handle binding=(0,3)
+[12] "image_2d_array" type=[14] space=Handle binding=(0,4)
+[13] "image_cube" type=[15] space=Handle binding=(0,5)
+[14] "image_cube_array" type=[16] space=Handle binding=(0,6)
+[15] "image_3d" type=[17] space=Handle binding=(0,7)
+[16] "image_aa" type=[18] space=Handle binding=(0,8)
+[17] "sampler_reg" type=[20] space=Handle binding=(1,0)
+[18] "sampler_cmp" type=[21] space=Handle binding=(1,1)
+[19] "image_2d_depth" type=[22] space=Handle binding=(1,2)
+[20] "image_2d_array_depth" type=[23] space=Handle binding=(1,3)
+[21] "image_cube_depth" type=[24] space=Handle binding=(1,4)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=1, exprs=107, stmts=28, locals=0} workgroup_size=(16,1,1)
+[1] "depth_load" stage=Compute function={name="depth_load", args=1, exprs=18, stmts=7, locals=0} workgroup_size=(16,1,1)
+[2] "queries" stage=Vertex function={name="queries", args=0, exprs=54, stmts=16, locals=0}
+[3] "levels_queries" stage=Vertex function={name="levels_queries", args=0, exprs=27, stmts=12, locals=0}
+[4] "texture_sample" stage=Fragment function={name="texture_sample", args=0, exprs=149, stmts=51, locals=1}
+[5] "texture_sample_comparison" stage=Fragment function={name="texture_sample_comparison", args=0, exprs=51, stmts=20, locals=1}
+[6] "gather" stage=Fragment function={name="gather", args=0, exprs=34, stmts=10, locals=0}
+[7] "depth_no_comparison" stage=Fragment function={name="depth_no_comparison", args=0, exprs=16, stmts=6, locals=0}

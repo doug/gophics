@@ -1,0 +1,133 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 67
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_6 "f"
+               OpExecutionMode %_6 LocalSize 1 1 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeInt 32 1
+         %_4 = OpTypeFloat 32
+         %_5 = OpTypeFunction %_2
+         %_8 = OpTypePointer Function %_3
+         %_10 = OpTypePointer Function %_4
+         %_65 = OpConstant %_3 1
+         %_66 = OpConstant %_4 1065353216
+         %_6 = OpFunction %_2 None %_5
+         %_7 = OpLabel
+         %_9 = OpVariable %_8 Function
+         %_11 = OpVariable %_10 Function
+         %_12 = OpVariable %_8 Function
+         %_13 = OpVariable %_10 Function
+         %_14 = OpVariable %_10 Function
+         %_15 = OpVariable %_10 Function
+         %_16 = OpVariable %_10 Function
+         %_17 = OpVariable %_8 Function
+         %_18 = OpVariable %_8 Function
+         %_19 = OpVariable %_10 Function
+         %_20 = OpVariable %_10 Function
+         %_21 = OpVariable %_10 Function
+         %_22 = OpVariable %_10 Function
+         %_23 = OpVariable %_10 Function
+         %_24 = OpVariable %_10 Function
+         %_25 = OpVariable %_10 Function
+         %_26 = OpVariable %_10 Function
+         %_27 = OpVariable %_10 Function
+         %_28 = OpVariable %_10 Function
+         %_29 = OpVariable %_10 Function
+         %_30 = OpVariable %_10 Function
+         %_31 = OpVariable %_8 Function
+         %_32 = OpVariable %_8 Function
+         %_33 = OpVariable %_8 Function
+         %_34 = OpVariable %_8 Function
+         %_35 = OpVariable %_10 Function
+         %_36 = OpVariable %_10 Function
+         %_37 = OpVariable %_10 Function
+         %_38 = OpVariable %_10 Function
+         %_39 = OpVariable %_10 Function
+         %_40 = OpVariable %_10 Function
+         %_41 = OpVariable %_10 Function
+         %_42 = OpVariable %_10 Function
+         %_43 = OpVariable %_10 Function
+         %_44 = OpVariable %_8 Function
+         %_45 = OpVariable %_10 Function
+         %_46 = OpVariable %_8 Function
+         %_47 = OpVariable %_10 Function
+         %_48 = OpVariable %_10 Function
+         %_49 = OpVariable %_10 Function
+         %_50 = OpVariable %_10 Function
+         %_51 = OpVariable %_8 Function
+         %_52 = OpVariable %_8 Function
+         %_53 = OpVariable %_10 Function
+         %_54 = OpVariable %_10 Function
+         %_55 = OpVariable %_10 Function
+         %_56 = OpVariable %_10 Function
+         %_57 = OpVariable %_10 Function
+         %_58 = OpVariable %_10 Function
+         %_59 = OpVariable %_10 Function
+         %_60 = OpVariable %_10 Function
+         %_61 = OpVariable %_10 Function
+         %_62 = OpVariable %_10 Function
+         %_63 = OpVariable %_10 Function
+         %_64 = OpVariable %_10 Function
+               OpStore %_9 %_65
+               OpStore %_11 %_66
+               OpStore %_12 %_65
+               OpStore %_13 %_66
+               OpStore %_14 %_66
+               OpStore %_15 %_66
+               OpStore %_16 %_66
+               OpStore %_17 %_65
+               OpStore %_18 %_65
+               OpStore %_19 %_66
+               OpStore %_20 %_66
+               OpStore %_21 %_66
+               OpStore %_22 %_66
+               OpStore %_23 %_66
+               OpStore %_24 %_66
+               OpStore %_25 %_66
+               OpStore %_26 %_66
+               OpStore %_27 %_66
+               OpStore %_28 %_66
+               OpStore %_29 %_66
+               OpStore %_30 %_66
+               OpStore %_31 %_65
+               OpStore %_32 %_65
+               OpStore %_33 %_65
+               OpStore %_34 %_65
+               OpStore %_35 %_66
+               OpStore %_36 %_66
+               OpStore %_37 %_66
+               OpStore %_38 %_66
+               OpStore %_39 %_66
+               OpStore %_40 %_66
+               OpStore %_41 %_66
+               OpStore %_42 %_66
+               OpStore %_43 %_66
+               OpStore %_44 %_65
+               OpStore %_45 %_66
+               OpStore %_46 %_65
+               OpStore %_47 %_66
+               OpStore %_48 %_66
+               OpStore %_49 %_66
+               OpStore %_50 %_66
+               OpStore %_51 %_65
+               OpStore %_52 %_65
+               OpStore %_53 %_66
+               OpStore %_54 %_66
+               OpStore %_55 %_66
+               OpStore %_56 %_66
+               OpStore %_57 %_66
+               OpStore %_58 %_66
+               OpStore %_59 %_66
+               OpStore %_60 %_66
+               OpStore %_61 %_66
+               OpStore %_62 %_66
+               OpStore %_63 %_66
+               OpStore %_64 %_66
+               OpReturn
+               OpFunctionEnd

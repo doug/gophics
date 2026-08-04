@@ -1,0 +1,17 @@
+=== TYPES ===
+[0] Image { dim: D2, arrayed: false, class: Storage}
+[1] Vector { size: Vec3, scalar: Uint(4) }
+[2] Vector { size: Vec2, scalar: Sint(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "image" type=[0] space=Handle binding=(0,0)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "cs_main" stage=Compute function={name="cs_main", args=1, exprs=11, stmts=6, locals=0} workgroup_size=(2,1,1)

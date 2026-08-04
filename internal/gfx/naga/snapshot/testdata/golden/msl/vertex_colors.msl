@@ -1,0 +1,54 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+struct VertexInput {
+    metal::float3 position;
+    metal::float3 color;
+};
+struct VertexOutput {
+    metal::float4 position;
+    metal::float3 color;
+};
+
+struct vs_mainInput {
+    metal::float3 position [[attribute(0)]];
+    metal::float3 color [[attribute(1)]];
+};
+struct vs_mainOutput {
+    metal::float4 position [[position]];
+    metal::float3 color [[user(loc0), center_perspective]];
+};
+vertex vs_mainOutput vs_main(
+  vs_mainInput varyings [[stage_in]]
+) {
+    const VertexInput in = { varyings.position, varyings.color };
+    VertexOutput out = {};
+    out.position = metal::float4(in.position, 1.0);
+    out.color = in.color;
+    VertexOutput _e8 = out;
+    const auto _tmp = _e8;
+    return vs_mainOutput { _tmp.position, _tmp.color };
+}
+
+
+struct fs_mainInput {
+    metal::float3 color [[user(loc0), center_perspective]];
+};
+struct fs_mainOutput {
+    metal::float4 member_1 [[color(0)]];
+};
+fragment fs_mainOutput fs_main(
+  fs_mainInput varyings_1 [[stage_in]]
+) {
+    const auto color = varyings_1.color;
+    return fs_mainOutput { metal::float4(color, 1.0) };
+}

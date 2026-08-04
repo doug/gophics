@@ -1,0 +1,21 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec3, scalar: Float(4) }
+[2] Struct "VertexInput" { members: [{ name: "position", type: [1], offset: 0, binding: Location(0) interp=2/0}, { name: "color", type: [1], offset: 16, binding: Location(1) interp=2/0}], span: 32 }
+[3] Vector { size: Vec4, scalar: Float(4) }
+[4] Struct "VertexOutput" { members: [{ name: "clip_position", type: [3], offset: 0, binding: Builtin(0)}, { name: "color", type: [1], offset: 16, binding: Location(0) interp=2/0}], span: 32 }
+[5] Scalar(Sint, 4)
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "vs_main" stage=Vertex function={name="vs_main", args=1, exprs=9, stmts=7, locals=1}
+[1] "fs_main" stage=Fragment function={name="fs_main", args=1, exprs=29, stmts=6, locals=3}

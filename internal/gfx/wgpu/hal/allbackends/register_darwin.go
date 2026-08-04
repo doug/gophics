@@ -1,0 +1,16 @@
+// Copyright 2025 The GoGPU Authors
+// SPDX-License-Identifier: MIT
+
+//go:build darwin && !(js && wasm)
+
+package allbackends
+
+import (
+	// macOS/iOS-specific HAL backend imports.
+
+	// Metal backend - primary backend on Apple platforms.
+	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/metal"
+
+	// Vulkan backend - available via MoltenVK on macOS.
+	_ "github.com/doug/gossamer/internal/gfx/wgpu/hal/vulkan"
+)

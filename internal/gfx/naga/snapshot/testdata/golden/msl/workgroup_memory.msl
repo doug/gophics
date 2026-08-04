@@ -1,0 +1,66 @@
+// language: metal1.0
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using metal::uint;
+struct DefaultConstructible {
+    template<typename T>
+    operator T() && {
+        return T {};
+    }
+};
+
+struct _mslBufferSizes {
+    uint size2;
+};
+
+struct type_1 {
+    float inner[256];
+};
+struct Params {
+    uint count;
+};
+typedef float type_3[1];
+uint naga_div(uint lhs, uint rhs) {
+    return lhs / metal::select(rhs, 1u, rhs == 0u);
+}
+
+
+struct main_Input {
+};
+kernel void main_(
+  uint lid [[thread_index_in_threadgroup]]
+, metal::uint3 gid [[thread_position_in_grid]]
+, metal::uint3 __local_invocation_id [[thread_position_in_threadgroup]]
+, device type_3& output [[user(fake0)]]
+, constant _mslBufferSizes& _buffer_sizes [[user(fake0)]]
+) {
+    threadgroup type_1 shared_data;
+    if (metal::all(__local_invocation_id == metal::uint3(0u))) {
+        shared_data = {};
+    }
+    metal::threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+    if (uint(lid) < 256) {
+        shared_data.inner[lid] = static_cast<float>(gid.x) * 0.5;
+    }
+    metal::threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+    if (lid < 128u) {
+        float _e14 = uint(lid) < 256 ? shared_data.inner[lid] : DefaultConstructible();
+        uint _e17 = lid + 128u;
+        float _e19 = uint(_e17) < 256 ? shared_data.inner[_e17] : DefaultConstructible();
+        if (uint(lid) < 256) {
+            shared_data.inner[lid] = _e14 + _e19;
+        }
+    }
+    metal::threadgroup_barrier(metal::mem_flags::mem_threadgroup);
+    if (lid == 0u) {
+        uint _e26 = naga_div(gid.x, 256u);
+        float _e30 = shared_data.inner[0];
+        if (uint(_e26) < 1 + (_buffer_sizes.size2 - 0 - 4) / 4) {
+            output[_e26] = _e30;
+        }
+        return;
+    } else {
+        return;
+    }
+}

@@ -1,0 +1,25 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec3, scalar: Float(4) }
+[2] Struct "S" { members: [{ name: "a", type: [1], offset: 0}], span: 16 }
+[3] Struct "Test" { members: [{ name: "a", type: [2], offset: 0}, { name: "b", type: [0], offset: 16}], span: 32 }
+[4] Array { base: [1], size: Constant(2), stride: 16 }
+[5] Struct "Test2" { members: [{ name: "a", type: [4], offset: 0}, { name: "b", type: [0], offset: 32}], span: 48 }
+[6] Matrix { columns: Vec4, rows: Vec3, scalar: Float(4) }
+[7] Struct "Test3" { members: [{ name: "a", type: [6], offset: 0}, { name: "b", type: [0], offset: 64}], span: 80 }
+[8] Vector { size: Vec4, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "input1" type=[3] space=Uniform binding=(0,0)
+[1] "input2" type=[5] space=Uniform binding=(0,1)
+[2] "input3" type=[7] space=Uniform binding=(0,2)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "vertex" stage=Vertex function={name="vertex", args=0, exprs=14, stmts=5, locals=0}

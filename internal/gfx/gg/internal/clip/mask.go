@@ -1,0 +1,424 @@
+package clip
+
+import (
+	"github.com/doug/gossamer/internal/gfx/gg/internal/image"
+)
+
+// PathVerb represents a path construction command.
+// Values match gg.PathVerb for zero-cost conversion.
+type PathVerb byte
+
+const (
+	// VerbMoveTo moves the current point. Consumes 2 coords (x, y).
+	VerbMoveTo PathVerb = iota
+	// VerbLineTo draws a line. Consumes 2 coords (x, y).
+	VerbLineTo
+	// VerbQuadTo draws a quadratic Bezier. Consumes 4 coords (cx, cy, x, y).
+	VerbQuadTo
+	// VerbCubicTo draws a cubic Bezier. Consumes 6 coords (c1x, c1y, c2x, c2y, x, y).
+	VerbCubicTo
+	// VerbClose closes the current subpath. Consumes 0 coords.
+	VerbClose
+)
+
+// MaskClipper performs alpha mask-based clipping for anti-aliased complex clips.
+// It rasterizes a path into a grayscale mask where each pixel's value represents
+// coverage (0 = outside, 255 = fully inside).
+type MaskClipper struct {
+	mask   *image.ImageBuf
+	bounds Rect
+}
+
+// NewMaskClipper creates a mask clipper by rasterizing the given path
+// (as SOA verb+coords slices) into an alpha mask.
+//
+// Parameters:
+//   - verbs: Path verb stream
+//   - coords: Path coordinate stream
+//   - bounds: Bounding rectangle for the mask
+//   - antiAlias: Enable anti-aliased rendering (currently always on)
+//
+// The mask is stored as FormatGray8 (1 byte per pixel) for memory efficiency.
+func NewMaskClipper(verbs []PathVerb, coords []float64, bounds Rect, antiAlias bool) (*MaskClipper, error) {
+	// Validate bounds - empty bounds means no clipping needed
+	if bounds.IsEmpty() {
+		return nil, image.ErrInvalidDimensions
+	}
+
+	// Calculate mask dimensions (ceiling to ensure we cover all pixels)
+	width := int(bounds.W + 0.5)
+	height := int(bounds.H + 0.5)
+	if width <= 0 || height <= 0 {
+		return nil, image.ErrInvalidDimensions
+	}
+
+	// Create grayscale mask buffer
+	mask, err := image.NewImageBuf(width, height, image.FormatGray8)
+	if err != nil {
+		return nil, err
+	}
+
+	mc := &MaskClipper{
+		mask:   mask,
+		bounds: bounds,
+	}
+
+	// Rasterize path into mask
+	mc.rasterizePath(verbs, coords, antiAlias)
+
+	return mc, nil
+}
+
+// Coverage returns the coverage value (0-255) at the given point.
+// Points outside the mask bounds return 0 (no coverage).
+func (mc *MaskClipper) Coverage(x, y float64) byte {
+	// Convert to mask coordinates
+	mx := x - mc.bounds.X
+	my := y - mc.bounds.Y
+
+	// Check bounds
+	if mx < 0 || my < 0 || mx >= float64(mc.mask.Width()) || my >= float64(mc.mask.Height()) {
+		return 0
+	}
+
+	// Get pixel value (bilinear interpolation for smoother results)
+	ix := int(mx)
+	iy := int(my)
+
+	// Simple nearest-neighbor for now (can be enhanced with bilinear later)
+	if ix >= mc.mask.Width() {
+		ix = mc.mask.Width() - 1
+	}
+	if iy >= mc.mask.Height() {
+		iy = mc.mask.Height() - 1
+	}
+
+	// GetRGBA returns (r, g, b, a), but for Gray8 format r=g=b=gray value
+	gray, _, _, _ := mc.mask.GetRGBA(ix, iy) //nolint:dogsled // Gray8 format has r=g=b
+	return gray
+}
+
+// ApplyCoverage modulates the source alpha by the mask coverage at the given point.
+// Returns the modulated alpha value (0-255).
+func (mc *MaskClipper) ApplyCoverage(x, y float64, srcAlpha byte) byte {
+	coverage := mc.Coverage(x, y)
+	if coverage == 0 {
+		return 0
+	}
+	if coverage == 255 {
+		return srcAlpha
+	}
+
+	// Modulate: result = srcAlpha * coverage / 255
+	// Use 16-bit math to avoid overflow
+	result := (uint16(srcAlpha) * uint16(coverage)) / 255
+	return byte(result)
+}
+
+// Bounds returns the bounding rectangle of the mask.
+func (mc *MaskClipper) Bounds() Rect {
+	return mc.bounds
+}
+
+// Mask returns the underlying grayscale image buffer.
+// This is useful for debugging or advanced use cases.
+func (mc *MaskClipper) Mask() *image.ImageBuf {
+	return mc.mask
+}
+
+// rasterizePath converts path (verb+coords) into a coverage mask.
+func (mc *MaskClipper) rasterizePath(verbs []PathVerb, coords []float64, antiAlias bool) {
+	if len(verbs) == 0 {
+		return
+	}
+
+	// Flatten path to line segments
+	points := mc.flattenPath(verbs, coords)
+	if len(points) < 2 {
+		return
+	}
+
+	// Build edge list for scanline rasterization
+	edges := make([]edge, 0, len(points))
+	for i := 0; i < len(points)-1; i++ {
+		p0 := points[i]
+		p1 := points[i+1]
+
+		// Skip horizontal edges
+		if p1.Y == p0.Y {
+			continue
+		}
+
+		edges = append(edges, mc.makeEdge(p0, p1))
+	}
+
+	if len(edges) == 0 {
+		return
+	}
+
+	// Scanline rasterization
+	if antiAlias {
+		for y := 0; y < mc.mask.Height(); y++ {
+			mc.rasterizeScanlineAA(edges, y)
+		}
+	} else {
+		for y := 0; y < mc.mask.Height(); y++ {
+			mc.rasterizeScanline(edges, y)
+		}
+	}
+}
+
+// edge represents a scanline edge for rasterization.
+type edge struct {
+	x0, y0 float64 // Start point
+	x1, y1 float64 // End point
+	dir    int     // Direction: +1 for down, -1 for up
+}
+
+// makeEdge creates an edge from two points, ensuring y0 < y1.
+func (mc *MaskClipper) makeEdge(p0, p1 Point) edge {
+	// Convert to mask coordinates
+	x0 := p0.X - mc.bounds.X
+	y0 := p0.Y - mc.bounds.Y
+	x1 := p1.X - mc.bounds.X
+	y1 := p1.Y - mc.bounds.Y
+
+	if y0 > y1 {
+		// Swap to ensure y0 < y1
+		x0, x1 = x1, x0
+		y0, y1 = y1, y0
+		return edge{x0: x0, y0: y0, x1: x1, y1: y1, dir: -1}
+	}
+	return edge{x0: x0, y0: y0, x1: x1, y1: y1, dir: 1}
+}
+
+// rasterizeScanlineAA fills a single scanline with anti-aliasing using 4x
+// Y-supersampling and fractional X-edge coverage. Each pixel is sampled at 4
+// sub-scanlines (y+0.125, y+0.375, y+0.625, y+0.875) and the coverage is
+// averaged. Edge pixels get fractional coverage based on the exact intersection.
+func (mc *MaskClipper) rasterizeScanlineAA(edges []edge, y int) {
+	width := mc.mask.Width()
+	// Accumulate coverage from 4 sub-scanlines (each contributes 0-255/4).
+	coverage := make([]uint16, width)
+
+	subOffsets := [4]float64{0.125, 0.375, 0.625, 0.875}
+	for _, off := range subOffsets {
+		scanY := float64(y) + off
+
+		// Find edge intersections at this sub-scanline.
+		var intersections []float64
+		for _, e := range edges {
+			if e.y0 <= scanY && scanY < e.y1 {
+				t := (scanY - e.y0) / (e.y1 - e.y0)
+				x := e.x0 + t*(e.x1-e.x0)
+				intersections = append(intersections, x)
+			}
+		}
+		if len(intersections) == 0 {
+			continue
+		}
+		sortFloats(intersections)
+
+		// Fill spans with fractional edge coverage.
+		for i := 0; i+1 < len(intersections); i += 2 {
+			x1 := intersections[i]
+			x2 := intersections[i+1]
+
+			px1 := int(x1)
+			px2 := int(x2)
+			if px1 < 0 {
+				px1 = 0
+			}
+			if px2 >= width {
+				px2 = width - 1
+			}
+
+			if px1 == px2 {
+				// Single pixel span — coverage = span width.
+				frac := x2 - x1
+				if frac > 1.0 {
+					frac = 1.0
+				}
+				coverage[px1] += uint16(frac * 64) // 64 = 255/4 ≈ per-subsample max
+				continue
+			}
+
+			// Left edge pixel: fractional coverage.
+			if px1 >= 0 && px1 < width {
+				leftFrac := 1.0 - (x1 - float64(px1))
+				if leftFrac > 1.0 {
+					leftFrac = 1.0
+				}
+				if leftFrac < 0 {
+					leftFrac = 0
+				}
+				coverage[px1] += uint16(leftFrac * 64)
+			}
+
+			// Interior pixels: full coverage for this subsample.
+			for x := px1 + 1; x < px2; x++ {
+				if x >= 0 && x < width {
+					coverage[x] += 64 // 255/4
+				}
+			}
+
+			// Right edge pixel: fractional coverage.
+			if px2 >= 0 && px2 < width && px2 > px1 {
+				rightFrac := x2 - float64(px2)
+				if rightFrac > 1.0 {
+					rightFrac = 1.0
+				}
+				if rightFrac < 0 {
+					rightFrac = 0
+				}
+				coverage[px2] += uint16(rightFrac * 64)
+			}
+		}
+	}
+
+	// Write accumulated coverage to mask.
+	for x := 0; x < width; x++ {
+		if coverage[x] > 0 {
+			c := coverage[x]
+			if c > 255 {
+				c = 255
+			}
+			_ = mc.mask.SetRGBA(x, y, byte(c), byte(c), byte(c), byte(c))
+		}
+	}
+}
+
+// rasterizeScanline fills a single scanline using the non-zero winding rule.
+func (mc *MaskClipper) rasterizeScanline(edges []edge, y int) {
+	scanY := float64(y) + 0.5
+
+	// Find edges that intersect this scanline
+	var intersections []float64
+	for _, e := range edges {
+		if e.y0 <= scanY && scanY < e.y1 {
+			// Compute x intersection
+			t := (scanY - e.y0) / (e.y1 - e.y0)
+			x := e.x0 + t*(e.x1-e.x0)
+			intersections = append(intersections, x)
+		}
+	}
+
+	if len(intersections) == 0 {
+		return
+	}
+
+	// Sort intersections
+	sortFloats(intersections)
+
+	// Fill spans using even-odd rule (pairs of intersections)
+	for i := 0; i+1 < len(intersections); i += 2 {
+		x1 := intersections[i]
+		x2 := intersections[i+1]
+
+		// Convert to pixel coordinates
+		px1 := int(x1)
+		px2 := int(x2)
+
+		// Clamp to mask bounds
+		if px1 < 0 {
+			px1 = 0
+		}
+		if px2 >= mc.mask.Width() {
+			px2 = mc.mask.Width() - 1
+		}
+
+		// Fill pixels
+		for x := px1; x <= px2; x++ {
+			_ = mc.mask.SetRGBA(x, y, 255, 255, 255, 255)
+		}
+	}
+}
+
+// flattenPath converts path (verb+coords) into a sequence of points.
+func (mc *MaskClipper) flattenPath(verbs []PathVerb, coords []float64) []Point {
+	var points []Point
+	var current Point
+	ci := 0
+
+	for _, v := range verbs {
+		switch v {
+		case VerbMoveTo:
+			current = Point{X: coords[ci], Y: coords[ci+1]}
+			points = append(points, current)
+			ci += 2
+
+		case VerbLineTo:
+			current = Point{X: coords[ci], Y: coords[ci+1]}
+			points = append(points, current)
+			ci += 2
+
+		case VerbQuadTo:
+			ctrl := Point{X: coords[ci], Y: coords[ci+1]}
+			end := Point{X: coords[ci+2], Y: coords[ci+3]}
+			prev := current
+			steps := 10
+			for i := 1; i <= steps; i++ {
+				t := float64(i) / float64(steps)
+				pt := evalQuadraticBezier(prev, ctrl, end, t)
+				points = append(points, pt)
+			}
+			current = end
+			ci += 4
+
+		case VerbCubicTo:
+			c1 := Point{X: coords[ci], Y: coords[ci+1]}
+			c2 := Point{X: coords[ci+2], Y: coords[ci+3]}
+			end := Point{X: coords[ci+4], Y: coords[ci+5]}
+			prev := current
+			steps := 16
+			for i := 1; i <= steps; i++ {
+				t := float64(i) / float64(steps)
+				pt := evalCubicBezier(prev, c1, c2, end, t)
+				points = append(points, pt)
+			}
+			current = end
+			ci += 6
+
+		case VerbClose:
+			if len(points) > 0 {
+				points = append(points, points[0])
+			}
+		}
+	}
+
+	return points
+}
+
+// evalQuadraticBezier evaluates a quadratic Bezier curve at parameter t.
+func evalQuadraticBezier(p0, p1, p2 Point, t float64) Point {
+	s := 1 - t
+	return Point{
+		X: s*s*p0.X + 2*s*t*p1.X + t*t*p2.X,
+		Y: s*s*p0.Y + 2*s*t*p1.Y + t*t*p2.Y,
+	}
+}
+
+// evalCubicBezier evaluates a cubic Bezier curve at parameter t.
+func evalCubicBezier(p0, p1, p2, p3 Point, t float64) Point {
+	s := 1 - t
+	s2 := s * s
+	s3 := s2 * s
+	t2 := t * t
+	t3 := t2 * t
+	return Point{
+		X: s3*p0.X + 3*s2*t*p1.X + 3*s*t2*p2.X + t3*p3.X,
+		Y: s3*p0.Y + 3*s2*t*p1.Y + 3*s*t2*p2.Y + t3*p3.Y,
+	}
+}
+
+// sortFloats sorts a slice of float64 values (simple bubble sort for small slices).
+func sortFloats(values []float64) {
+	n := len(values)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if values[j] > values[j+1] {
+				values[j], values[j+1] = values[j+1], values[j]
+			}
+		}
+	}
+}

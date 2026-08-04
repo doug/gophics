@@ -1,0 +1,19 @@
+=== TYPES ===
+[0] Scalar(Sint, 4)
+[1] Atomic { base: Uint(4) }
+[2] Scalar(Uint, 4)
+[3] Scalar(Bool, 1)
+[4] Struct "__atomic_compare_exchange_result<Uint,4>" { members: [{ name: "old_value", type: [2], offset: 0}, { name: "exchanged", type: [3], offset: 4}], span: 8 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+  [0] name="o" id=None ty=0 init=None
+
+=== GLOBALS ===
+[0] "a" type=[1] space=WorkGroup binding=None
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "f" stage=Compute function={name="f", args=0, exprs=5, stmts=3, locals=0} workgroup_size=(1,1,1)

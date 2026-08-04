@@ -1,0 +1,215 @@
+=== TYPES ===
+[0] Image { dim: D1, arrayed: false, class: Sampled}
+[1] Scalar(Sint, 4)
+[2] Vector { size: Vec4, scalar: Float(4) }
+[3] Image { dim: D2, arrayed: false, class: Sampled}
+[4] Vector { size: Vec2, scalar: Sint(4) }
+[5] Image { dim: D2, arrayed: true, class: Sampled}
+[6] Scalar(Uint, 4)
+[7] Image { dim: D3, arrayed: false, class: Sampled}
+[8] Vector { size: Vec3, scalar: Sint(4) }
+[9] Image { dim: D2, arrayed: false, class: Sampled, multisampled: true}
+[10] Image { dim: D1, arrayed: false, class: Storage}
+[11] Image { dim: D2, arrayed: false, class: Storage}
+[12] Image { dim: D2, arrayed: true, class: Storage}
+[13] Image { dim: D3, arrayed: false, class: Storage}
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "image_1d" type=[0] space=Handle binding=(0,0)
+[1] "image_2d" type=[3] space=Handle binding=(0,1)
+[2] "image_2d_array" type=[5] space=Handle binding=(0,2)
+[3] "image_3d" type=[7] space=Handle binding=(0,3)
+[4] "image_multisampled_2d" type=[9] space=Handle binding=(0,4)
+[5] "image_storage_1d" type=[10] space=Handle binding=(0,5)
+[6] "image_storage_2d" type=[11] space=Handle binding=(0,6)
+[7] "image_storage_2d_array" type=[12] space=Handle binding=(0,7)
+[8] "image_storage_3d" type=[13] space=Handle binding=(0,8)
+
+=== FUNCTIONS ===
+[0] "test_textureLoad_1d"
+  args: [{ name: "coords", type: [1], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([0])
+    [3] ImageLoad { image: [2], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "level"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+[1] "test_textureLoad_2d"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([1])
+    [3] ImageLoad { image: [2], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "level"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+[2] "test_textureLoad_2d_array_u"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "index", type: [6], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 5
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] GlobalVariable([2])
+    [4] ImageLoad { image: [3], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "index"
+    [2] = "level"
+  body: 2 statements
+    Emit(4..5)
+    Return { value: [4] }
+
+[3] "test_textureLoad_2d_array_s"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "index", type: [1], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 5
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] GlobalVariable([2])
+    [4] ImageLoad { image: [3], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "index"
+    [2] = "level"
+  body: 2 statements
+    Emit(4..5)
+    Return { value: [4] }
+
+[4] "test_textureLoad_3d"
+  args: [{ name: "coords", type: [8], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([3])
+    [3] ImageLoad { image: [2], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "level"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+[5] "test_textureLoad_multisampled_2d"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "_sample", type: [1], binding: None}]
+  result: type=[2]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([4])
+    [3] ImageLoad { image: [2], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "_sample"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+[6] "test_textureStore_1d"
+  args: [{ name: "coords", type: [1], binding: None}, { name: "value", type: [2], binding: None}]
+  result: None
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([5])
+  named_expressions:
+    [0] = "coords"
+    [1] = "value"
+  body: 2 statements
+    ImageStore { image: [2], coordinate: [0], value: [1] }
+    Return
+
+[7] "test_textureStore_2d"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "value", type: [2], binding: None}]
+  result: None
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([6])
+  named_expressions:
+    [0] = "coords"
+    [1] = "value"
+  body: 2 statements
+    ImageStore { image: [2], coordinate: [0], value: [1] }
+    Return
+
+[8] "test_textureStore_2d_array_u"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "array_index", type: [6], binding: None}, { name: "value", type: [2], binding: None}]
+  result: None
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] GlobalVariable([7])
+  named_expressions:
+    [0] = "coords"
+    [1] = "array_index"
+    [2] = "value"
+  body: 2 statements
+    ImageStore { image: [3], coordinate: [0], value: [2] }
+    Return
+
+[9] "test_textureStore_2d_array_s"
+  args: [{ name: "coords", type: [4], binding: None}, { name: "array_index", type: [1], binding: None}, { name: "value", type: [2], binding: None}]
+  result: None
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] GlobalVariable([7])
+  named_expressions:
+    [0] = "coords"
+    [1] = "array_index"
+    [2] = "value"
+  body: 2 statements
+    ImageStore { image: [3], coordinate: [0], value: [2] }
+    Return
+
+[10] "test_textureStore_3d"
+  args: [{ name: "coords", type: [8], binding: None}, { name: "value", type: [2], binding: None}]
+  result: None
+  locals: 0
+  expressions: 3
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([8])
+  named_expressions:
+    [0] = "coords"
+    [1] = "value"
+  body: 2 statements
+    ImageStore { image: [2], coordinate: [0], value: [1] }
+    Return
+
+=== ENTRY POINTS ===
+[0] "fragment_shader" stage=Fragment function={name="fragment_shader", args=0, exprs=37, stmts=13, locals=0}

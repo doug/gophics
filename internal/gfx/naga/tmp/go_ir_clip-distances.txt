@@ -1,0 +1,18 @@
+=== TYPES ===
+[0] Scalar(Float, 4)
+[1] Vector { size: Vec4, scalar: Float(4) }
+[2] Array { base: [0], size: Constant(1), stride: 4 }
+[3] Struct "VertexOutput" { members: [{ name: "position", type: [1], offset: 0, binding: Builtin(0)}, { name: "clip_distances", type: [2], offset: 16, binding: Builtin(29)}], span: 32 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+(none)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "main" stage=Vertex function={name="main", args=0, exprs=5, stmts=5, locals=1}

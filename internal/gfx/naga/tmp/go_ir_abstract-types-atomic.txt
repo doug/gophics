@@ -1,0 +1,150 @@
+=== TYPES ===
+[0] Atomic { base: Sint(4) }
+[1] Atomic { base: Uint(4) }
+[2] Scalar(Bool, 1)
+[3] Scalar(Sint, 4)
+[4] Struct "__atomic_compare_exchange_result<Sint,4>" { members: [{ name: "old_value", type: [3], offset: 0}, { name: "exchanged", type: [2], offset: 4}], span: 8 }
+[5] Scalar(Uint, 4)
+[6] Struct "__atomic_compare_exchange_result<Uint,4>" { members: [{ name: "old_value", type: [5], offset: 0}, { name: "exchanged", type: [2], offset: 4}], span: 8 }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "atomic_i32" type=[0] space=Storage(LOAD|STORE) binding=(0,0)
+[1] "atomic_u32" type=[1] space=Storage(LOAD|STORE) binding=(0,1)
+
+=== FUNCTIONS ===
+[0] "test_atomic_i32"
+  args: []
+  result: None
+  locals: 0
+  expressions: 34
+    [0] GlobalVariable([0])
+    [1] Literal(I32(1))
+    [2] GlobalVariable([0])
+    [3] Literal(I32(1))
+    [4] Literal(I32(1))
+    [5] AtomicResult
+    [6] GlobalVariable([0])
+    [7] Literal(I32(1))
+    [8] Literal(I32(1))
+    [9] AtomicResult
+    [10] GlobalVariable([0])
+    [11] Literal(I32(1))
+    [12] AtomicResult
+    [13] GlobalVariable([0])
+    [14] Literal(I32(1))
+    [15] AtomicResult
+    [16] GlobalVariable([0])
+    [17] Literal(I32(1))
+    [18] AtomicResult
+    [19] GlobalVariable([0])
+    [20] Literal(I32(1))
+    [21] AtomicResult
+    [22] GlobalVariable([0])
+    [23] Literal(I32(1))
+    [24] AtomicResult
+    [25] GlobalVariable([0])
+    [26] Literal(I32(1))
+    [27] AtomicResult
+    [28] GlobalVariable([0])
+    [29] Literal(I32(1))
+    [30] AtomicResult
+    [31] GlobalVariable([0])
+    [32] Literal(I32(1))
+    [33] AtomicResult
+  named_expressions:
+    [5] = "phony"
+    [9] = "phony"
+    [12] = "phony"
+    [15] = "phony"
+    [18] = "phony"
+    [21] = "phony"
+    [24] = "phony"
+    [27] = "phony"
+    [30] = "phony"
+    [33] = "phony"
+  body: 12 statements
+    Store { pointer: [0], value: [1] }
+    Atomic { pointer: [2], fun: Exchange, value: [4], result: [5] }
+    Atomic { pointer: [6], fun: Exchange, value: [8], result: [9] }
+    Atomic { pointer: [10], fun: Add, value: [11], result: [12] }
+    Atomic { pointer: [13], fun: Subtract, value: [14], result: [15] }
+    Atomic { pointer: [16], fun: And, value: [17], result: [18] }
+    Atomic { pointer: [19], fun: ExclusiveOr, value: [20], result: [21] }
+    Atomic { pointer: [22], fun: InclusiveOr, value: [23], result: [24] }
+    Atomic { pointer: [25], fun: Min, value: [26], result: [27] }
+    Atomic { pointer: [28], fun: Max, value: [29], result: [30] }
+    Atomic { pointer: [31], fun: Exchange, value: [32], result: [33] }
+    Return
+
+[1] "test_atomic_u32"
+  args: []
+  result: None
+  locals: 0
+  expressions: 34
+    [0] GlobalVariable([1])
+    [1] Literal(U32(1))
+    [2] GlobalVariable([1])
+    [3] Literal(U32(1))
+    [4] Literal(U32(1))
+    [5] AtomicResult
+    [6] GlobalVariable([1])
+    [7] Literal(U32(1))
+    [8] Literal(U32(1))
+    [9] AtomicResult
+    [10] GlobalVariable([1])
+    [11] Literal(U32(1))
+    [12] AtomicResult
+    [13] GlobalVariable([1])
+    [14] Literal(U32(1))
+    [15] AtomicResult
+    [16] GlobalVariable([1])
+    [17] Literal(U32(1))
+    [18] AtomicResult
+    [19] GlobalVariable([1])
+    [20] Literal(U32(1))
+    [21] AtomicResult
+    [22] GlobalVariable([1])
+    [23] Literal(U32(1))
+    [24] AtomicResult
+    [25] GlobalVariable([1])
+    [26] Literal(U32(1))
+    [27] AtomicResult
+    [28] GlobalVariable([1])
+    [29] Literal(U32(1))
+    [30] AtomicResult
+    [31] GlobalVariable([1])
+    [32] Literal(U32(1))
+    [33] AtomicResult
+  named_expressions:
+    [5] = "phony"
+    [9] = "phony"
+    [12] = "phony"
+    [15] = "phony"
+    [18] = "phony"
+    [21] = "phony"
+    [24] = "phony"
+    [27] = "phony"
+    [30] = "phony"
+    [33] = "phony"
+  body: 12 statements
+    Store { pointer: [0], value: [1] }
+    Atomic { pointer: [2], fun: Exchange, value: [4], result: [5] }
+    Atomic { pointer: [6], fun: Exchange, value: [8], result: [9] }
+    Atomic { pointer: [10], fun: Add, value: [11], result: [12] }
+    Atomic { pointer: [13], fun: Subtract, value: [14], result: [15] }
+    Atomic { pointer: [16], fun: And, value: [17], result: [18] }
+    Atomic { pointer: [19], fun: ExclusiveOr, value: [20], result: [21] }
+    Atomic { pointer: [22], fun: InclusiveOr, value: [23], result: [24] }
+    Atomic { pointer: [25], fun: Min, value: [26], result: [27] }
+    Atomic { pointer: [28], fun: Max, value: [29], result: [30] }
+    Atomic { pointer: [31], fun: Exchange, value: [32], result: [33] }
+    Return
+
+=== ENTRY POINTS ===
+[0] "main" stage=Compute function={name="main", args=0, exprs=0, stmts=3, locals=0} workgroup_size=(1,1,1)

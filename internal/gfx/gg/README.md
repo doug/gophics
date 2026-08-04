@@ -1,0 +1,642 @@
+<h1 align="center">gg</h1>
+
+<p align="center">
+  <strong>2D Graphics Library for Go</strong><br>
+  Pure Go | GPU Accelerated | Production Ready
+</p>
+
+<p align="center">
+  <a href="https://github.com/gogpu/gg/actions/workflows/ci.yml"><img src="https://github.com/gogpu/gg/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/gogpu/gg"><img src="https://codecov.io/gh/gogpu/gg/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="https://pkg.go.dev/github.com/gogpu/gg"><img src="https://pkg.go.dev/badge/github.com/gogpu/gg.svg" alt="Go Reference"></a>
+  <a href="https://goreportcard.com/report/github.com/gogpu/gg"><img src="https://goreportcard.com/badge/github.com/gogpu/gg" alt="Go Report Card"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
+  <a href="https://github.com/gogpu/gg/releases"><img src="https://img.shields.io/github/v/release/gogpu/gg" alt="Latest Release"></a>
+  <a href="https://github.com/gogpu/gg"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version"></a>
+</p>
+
+<p align="center">
+  <sub>Part of the <a href="https://github.com/gogpu">GoGPU</a> ecosystem</sub>
+</p>
+
+---
+
+## Overview
+
+**gg** is a 2D graphics library for Go designed to power IDEs, browsers, and graphics-intensive applications. Built with modern patterns inspired by [vello](https://github.com/linebender/vello) and [tiny-skia](https://github.com/RazrFalcon/tiny-skia), it delivers production-grade rendering with zero CGO dependencies.
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/34243cff-5434-411c-a17c-3e52a80f1d57" width="100%" autoplay loop muted playsinline>
+    Seven-Tier GPU Rendering: SDF shapes, convex polygons, stencil+cover paths, MSDF text, Vello compute pipeline, glyph mask cache
+  </video>
+  <br>
+  <sub>Six-tier GPU rendering: SDF shapes, convex polygons, stencil+cover paths, MSDF text, Vello compute, and glyph mask cache.
+  Pure Go, Vulkan/DX12/GLES backends, zero CGO. (<a href="examples/gogpu_integration/">source</a>)</sub>
+</p>
+
+### Key Features
+
+| Category | Capabilities |
+|----------|--------------|
+| **Rendering** | Immediate and retained mode, seven-tier GPU acceleration (SDF, Convex, Stencil+Cover, Textured Quad, MSDF Text, Compute, Glyph Mask), per-context GPU isolation (Skia GrContext pattern), scene GPU auto-select, Skia AAA pixel-perfect rasterizer, **pixel-perfect mode** (`SetAntiAlias(false)` — dedicated NoAAFiller, Skia/Cairo/tiny-skia pattern), CPU fallback |
+| **Shapes** | Rectangles, circles, ellipses, arcs, bezier curves, polygons, stars |
+| **Text** | **Pure Go font stack** (own cmap/hmtx/GSUB/GPOS/gvar/avar parsers, TrueType bytecode interpreter — skrifa golden parity 624/624 diff=0), **variable font support** (`WithVariations` — weight/width/slant axes, own gvar/HVAR interpolation), MSDF + glyph mask dual-strategy rendering, TextMode auto-selection, **text stroke/outline** (StrokeString + TextPath, Skia/Cairo/HTML5 pattern), **aliased text** (TextModeAliased, Skia kAlias binary masks — GPU + CPU), **per-glyph rendering** (fractional advances, Skia linearMetrics pattern), **OpenType font features** (`WithFeatures(TabularNums, NoLigatures)` — own GSUB/GPOS shaper, 5-10x faster than HarfBuzz), DPI-aware HiDPI text, **ClearType LCD auto-detection** (Windows SPI + registry, macOS grayscale, Linux Xft/Wayland), **CJK script-aware rendering** (ADR-027: per-script hinting, exact-size rasterization, dual MSDF atlas 64/128px), font hinting (enterprise auto-hinter + TrueType bytecode interpreter), transform-aware CPU text (scale/rotate/shear), glyph outline caching, emoji support, bidirectional text, scene text via TagText glyph references (shape-once, Skia drawTextBlob pattern), atlas zoom resilience (size buckets + frame-based compaction) |
+| **Compositing** | 29 blend modes (Porter-Duff, Advanced, HSL), layer isolation, alpha masks, zero-readback compositor (non-MSAA blit fast path, **HiDPI-aware damage tracking** (logical→physical scaling for OS compositor), damage-aware multi-rect sub-region updates, per-draw dynamic scissor ADR-028) |
+| **Images** | 7 pixel formats, PNG/JPEG/WebP I/O, mipmaps, affine transforms |
+| **SVG** | Full SVG renderer (`gg/svg`): parse + render SVG XML with color override for theming, SVG path data parser (`ParseSVGPath`), transform-aware `FillPath`/`StrokePath` |
+| **Vector Export** | Recording system with PDF and SVG backends |
+| **Rasterizer** | Smart per-path algorithm selection (scanline, 4×4 tiles, 16×16 tiles, SDF, compute), text-aware area-based routing |
+| **Performance** | Tile-based parallel rendering, LRU caching, four-level damage pipeline (ADR-021: object diff → tile dirty → GPU scissor → OS present), **text batch coalescing** (ADR-031: same-style DrawString calls merge into 1 GPU draw call, Skia TextBlob pattern), **zero-copy buffer reuse** (NewPixmapFromBuffer + ImageView for hot rendering loops), incremental Path.Bounds (Skia pattern), `GOGPU_DEBUG_DAMAGE=1` overlay |
+
+---
+
+## Installation
+
+```bash
+go get github.com/gogpu/gg
+```
+
+**Requirements:** Go 1.25+
+
+---
+
+## Quick Start
+
+```go
+package main
+
+import (
+    "github.com/gogpu/gg"
+    "github.com/gogpu/gg/text"
+)
+
+func main() {
+    // Create drawing context
+    dc := gg.NewContext(512, 512)
+    defer dc.Close()
+
+    dc.ClearWithColor(gg.White)
+
+    // Draw shapes
+    dc.SetHexColor("#3498db")
+    dc.DrawCircle(256, 256, 100)
+    dc.Fill()
+
+    // Render text
+    source, _ := text.NewFontSourceFromFile("arial.ttf")
+    defer source.Close()
+
+    dc.SetFont(source.Face(32))
+    dc.SetColor(gg.Black)
+    dc.DrawString("Hello, GoGPU!", 180, 260)
+
+    dc.SavePNG("output.png")
+}
+```
+
+---
+
+## Rendering
+
+### Software Rendering (Default)
+
+The CPU rasterizer automatically selects the optimal algorithm per-path:
+
+| Algorithm | Tiles | Best For |
+|-----------|-------|----------|
+| **AnalyticFiller** (Skia AAA) | — | Simple paths, small shapes (< 32px). Pixel-perfect with Skia Chrome/Android. |
+| **AnalyticFiller Convex** | — | Convex shapes (rect, circle, triangle). 1.6x faster, kSnapDigit X snapping. |
+| **SparseStrips** | 4×4 | Complex paths, CPU/SIMD workloads |
+| **TileCompute** | 16×16 | Extreme complexity (10K+ segments) |
+
+```go
+dc := gg.NewContext(800, 600)
+defer dc.Close()
+
+// Auto-selection (default) — optimal algorithm per-path
+dc.DrawCircle(400, 300, 100)
+dc.Fill()
+
+// Force specific algorithm for benchmarking
+dc.SetRasterizerMode(gg.RasterizerSparseStrips)
+```
+
+### Pixel-Perfect Mode (No Anti-Aliasing)
+
+Disable anti-aliasing for crisp, aliased edges — useful for pixel art, retro graphics,
+technical drawings, and sharp grid lines:
+
+```go
+dc.SetAntiAlias(false)          // binary coverage: inside=opaque, outside=transparent
+dc.DrawRectangle(10, 10, 100, 50)
+dc.Fill()                        // no gray edge pixels
+dc.SetAntiAlias(true)           // back to smooth AA
+```
+
+Uses a dedicated integer scanline rasterizer (Skia/tiny-skia pattern) — ~2-3× faster
+than analytic AA. Works on both CPU and GPU (all backends). Text AA is independent
+(controlled via `SetTextMode`).
+
+### Text Stroke & Outline
+
+Stroke text outlines for outlined/bordered text effects (Skia/Cairo/HTML5 pattern):
+
+```go
+dc.SetLineWidth(3)
+dc.SetRGB(0, 0, 0)
+dc.StrokeString("Hello", x, y)  // black outline
+dc.SetRGB(1, 1, 1)
+dc.DrawString("Hello", x, y)    // white fill on top
+
+// Or get text as a Path for custom operations:
+path := dc.TextPath("Hello", x, y)
+```
+
+### Aliased Text
+
+Pixel-perfect text with binary coverage (Skia `SkFont::Edging::kAlias`).
+Works on both GPU and CPU — no GPU required:
+
+```go
+dc.SetTextMode(gg.TextModeAliased)  // no gray edge pixels on text
+dc.DrawString("Pixel Perfect", x, y)
+dc.SavePNG("aliased.png")           // works standalone, no import _ "gg/gpu" needed
+```
+
+Geometry AA (`SetAntiAlias`) and text AA (`SetTextMode`) are independent — matching
+Skia and Cairo separation.
+
+### GPU Acceleration (Optional)
+
+gg supports optional GPU acceleration through the `GPUAccelerator` interface with
+a seven-tier rendering pipeline:
+
+| Tier | Method | Best For |
+|------|--------|----------|
+| **1. SDF** | Signed Distance Field | Circles, ellipses, rectangles, rounded rects |
+| **2a. Convex** | Direct vertex emission | Convex polygons, single draw call |
+| **2b. Stencil+Cover** | Fan tessellation + stencil buffer | Arbitrary complex paths, EvenOdd/NonZero fill |
+| **3. Textured Quad** | GPU image sampling | DrawImage, DrawGPUTexture (zero-readback compositing) |
+| **4. MSDF Text** | Multi-channel Signed Distance Field | Dynamic/animated text, resolution-independent |
+| **5. Compute** | 9-stage Vello compute pipeline | Full scenes with many paths (GPU parallel rasterization) |
+| **6. Glyph Mask** | CPU-rasterized R8 alpha atlas | Static UI text ≤48px, pixel-perfect quality |
+
+Tiers 1–4, 6 use a render-pass pipeline; Tier 5 uses compute shaders dispatched
+via `PipelineMode` (Auto/RenderPass/Compute). Text auto-selection routes horizontal
+text ≤48px to Glyph Mask (Skia/Chrome pattern), else MSDF.
+
+When no GPU is registered, rendering uses the high-quality CPU rasterizer (default).
+
+```go
+import (
+    "github.com/gogpu/gg"
+    _ "github.com/gogpu/gg/gpu" // opt-in GPU acceleration
+)
+
+func main() {
+    // GPU automatically used when available, falls back to CPU
+    dc := gg.NewContext(800, 600)
+    defer dc.Close()
+
+    dc.DrawCircle(400, 300, 100)
+    dc.Fill() // tries GPU first, falls back to CPU transparently
+}
+```
+
+For zero-copy rendering directly to a GPU surface (e.g., in a gogpu window),
+use [`ggcanvas.Canvas.RenderDirect`](integration/ggcanvas/) — see the
+[gogpu integration example](examples/gogpu_integration/). The example uses
+event-driven rendering with `AnimationToken` for power-efficient VSync (0% CPU when idle).
+
+**Compositor examples:**
+
+| Example | Description |
+|---------|-------------|
+| [`zero_readback/`](examples/zero_readback/) | GPU-direct rendering — SDF shapes + text rendered to swapchain in a single MSAA pass, zero CPU readback |
+| [`blit_only/`](examples/blit_only/) | Non-MSAA compositor path — CPU pixmap uploaded via `FlushPixmap`, composited via `DrawGPUTextureBase` in a 1x render pass (93% bandwidth reduction, ADR-016) |
+| [`zero_readback_manual/`](examples/zero_readback_manual/) | Manual zero-readback pipeline — `FlushPixmap` + `EnsureGPUTexture` + `DrawGPUTextureBase` + `FlushGPUWithView` step-by-step |
+
+### Custom Pixmap
+
+```go
+// Use existing pixmap
+pm := gg.NewPixmap(800, 600)
+dc := gg.NewContext(800, 600, gg.WithPixmap(pm))
+```
+
+---
+
+## Architecture
+
+```
+                        gg (Public API)
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+   Immediate Mode       Retained Mode        Resources
+   (Context API)        (Scene Graph)     (Images, Fonts)
+         │                   │                   │
+         │              TagText (ADR-022)        │
+         │          shape once → glyph refs      │
+         └───────────────────┼───────────────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+         CPU Raster                   GPUAccelerator
+      (always available)            (opt-in via gg/gpu)
+              │                             │
+    internal/raster              ┌──────────┼──────────┐
+                                 │          │          │
+                           Render Pass   MSDF Text   Compute
+                         (Tiers 1-4,6)  (Tier 4,6) (Tier 5)
+```
+
+### Rendering Structure
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| **CPU Raster** | `internal/raster/` | Skia AAA analytic anti-aliasing (pixel-perfect port of Chrome/Android rasterizer). General + convex fast path. |
+| **Tile Rasterizers** | `internal/gpu/` (4×4), `internal/gpu/tilecompute/` (16×16) | SparseStrips + TileCompute, both ported from Vello |
+| **GPU Accelerator** | `internal/gpu` | Seven-tier GPU pipeline (SDF, Convex, Stencil+Cover, Textured Quad, MSDF Text, Compute, Glyph Mask) |
+| **Scene Text** | `scene/` | TagText glyph references (ADR-022): shape once at recording, resolve at render via DrawShapedGlyphs → Tier 6/4. Atlas zoom resilience (Skia size buckets). |
+| **GPU + Tiles** | `gpu/` | Opt-in via `import _ "github.com/gogpu/gg/gpu"` (GPU + tile rasterizers) |
+| **Tiles Only** | `raster/` | Opt-in via `import _ "github.com/gogpu/gg/raster"` (CPU-only tiles) |
+| **Software** | Root `gg` package | Default CPU renderer with smart algorithm selection |
+
+---
+
+## Core APIs
+
+### Immediate Mode (Context)
+
+Canvas-style drawing with transformation stack:
+
+```go
+dc := gg.NewContext(800, 600)
+defer dc.Close()
+
+// Transforms
+dc.Push()
+dc.Translate(400, 300)
+dc.Rotate(math.Pi / 4)
+dc.DrawRectangle(-50, -50, 100, 100)
+dc.SetRGB(0.2, 0.5, 0.8)
+dc.Fill()
+dc.Pop()
+
+// Bezier paths
+dc.MoveTo(100, 100)
+dc.QuadraticTo(200, 50, 300, 100)
+dc.CubicTo(350, 150, 350, 250, 300, 300)
+dc.SetLineWidth(3)
+dc.Stroke()
+```
+
+### Fluent Path Builder
+
+Type-safe path construction with method chaining:
+
+```go
+path := gg.BuildPath().
+    MoveTo(100, 100).
+    LineTo(200, 100).
+    QuadTo(250, 150, 200, 200).
+    CubicTo(150, 250, 100, 250, 50, 200).
+    Close().
+    Circle(300, 150, 50).
+    Star(400, 150, 40, 20, 5).
+    Build()
+
+dc.SetPath(path)
+dc.Fill()
+```
+
+### Retained Mode (Scene Graph)
+
+GPU-optimized scene graph with compact encoding. Text uses TagText glyph references
+(ADR-022) — shaped once at recording time, resolved at render time with full hinting
+and atlas batching:
+
+```go
+import (
+    "github.com/gogpu/gg"
+    "github.com/gogpu/gg/scene"
+    "github.com/gogpu/gg/text"
+)
+
+s := scene.NewScene()
+
+// Shapes — encoded as compact binary commands
+s.Fill(scene.FillNonZero, scene.IdentityAffine(),
+    scene.SolidBrush(gg.RGBA{R: 1, A: 0.8}),
+    scene.NewCircleShape(150, 200, 100))
+
+// Text — stored as glyph references (10 bytes/glyph, not vector paths)
+source, _ := text.NewFontSourceFromFile("Roboto.ttf")
+face := source.Face(16)
+s.DrawText("Hello Scene", face, 50, 50, scene.SolidBrush(gg.White))
+
+// Render through GPU scene renderer (Tier 6/4 text, SDF shapes)
+gpuR := scene.NewGPUSceneRenderer(dc)
+gpuR.RenderScene(s)
+```
+
+### Text Rendering
+
+Full Unicode support with font fallback and built-in GSUB/GPOS shaping:
+
+```go
+// Font composition
+mainFont, _ := text.NewFontSourceFromFile("Roboto.ttf")
+emojiFont, _ := text.NewFontSourceFromFile("NotoEmoji.ttf")
+defer mainFont.Close()
+defer emojiFont.Close()
+
+multiFace, _ := text.NewMultiFace(
+    mainFont.Face(24),
+    text.NewFilteredFace(emojiFont.Face(24), text.RangeEmoji),
+)
+
+dc.SetFont(multiFace)
+dc.DrawString("Hello World! Nice day!", 50, 100)
+
+// Built-in GSUB/GPOS shaping (ligatures, kerning) is enabled by default.
+// No additional setup needed — OwnShaper handles liga, kern features automatically.
+
+// Text layout with wrapping
+opts := text.LayoutOptions{
+    MaxWidth:  400,
+    WrapMode:  text.WrapWordChar,
+    Alignment: text.AlignCenter,
+}
+layout := text.LayoutText("Long text...", face, opts)
+```
+
+#### Transform-Aware Text
+
+Text rendering respects the full transformation matrix (scale, rotation, shear):
+
+```go
+dc.SetFont(source.Face(24))
+dc.SetRGB(0, 0, 0)
+
+// Scaled text — rendered at device resolution (no pixelation)
+dc.Push()
+dc.Scale(2, 2)
+dc.DrawString("2x Scale", 50, 50)
+dc.Pop()
+
+// Rotated text — glyph outlines converted to vector paths
+dc.Push()
+dc.Translate(200, 200)
+dc.Rotate(math.Pi / 6) // 30 degrees
+dc.DrawString("Rotated", 0, 0)
+dc.Pop()
+```
+
+Text rendering strategy is selectable per-Context via `SetTextMode()`:
+
+| Mode | Strategy | Best for |
+|------|----------|----------|
+| `TextModeAuto` | Auto-select (default) | General use |
+| `TextModeMSDF` | GPU MSDF atlas | Games, animations, real-time scaling |
+| `TextModeVector` | Glyph outlines as paths | UI labels, quality-critical text |
+| `TextModeBitmap` | CPU bitmap rasterization | PNG/PDF export, static text |
+
+The CPU text pipeline uses a three-tier strategy (modeled after Skia/Cairo/Vello):
+translation-only → bitmap, uniform scale ≤256px → bitmap at device size,
+everything else → glyph outlines as vector paths with cached outlines via `GlyphCache`.
+
+### Color Emoji
+
+Full color emoji support with CBDT/CBLC (bitmap) and COLR/CPAL (vector) formats:
+
+<p align="center">
+  <img src="docs/images/colr_palette.png" alt="COLR Color Palette" width="512">
+  <br>
+  <sub>175 colors from Segoe UI Emoji COLR/CPAL palette</sub>
+</p>
+
+```go
+// Extract color emoji from font
+extractor, _ := emoji.NewCBDTExtractor(cbdtData, cblcData)
+glyph, _ := extractor.GetGlyph(glyphID, ppem)
+img, _ := png.Decode(bytes.NewReader(glyph.Data))
+
+// Parse COLR/CPAL vector layers
+parser, _ := emoji.NewCOLRParser(colrData, cpalData)
+glyph, _ := parser.GetGlyph(glyphID, paletteIndex)
+for _, layer := range glyph.Layers {
+    // Render each layer with layer.Color
+}
+```
+
+See [`examples/color_emoji/`](examples/color_emoji/) for a complete example.
+
+### Blend Modes
+
+29 W3C blend modes for direct Fill/Stroke operations:
+
+```go
+// Per-operation blending (Skia/Cairo/Qt pattern):
+dc.SetRGB(1, 0, 0) // red background
+dc.DrawRectangle(0, 0, 200, 200)
+dc.Fill()
+
+dc.SetBlendMode(gg.BlendMultiply)
+dc.SetRGB(0, 0, 1) // blue foreground
+dc.DrawCircle(100, 100, 80)
+dc.Fill() // uses Multiply blending
+
+dc.SetBlendMode(gg.BlendNormal) // reset to default
+```
+
+For isolated compositing with opacity, use layers:
+
+```go
+dc.PushLayer(gg.BlendOverlay, 0.7)
+// ... draw content ...
+dc.PopLayer()
+```
+
+### Alpha Masks
+
+Per-shape masking — each draw individually masked:
+
+```go
+// Create a circular mask
+dc.DrawCircle(200, 200, 100)
+mask := dc.AsMask() // capture path as mask (before Fill!)
+dc.ClearPath()
+
+// Apply mask: only the circle area is visible
+dc.SetMask(mask)
+dc.SetRGB(0, 0, 1)
+dc.DrawRectangle(0, 0, 400, 400)
+dc.Fill() // blue only inside the circle
+```
+
+Per-layer masking — mask an entire group of draws:
+
+```go
+mask := gg.NewMask(400, 400)
+// ... fill mask with desired shape ...
+
+dc.PushMaskLayer(mask)
+dc.DrawCircle(100, 100, 50)
+dc.Fill()
+dc.DrawRectangle(200, 200, 80, 80)
+dc.Fill()
+dc.PopLayer() // entire layer masked, then composited
+```
+
+### Recording & Vector Export
+
+Record drawing operations and export to PDF or SVG:
+
+```go
+import (
+    "github.com/gogpu/gg/recording"
+    _ "github.com/gogpu/gg-pdf" // Register PDF backend
+    _ "github.com/gogpu/gg-svg" // Register SVG backend
+)
+
+// Create recorder
+rec := recording.NewRecorder(800, 600)
+
+// Draw using familiar API
+rec.SetColor(gg.Blue)
+rec.DrawCircle(400, 300, 100)
+rec.Fill()
+
+// Finish recording and play back to a raster backend
+r := rec.FinishRecording()
+backend := raster.NewBackend()
+r.Playback(backend)
+backend.SaveToFile("output.png")
+```
+
+---
+
+## Why "Context" Instead of "Canvas"?
+
+The drawing type is named `Context` following industry conventions:
+
+| Library | Drawing Type |
+|---------|-------------|
+| HTML5 Canvas | `CanvasRenderingContext2D` |
+| Cairo | `cairo_t` (context) |
+| Apple CoreGraphics | `CGContext` |
+| piet (Rust) | `RenderContext` |
+
+In HTML5, Canvas is the element while **Context** performs drawing (`canvas.getContext("2d")`). The `Context` contains drawing state and provides the drawing API.
+
+**Convention:** `dc` for drawing context, `ctx` for `context.Context`:
+
+```go
+dc := gg.NewContext(512, 512) // dc = drawing context
+```
+
+---
+
+## Performance
+
+| Operation | Time | Notes |
+|-----------|------|-------|
+| sRGB to Linear | 0.16ns | 260x faster than math.Pow |
+| LayerCache.Get | 90ns | Thread-safe LRU |
+| DirtyRegion.Mark | 10.9ns | Lock-free atomic |
+| MSDF lookup | <10ns | Zero-allocation |
+| Path iteration | 23ns | SOA Iterate(), 0 allocs |
+| FillRect 100×100 | 520µs | **0 allocs** (zero-alloc pipeline) |
+| FillCircle r100 | 1.7ms | **0 allocs** (zero-alloc pipeline) |
+| StrokePath 10seg | 219ns | **0 allocs** (scratch path reuse, Skia pattern) |
+| SetRGB/SetRGBA | <1ns | **0 allocs** (inline solidColor, ADR-036) |
+| Gradient ColorAt | 33ns | 0 allocs (pre-sorted stops) |
+
+## Debugging
+
+### Damage Overlay
+
+Visualize which regions are repainted each frame:
+
+```bash
+GOGPU_DEBUG_DAMAGE=1 go run ./examples/gogpu_integration
+```
+
+Green flash-and-fade overlay shows damaged (repainted) regions. Useful for verifying that damage tracking works correctly and only dirty areas are repainted.
+
+### Environment Variables
+
+| Variable | Values | Description |
+|----------|--------|-------------|
+| `GOGPU_GRAPHICS_API` | `vulkan`, `dx12`, `metal`, `gles`, `software` | Force specific GPU backend |
+| `GOGPU_RENDER_MODE` | `auto`, `cpu`, `gpu` | Force CPU or GPU rasterizer (ADR-020) |
+| `GOGPU_DEBUG_DAMAGE` | `1` | Show damage region overlay (flash-and-fade) |
+
+---
+
+## Ecosystem
+
+**gg** is part of the [GoGPU](https://github.com/gogpu) ecosystem.
+
+| Project | Description |
+|---------|-------------|
+| [gogpu/gogpu](https://github.com/gogpu/gogpu) | GPU framework with windowing and input |
+| [gogpu/wgpu](https://github.com/gogpu/wgpu) | Pure Go WebGPU implementation |
+| [gogpu/naga](https://github.com/gogpu/naga) | Shader compiler (WGSL to SPIR-V, MSL, GLSL) |
+| **gogpu/gg** | **2D graphics (this repo)** |
+| [gogpu/gg-pdf](https://github.com/gogpu/gg-pdf) | PDF export backend for recording |
+| [gogpu/gg-svg](https://github.com/gogpu/gg-svg) | SVG export backend for recording |
+| [gogpu/ui](https://github.com/gogpu/ui) | GUI toolkit (planned) |
+
+---
+
+## Documentation
+
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — System architecture
+- **[ROADMAP.md](ROADMAP.md)** — Development milestones
+- **[CHANGELOG.md](CHANGELOG.md)** — Release notes
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Contribution guidelines
+- **[pkg.go.dev](https://pkg.go.dev/github.com/gogpu/gg)** — API reference
+
+### Community Tutorials
+
+We haven't written comprehensive tutorials yet, but the community has started:
+
+🇨🇿 **Pavel Tišnovský** ([root.cz](https://www.root.cz)) wrote two in-depth `gg` tutorials with 54 working [examples](https://github.com/tisnik/go-root):
+
+1. [Creating 2D/3D Graphics in Go with GoGPU](https://www.root.cz/clanky/tvorba-2d-i-3d-grafiky-a-animaci-v-go-s-vyuzitim-projektu-gogpu/) — 49 min. Paths, Bézier curves, transforms, text, animations.
+2. [Part 2: Gradients, SVG & PDF Export](https://www.root.cz/clanky/tvorba-2d-i-3d-grafiky-a-animaci-v-go-s-vyuzitim-projektu-gogpu-2-cast/) — 39 min. Linear/radial/angular gradients, vector export.
+
+> Czech language — use [Google Translate](https://translate.google.com/). Code examples are universal.
+
+### Articles
+
+- [GoGPU: From Idea to 100K Lines in Two Weeks](https://dev.to/kolkov/gogpu-from-idea-to-100k-lines-in-two-weeks-building-gos-gpu-ecosystem-3b2)
+- [Pure Go 2D Graphics Library with GPU Acceleration](https://dev.to/kolkov/pure-go-2d-graphics-library-with-gpu-acceleration-introducing-gogpugg-538h)
+- [GoGPU Announcement](https://dev.to/kolkov/gogpu-a-pure-go-graphics-library-for-gpu-programming-2j5d)
+
+---
+
+## Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+**Priority areas:**
+- API feedback and testing
+- Examples and documentation
+- Performance benchmarks
+- Cross-platform testing
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  <strong>gg</strong> — 2D Graphics for Go
+</p>

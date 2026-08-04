@@ -1,0 +1,21 @@
+=== TYPES ===
+[0] Atomic { base: Float(4) }
+[1] Array { base: [0], size: Constant(2), stride: 4 }
+[2] Struct "Struct" { members: [{ name: "atomic_scalar", type: [0], offset: 0}, { name: "atomic_arr", type: [1], offset: 4}], span: 12 }
+[3] Vector { size: Vec3, scalar: Uint(4) }
+[4] Scalar(Float, 4)
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "storage_atomic_scalar" type=[0] space=Storage(LOAD|STORE) binding=(0,0)
+[1] "storage_atomic_arr" type=[1] space=Storage(LOAD|STORE) binding=(0,1)
+[2] "storage_struct" type=[2] space=Storage(LOAD|STORE) binding=(0,2)
+
+=== FUNCTIONS ===
+=== ENTRY POINTS ===
+[0] "cs_main" stage=Compute function={name="cs_main", args=1, exprs=57, stmts=33, locals=0} workgroup_size=(2,1,1)

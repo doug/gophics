@@ -1,0 +1,55 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 44
+; Schema: 0
+
+               OpCapability Shader
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_12 "main"
+               OpExecutionMode %_12 LocalSize 1 1 1
+         %_2 = OpTypeVoid
+         %_3 = OpTypeFloat 32
+         %_4 = OpTypeVector %_3 4
+         %_5 = OpTypeMatrix %_4 4
+         %_6 = OpTypeVector %_3 2
+         %_7 = OpTypeMatrix %_6 2
+         %_8 = OpTypeVector %_3 3
+         %_9 = OpTypeMatrix %_8 3
+         %_10 = OpTypeMatrix %_8 4
+         %_11 = OpTypeFunction %_2
+         %_14 = OpConstant %_3 1065353216
+         %_15 = OpConstant %_3 0
+         %_33 = OpConstant %_3 1073741824
+         %_34 = OpConstant %_3 1077936128
+         %_12 = OpFunction %_2 None %_11
+         %_13 = OpLabel
+         %_16 = OpCompositeConstruct %_4 %_14 %_15 %_15 %_15
+         %_17 = OpCompositeConstruct %_4 %_15 %_14 %_15 %_15
+         %_18 = OpCompositeConstruct %_4 %_15 %_15 %_14 %_15
+         %_19 = OpCompositeConstruct %_4 %_15 %_15 %_15 %_14
+         %_20 = OpCompositeConstruct %_5 %_16 %_17 %_18 %_19
+         %_21 = OpCompositeConstruct %_6 %_14 %_15
+         %_22 = OpCompositeConstruct %_6 %_15 %_14
+         %_23 = OpCompositeConstruct %_7 %_21 %_22
+         %_24 = OpCompositeConstruct %_8 %_14 %_15 %_15
+         %_25 = OpCompositeConstruct %_8 %_15 %_14 %_15
+         %_26 = OpCompositeConstruct %_8 %_15 %_15 %_14
+         %_27 = OpCompositeConstruct %_9 %_24 %_25 %_26
+         %_28 = OpCompositeConstruct %_8 %_14 %_15 %_15
+         %_29 = OpCompositeConstruct %_8 %_15 %_14 %_15
+         %_30 = OpCompositeConstruct %_8 %_15 %_15 %_14
+         %_31 = OpCompositeConstruct %_8 %_15 %_15 %_15
+         %_32 = OpCompositeConstruct %_10 %_28 %_29 %_30 %_31
+         %_35 = OpCompositeConstruct %_4 %_14 %_33 %_34 %_14
+         %_36 = OpMatrixTimesVector %_4 %_20 %_35
+         %_37 = OpMatrixTimesMatrix %_5 %_20 %_20
+         %_38 = OpTranspose %_7 %_23
+         %_39 = OpCompositeExtract %_4 %_20 0
+         %_40 = OpCompositeExtract %_4 %_20 1
+         %_41 = OpCompositeExtract %_4 %_20 2
+         %_42 = OpCompositeExtract %_3 %_41 3
+         %_43 = OpMatrixTimesScalar %_7 %_23 %_33
+               OpReturn
+               OpFunctionEnd

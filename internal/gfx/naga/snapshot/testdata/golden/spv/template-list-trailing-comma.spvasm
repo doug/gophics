@@ -1,0 +1,105 @@
+; SPIR-V
+; Version: 1.1
+; Generator: 0x00000000
+; Bound: 72
+; Schema: 0
+
+               OpCapability Shader
+         OpExtension %_1599492179 %_1599227979 %_1919906931 %_1600481121 %_1717990754 %_1935635045 %_1634889588 %_1667196263 %_1936941420 %_0
+         %_1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %_18 "main" %_22
+               OpExecutionMode %_18 LocalSize 1 1 1
+               OpDecorate %_5 ArrayStride 4
+               OpDecorate %_6 ArrayStride 4
+               OpDecorate %_11 Block
+               OpMemberDecorate %_11 0 Offset 0
+               OpDecorate %_13 DescriptorSet 0
+               OpDecorate %_13 Binding 0
+               OpDecorate %_14 Block
+               OpMemberDecorate %_14 0 Offset 0
+               OpDecorate %_16 DescriptorSet 0
+               OpDecorate %_16 Binding 1
+               OpDecorate %_22 BuiltIn LocalInvocationId
+         %_2 = OpTypeVoid
+         %_3 = OpTypeInt 32 0
+         %_4 = OpConstant %_3 1
+         %_5 = OpTypeArray %_3 %_4
+         %_6 = OpTypeRuntimeArray %_3
+         %_7 = OpTypeArray %_3 %_4
+         %_8 = OpTypePointer Workgroup %_7
+         %_11 = OpTypeStruct %_6
+         %_12 = OpTypePointer StorageBuffer %_11
+         %_14 = OpTypeStruct %_6
+         %_15 = OpTypePointer StorageBuffer %_14
+         %_17 = OpTypeFunction %_2
+         %_20 = OpTypeVector %_3 3
+         %_21 = OpTypePointer Input %_20
+         %_24 = OpTypeBool
+         %_25 = OpTypeVector %_24 3
+         %_26 = OpConstantNull %_20
+         %_31 = OpConstantNull %_7
+         %_32 = OpConstantNull %_7
+         %_33 = OpConstant %_3 2
+         %_34 = OpConstant %_3 264
+         %_36 = OpConstant %_3 0
+         %_37 = OpTypePointer Workgroup %_3
+         %_40 = OpTypePointer StorageBuffer %_6
+         %_42 = OpTypePointer StorageBuffer %_3
+         %_9 = OpVariable %_8 Workgroup
+         %_10 = OpVariable %_8 Workgroup
+         %_13 = OpVariable %_12 StorageBuffer
+         %_16 = OpVariable %_15 StorageBuffer
+         %_22 = OpVariable %_21 Input
+         %_18 = OpFunction %_2 None %_17
+         %_19 = OpLabel
+         %_23 = OpLoad %_20 %_22
+         %_27 = OpSignBitSet %_25 %_23 %_26
+         %_28 = Op155 %_24 %_27
+               OpSelectionMerge %_29 0
+               OpBranchConditional %_28 %_30 %_29
+         %_30 = OpLabel
+               OpStore %_9 %_31
+               OpStore %_10 %_32
+               OpBranch %_29
+         %_29 = OpLabel
+         OpControlBarrier %_33 %_33 %_34
+               OpBranch %_35
+         %_35 = OpLabel
+         %_38 = OpAccessChain %_37 %_9 %_36
+         %_39 = OpLoad %_3 %_38
+         %_41 = OpAccessChain %_40 %_13 %_36
+         %_43 = OpAccessChain %_42 %_41 %_36
+         %_44 = OpLoad %_3 %_43
+         %_45 = OpAccessChain %_40 %_13 %_36
+         %_46 = OpAccessChain %_42 %_45 %_36
+         %_47 = OpLoad %_3 %_46
+         %_48 = OpAccessChain %_37 %_9 %_36
+               OpStore %_48 %_47
+         %_49 = OpAccessChain %_37 %_10 %_36
+         %_50 = OpLoad %_3 %_49
+         %_51 = OpAccessChain %_40 %_16 %_36
+         %_52 = OpAccessChain %_42 %_51 %_36
+         %_53 = OpLoad %_3 %_52
+         %_54 = OpAccessChain %_40 %_16 %_36
+         %_55 = OpAccessChain %_42 %_54 %_36
+         %_56 = OpLoad %_3 %_55
+         %_57 = OpAccessChain %_37 %_10 %_36
+               OpStore %_57 %_56
+         %_58 = OpAccessChain %_40 %_16 %_36
+         %_59 = OpAccessChain %_42 %_58 %_36
+         %_60 = OpLoad %_3 %_59
+         %_61 = OpAccessChain %_37 %_9 %_36
+         %_62 = OpLoad %_3 %_61
+         %_63 = OpAccessChain %_37 %_9 %_36
+         %_64 = OpLoad %_3 %_63
+         %_65 = OpAccessChain %_37 %_10 %_36
+         %_66 = OpLoad %_3 %_65
+         %_67 = OpAccessChain %_37 %_10 %_36
+         %_68 = OpLoad %_3 %_67
+         %_69 = OpIAdd %_3 %_64 %_68
+         %_70 = OpAccessChain %_40 %_16 %_36
+         %_71 = OpAccessChain %_42 %_70 %_36
+               OpStore %_71 %_69
+               OpReturn
+               OpFunctionEnd

@@ -1,0 +1,92 @@
+=== TYPES ===
+[0] Image { dim: D2, arrayed: false, class: Depth}
+[1] Scalar(Sint, 4)
+[2] Vector { size: Vec2, scalar: Sint(4) }
+[3] Scalar(Float, 4)
+[4] Image { dim: D2, arrayed: true, class: Depth}
+[5] Scalar(Uint, 4)
+[6] Image { dim: D2, arrayed: false, class: Depth, multisampled: true}
+[7] Vector { size: Vec4, scalar: Float(4) }
+
+=== CONSTANTS ===
+(none)
+
+=== OVERRIDES ===
+(none)
+
+=== GLOBALS ===
+[0] "image_depth_2d" type=[0] space=Handle binding=(0,0)
+[1] "image_depth_2d_array" type=[4] space=Handle binding=(0,1)
+[2] "image_depth_multisampled_2d" type=[6] space=Handle binding=(0,2)
+
+=== FUNCTIONS ===
+[0] "test_textureLoad_depth_2d"
+  args: [{ name: "coords", type: [2], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[3]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([0])
+    [3] ImageLoad { image: [2], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "level"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+[1] "test_textureLoad_depth_2d_array_u"
+  args: [{ name: "coords", type: [2], binding: None}, { name: "index", type: [5], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[3]
+  locals: 0
+  expressions: 5
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] GlobalVariable([1])
+    [4] ImageLoad { image: [3], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "index"
+    [2] = "level"
+  body: 2 statements
+    Emit(4..5)
+    Return { value: [4] }
+
+[2] "test_textureLoad_depth_2d_array_s"
+  args: [{ name: "coords", type: [2], binding: None}, { name: "index", type: [1], binding: None}, { name: "level", type: [1], binding: None}]
+  result: type=[3]
+  locals: 0
+  expressions: 5
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] FunctionArgument(2)
+    [3] GlobalVariable([1])
+    [4] ImageLoad { image: [3], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "index"
+    [2] = "level"
+  body: 2 statements
+    Emit(4..5)
+    Return { value: [4] }
+
+[3] "test_textureLoad_depth_multisampled_2d"
+  args: [{ name: "coords", type: [2], binding: None}, { name: "_sample", type: [1], binding: None}]
+  result: type=[3]
+  locals: 0
+  expressions: 4
+    [0] FunctionArgument(0)
+    [1] FunctionArgument(1)
+    [2] GlobalVariable([2])
+    [3] ImageLoad { image: [2], coordinate: [0] }
+  named_expressions:
+    [0] = "coords"
+    [1] = "_sample"
+  body: 2 statements
+    Emit(3..4)
+    Return { value: [3] }
+
+=== ENTRY POINTS ===
+[0] "fragment_shader" stage=Fragment function={name="fragment_shader", args=0, exprs=19, stmts=6, locals=0}

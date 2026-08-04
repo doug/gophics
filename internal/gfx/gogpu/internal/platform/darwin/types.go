@@ -1,0 +1,216 @@
+//go:build darwin
+
+package darwin
+
+// CGFloat is the floating-point type used by Core Graphics.
+// On 64-bit systems (all supported macOS versions), CGFloat is float64.
+type CGFloat = float64
+
+// CGPoint represents a point in a two-dimensional coordinate system.
+type CGPoint struct {
+	X CGFloat
+	Y CGFloat
+}
+
+// CGSize represents the dimensions of a rectangle.
+type CGSize struct {
+	Width  CGFloat
+	Height CGFloat
+}
+
+// CGRect represents a rectangle defined by origin and size.
+// macOS uses a bottom-left origin coordinate system.
+type CGRect struct {
+	Origin CGPoint
+	Size   CGSize
+}
+
+// NSPoint is an alias for CGPoint in AppKit.
+type NSPoint = CGPoint
+
+// NSSize is an alias for CGSize in AppKit.
+type NSSize = CGSize
+
+// NSRect is an alias for CGRect in AppKit.
+type NSRect = CGRect
+
+// NSUInteger is the unsigned integer type used by Cocoa.
+// On 64-bit systems, NSUInteger is uint64.
+type NSUInteger = uint64
+
+// NSInteger is the signed integer type used by Cocoa.
+// On 64-bit systems, NSInteger is int64.
+type NSInteger = int64
+
+// BOOL is the Objective-C boolean type.
+// YES = 1, NO = 0.
+type BOOL = int8
+
+// Objective-C BOOL constants.
+const (
+	YES BOOL = 1
+	NO  BOOL = 0
+)
+
+// NSWindowStyleMask specifies the style of a window and its capabilities.
+type NSWindowStyleMask NSUInteger
+
+// Window style mask values.
+const (
+	// NSWindowStyleMaskBorderless creates a window with no border or title bar.
+	NSWindowStyleMaskBorderless NSWindowStyleMask = 0
+
+	// NSWindowStyleMaskTitled creates a window with a title bar.
+	NSWindowStyleMaskTitled NSWindowStyleMask = 1 << 0
+
+	// NSWindowStyleMaskClosable allows the window to be closed.
+	NSWindowStyleMaskClosable NSWindowStyleMask = 1 << 1
+
+	// NSWindowStyleMaskMiniaturizable allows the window to be minimized.
+	NSWindowStyleMaskMiniaturizable NSWindowStyleMask = 1 << 2
+
+	// NSWindowStyleMaskResizable allows the window to be resized.
+	NSWindowStyleMaskResizable NSWindowStyleMask = 1 << 3
+
+	// NSWindowStyleMaskFullScreen enables fullscreen mode.
+	NSWindowStyleMaskFullScreen NSWindowStyleMask = 1 << 14
+
+	// NSWindowStyleMaskFullSizeContentView extends content under title bar.
+	NSWindowStyleMaskFullSizeContentView NSWindowStyleMask = 1 << 15
+)
+
+// NSWindowTitleVisibility controls whether the title is visible in the title bar.
+type NSWindowTitleVisibility NSInteger
+
+const (
+	// NSWindowTitleVisible shows the native title text in the title bar (default).
+	NSWindowTitleVisible NSWindowTitleVisibility = 0
+	// NSWindowTitleHidden hides the native title text, leaving traffic-light buttons visible.
+	NSWindowTitleHidden NSWindowTitleVisibility = 1
+)
+
+// NSWindowCollectionBehavior controls how the window participates in
+// Spaces, Expose, and fullscreen.
+type NSWindowCollectionBehavior NSUInteger
+
+// Collection behavior values.
+const (
+	// NSWindowCollectionBehaviorFullScreenPrimary allows the window
+	// to enter native macOS fullscreen mode via the green button or
+	// toggleFullScreen: selector.
+	NSWindowCollectionBehaviorFullScreenPrimary NSWindowCollectionBehavior = 1 << 7
+)
+
+// NSBackingStoreType specifies how the window buffer is stored.
+type NSBackingStoreType NSUInteger
+
+// Backing store types.
+const (
+	// NSBackingStoreBuffered uses a buffer for window contents.
+	// This is the standard mode for modern macOS.
+	NSBackingStoreBuffered NSBackingStoreType = 2
+)
+
+// NSEventMask specifies which events to receive.
+type NSEventMask NSUInteger
+
+// Event mask values.
+const (
+	// NSEventMaskAny matches any event type.
+	NSEventMaskAny NSEventMask = ^NSEventMask(0)
+)
+
+// NSEventType specifies the type of an event.
+type NSEventType NSUInteger
+
+// Event types.
+const (
+	NSEventTypeLeftMouseDown      NSEventType = 1
+	NSEventTypeLeftMouseUp        NSEventType = 2
+	NSEventTypeRightMouseDown     NSEventType = 3
+	NSEventTypeRightMouseUp       NSEventType = 4
+	NSEventTypeMouseMoved         NSEventType = 5
+	NSEventTypeLeftMouseDragged   NSEventType = 6
+	NSEventTypeRightMouseDragged  NSEventType = 7
+	NSEventTypeMouseEntered       NSEventType = 8
+	NSEventTypeMouseExited        NSEventType = 9
+	NSEventTypeKeyDown            NSEventType = 10
+	NSEventTypeKeyUp              NSEventType = 11
+	NSEventTypeFlagsChanged       NSEventType = 12
+	NSEventTypeScrollWheel        NSEventType = 22
+	NSEventTypeApplicationDefined NSEventType = 15
+	NSEventTypeTabletPoint        NSEventType = 23
+	NSEventTypeTabletProximity    NSEventType = 24
+	NSEventTypeOtherMouseDown     NSEventType = 25
+	NSEventTypeOtherMouseUp       NSEventType = 26
+	NSEventTypeOtherMouseDragged  NSEventType = 27
+)
+
+// NSEvent subtypes for mouse events carrying tablet data.
+const (
+	NSEventSubtypeMouseEvent      NSUInteger = 0
+	NSEventSubtypeTabletPoint     NSUInteger = 1
+	NSEventSubtypeTabletProximity NSUInteger = 2
+)
+
+// NSPointingDeviceType values from NSEvent.
+const (
+	NSPointingDeviceTypeUnknown NSUInteger = 0
+	NSPointingDeviceTypePen     NSUInteger = 1
+	NSPointingDeviceTypeCursor  NSUInteger = 2
+	NSPointingDeviceTypeEraser  NSUInteger = 3
+)
+
+// NSEventModifierFlags are the modifier key flags in an NSEvent.
+type NSEventModifierFlags NSUInteger
+
+// Modifier flags.
+const (
+	// NSEventModifierFlagCapsLock indicates Caps Lock is active.
+	NSEventModifierFlagCapsLock NSEventModifierFlags = 1 << 16
+
+	// NSEventModifierFlagShift indicates Shift key is pressed.
+	NSEventModifierFlagShift NSEventModifierFlags = 1 << 17
+
+	// NSEventModifierFlagControl indicates Control key is pressed.
+	NSEventModifierFlagControl NSEventModifierFlags = 1 << 18
+
+	// NSEventModifierFlagOption indicates Option (Alt) key is pressed.
+	NSEventModifierFlagOption NSEventModifierFlags = 1 << 19
+
+	// NSEventModifierFlagCommand indicates Command (Super) key is pressed.
+	NSEventModifierFlagCommand NSEventModifierFlags = 1 << 20
+)
+
+// NSApplicationActivationPolicy specifies how an app is activated.
+type NSApplicationActivationPolicy NSInteger
+
+// Activation policies.
+const (
+	// NSApplicationActivationPolicyRegular is a regular app with dock icon.
+	NSApplicationActivationPolicyRegular NSApplicationActivationPolicy = 0
+
+	// NSApplicationActivationPolicyAccessory is an accessory app without dock icon.
+	NSApplicationActivationPolicyAccessory NSApplicationActivationPolicy = 1
+
+	// NSApplicationActivationPolicyProhibited is a background app.
+	NSApplicationActivationPolicyProhibited NSApplicationActivationPolicy = 2
+)
+
+// MakeRect creates an NSRect from origin and size components.
+func MakeRect(x, y, width, height CGFloat) NSRect {
+	return NSRect{
+		Origin: NSPoint{X: x, Y: y},
+		Size:   NSSize{Width: width, Height: height},
+	}
+}
+
+// MakePoint creates an NSPoint from coordinates.
+func MakePoint(x, y CGFloat) NSPoint {
+	return NSPoint{X: x, Y: y}
+}
+
+// MakeSize creates an NSSize from dimensions.
+func MakeSize(width, height CGFloat) NSSize {
+	return NSSize{Width: width, Height: height}
+}

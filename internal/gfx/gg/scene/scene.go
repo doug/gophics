@@ -1,0 +1,825 @@
+package scene
+
+import "github.com/doug/gossamer/internal/gfx/gg/text"
+
+// Scene is the main retained mode container for accumulating drawing operations.
+// It builds an Encoding that can be efficiently rendered or cached.
+//
+// Scene provides a familiar drawing API with Fill, Stroke, layers, clips,
+// and transforms. All operations are recorded into an internal Encoding
+// for later playback or GPU submission.
+//
+// Example:
+//
+//	scene := NewScene()
+//	scene.Fill(FillNonZero, IdentityAffine(), SolidBrush(gg.Red), circle)
+//	scene.PushLayer(BlendMultiply, 0.5, nil)
+//	scene.Stroke(DefaultStrokeStyle(), IdentityAffine(), SolidBrush(gg.Blue), rect)
+//	scene.PopLayer()
+//	enc := scene.Encoding()
+type Scene struct {
+	// encoding is the root encoding that accumulates all commands
+	encoding *Encoding
+
+	// layerStack manages the hierarchy of compositing layers
+	layerStack *LayerStack
+
+	// transformStack holds the transform state stack
+	transformStack []Affine
+
+	// clipStack holds the clip state stack
+	clipStack *ClipStack
+
+	// version is incremented on each modification for cache invalidation
+	version uint64
+
+	// bounds tracks the cumulative bounding box of all content
+	bounds Rect
+
+	// currentTransform is the current combined transform
+	currentTransform Affine
+
+	// antiAlias controls whether subsequent draws use anti-aliasing.
+	// Default: true. State changes are delta-encoded (TagSetAntiAlias emitted
+	// only when the value differs from lastEncodedAA).
+	antiAlias bool
+
+	// lastEncodedAA tracks the last AA state emitted into the encoding.
+	// Used for dirty tracking to avoid redundant TagSetAntiAlias tags.
+	lastEncodedAA bool
+
+	// imageRegistry maps image handles to indices
+	imageRegistry []*Image
+
+	// fontRegistry maps FontSourceID → *text.FontSource for TagText resolution.
+	// Populated at scene recording time, consumed at render/playback time.
+	fontRegistry map[uint64]*text.FontSource
+
+	// pathPool reuses Path objects to avoid per-shape allocations in Fill/Stroke.
+	// Each shape.ToPath() creates a new Path; pooling eliminates this overhead.
+	pathPool PathPool
+}
+
+// NewScene creates a new empty scene.
+func NewScene() *Scene {
+	return &Scene{
+		encoding:         NewEncoding(),
+		layerStack:       NewLayerStack(),
+		transformStack:   make([]Affine, 0, 8),
+		clipStack:        NewClipStack(),
+		version:          0,
+		bounds:           EmptyRect(),
+		currentTransform: IdentityAffine(),
+		antiAlias:        true,
+		lastEncodedAA:    true,
+		imageRegistry:    make([]*Image, 0, 8),
+		fontRegistry:     make(map[uint64]*text.FontSource, 4),
+	}
+}
+
+// Reset clears the scene for reuse without deallocating memory.
+func (s *Scene) Reset() {
+	s.encoding.Reset()
+	s.layerStack.Reset()
+	s.transformStack = s.transformStack[:0]
+	s.clipStack.Reset()
+	s.version++
+	s.bounds = EmptyRect()
+	s.currentTransform = IdentityAffine()
+	s.antiAlias = true
+	s.lastEncodedAA = true
+	s.imageRegistry = s.imageRegistry[:0]
+	clear(s.fontRegistry)
+}
+
+// SetAntiAlias enables or disables anti-aliasing for subsequent fill and stroke
+// operations. When disabled, shapes are rendered with binary (pixel-perfect)
+// coverage, producing crisp edges ideal for UI elements at exact pixel boundaries.
+//
+// The state change is delta-encoded: TagSetAntiAlias is emitted into the encoding
+// only when the value differs from the previously encoded state. Default is true.
+//
+// Reference: Skia SkPaint::setAntiAlias, Cairo cairo_set_antialias.
+func (s *Scene) SetAntiAlias(enabled bool) {
+	s.antiAlias = enabled
+	s.version++
+}
+
+// AntiAlias returns whether anti-aliasing is enabled for subsequent draws.
+func (s *Scene) AntiAlias() bool {
+	return s.antiAlias
+}
+
+// emitAntiAliasIfNeeded emits TagSetAntiAlias into the given encoding when
+// the current AA state differs from the last-encoded state. This implements
+// delta encoding to avoid redundant tags in the stream.
+func (s *Scene) emitAntiAliasIfNeeded(enc *Encoding) {
+	if s.antiAlias != s.lastEncodedAA {
+		enc.EncodeAntiAlias(s.antiAlias)
+		s.lastEncodedAA = s.antiAlias
+	}
+}
+
+// Fill fills a shape with the given style, transform, and brush.
+func (s *Scene) Fill(style FillStyle, transform Affine, brush Brush, shape Shape) {
+	if shape == nil {
+		return
+	}
+
+	// Combine with current transform
+	combinedTransform := s.currentTransform.Multiply(transform)
+
+	// Get the current layer's encoding
+	enc := s.currentEncoding()
+
+	// Emit AA state change if needed (delta encoding).
+	s.emitAntiAliasIfNeeded(enc)
+
+	// Optimization: RoundRectShape uses dedicated SDF encoding
+	// which bypasses path construction entirely.
+	if rr, ok := shape.(*RoundRectShape); ok {
+		if !combinedTransform.IsIdentity() {
+			enc.EncodeTransform(combinedTransform)
+		}
+		enc.EncodeFillRoundRect(brush, style, rr.Rect, rr.RadiusX, rr.RadiusY)
+
+		shapeBounds := rr.Rect
+		if !combinedTransform.IsIdentity() {
+			shapeBounds = transformBounds(shapeBounds, combinedTransform)
+		}
+		s.bounds = s.bounds.Union(shapeBounds)
+		enc.UpdateBounds(shapeBounds)
+		enc.RecordCommandBounds(shapeBounds)
+		s.layerStack.Top().UpdateBounds(shapeBounds)
+		s.version++
+		return
+	}
+
+	// Encode transform if not identity
+	if !combinedTransform.IsIdentity() {
+		enc.EncodeTransform(combinedTransform)
+	}
+
+	// Convert shape to path and encode — use pooled path when possible.
+	path := s.shapeToPath(shape)
+	if path == nil || path.IsEmpty() {
+		return
+	}
+	s.encodeScenePath(enc, path)
+	s.pathPool.Put(path)
+
+	// Encode fill command
+	enc.EncodeFill(brush, style)
+
+	// Update bounds
+	shapeBounds := shape.Bounds()
+	if !combinedTransform.IsIdentity() {
+		shapeBounds = transformBounds(shapeBounds, combinedTransform)
+	}
+	s.bounds = s.bounds.Union(shapeBounds)
+	enc.UpdateBounds(shapeBounds)
+	enc.RecordCommandBounds(shapeBounds)
+
+	// Update layer bounds
+	s.layerStack.Top().UpdateBounds(shapeBounds)
+
+	s.version++
+}
+
+// Stroke strokes a shape with the given style, transform, and brush.
+func (s *Scene) Stroke(style *StrokeStyle, transform Affine, brush Brush, shape Shape) {
+	if shape == nil {
+		return
+	}
+	if style == nil {
+		style = DefaultStrokeStyle()
+	}
+
+	// Combine with current transform
+	combinedTransform := s.currentTransform.Multiply(transform)
+
+	// Get the current layer's encoding
+	enc := s.currentEncoding()
+
+	// Emit AA state change if needed (delta encoding).
+	s.emitAntiAliasIfNeeded(enc)
+
+	// Encode transform if not identity
+	if !combinedTransform.IsIdentity() {
+		enc.EncodeTransform(combinedTransform)
+	}
+
+	// Convert shape to path and encode — use pooled path when possible.
+	path := s.shapeToPath(shape)
+	if path == nil || path.IsEmpty() {
+		return
+	}
+	s.encodeScenePath(enc, path)
+	s.pathPool.Put(path)
+
+	// Encode stroke command
+	enc.EncodeStroke(brush, style)
+
+	// Update bounds (expand by stroke width)
+	shapeBounds := shape.Bounds()
+	halfWidth := style.Width / 2
+	shapeBounds.MinX -= halfWidth
+	shapeBounds.MinY -= halfWidth
+	shapeBounds.MaxX += halfWidth
+	shapeBounds.MaxY += halfWidth
+
+	if !combinedTransform.IsIdentity() {
+		shapeBounds = transformBounds(shapeBounds, combinedTransform)
+	}
+	s.bounds = s.bounds.Union(shapeBounds)
+	enc.UpdateBounds(shapeBounds)
+	enc.RecordCommandBounds(shapeBounds)
+
+	// Update layer bounds
+	s.layerStack.Top().UpdateBounds(shapeBounds)
+
+	s.version++
+}
+
+// DrawImage draws an image at the given transform.
+func (s *Scene) DrawImage(img *Image, transform Affine) {
+	if img == nil {
+		return
+	}
+
+	// Register image and get index
+	imageIdx := s.registerImage(img)
+
+	// Combine with current transform
+	combinedTransform := s.currentTransform.Multiply(transform)
+
+	// Get the current layer's encoding
+	enc := s.currentEncoding()
+
+	// Encode image command
+	//nolint:gosec // image index is bounded by slice length
+	enc.EncodeImage(uint32(imageIdx), combinedTransform)
+
+	// Update bounds
+	imgBounds := Rect{
+		MinX: 0,
+		MinY: 0,
+		MaxX: float32(img.Width),
+		MaxY: float32(img.Height),
+	}
+	if !combinedTransform.IsIdentity() {
+		imgBounds = transformBounds(imgBounds, combinedTransform)
+	}
+	s.bounds = s.bounds.Union(imgBounds)
+	enc.UpdateBounds(imgBounds)
+	enc.RecordCommandBounds(imgBounds)
+
+	// Update layer bounds
+	s.layerStack.Top().UpdateBounds(imgBounds)
+
+	s.version++
+}
+
+// PushLayer pushes a new compositing layer.
+// All subsequent drawing operations will be rendered to this layer.
+// Call PopLayer to composite the layer with the content below.
+func (s *Scene) PushLayer(blend BlendMode, alpha float32, clip Shape) {
+	clampedAlpha := clampAlpha(alpha)
+
+	layer := s.layerStack.AcquireLayer()
+	layer.Kind = LayerRegular
+	layer.BlendMode = blend
+	layer.Alpha = clampedAlpha
+	layer.Clip = clip
+	layer.Transform = s.currentTransform
+	layer.ClipStackDepth = s.clipStack.Depth()
+
+	// Initialize layer encoding
+	if layer.Encoding == nil {
+		layer.Encoding = NewEncoding()
+	} else {
+		layer.Encoding.Reset()
+	}
+
+	// Encode push layer in parent
+	parentEnc := s.currentEncoding()
+	parentEnc.EncodePushLayer(blend, clampedAlpha)
+
+	// If there's a clip, encode it
+	if clip != nil {
+		path := s.shapeToPath(clip)
+		if path != nil && !path.IsEmpty() {
+			s.encodeScenePath(parentEnc, path)
+			s.pathPool.Put(path)
+			parentEnc.EncodeBeginClip()
+		}
+	}
+
+	s.layerStack.Push(layer)
+	s.version++
+}
+
+// PopLayer pops the current layer and composites it with the content below.
+// Returns false if there's no layer to pop (only root layer remains).
+func (s *Scene) PopLayer() bool {
+	if s.layerStack.IsRoot() {
+		return false
+	}
+
+	layer := s.layerStack.Pop()
+	if layer == nil {
+		return false
+	}
+
+	// Get parent encoding
+	parentEnc := s.currentEncoding()
+
+	// If layer had content, append it to parent
+	if layer.Encoding != nil && !layer.Encoding.IsEmpty() {
+		parentEnc.Append(layer.Encoding)
+	}
+
+	// If layer had a clip, end it
+	if layer.Clip != nil {
+		parentEnc.EncodeEndClip()
+	}
+
+	// Encode pop layer
+	parentEnc.EncodePopLayer()
+
+	// Update parent bounds
+	s.layerStack.Top().UpdateBounds(layer.Bounds)
+
+	// Return layer to pool
+	s.layerStack.ReleaseLayer(layer)
+
+	s.version++
+	return true
+}
+
+// PushClip pushes a clip region. All subsequent drawing operations
+// will be clipped to this shape until PopClip is called.
+func (s *Scene) PushClip(shape Shape) {
+	if shape == nil {
+		return
+	}
+
+	clipState := NewClipState(shape, s.currentTransform)
+	s.clipStack.Push(clipState)
+
+	// Encode clip in current layer
+	enc := s.currentEncoding()
+	path := s.shapeToPath(shape)
+	if path != nil && !path.IsEmpty() {
+		// Encode transform if not identity
+		if !s.currentTransform.IsIdentity() {
+			enc.EncodeTransform(s.currentTransform)
+		}
+		s.encodeScenePath(enc, path)
+		s.pathPool.Put(path)
+		enc.EncodeBeginClip()
+	}
+
+	s.version++
+}
+
+// PopClip pops the current clip region.
+// Returns false if there's no clip to pop.
+func (s *Scene) PopClip() bool {
+	if s.clipStack.IsEmpty() {
+		return false
+	}
+
+	s.clipStack.Pop()
+
+	// Encode end clip
+	enc := s.currentEncoding()
+	enc.EncodeEndClip()
+
+	s.version++
+	return true
+}
+
+// PushTransform pushes a transform onto the transform stack.
+// The transform is concatenated with the current transform.
+func (s *Scene) PushTransform(t Affine) {
+	s.transformStack = append(s.transformStack, s.currentTransform)
+	s.currentTransform = s.currentTransform.Multiply(t)
+	s.version++
+}
+
+// PopTransform pops the current transform from the stack.
+// Returns false if there's no transform to pop.
+func (s *Scene) PopTransform() bool {
+	if len(s.transformStack) == 0 {
+		return false
+	}
+	s.currentTransform = s.transformStack[len(s.transformStack)-1]
+	s.transformStack = s.transformStack[:len(s.transformStack)-1]
+	s.version++
+	return true
+}
+
+// SetTransform sets the current transform, replacing the existing one.
+// This does not affect the transform stack.
+func (s *Scene) SetTransform(t Affine) {
+	s.currentTransform = t
+	s.version++
+}
+
+// Transform returns the current transform.
+func (s *Scene) Transform() Affine {
+	return s.currentTransform
+}
+
+// Translate applies a translation to the current transform.
+func (s *Scene) Translate(x, y float32) {
+	s.currentTransform = s.currentTransform.Multiply(TranslateAffine(x, y))
+	s.version++
+}
+
+// Scale applies a scale to the current transform.
+func (s *Scene) Scale(x, y float32) {
+	s.currentTransform = s.currentTransform.Multiply(ScaleAffine(x, y))
+	s.version++
+}
+
+// Rotate applies a rotation to the current transform (angle in radians).
+func (s *Scene) Rotate(angle float32) {
+	s.currentTransform = s.currentTransform.Multiply(RotateAffine(angle))
+	s.version++
+}
+
+// Encoding returns the root encoding containing all scene commands.
+// This encoding can be used for rendering or caching.
+func (s *Scene) Encoding() *Encoding {
+	// Flatten all layers into root encoding
+	s.flattenLayers()
+	return s.encoding
+}
+
+// Flatten composites all layers into a single encoding.
+// This is useful for rendering the complete scene as a single
+// flattened representation.
+//
+// Unlike Encoding(), this method returns a new cloned encoding
+// that is independent of the scene's internal state. This allows
+// the scene to be modified after calling Flatten() without
+// affecting the returned encoding.
+//
+// The flattening process:
+//  1. All open layers are popped and composited
+//  2. Layer blend modes and alpha values are applied
+//  3. The result is a single encoding with all content merged
+//
+// Example:
+//
+//	scene := NewScene()
+//	scene.Fill(FillNonZero, IdentityAffine(), SolidBrush(gg.Red), rect)
+//	scene.PushLayer(BlendMultiply, 0.5, nil)
+//	scene.Fill(FillNonZero, IdentityAffine(), SolidBrush(gg.Blue), circle)
+//	flat := scene.Flatten()
+//	// flat contains both shapes with layer compositing applied
+func (s *Scene) Flatten() *Encoding {
+	// First ensure all layers are flattened
+	s.flattenLayers()
+
+	// Return a clone so caller can't affect internal state
+	return s.encoding.Clone()
+}
+
+// Bounds returns the cumulative bounding box of all scene content.
+func (s *Scene) Bounds() Rect {
+	return s.bounds
+}
+
+// Version returns the scene version number.
+// This is incremented on each modification and can be used for cache invalidation.
+func (s *Scene) Version() uint64 {
+	return s.version
+}
+
+// TaggedBounds returns per-draw-command bounding boxes with stable IDs.
+// Used by DamageTracker (ADR-021) for frame-to-frame object diff.
+func (s *Scene) TaggedBounds() []TaggedBounds {
+	return s.encoding.CommandBounds()
+}
+
+// IsEmpty returns true if the scene has no content.
+func (s *Scene) IsEmpty() bool {
+	return s.encoding.IsEmpty() && s.layerStack.Root().IsEmpty()
+}
+
+// Append merges another Scene into this one, combining encodings, image
+// registries, and bounds. Image indices in the appended scene's encoding
+// are adjusted to account for images already registered in this scene.
+//
+// This is the Scene-level equivalent of Flutter's SceneBuilder.addPicture() —
+// composing cached display lists from multiple RepaintBoundary nodes into a
+// single scene for rendering.
+//
+// The other scene is flattened (layers collapsed) before appending.
+func (s *Scene) Append(other *Scene) {
+	if other == nil || other.IsEmpty() {
+		return
+	}
+	otherEnc := other.Encoding()
+	//nolint:gosec // image registry length is bounded
+	imageOffset := uint32(len(s.imageRegistry))
+	s.currentEncoding().AppendWithImages(otherEnc, imageOffset)
+	s.imageRegistry = append(s.imageRegistry, other.imageRegistry...)
+	for id, src := range other.fontRegistry {
+		s.fontRegistry[id] = src
+	}
+	s.bounds = s.bounds.Union(other.Bounds())
+	s.version++
+}
+
+// AppendWithTranslation merges another scene into this one, offsetting all
+// coordinates by (dx, dy). Image indices are adjusted to avoid conflicts.
+//
+// This is the Vello-derived pattern for composing child scenes recorded at
+// local (0,0) into a parent at a specific position. Used by RepaintBoundary
+// scene composition (ADR-007 Phase 5).
+func (s *Scene) AppendWithTranslation(other *Scene, dx, dy float32) {
+	if other == nil || other.IsEmpty() {
+		return
+	}
+	otherEnc := other.Encoding()
+	//nolint:gosec // image registry length is bounded
+	imageOffset := uint32(len(s.imageRegistry))
+	s.currentEncoding().AppendWithTranslation(otherEnc, dx, dy, imageOffset)
+	s.imageRegistry = append(s.imageRegistry, other.imageRegistry...)
+	for id, src := range other.fontRegistry {
+		s.fontRegistry[id] = src
+	}
+
+	ob := other.Bounds()
+	ob.MinX += dx
+	ob.MinY += dy
+	ob.MaxX += dx
+	ob.MaxY += dy
+	s.bounds = s.bounds.Union(ob)
+	s.version++
+}
+
+// LayerDepth returns the current layer stack depth.
+func (s *Scene) LayerDepth() int {
+	return s.layerStack.Depth()
+}
+
+// ClipDepth returns the current clip stack depth.
+func (s *Scene) ClipDepth() int {
+	return s.clipStack.Depth()
+}
+
+// TransformDepth returns the current transform stack depth.
+func (s *Scene) TransformDepth() int {
+	return len(s.transformStack)
+}
+
+// ClipBounds returns the intersection of all active clip regions.
+func (s *Scene) ClipBounds() Rect {
+	return s.clipStack.CombinedBounds()
+}
+
+// currentEncoding returns the encoding for the current layer.
+func (s *Scene) currentEncoding() *Encoding {
+	layer := s.layerStack.Top()
+	if layer.Encoding != nil {
+		return layer.Encoding
+	}
+	return s.encoding
+}
+
+// encodeScenePath encodes a scene Path to an Encoding.
+func (s *Scene) encodeScenePath(enc *Encoding, path *Path) {
+	if path == nil || path.IsEmpty() {
+		return
+	}
+
+	enc.tags = append(enc.tags, TagBeginPath)
+	enc.pathBounds = EmptyRect()
+	enc.pathCount++
+
+	pointIdx := 0
+	for _, verb := range path.verbs {
+		switch verb {
+		case MoveTo:
+			enc.tags = append(enc.tags, TagMoveTo)
+			x, y := path.points[pointIdx], path.points[pointIdx+1]
+			enc.pathData = append(enc.pathData, x, y)
+			enc.pathBounds = enc.pathBounds.UnionPoint(x, y)
+			pointIdx += 2
+
+		case LineTo:
+			enc.tags = append(enc.tags, TagLineTo)
+			x, y := path.points[pointIdx], path.points[pointIdx+1]
+			enc.pathData = append(enc.pathData, x, y)
+			enc.pathBounds = enc.pathBounds.UnionPoint(x, y)
+			pointIdx += 2
+
+		case QuadTo:
+			enc.tags = append(enc.tags, TagQuadTo)
+			cx, cy := path.points[pointIdx], path.points[pointIdx+1]
+			x, y := path.points[pointIdx+2], path.points[pointIdx+3]
+			enc.pathData = append(enc.pathData, cx, cy, x, y)
+			enc.pathBounds = enc.pathBounds.UnionPoint(cx, cy)
+			enc.pathBounds = enc.pathBounds.UnionPoint(x, y)
+			pointIdx += 4
+
+		case CubicTo:
+			enc.tags = append(enc.tags, TagCubicTo)
+			c1x, c1y := path.points[pointIdx], path.points[pointIdx+1]
+			c2x, c2y := path.points[pointIdx+2], path.points[pointIdx+3]
+			x, y := path.points[pointIdx+4], path.points[pointIdx+5]
+			enc.pathData = append(enc.pathData, c1x, c1y, c2x, c2y, x, y)
+			enc.pathBounds = enc.pathBounds.UnionPoint(c1x, c1y)
+			enc.pathBounds = enc.pathBounds.UnionPoint(c2x, c2y)
+			enc.pathBounds = enc.pathBounds.UnionPoint(x, y)
+			pointIdx += 6
+
+		case Close:
+			enc.tags = append(enc.tags, TagClosePath)
+		}
+	}
+
+	enc.tags = append(enc.tags, TagEndPath)
+	// Note: we intentionally do NOT update enc.bounds here.
+	// Bounds management is handled at the Scene level (Fill/Stroke/DrawImage)
+	// with proper coordinate transforms applied. This avoids the bug where
+	// untransformed path coordinates cause the tile-based renderer to miss
+	// content that was moved by transforms (gg#116).
+}
+
+// flattenLayers collapses all layer content into the root encoding.
+// This is called when Encoding() is requested.
+func (s *Scene) flattenLayers() {
+	// If we're already at root level and root has content, nothing to do
+	if s.layerStack.IsRoot() {
+		rootLayer := s.layerStack.Root()
+		if rootLayer.Encoding != nil && !rootLayer.Encoding.IsEmpty() {
+			s.encoding.Append(rootLayer.Encoding)
+			rootLayer.Encoding.Reset()
+		}
+		return
+	}
+
+	// Pop all layers and merge into root
+	for !s.layerStack.IsRoot() {
+		_ = s.PopLayer()
+	}
+
+	// Merge root layer content
+	rootLayer := s.layerStack.Root()
+	if rootLayer.Encoding != nil && !rootLayer.Encoding.IsEmpty() {
+		s.encoding.Append(rootLayer.Encoding)
+		rootLayer.Encoding.Reset()
+	}
+}
+
+// shapeToPath converts a shape to a path, using a pooled Path when the shape
+// implements PathBuilder. The returned path should be returned to s.pathPool
+// after use via s.pathPool.Put(path).
+func (s *Scene) shapeToPath(shape Shape) *Path {
+	if builder, ok := shape.(PathBuilder); ok {
+		p := s.pathPool.Get()
+		builder.BuildPathInto(p)
+		return p
+	}
+	return shape.ToPath()
+}
+
+// RegisterFont registers a FontSource in the scene's font registry.
+// Returns the FontSourceID used to reference this font in TagText commands.
+func (s *Scene) RegisterFont(source *text.FontSource) uint64 {
+	id := computeSceneTextFontID(source)
+	s.fontRegistry[id] = source
+	return id
+}
+
+// FontRegistry returns the scene's font registry for render-time font lookup.
+func (s *Scene) FontRegistry() map[uint64]*text.FontSource {
+	return s.fontRegistry
+}
+
+// registerImage adds an image to the registry and returns its index.
+func (s *Scene) registerImage(img *Image) int {
+	// Check if already registered
+	for i, registered := range s.imageRegistry {
+		if registered == img {
+			return i
+		}
+	}
+	// Add new image
+	idx := len(s.imageRegistry)
+	s.imageRegistry = append(s.imageRegistry, img)
+	return idx
+}
+
+// Images returns all registered images.
+func (s *Scene) Images() []*Image {
+	return s.imageRegistry
+}
+
+// transformBounds transforms a bounding rectangle by an affine transform.
+func transformBounds(bounds Rect, transform Affine) Rect {
+	if bounds.IsEmpty() {
+		return bounds
+	}
+
+	// Transform all four corners
+	corners := [][2]float32{
+		{bounds.MinX, bounds.MinY},
+		{bounds.MaxX, bounds.MinY},
+		{bounds.MaxX, bounds.MaxY},
+		{bounds.MinX, bounds.MaxY},
+	}
+
+	result := EmptyRect()
+	for _, c := range corners {
+		x, y := transform.TransformPoint(c[0], c[1])
+		result = result.UnionPoint(x, y)
+	}
+
+	return result
+}
+
+// Image represents an image resource for drawing.
+// This is a placeholder that will be expanded during integration.
+type Image struct {
+	// Width is the image width in pixels
+	Width int
+
+	// Height is the image height in pixels
+	Height int
+
+	// Data holds the pixel data (RGBA format)
+	// This will be populated during integration phase
+	Data []byte
+}
+
+// NewImage creates a new image with the given dimensions.
+func NewImage(width, height int) *Image {
+	return &Image{
+		Width:  width,
+		Height: height,
+	}
+}
+
+// Bounds returns the image bounds as a Rect.
+func (img *Image) Bounds() Rect {
+	return Rect{
+		MinX: 0,
+		MinY: 0,
+		MaxX: float32(img.Width),
+		MaxY: float32(img.Height),
+	}
+}
+
+// IsEmpty returns true if the image has no dimensions.
+func (img *Image) IsEmpty() bool {
+	return img.Width <= 0 || img.Height <= 0
+}
+
+// ScenePool manages a pool of reusable Scene objects.
+type ScenePool struct {
+	scenes []*Scene
+}
+
+// NewScenePool creates a new scene pool.
+func NewScenePool() *ScenePool {
+	return &ScenePool{
+		scenes: make([]*Scene, 0, 4),
+	}
+}
+
+// Get retrieves a scene from the pool or creates a new one.
+func (sp *ScenePool) Get() *Scene {
+	if len(sp.scenes) > 0 {
+		scene := sp.scenes[len(sp.scenes)-1]
+		sp.scenes = sp.scenes[:len(sp.scenes)-1]
+		scene.Reset()
+		return scene
+	}
+	return NewScene()
+}
+
+// Put returns a scene to the pool for reuse.
+func (sp *ScenePool) Put(scene *Scene) {
+	if scene == nil {
+		return
+	}
+	sp.scenes = append(sp.scenes, scene)
+}
+
+// Warmup pre-allocates scenes to avoid allocation during critical paths.
+func (sp *ScenePool) Warmup(count int) {
+	scenes := make([]*Scene, count)
+	for i := 0; i < count; i++ {
+		scenes[i] = sp.Get()
+	}
+	for i := 0; i < count; i++ {
+		sp.Put(scenes[i])
+	}
+}
