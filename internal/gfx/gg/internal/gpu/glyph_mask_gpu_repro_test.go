@@ -122,7 +122,7 @@ func TestGlyphMaskGPURepro(t *testing.T) {
 
 	out := os.Getenv("GMREPRO_OUT")
 	if out == "" {
-		out = "glyph_mask_gpu_repro.png"
+		out = filepath.Join(t.TempDir(), "glyph_mask_gpu_repro.png")
 	}
 	f, err := os.Create(out)
 	if err != nil {
