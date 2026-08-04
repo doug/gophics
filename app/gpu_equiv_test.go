@@ -168,6 +168,138 @@ func TestGPUGradientInterpolates(t *testing.T) {
 	}
 }
 
+// TestGPUOpacityGroup is the minimal repro for GPU opacity-layer compositing
+// (docs/gpu-opacity-layers.md). A base fill, then a PushOpacity(0.5) group
+// containing an overlapping fill. Before GPU layers, the accelerator lost the
+// base content and ignored the group alpha; now the base must survive and the
+// group must composite at ~50%. Checked both against the (correct) CPU path and
+// via direct pixel assertions.
+func TestGPUOpacityGroup(t *testing.T) {
+	red := paint.RGB(1, 0, 0)
+	blue := paint.RGB(0, 0, 1)
+	// The overlay extends to the bottom-right corner (200,200): if a layer
+	// target were sized in logical rather than physical pixels (the HiDPI
+	// opacity bug class), the corner of the composite would be clipped at 2×/3×.
+	scene := func() widget.Widget {
+		return widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+			c.Clear(paint.RGB(1, 1, 1))
+			c.FillRect(geom.RectXYWH(0, 0, 120, 120), red) // base
+			c.PushOpacity(0.5)
+			c.FillRect(geom.RectXYWH(60, 60, 140, 140), blue) // half-opacity overlay to corner
+			c.PopOpacity()
+		}}
+	}
+
+	// Whole-frame GPU-vs-CPU agreement across device scales (the CPU path is the
+	// correct reference). 2×/3× guard the physical-pixel target sizing.
+	for _, scale := range []float32{1, 2, 3} {
+		h, err := NewHeadless(scene(), Config{Size: geom.Size{W: 200, H: 200}}, scale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gimg := h.RenderGPU()
+		if gimg == nil {
+			t.Skip("no headless GPU adapter")
+		}
+		gpu := toRGBA(gimg)
+		cpu := toRGBA(h.Render())
+		if cpu.Bounds() != gpu.Bounds() {
+			t.Fatalf("scale %v: size mismatch cpu %v gpu %v", scale, cpu.Bounds(), gpu.Bounds())
+		}
+		if os.Getenv("GOSSAMER_GPU_DUMP") != "" {
+			dumpPNG(t, "/tmp/opacity_gpu.png", gpu)
+			dumpPNG(t, "/tmp/opacity_cpu.png", cpu)
+		}
+
+		var diff, total int
+		b := gpu.Bounds()
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				o := gpu.PixOffset(x, y)
+				d := 0
+				for k := 0; k < 4; k++ {
+					if dd := absi(int(cpu.Pix[o+k]) - int(gpu.Pix[o+k])); dd > d {
+						d = dd
+					}
+				}
+				if d > 32 {
+					diff++
+				}
+				total++
+			}
+		}
+		frac := float64(diff) / float64(total)
+		t.Logf("scale %v: opacity group GPU vs CPU %d/%d = %.3f%% differ", scale, diff, total, frac*100)
+		if frac > 0.07 { // AA tolerance rises with HiDPI (per the primitives gate)
+			t.Errorf("scale %v: GPU opacity group disagrees with CPU on %.2f%% (want <7%%)", scale, frac*100)
+		}
+
+		// Direct property checks at 1× (the bug's symptoms), in physical px.
+		if scale == 1 {
+			const tol = 24
+			near := func(name string, x, y int, want color.RGBA) {
+				t.Helper()
+				got := gpu.RGBAAt(x, y)
+				if absi(int(got.R)-int(want.R)) > tol || absi(int(got.G)-int(want.G)) > tol ||
+					absi(int(got.B)-int(want.B)) > tol {
+					t.Errorf("%s @(%d,%d): got %v, want ~%v", name, x, y, got, want)
+				}
+			}
+			near("base-survives", 30, 30, color.RGBA{255, 0, 0, 255})            // red survives the group
+			near("overlay-over-white", 170, 170, color.RGBA{128, 128, 255, 255}) // 0.5*blue+0.5*white
+			near("overlap-half", 90, 90, color.RGBA{128, 0, 128, 255})           // 0.5*blue+0.5*red (alpha applies)
+		}
+	}
+}
+
+// TestGPUOpacityNested exercises nested opacity groups (the resolveDraws
+// recursion / child-of-child render path): an outer 0.5 group containing a fill
+// and an inner 0.5 group, so the inner content lands at 0.25 effective opacity.
+// The correct CPU path is the reference.
+func TestGPUOpacityNested(t *testing.T) {
+	scene := widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+		c.Clear(paint.RGB(1, 1, 1))
+		c.FillRect(geom.RectXYWH(0, 0, 100, 100), paint.RGB(1, 0, 0))
+		c.PushOpacity(0.5)
+		c.FillRect(geom.RectXYWH(40, 40, 120, 120), paint.RGB(0, 1, 0)) // 0.5
+		c.PushOpacity(0.5)
+		c.FillRect(geom.RectXYWH(80, 80, 120, 120), paint.RGB(0, 0, 1)) // 0.25 effective
+		c.PopOpacity()
+		c.PopOpacity()
+	}}
+	h, err := NewHeadless(scene, Config{Size: geom.Size{W: 200, H: 200}}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gimg := h.RenderGPU()
+	if gimg == nil {
+		t.Skip("no headless GPU adapter")
+	}
+	gpu, cpu := toRGBA(gimg), toRGBA(h.Render())
+	var diff, total int
+	b := gpu.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			o := gpu.PixOffset(x, y)
+			d := 0
+			for k := 0; k < 4; k++ {
+				if dd := absi(int(cpu.Pix[o+k]) - int(gpu.Pix[o+k])); dd > d {
+					d = dd
+				}
+			}
+			if d > 32 {
+				diff++
+			}
+			total++
+		}
+	}
+	frac := float64(diff) / float64(total)
+	t.Logf("nested opacity GPU vs CPU: %d/%d = %.3f%% differ", diff, total, frac*100)
+	if frac > 0.07 {
+		t.Errorf("nested GPU opacity disagrees with CPU on %.2f%% (want <7%%)", frac*100)
+	}
+}
+
 func absi(v int) int {
 	if v < 0 {
 		return -v

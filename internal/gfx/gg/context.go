@@ -80,6 +80,7 @@ type Context struct {
 	gpuCtx            gpuContextOps
 	gpuFallbackWarned bool // true after first global fallback warning (avoid log spam)
 	gpuDisabled       bool // opt this context out of the (process-global) accelerator entirely
+	gpuLayerDepth     int  // open PushLayer groups routed to the GPU accelerator (balanced pop routing)
 
 	// Lifecycle
 	closed bool // Indicates whether Close has been called

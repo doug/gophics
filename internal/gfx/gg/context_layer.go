@@ -4,6 +4,16 @@ import (
 	intImage "github.com/doug/gossamer/internal/gfx/gg/internal/image"
 )
 
+// layerCtxOps is the optional per-context GPU interface for offscreen layer
+// (saveLayer) compositing, implemented by *gpu.GPURenderContext. It is detected
+// on c.gpuCtxOps() the same way the shared-encoder ops are (see context.go), so
+// PushLayer/PopLayer route to the accelerator on the GPU path instead of the
+// CPU-pixmap swap below.
+type layerCtxOps interface {
+	PushLayer(opacity float64, blend BlendMode)
+	PopLayer()
+}
+
 // Layer represents a drawing layer with blend mode and opacity.
 // Layers allow isolating drawing operations and compositing them with
 // different blend modes and opacity values, similar to layers in Photoshop
@@ -55,6 +65,19 @@ func (c *Context) PushLayer(blendMode BlendMode, opacity float64) {
 		opacity = 1
 	}
 
+	// GPU path: record a layer marker on the per-context render context so the
+	// accelerator composites an offscreen target (Skia saveLayer). Skip the
+	// CPU-pixmap swap below — accelerated fills bypass c.pixmap, so the swap
+	// loses prior GPU content and cannot apply the group alpha. See
+	// docs/gpu-opacity-layers.md.
+	if rc := c.gpuCtxOps(); rc != nil {
+		if la, ok := rc.(layerCtxOps); ok {
+			la.PushLayer(opacity, blendMode)
+			c.gpuLayerDepth++
+			return
+		}
+	}
+
 	// Initialize layer stack if needed
 	if c.layerStack == nil {
 		c.layerStack = newLayerStack()
@@ -99,6 +122,20 @@ func (c *Context) PushLayer(blendMode BlendMode, opacity float64) {
 //	// ... draw operations ...
 //	dc.PopLayer() // Composite layer onto parent
 func (c *Context) PopLayer() {
+	// GPU path: balance a PushLayer that was routed to the accelerator.
+	if c.gpuLayerDepth > 0 {
+		if rc := c.gpuCtxOps(); rc != nil {
+			if la, ok := rc.(layerCtxOps); ok {
+				la.PopLayer()
+				c.gpuLayerDepth--
+				return
+			}
+		}
+		// GPU became unavailable mid-frame: drop the stale count and fall
+		// through to the CPU path (no-op if the CPU stack is empty).
+		c.gpuLayerDepth = 0
+	}
+
 	if c.layerStack == nil || len(c.layerStack.layers) == 0 {
 		return
 	}

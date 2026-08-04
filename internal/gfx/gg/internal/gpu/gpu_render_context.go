@@ -30,6 +30,8 @@ const (
 	drawCmdImage                                // DrawImage (Phase 2)
 	drawCmdGPUTexture                           // DrawGPUTexture overlay (Phase 2)
 	drawCmdBaseLayer                            // DrawGPUTextureBase, z-order: always first (Phase 2)
+	drawCmdPushLayer                            // opacity/blend group begin — offscreen layer (saveLayer)
+	drawCmdPopLayer                             // opacity/blend group end — composite offscreen layer
 )
 
 // drawCommand is a backend-agnostic draw command stored at queue time.
@@ -70,6 +72,12 @@ type drawCommand struct {
 	clipRect  *[4]uint32  // scissor rect; nil = full framebuffer
 	clipRRect *ClipParams // analytic RRect clip; nil = no RRect clip
 	clipPath  *gg.Path    // arbitrary clip path for depth clipping; nil = no clip
+
+	// Layer group markers (drawCmdPushLayer / drawCmdPopLayer). PushLayer opens
+	// an offscreen opacity/blend group (Skia saveLayer); PopLayer composites it.
+	// The Flush-time layer driver partitions pendingDraws on these markers.
+	layerOpacity float32      // drawCmdPushLayer: group alpha in [0,1]
+	layerBlend   gg.BlendMode // drawCmdPushLayer: composite blend mode
 }
 
 // copyClipRect returns a deep copy of a scissor rect pointer.
@@ -162,6 +170,12 @@ type GPURenderContext struct {
 	// When set, Flush records render passes into this encoder instead of
 	// creating its own + submitting. The caller owns Finish + Submit.
 	sharedEncoder *wgpu.CommandEncoder
+
+	// Offscreen textures backing this frame's opacity/blend group composites
+	// (Skia saveLayer). Freed one frame later — the GPU has finished sampling
+	// them by then, which avoids a use-after-free on the async submit. See
+	// gpu_layers.go.
+	prevLayerReleases []func()
 
 	// --- Cached resources for per-frame allocation elimination ---
 
@@ -448,6 +462,26 @@ func (rc *GPURenderContext) QueueBaseLayer(target gg.GPURenderTarget, view gpuco
 	rc.pendingDraws = append(rc.pendingDraws, cmd)
 	rc.pendingTarget = target
 	rc.hasPendingTarget = true
+}
+
+// PushLayer records the start of an offscreen opacity/blend group (Skia
+// saveLayer / Flutter OpacityLayer). The group's draws accumulate in
+// pendingDraws between this marker and the matching PopLayer; the Flush-time
+// layer driver (partitionLayers) renders them to an offscreen target and
+// composites the result with the given alpha + blend mode. Markers carry no
+// target — they are boundaries, not draws.
+func (rc *GPURenderContext) PushLayer(opacity float64, blend gg.BlendMode) {
+	rc.pendingDraws = append(rc.pendingDraws, drawCommand{
+		kind:         drawCmdPushLayer,
+		layerOpacity: float32(opacity),
+		layerBlend:   blend,
+	})
+}
+
+// PopLayer records the end of the opacity/blend group opened by the most recent
+// unmatched PushLayer. See PushLayer.
+func (rc *GPURenderContext) PopLayer() {
+	rc.pendingDraws = append(rc.pendingDraws, drawCommand{kind: drawCmdPopLayer})
 }
 
 // QueueGPUTextureDraw queues a GPU-to-GPU texture compositing command via
@@ -848,6 +882,14 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 
 // Flush dispatches all pending commands for this context via the render session.
 func (rc *GPURenderContext) Flush(target gg.GPURenderTarget) error { //nolint:cyclop,gocognit,gocyclo,funlen // sequential resource setup + group dispatch
+	// Resolve opacity/blend groups (PushLayer/PopLayer) to offscreen composites
+	// first (Skia saveLayer): each group is rendered to its own offscreen target
+	// via a child context and rewritten into a single textured-quad composite,
+	// so the code below sees a flat, marker-free draw list. See gpu_layers.go.
+	if rc.hasLayerMarkers() {
+		rc.resolveLayers(target)
+	}
+
 	// Dispatch backend-agnostic draw commands (ADR-051).
 	// rasterAtlas: mixed CPU/GPU dispatch — shape commands are CPU-dispatched
 	// immediately; non-shape commands (images, GPU textures, base layers)
@@ -1091,6 +1133,10 @@ func (rc *GPURenderContext) drawsToScissorGroup(draws []drawCommand) ScissorGrou
 
 		case drawCmdBaseLayer:
 			// BaseLayer is extracted separately at flush time — skip here.
+
+		case drawCmdPushLayer, drawCmdPopLayer:
+			// Layer group markers are consumed by the Flush-time layer driver
+			// (partitionLayers) before grouping — skip here.
 		}
 	}
 

@@ -1,5 +1,25 @@
 # GPU opacity-layer compositing — design & plan
 
+> **STATUS 2026-08-04 — IMPLEMENTED & VERIFIED headless + on-device (uncommitted
+> WIP in `third_party/gg`).** On-device: an opacity region added to
+> `examples/gpucheck` renders correctly on a real Pixel (PowerVR D-Series Vulkan,
+> `RGBA8Unorm`, GPU present) — base survives, overlay 50%, nested 25%, matching
+> the desktop reference. Deploy: `gossamer run -p android -tags gossamer_verify
+> ./examples/hn/mobile` (needs the `replace` directives in `gossamer/go.mod` —
+> gomobile ignores `go.work`). Route B landed: opacity groups render
+> to pooled offscreen targets via child contexts and composite with the group
+> alpha (Skia saveLayer). New driver `gg/internal/gpu/gpu_layers.go`; hook at the
+> top of `GPURenderContext.Flush`; `Context.PushLayer/PopLayer` branch to the GPU
+> path in `context_layer.go`. Verified on headless Metal: `TestGPUOpacityGroup`
+> (base survives + correct 50% composite; whole-frame GPU==CPU **0.000%** at
+> 1×/2×/3×, overlay to the bottom-right corner guarding the HiDPI class) and
+> `TestGPUOpacityNested` (child-of-child, 0.000%), in `app/gpu_equiv_test.go`.
+> Regression guards green; the 3 `TestMetalStencil*` failures are pre-existing
+> (software-backend MSAA, unrelated). **Remaining:** on-device Pixel-10 GPU-present
+> validation (RenderPass mode). Deferred: per-draw blend modes (only `BlendNormal`
+> reachable today), bounds-sized targets (perf), CPU-fallback-op-inside-a-layer.
+> Implementation notes below reflect what was built; original plan follows.
+
 `paint.PushOpacity`/`PopOpacity` (and `widget.Opacity`) don't work on the GPU
 render path: content drawn *before* a group is lost and the group's alpha is
 ignored (it renders at full opacity). The CPU path is correct. This is a
@@ -129,3 +149,147 @@ or target-lifecycle bug corrupts every frame on every platform. Land behind the
 harness above, and validate on device (Pixel 10 GPU present) — not just headless
 `RenderGPU` — before calling it done, since the two paths have already diverged
 once (the headless-scale bug that never affected the device).
+
+---
+
+## RESOLVED (2026-08-04): canonical path, chosen route, implementation plan
+
+Two deep code traces (canonical-renderer + offscreen-primitive catalog) settled
+every open question above. Summary of what's now known and the plan.
+
+### Canonical renderer (Open Q1 — answered)
+
+**All three present paths converge on ONE renderer.** Desktop
+(`shell/desktop/present.go` → `ggc.Render` → `RenderDirect`), web
+(`shell/web/present.go` → `RenderDirect`), and mobile (`shell/mobile/gpu.go` →
+`RenderDirect`) all funnel through `ggcanvas.Canvas.Draw` +
+`gg.Context.FlushGPUWithView` → the **`SDFAccelerator`'s per-`gg.Context`
+`*GPURenderContext`** (`internal/gpu/gpu_render_context.go`), whose `Flush`
+(`:850`) dispatches a **`GPURenderSession`**. gossamer replays its own display
+list into `gg.Context` method calls (it does *not* use gg's `scene` package);
+`paint.PushOpacity`→`Context.PushLayer(BlendNormal, alpha)` (`paint/paint.go:919`).
+
+Confirmed dead (do NOT build on): `internal/gpu/renderer.go`
+`GPUSceneRenderer.pushLayer`/`blendTextures` (only test/example callers; its
+`CreateTexture` is a stub that allocates no GPU memory), and
+`scene/gpu_renderer.go` (gossamer never imports `gg/scene`).
+
+### Chosen route: B — layers in the active accelerator path
+
+Route A (revive `GPUSceneRenderer`) is a from-scratch build on stubs. **Route B
+reuses machinery that already works**: real offscreen MSAA+resolve target sets
+(`textureSet.ensureTextures`, `gpu_textures.go:38`), a dormant pool built for
+exactly this (`TexturePool.Acquire/Release/EndFrame`, `texture_pool.go:57`,
+Flutter `RenderTargetCache` pattern — currently never called outside tests),
+retargetable passes (`GPURenderTarget.View` + `resolveActiveView` +
+`effectiveDimensions`), a no-submit shared encoder (`encodeToEncoder`,
+`render_session.go:3277`, ADR-017 "Impeller pattern"), and a **working
+GPU-texture→target compositor with per-draw opacity**
+(`buildGPUTextureResources` + `QueueGPUTextureDraw` +
+`GPUTextureDrawCommand.Opacity`).
+
+### The load-bearing constraint (drives the whole shape)
+
+The frame is **ONE render pass** (`LoadOpClear` once; verified on-device:
+1053/1053 single-pass, scissor *groups* are scissor rects within the one pass,
+not separate passes). Within that pass, draws are **bucketed by primitive type**
+(`SDFShapes`, `ConvexCommands`, `StencilPaths`, `ImageCommands`, `TextBatches`,
+`GlyphMaskBatches`, `GPUTextureCommands`) and dispatched in fixed **tier order** —
+so z-order within a clip group is tier order, *not* insertion order
+(`drawsToScissorGroup`, `gpu_render_context.go:1042`). This is a pre-existing
+property gossamer's GPU renderer already lives with.
+
+Design consequence: **a layer renders to its own offscreen texture in a separate
+prior pass (`LoadOpClear`, TBDR-safe — never `LoadOpLoad`), and its resolved
+single-sample texture is composited into the single main pass as a
+`GPUTexture`-tier quad with the group's alpha.** The layer's internal sample
+count need not match the parent; only its 1× resolve output is sampled. This is
+exactly Skia/Impeller `saveLayer`.
+
+Known z-order limitation (inherited, documented): content of a *different
+primitive type* drawn after an opacity group and *overlapping* it at the *same
+clip* composites in tier order, not strict painter's order — same class as the
+renderer's existing mixed-type ordering limitation. Opacity groups typically wrap
+a leaf subtree with non-overlapping / differently-clipped siblings, so this is
+rare in practice; the `renderref` opacity grid validates the common cases.
+
+### Scope decisions
+
+- **Full-surface layer targets first cut** — mirror the CPU `PushLayer` (sizes to
+  `c.pixmap` physical dims, not logical). Composite quad is a full-surface quad at
+  origin; layer draws use absolute coords. Bounds-sized targets (cheaper) are a
+  later optimization using `scene.LayerState.Bounds`.
+- **Per-draw alpha only; DEFER blend modes.** `PushOpacity` always uses
+  `BlendNormal`+alpha, and the composite pipeline is hardcoded
+  `BlendStatePremultiplied` (premultiplied source-over) — which is exactly right
+  for opacity groups. Separable/HSL blend modes (Multiply/Screen/…) would need a
+  dst-sampling shader + pipeline; not reachable from gossamer today, so out of
+  scope for this landing.
+- **Clip/transform save-restore** is largely already handled: gg bakes clip state
+  into each `drawCommand` at record time (`clipRect`/`clipRRect`/`clipPath`,
+  `gpu_render_context.go:837`) and transform into shape coords, so a layer's draws
+  carry their own state. No global save/restore stack needed for the first cut.
+
+### Build plan (Route B) — refined to the multi-context / RepaintBoundary pattern
+
+Key refinement found while reading the session: **a layer is a RepaintBoundary
+with an opacity composite.** Rendering a layer's draws into an offscreen
+single-sample sampleable color target can reuse `RenderFrameGrouped` *wholesale*
+(the shared MSAA/stencil scratch `s.textures` is safe to reuse across sequential
+`LoadOpClear` passes — only the resolve target differs). **Hazard:**
+`RenderFrameGrouped` writes into session-level shared GPU buffers
+(`render_session.go:701-705`), so calling it N times per submit on one encoder
+would let the last write clobber all passes. **Resolution:** use **one
+`GPURenderContext`/session per layer**, all recording into the ADR-017 shared
+encoder — exactly the multi-context / RepaintBoundary path gg already supports
+(`warnGPUFallback` references it; multiple `gg.Context`s already share one encoder
+today). So no `RenderFrameGrouped` rewrite and no texture-set stack.
+
+1. **`LayerAware` per-context ops** — add `PushLayer(opacity float64, blend
+   BlendMode)` / `PopLayer()` to `GPURenderContext`; detect from `Context` via an
+   inline interface on `gpuCtxOps()` (the `SetSharedEncoder`/`CreateEncoder`
+   pattern at `context.go:1335`). Layers are per-context state, so this goes
+   through the per-context rc, not the global accelerator.
+2. **Branch `Context.PushLayer`/`PopLayer`** (`context_layer.go`): when
+   `rc := c.gpuCtxOps()` is present and GPU is the live path, record a layer
+   marker and SKIP the CPU-pixmap swap (the swap is what breaks the GPU path);
+   keep the CPU-pixmap path unchanged when `rc == nil`.
+3. **Record push/pop markers in `pendingDraws`** (`gpu_render_context.go`): new
+   `drawCmdPushLayer`/`drawCmdPopLayer` kinds carrying `{opacity, blend}`.
+4. **Layer-aware Flush driver**: at end-of-frame, partition `pendingDraws` into a
+   nesting tree by push/pop. Depth-first, innermost layers first: acquire a
+   transient sampleable color target (WxH, `RenderAttachment|TextureBinding|
+   CopySrc`), render that layer's own draw run through a pooled child
+   `GPURenderContext`/session via `FlushGPUWithView(layerColorView, W, H)` on the
+   shared encoder (view change → auto `LoadOpClear`, TBDR-safe), then record
+   `GPUTextureDrawCommand{View: layerColorView, Opacity: alpha, Dst: 0,0,W,H}`
+   into the parent stream at the pop position. Parent stream flushes last into the
+   surface, compositing the layer quads in the single main pass. Sequential passes
+   on one encoder provide the read-after-write dependency (parent samples the
+   layer's resolve output).
+5. **Transient layer-target pool + child-session pool**: a size-keyed pool of
+   single-sample sampleable color textures (new — `textureSet` resolve is
+   `CopySrc`-only, not `TextureBinding`), plus a small pool of child
+   `GPURenderContext`s so per-layer buffers are independent; recycle at frame end.
+   (`TexturePool` pools full MSAA sets; the new pool is just the sampleable color
+   target.)
+
+Open impl risks to confirm while coding: (a) child sessions must share
+`GPUShared` pipelines/atlases (read-only) but own independent vertex/index/uniform
+buffers — verify `NewGPURenderSession` gives per-session buffers; (b) a CPU-
+fallback op *inside* a layer (e.g. gradient) must flush into that layer's target,
+not the parent — the layer's own context/target handles this since fallback
+flushes go through the context's `gpuRenderTarget()`; confirm the layer context's
+target is the layer view; (c) glyph/MSDF atlas views are engine-shared — ensure
+child sessions get `SetGlyphMaskAtlasView`/`syncTextAtlases` like the parent.
+
+### Verification (Task 4)
+
+- Focused unit: base fill + `PushOpacity(0.5)` + overlapping fill → base survives,
+  overlap ~50% (the minimal repro that fails today).
+- Flip `app/rendermatrix_test.go` GPU parity to the full `renderref.Scene()`
+  (opacity grid) at 1×/2×/3× within AA tolerance.
+- Regression guards stay green: CPU scale-consistency + `TestGPUMatchesCPU`.
+- Reconcile desktop (Auto pipeline mode) vs web/mobile (forced RenderPass) so the
+  layer path is exercised identically; make headless match the shipping path.
+- On-device validation on the Pixel 10 GPU present — not just headless `RenderGPU`.

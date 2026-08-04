@@ -95,6 +95,12 @@ type GPUShared struct {
 	// Texture pool for per-context MSAA/stencil textures (Flutter RenderTargetCache pattern).
 	texturePool *TexturePool
 
+	// Reusable child render contexts for opacity/blend group rendering
+	// (gpu_layers.go). Layer groups render through their own context/session to
+	// avoid clobbering the parent's shared GPU buffers; pooling them avoids
+	// creating+destroying a session per group per frame. Guarded by mu.
+	childCtxPool []*GPURenderContext
+
 	// CPU SDF fallback accelerator.
 	cpuFallback gg.SDFAccelerator
 

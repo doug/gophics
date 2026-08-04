@@ -126,6 +126,22 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	}
 	c.FillPath(spin.Close(), paint.RGB(0.95, 0.72, 0.30))
 	c.Text("path fill · spinning = frames advancing", geom.Pt{X: x + 170, Y: y + 28}, 13, dim)
+	y += 76
+
+	// Opacity groups (GPU saveLayer). The green base must SURVIVE under the
+	// half-opacity magenta overlay (the old bug lost it), the overlay must be
+	// ~50% (over green → blend, over dark bg → muted), and the nested blue must
+	// be ~25% (a 0.5 group inside a 0.5 group). If the base vanishes or the
+	// overlay is fully opaque, GPU layer compositing is broken.
+	c.Text("opacity: base survives · overlay 50% · nested 25%", geom.Pt{X: x, Y: y}, 13, dim)
+	oy := y + 12
+	c.FillRRect(geom.RectXYWH(x, oy, 120, 58), 8, good) // opaque green base
+	c.PushOpacity(0.5)
+	c.FillRRect(geom.RectXYWH(x+60, oy+14, 210, 44), 8, paint.RGB(0.95, 0.30, 0.60)) // 50% magenta
+	c.PushOpacity(0.5)
+	c.FillRRect(geom.RectXYWH(x+170, oy+6, 90, 52), 8, paint.RGB(0.30, 0.55, 0.95)) // 25% blue (nested)
+	c.PopOpacity()
+	c.PopOpacity()
 
 	// Tap marker.
 	if s.taps > 0 {
