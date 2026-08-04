@@ -231,7 +231,7 @@ func drawLineArea(c paint.Canvas, size geom.Size, xs []Sample, accent paint.Colo
 	}
 	area.LineTo(geom.Pt{X: px(len(xs) - 1), Y: size.H})
 	area.Close()
-	c.FillPath(area, accent.WithAlpha(0.12))
+	c.FillPath(area, accent.WithAlpha(0.22))
 
 	line := paint.NewPath()
 	line.MoveTo(geom.Pt{X: px(0), Y: py(xs[0].V)})
