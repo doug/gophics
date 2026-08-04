@@ -591,6 +591,12 @@ func (c *Core) Keyboard(e shell.Event) {
 
 // Run opens a window and runs the app until the window closes.
 func Run(root widget.Widget, cfg Config) error {
+	// Gallery-thumbnail capture: when GOPHICS_THUMB is set, render the real app
+	// headless to a PNG and exit — no display, no browser. See thumb.go.
+	if done, err := maybeCaptureThumb(root, cfg); done {
+		return err
+	}
+
 	h, err := NewHandler(root, cfg)
 	if err != nil {
 		return err
