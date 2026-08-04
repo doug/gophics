@@ -167,3 +167,90 @@ are all correct):
 
 Neither reproduces through the Metal reference render, so they need debugging
 against Vulkan specifically.
+
+## Device results — iPhone 13 mini (A15, iOS 26.5), 2026-08-04
+
+The GPU (Metal) path renders correctly on a real iPhone — sharp text, on-GPU
+gradients, sprites (plain/tint/rotate), path fills, and the animating spinning
+square. No CPU blit. Getting there took four Metal fixes (all committed):
+
+- **wgpu, GOOS=ios surface target.** `runtime.GOOS` is `"ios"`, not `"darwin"`;
+  the legacy-handle path fell through to an unknown surface target kind. (Fixed
+  in `third_party/wgpu/surface_native.go`.)
+- **wgpu, macOS-only MTLDevice selectors.** `isLowPower` / `isHeadless` /
+  `isRemovable` / `recommendedMaxWorkingSetSize` /
+  `isDepth24Stencil8PixelFormatSupported` are macOS-only. On iOS the concrete
+  device class (AGXG14 on the phone) implements them as *throwing stubs*, so
+  `respondsToSelector:` returns YES yet the send still aborts with "unrecognized
+  selector". A runtime guard cannot detect that — split by build tag
+  (`hal/metal/device_traits_{darwin,ios}.go`).
+- **wgpu, `framebufferOnly` must be NO.** The present path makes a texture view
+  from the drawable, which Metal forbids on a framebufferOnly texture.
+- **gg, image uniform size.** `ImageUniforms` ended in `_pad: vec3<f32>`; WGSL
+  aligns a vec3 to 16 bytes, so the struct was 96 bytes while the Go side binds
+  80 (`imageUniformSize`). Every image/sprite draw failed Metal validation
+  ("uniforms[0] ... has space for 80 bytes, but argument has a length(96)").
+  Fixed with three scalar `f32` pads. (This is the general-purpose fix for the
+  earlier "rotated sprites drop out" symptom on the sprite pipeline.)
+
+### Autonomous iOS iteration loop (no device, no Xcode clicks)
+
+Build for the **iOS Simulator** — Simulator builds are ad-hoc signed, so the
+codesign/keychain gate that blocks headless device builds does not apply — then
+drive it entirely from the CLI: `xcrun simctl install / launch --console-pty /
+io screenshot`. Force the Metal **API validation layer** on (matching what
+Xcode's Debug scheme enables on device) so device-class draw-validation errors
+reproduce headlessly:
+
+```
+SIMCTL_CHILD_MTL_DEBUG_LAYER=1
+SIMCTL_CHILD_MTL_DEBUG_LAYER_ERROR_MODE=nslog   # log, don't assert
+```
+
+Caveats learned the hard way: `simctl launch` does **not** enable Metal
+validation by default (so a "clean" plain run is a false negative — the image
+uniform bug was invisible until the layer was forced on); `MTL_SHADER_VALIDATION=1`
+crashes the Simulator's `MTLCompilerService` (XPC interrupted → every pipeline
+fails to build) so don't set it; and `..._WARNING_MODE=nslog` floods the log
+with hundreds of thousands of benign "redundant setX" state-cache lines.
+
+### Known-benign log line: `(Metal) Compiler failed to build request`
+
+Seen once at startup on both the device (Xcode Debug) and the Simulator under the
+validation layer. It is **benign and self-recovering**, not a shader defect:
+
+- Intermittent — does not reproduce every run.
+- Self-recovering — under `MTL_SHADER_VALIDATION` it prints
+  `XPC_ERROR_CONNECTION_INTERRUPTED ... This error occurred after multiple
+  retries`. It's the `MTLCompilerService` XPC process dropping a connection
+  under the startup burst of ~17 pipeline compiles; Metal retries and succeeds.
+- No pipeline is lost — gg never reports a pipeline-creation error, and
+  rendering is complete and correct. It does not appear in a Release build (no
+  debug/validation layer).
+
+### Possible future fix: lazy Vello-compute init (deferred — not done)
+
+`GPUShared.initVelloAccelerator` (`third_party/gg/internal/gpu/gpu_shared.go`,
+called unconditionally at GPU init) eagerly compiles ~9 Vello compute shaders
+(`pathtag_reduce`/`pathtag_scan`, `draw_reduce`/`draw_leaf`, `coarse`,
+`backdrop`, `path_count`, `path_tiling`, `fine`) "for compute routing". On the
+current mobile path, on-screen rendering goes through the SDF/stencil/glyph/
+convex/textured-quad **render** pipelines, so those compute pipelines are
+compiled at startup but not used. They are more than half of the startup compile
+burst and the main pressure behind the XPC transient above.
+
+Deferring `dispatcher.Init()` to the first actual compute-routed draw would:
+
+- **Pros:** cut the startup compile burst roughly in half → faster cold start
+  and much less likely to trip the `MTLCompilerService` XPC hiccup; removes no
+  functionality (init-on-first-use).
+- **Cons / risk:** it's an init-path change to gg's shared accelerator. Anything
+  that assumes `velloAccel.dispatcher` is ready immediately after GPU init needs
+  a lazy-init guard, or it will nil/uninitialized-deref on the first
+  compute-routed draw. Also moves a one-time ~1–2ms×9 compile cost onto the
+  first frame that needs it (a potential first-use hitch) unless pre-warmed off
+  the render thread.
+
+Deliberately **not done** for now: the underlying error is harmless, so the
+init-path regression risk isn't worth it yet. Revisit if cold-start time on
+mobile becomes a concern, or to quiet the log for on-device profiling.
