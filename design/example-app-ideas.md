@@ -231,12 +231,16 @@ hardens a **reusable core layer**, not a one-off.
 
 ## In flight / queued (session log)
 
-- **Health dashboard** — IN PROGRESS (`examples/health/`). Live metric cards
-  (real-time heart rate, steps, weight, sleep) over a `Provider` interface.
-  Phase 1: synthetic live provider (desktop/web). Phase 2: bind the same
-  interface to HealthKit (iOS) / Health Connect (Android) — health stores are
-  on-device only, so real live data is the mobile build's showcase: one Go UI,
-  pixel-identical, real native data on the phone.
+- **Health dashboard** — Phase 1 SHIPPED (`examples/health/`): live metric cards
+  (real-time heart rate, steps, weight, sleep) with custom-painted charts,
+  onboarding, and per-metric detail (range tabs + stats) over a `Provider`
+  interface; synthetic live provider on desktop/web; featured in the gallery.
+  Phase 2 SEAM DONE (tested Go): injectable `Provider` + thread-safe
+  `DeviceProvider` + `examples/health/mobile` gomobile bind. Phase 2 native
+  hosts (HealthKit iOS / Health Connect Android) are a documented, device-bound
+  recipe — see [health-native-providers.md](health-native-providers.md). Health
+  stores are on-device only, so real live data is the mobile build's showcase:
+  one Go UI, pixel-identical, real native data on the phone.
 - **WebRTC calling app** — QUEUED. A 1:1 (or small-group) call app to exercise
   the WebRTC stack end-to-end *and* the audio/video capture + playback paths:
   camera preview, mic capture, peer connection/signalling, remote video render,
