@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/doug/gossamer/internal/gfx/gg"
+	"github.com/doug/gossamer/internal/gfx/gputypes"
 	"github.com/doug/gossamer/internal/gfx/wgpu"
 )
 
@@ -29,6 +30,13 @@ func createMetalDevice(t *testing.T) (*wgpu.Device, *wgpu.Queue, func()) {
 	if err != nil {
 		instance.Release()
 		t.Skipf("metal RequestAdapter: %v", err)
+	}
+	// Without a real Metal adapter (e.g. CI runners, or no backend registered)
+	// wgpu falls back to a software backend that can't do MSAA, so these
+	// hardware stencil-resolve tests can't run — skip rather than fail.
+	if b := adapter.Info().Backend; b != gputypes.BackendMetal {
+		instance.Release()
+		t.Skipf("no hardware Metal adapter (got %v); stencil MSAA test needs real Metal", b)
 	}
 	device, err := adapter.RequestDevice(nil)
 	if err != nil {

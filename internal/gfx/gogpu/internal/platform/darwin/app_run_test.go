@@ -13,6 +13,12 @@ import (
 
 func runAppOnce(t *testing.T, cfg gogpu.Config, setup func(app *gogpu.App), expectPanic bool) {
 	t.Helper()
+	// These open a real Cocoa window and drive the native event loop, which
+	// blocks in nextEventMatchingMask when there is no focused GUI session
+	// (headless `go test`, CI) — hanging to the test timeout. Opt in explicitly.
+	if os.Getenv("GOGPU_GUI_TEST") == "" {
+		t.Skip("interactive window test; set GOGPU_GUI_TEST=1 to run")
+	}
 	runOnMainThread(t, func() {
 		fmt.Fprintln(os.Stderr, "starting", t.Name())
 

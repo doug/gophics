@@ -3,6 +3,7 @@
 package codegen
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,14 @@ func verifyMSLWithXcrun(t *testing.T, source string) {
 	cmd := exec.Command("xcrun", "-sdk", "macosx", "metal", "-c", srcPath, "-o", outPath) //nolint:gosec // G204: args are temp paths in tests
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		// The `metal` driver can be present (xcrun --find succeeds) while its
+		// compiler component — the downloadable Metal Toolchain — is not
+		// installed. That's an environment gap, not a codegen bug, so skip
+		// rather than fail. A genuine MSL error (toolchain present) still fails.
+		if bytes.Contains(out, []byte("missing Metal Toolchain")) ||
+			bytes.Contains(out, []byte("cannot execute tool 'metal'")) {
+			t.Skip("Metal Toolchain not installed (xcodebuild -downloadComponent MetalToolchain); skipping MSL compile check")
+		}
 		t.Fatalf("xcrun metal failed: %v\n%s\nMSL:\n%s", err, out, source)
 	}
 }

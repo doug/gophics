@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Test scoping (see docs/substrate-consolidation.md):
+#   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
+#   - test-framework: gossamer's own packages (CPU/headless, deterministic) — the gate.
+#   - test-substrate: the vendored internal/gfx + internal/audio. Their
+#                     GPU / Metal-toolchain / interactive-display tests self-skip
+#                     when those prerequisites are absent, so this job is
+#                     best-effort (does not block merges).
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, goos: linux,   goarch: amd64 }
+          - { runner: ubuntu-latest, goos: windows, goarch: amd64 }
+          - { runner: ubuntu-latest, goos: js,      goarch: wasm  }
+          - { runner: macos-latest,  goos: darwin,  goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: go build (CGO_ENABLED=0)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./...
+      - name: go build -tags nogpu (pure-CPU, no wgpu)
+        if: matrix.goos == 'linux'
+        env:
+          CGO_ENABLED: "0"
+        run: go build -tags nogpu ./...
+      - name: no cgo in the tree
+        if: matrix.goos == 'linux'
+        run: |
+          if grep -rl 'import "C"' --include='*.go' . ; then
+            echo "cgo found — the zero-CGo invariant is broken"; exit 1
+          fi
+
+  test-framework:
+    name: test (framework)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: framework tests (CPU/headless)
+        run: go test -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
+
+  test-substrate:
+    name: test (substrate, best-effort)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: substrate tests (GPU/toolchain tests self-skip)
+        run: go test -count=1 ./internal/...
