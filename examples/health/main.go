@@ -1,7 +1,8 @@
 // Command health is a live health-dashboard showcase: a scrollable set of metric
 // cards — a real-time heart rate, today's steps, weight, and sleep — each with a
-// custom-painted chart. It is built entirely from gophics widgets + one Canvas
-// per chart, and streams live via a per-frame Ticker.
+// custom-painted chart, tappable through to a detail screen. It is built entirely
+// from gophics widgets + one Canvas per chart, and streams live via a per-frame
+// Ticker.
 //
 // Data comes through the Provider interface (provider.go). Desktop and web run
 // the synthetic live provider; on iOS/Android the same UI is meant to bind to
@@ -13,6 +14,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 
 	"golang.org/x/image/font/gofont/goregular"
@@ -26,57 +28,132 @@ import (
 
 // Palette — a light, calm health-app look.
 var (
-	bg     = paint.RGB(0.95, 0.96, 0.975)
-	card   = paint.RGB(1, 1, 1)
-	ink    = paint.RGB(0.11, 0.12, 0.14)
-	sub    = paint.RGB(0.55, 0.57, 0.62)
-	heart  = paint.RGB(0.94, 0.27, 0.35)
-	steps  = paint.RGB(0.18, 0.72, 0.45)
-	weight = paint.RGB(0.24, 0.52, 0.96)
-	sleep  = paint.RGB(0.45, 0.40, 0.86)
+	bg      = paint.RGB(0.95, 0.96, 0.975)
+	surface = paint.RGB(1, 1, 1)
+	ink     = paint.RGB(0.11, 0.12, 0.14)
+	sub     = paint.RGB(0.55, 0.57, 0.62)
+	white   = paint.RGB(1, 1, 1)
+	heart   = paint.RGB(0.94, 0.27, 0.35)
+	steps   = paint.RGB(0.18, 0.72, 0.45)
+	weight  = paint.RGB(0.24, 0.52, 0.96)
+	sleep   = paint.RGB(0.45, 0.40, 0.86)
 )
 
-// spec is one dashboard card: which metric, how to label and draw it.
+// spec is one metric's presentation: label, unit, accent, formatting, chart.
 type spec struct {
-	m       Metric
-	label   string
-	unit    string
-	caption string
-	accent  paint.Color
-	fmtVal  func(float64) string
-	draw    func(c paint.Canvas, size geom.Size, xs []Sample, accent paint.Color)
+	m          Metric
+	label      string
+	unit       string
+	caption    string
+	accent     paint.Color
+	cardWindow int // last N samples shown on the dashboard card (0 = all)
+	fmtVal     func(float64) string
+	draw       func(c paint.Canvas, size geom.Size, xs []Sample, accent paint.Color)
 }
 
 var specs = []spec{
-	{HeartRate, "Heart Rate", "bpm", "live", heart, fmt0, drawLineArea},
-	{Steps, "Steps", "", "today", steps, fmtInt, drawLineArea},
-	{Weight, "Weight", "kg", "30 days", weight, fmt1, drawLineArea},
-	{Sleep, "Sleep", "h", "7 nights", sleep, fmt1, drawBars},
+	{HeartRate, "Heart Rate", "bpm", "live", heart, 0, fmt0, drawLineArea},
+	{Steps, "Steps", "", "today", steps, 0, fmtInt, drawLineArea},
+	{Weight, "Weight", "kg", "30 days", weight, 30, fmt1, drawLineArea},
+	{Sleep, "Sleep", "h", "7 nights", sleep, 7, fmt1, drawBars},
 }
+
+// specFor returns a metric's spec (specs is indexed by Metric).
+func specFor(m Metric) spec { return specs[m] }
+
+// lastN returns the last n samples (n <= 0 → all).
+func lastN(xs []Sample, n int) []Sample {
+	if n <= 0 || n >= len(xs) {
+		return xs
+	}
+	return xs[len(xs)-n:]
+}
+
+// --- app root: owns the provider + live ticker, gates on onboarding ---
 
 type Health struct{}
 
-func (Health) CreateState() widget.State { return &healthState{p: newSynthProvider()} }
+func (Health) CreateState() widget.State {
+	// HEALTH_VIEW skips the onboarding gate — used for screenshots and gallery
+	// thumbnails. "dashboard" opens the dashboard; a metric name ("heart",
+	// "weight", …) opens straight to that detail page.
+	return &healthState{p: newSynthProvider(), connected: os.Getenv("HEALTH_VIEW") != ""}
+}
+
+// metricByView maps a HEALTH_VIEW name to a metric, for deep-linking screenshots.
+func metricByView(v string) (Metric, bool) {
+	switch v {
+	case "heart":
+		return HeartRate, true
+	case "steps":
+		return Steps, true
+	case "weight":
+		return Weight, true
+	case "sleep":
+		return Sleep, true
+	}
+	return 0, false
+}
 
 type healthState struct {
 	widget.StateBase[Health]
-	p *synthProvider
+	p         *synthProvider
+	connected bool
 }
 
-// Init registers the per-frame ticker; Tick streams the provider forward and
-// repaints. This is the "data streaming into a live UI" path — on device it is a
-// platform callback instead of a synthetic Advance.
 func (s *healthState) Init(ctx widget.Ctx) { ctx.AddTicker(s) }
 
+// Tick streams the provider forward and repaints. On device this is a platform
+// callback instead of a synthetic Advance.
 func (s *healthState) Tick(dt float64) bool {
 	s.SetState(func() { s.p.Advance(dt) })
 	return true
 }
 
 func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
-	children := []widget.Widget{s.header()}
+	if !s.connected {
+		return s.onboarding()
+	}
+	// The dashboard is the Navigator's Home so it (and pushed detail pages) can
+	// reach the Nav handle. The provider lives here at the root and keeps
+	// streaming regardless of which page is on top.
+	home := widget.Widget(dashboard{p: s.p})
+	if m, ok := metricByView(os.Getenv("HEALTH_VIEW")); ok {
+		home = detailPage{p: s.p, m: m} // deep-link for screenshots
+	}
+	return widget.Navigator{Home: home}
+}
+
+func (s *healthState) onboarding() widget.Widget {
+	connect := widget.Interactive{
+		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.connected = true }) }},
+		Child: widget.Decorated{Color: heart, Radius: 14, Child: widget.Padding{
+			Insets: geom.InsetsSymmetric(28, 14),
+			Child:  widget.Text{S: "Connect " + s.p.Name(), Size: 16, Color: white},
+		}},
+	}
+	return widget.Fill{Color: bg, Child: widget.Align{X: 0.5, Y: 0.5, Child: widget.Padding{
+		All: 32,
+		Child: widget.Flex{CrossAlign: layout.CrossCenter, Children: []widget.Widget{
+			widget.Text{S: "♥", Size: 72, Color: heart},
+			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{S: "Health", Size: 34, Color: ink}},
+			widget.Padding{Insets: geom.Insets{Top: 6, Bottom: 26}, Child: widget.Text{
+				S: "Connect your data to see it live.", Size: 15, Color: sub}},
+			connect,
+		}},
+	}}}
+}
+
+// --- dashboard page (Navigator Home) ---
+
+type dashboard struct{ p *synthProvider }
+
+func (d dashboard) Build(ctx widget.Ctx) widget.Widget {
+	nav := widget.MustOf[widget.Nav](ctx)
+	children := []widget.Widget{header(d.p)}
 	for _, sp := range specs {
-		children = append(children, s.card(sp))
+		m := sp.m
+		children = append(children, card(d.p, sp, func() { nav.Push(detailPage{p: d.p, m: m}) }))
 	}
 	return widget.Fill{Color: bg, Child: widget.Scroll{
 		Child: widget.Padding{
@@ -86,41 +163,44 @@ func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
 	}}
 }
 
-func (s *healthState) header() widget.Widget {
+func header(p *synthProvider) widget.Widget {
 	return widget.Padding{
 		Insets: geom.Insets{Bottom: 18},
 		Child: widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
 			widget.Text{S: "Health", Size: 32, Color: ink},
-			widget.Text{S: s.p.Name(), Size: 14, Color: sub},
+			widget.Text{S: p.Name(), Size: 14, Color: sub},
 		}},
 	}
 }
 
-func (s *healthState) card(sp spec) widget.Widget {
-	val, _ := s.p.Latest(sp.m)
-	series := s.p.Series(sp.m)
+// card renders one dashboard metric card, tappable through to its detail page.
+func card(p *synthProvider, sp spec, onTap func()) widget.Widget {
+	val, _ := p.Latest(sp.m)
+	series := lastN(p.Series(sp.m), sp.cardWindow)
 
 	title := widget.Row(
 		widget.Text{S: sp.label, Size: 14, Color: sp.accent},
 		widget.Spacer(),
 		widget.Text{S: sp.caption, Size: 12, Color: sub},
 	)
-
 	value := widget.Row(
 		widget.Text{S: sp.fmtVal(val.V), Size: 34, Color: ink},
 		widget.Padding{Insets: geom.Insets{Left: 5, Top: 12}, Child: widget.Text{S: sp.unit, Size: 14, Color: sub}},
 	)
-
 	chart := widget.Expand(widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
 		sp.draw(c, size, series, sp.accent)
 	}})
 
+	body := widget.Decorated{Color: surface, Radius: 18, Child: widget.Padding{
+		All:   16,
+		Child: widget.Flex{CrossAlign: layout.CrossStretch, Children: []widget.Widget{title, value, chart}},
+	}}
 	return widget.Padding{
 		Insets: geom.Insets{Bottom: 14},
-		Child: widget.Sized{H: 170, Child: widget.Decorated{Color: card, Radius: 18, Child: widget.Padding{
-			All:   16,
-			Child: widget.Flex{CrossAlign: layout.CrossStretch, Children: []widget.Widget{title, value, chart}},
-		}}},
+		Child: widget.Sized{H: 170, Child: widget.Interactive{
+			Handler: widget.Handler{OnTap: onTap},
+			Child:   body,
+		}},
 	}
 }
 

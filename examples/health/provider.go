@@ -64,13 +64,13 @@ type synthProvider struct {
 func newSynthProvider() *synthProvider {
 	p := &synthProvider{rng: rand.New(rand.NewSource(42)), baseHR: 68}
 
-	// Weight: 31 daily points drifting 78 → 75 with day-to-day noise.
-	for d := 30; d >= 0; d-- {
-		w := 75.0 + float64(d)*0.10 + p.rng.NormFloat64()*0.18
+	// Weight: 91 daily points (3 months) drifting ~78 → 75 with day-to-day noise.
+	for d := 90; d >= 0; d-- {
+		w := 75.0 + float64(d)*0.035 + p.rng.NormFloat64()*0.18
 		p.weight = append(p.weight, Sample{T: -float64(d), V: w})
 	}
-	// Sleep: last 7 nights, 6.4–8.2 hours.
-	for n := 6; n >= 0; n-- {
+	// Sleep: last 30 nights, 6.4–8.2 hours.
+	for n := 29; n >= 0; n-- {
 		p.sleep = append(p.sleep, Sample{T: -float64(n), V: 6.4 + p.rng.Float64()*1.8})
 	}
 	// Steps: cumulative over the ~14 waking hours so far today.
