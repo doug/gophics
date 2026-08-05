@@ -114,11 +114,13 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 		childCross.Min = f.size(0, maxCross)
 	}
 
-	// Pass 1: fixed children.
+	// Pass 1: fixed children — plus flex children when the main axis is unbounded
+	// (they can't expand into an infinite remainder, so they size to their
+	// content instead of being skipped and collapsing to zero).
 	var usedMain, maxChildCross float32
 	totalFlex := 0
 	for _, c := range f.Children {
-		if c.Flex > 0 {
+		if c.Flex > 0 && boundedMain {
 			totalFlex += c.Flex
 			continue
 		}

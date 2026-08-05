@@ -161,6 +161,12 @@ func (c *Core) fireTap(box *widget.InteractiveBox, pos geom.Pt) {
 		box.Handler.OnDoubleTap()
 		return
 	}
+	// A new first-tap that isn't completing the pending one as a double (a
+	// different box, or the same box too far away): flush the still-pending tap's
+	// OnTap now so it isn't silently dropped when we overwrite it below.
+	if c.pendingTap != nil && c.pendingTap.Handler.OnTap != nil {
+		c.pendingTap.Handler.OnTap()
+	}
 	c.pendingTap, c.pendingTapPos, c.tapElapsed = box, pos, 0 // first tap: defer OnTap
 }
 

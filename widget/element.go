@@ -407,6 +407,18 @@ func (el *element) unmount() {
 		return
 	}
 	el.mounted = false
+	// Release keyboard focus if this element's box holds it, so key/text events
+	// stop routing to a detached handler and a newly-mounted focusable can take
+	// focus (autofocus only fires when KeyboardTarget is nil, and text-capturing
+	// would otherwise stay stuck on).
+	if el.owner != nil && el.owner.KeyboardTarget != nil {
+		if ib, ok := el.box.(*InteractiveBox); ok && el.owner.KeyboardTarget == &ib.Handler {
+			el.owner.KeyboardTarget = nil
+			if ib.Handler.OnFocus != nil {
+				ib.Handler.OnFocus(false)
+			}
+		}
+	}
 	if el.state != nil {
 		if d, ok := el.state.(Disposer); ok {
 			d.Dispose()

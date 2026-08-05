@@ -177,12 +177,12 @@ func (f Flex) attach(b layout.Box, kids []layout.Box) {
 	fb.Children = fb.Children[:0]
 	ki := 0
 	for _, c := range f.Children {
-		if c == nil {
-			continue
-		}
 		flex := 0
 		if fl, ok := c.(Flexible); ok {
-			flex = fl.Flex
+			flex, c = fl.Flex, fl.Child // unwrap to match childWidgets
+		}
+		if c == nil {
+			continue // childWidgets yielded nil → the reconciler made no box
 		}
 		fb.Children = append(fb.Children, layout.FlexChild{Box: kids[ki], Flex: flex})
 		ki++

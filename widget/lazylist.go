@@ -58,7 +58,12 @@ func (s *lazyState) height(i int) float32 {
 func (s *lazyState) Build(Ctx) Widget {
 	w := s.W()
 	if len(s.heights) != w.Count {
-		s.heights = make([]float32, w.Count)
+		// Preserve already-measured heights across Count changes so an infinite
+		// feed (OnEndReached grows Count) doesn't reset every visible row to its
+		// estimate and jump.
+		next := make([]float32, w.Count)
+		copy(next, s.heights)
+		s.heights = next
 	}
 	viewH := s.viewH
 	if viewH <= 0 {
