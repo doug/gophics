@@ -12,14 +12,15 @@
   canvas { display: block; }
   #bar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 20;
          display: flex; align-items: center; gap: 14px; padding: 0 14px;
-         font-size: 13px; color: #aab; background: linear-gradient(#000a, #0000);
-         opacity: .55; transition: opacity .15s; pointer-events: none; }
+         font-size: 13px; color: #aab; background: linear-gradient(#000c, #0000);
+         opacity: .7; transition: opacity .15s; pointer-events: none; }
   #bar:hover { opacity: 1; }
   #bar a, #bar .name { pointer-events: auto; }
   #bar a { color: #cdd3e6; text-decoration: none; }
   #bar a:hover { color: #fff; }
   #bar .name { color: #8aa0ff; font-weight: 600; }
   #bar .sp { flex: 1; }
+  #bar #rend { border: 1px solid #333a52; border-radius: 6px; padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -27,6 +28,7 @@
     <a href="gallery.html">← gallery</a>
     <span class="name" id="nm">demo</span>
     <span class="sp"></span>
+    <a id="rend" href="#" title="Toggle renderer">GPU</a>
     <a id="src" href="gallery.html">view source</a>
   </div>
   <div id="msg">Loading demo…</div>
@@ -34,24 +36,34 @@
   <script>
     const params = new URLSearchParams(location.search);
     const demo = (params.get("sketch") || params.get("demo") || "hn").replace(/[^a-z0-9]/gi, "");
-    document.getElementById("nm").textContent = demo;
     document.getElementById("src").href = "source/" + demo + ".html";
     document.title = "gophics — " + demo;
     const msg = document.getElementById("msg");
-    // ?cpu forces the CPU fallback (hide WebGPU before the wasm reads it) — for
-    // testing and for low-power devices.
-    if (params.has("cpu") && "gpu" in navigator) {
+    const nm = document.getElementById("nm");
+
+    // ?cpu forces the CPU rasterizer by hiding WebGPU before the wasm reads it.
+    // WebGPU is only exposed in a secure context (https or localhost) and on a
+    // supported GPU, so it's undefined over plain http even on capable devices;
+    // the Go runtime then falls back to a 2D-canvas CPU path automatically.
+    const forceCPU = params.has("cpu");
+    if (forceCPU && "gpu" in navigator) {
       Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true });
     }
-    // WebGPU needs a secure context (https or localhost) AND a supported GPU; it
-    // is undefined over plain http even on capable devices. When it's missing the
-    // Go runtime falls back to the CPU rasterizer (2D canvas), so run either way —
-    // just note the slower path.
-    if (!navigator.gpu) {
-      document.getElementById("nm").textContent = demo + " · CPU";
-      document.getElementById("nm").title =
-        "WebGPU unavailable (needs https/localhost + a supported GPU) — running on the CPU fallback";
-    }
+    const onCPU = !navigator.gpu;
+    nm.textContent = onCPU ? demo + " · CPU" : demo;
+
+    // Renderer toggle — always available, so a blank GPU canvas (a flaky mobile
+    // WebGPU driver) is one tap from the working CPU path, and vice versa.
+    const rend = document.getElementById("rend");
+    rend.textContent = onCPU ? "GPU" : "CPU";
+    rend.title = onCPU ? "Try the WebGPU renderer" : "Switch to the CPU renderer (use if the demo is blank)";
+    rend.onclick = (e) => {
+      e.preventDefault();
+      const u = new URL(location.href);
+      if (forceCPU) u.searchParams.delete("cpu"); else u.searchParams.set("cpu", "1");
+      location.replace(u.toString());
+    };
+
     const go = new Go();
     WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
       .then((res) => { msg.remove(); return go.run(res.instance); })
