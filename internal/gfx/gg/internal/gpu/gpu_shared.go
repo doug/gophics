@@ -225,6 +225,23 @@ func (s *GPUShared) SetDeviceProvider(provider gpucontext.DeviceProvider) error 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Device recreation (Android tears down and rebuilds the wgpu device on every
+	// surface recreation — rotation, background→foreground): the pooled child
+	// render contexts used for opacity/blend layer compositing hold sessions and
+	// buffers bound to the old device. Reusing one renders a saveLayer group's
+	// contents into nothing, so the composited overlay vanishes (only the base
+	// survives). Close and drop the pool — while the old device is still alive,
+	// just above — so acquireChildContext rebuilds them on the new device. Same
+	// class of fix as the glyph-atlas re-upload in SyncAtlasTextures.
+	if s.device != nil && s.device != wgpuDev {
+		for _, c := range s.childCtxPool {
+			if c != nil {
+				c.Close()
+			}
+		}
+		s.childCtxPool = nil
+	}
+
 	// Destroy own resources if we created them.
 	s.destroyPipelinesLocked()
 	if !s.externalDevice && s.device != nil {
