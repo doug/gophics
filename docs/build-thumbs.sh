@@ -36,6 +36,7 @@ specs=(
   "2048        2 "
   "sudoku      1 "
   "drummachine 1 "
+  "whiteboard  1 "
   "solitaire  8 "
   "hn        10 1"   # networked — realtime so the fetch completes
 )
