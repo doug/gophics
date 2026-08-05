@@ -116,4 +116,11 @@ footer { padding: 30px 0; color: var(--ink-faint); font-size: 14px; }
 footer .wrap { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 footer .spacer { flex: 1; } footer a { color: var(--ink-dim); }
 
-@media (max-width: 560px) { nav.top .wrap { gap: 14px; } nav .link { display: none; } }
+@media (max-width: 560px) {
+  /* Wrap the nav to a second row instead of hiding links; drop the flex spacer
+     so items pack left-to-right and GitHub sits with the rest. */
+  nav.top .wrap { flex-wrap: wrap; gap: 8px 16px; height: auto; min-height: 52px; padding: 9px 16px; }
+  nav .spacer { display: none; }
+  .brand { font-size: 17px; width: 100%; }
+  nav .link, nav .gh { font-size: 13px; }
+}

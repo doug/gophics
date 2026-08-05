@@ -38,15 +38,24 @@
     document.getElementById("src").href = "source/" + demo + ".html";
     document.title = "gophics — " + demo;
     const msg = document.getElementById("msg");
-    if (!navigator.gpu) {
-      msg.innerHTML = "This browser doesn't expose <b>WebGPU</b>.<br>Open in a recent Chrome, Edge, or Safari — " +
-        "or browse the recorded shots in the <a href='gallery.html'>gallery</a>.";
-    } else {
-      const go = new Go();
-      WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
-        .then((res) => { msg.remove(); return go.run(res.instance); })
-        .catch((err) => { msg.innerHTML = "Couldn't load <code>" + demo + "</code>: " + err; });
+    // ?cpu forces the CPU fallback (hide WebGPU before the wasm reads it) — for
+    // testing and for low-power devices.
+    if (params.has("cpu") && "gpu" in navigator) {
+      Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true });
     }
+    // WebGPU needs a secure context (https or localhost) AND a supported GPU; it
+    // is undefined over plain http even on capable devices. When it's missing the
+    // Go runtime falls back to the CPU rasterizer (2D canvas), so run either way —
+    // just note the slower path.
+    if (!navigator.gpu) {
+      document.getElementById("nm").textContent = demo + " · CPU";
+      document.getElementById("nm").title =
+        "WebGPU unavailable (needs https/localhost + a supported GPU) — running on the CPU fallback";
+    }
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
+      .then((res) => { msg.remove(); return go.run(res.instance); })
+      .catch((err) => { msg.innerHTML = "Couldn't load <code>" + demo + "</code>: " + err; });
   </script>
 </body>
 </html>
