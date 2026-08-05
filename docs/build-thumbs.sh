@@ -27,6 +27,7 @@ specs=(
   "gallery    2 "
   "todo       2 "
   "notes      2 "
+  "epub       1 "
   "match3     6 "
   "roguelike  4 "
   "flowfield  6 "
