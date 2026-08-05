@@ -55,6 +55,14 @@ type ImageDrawCommand struct {
 	// Source UV rectangle (normalized 0..1 within the image).
 	// For full-image draws: u0=0, v0=0, u1=1, v1=1.
 	U0, V0, U1, V1 float32
+
+	// Rotated/skewed draws: when HasQuad is set, QuadX/QuadY give the four
+	// device-space corners (order TL, TR, BR, BL) and define the quad instead of
+	// DstX/Y/W/H. Needed for rotated sprites — the axis-aligned DstX/W path can't
+	// express them, and the CPU pattern-fill fallback is dropped on the
+	// direct-surface present path, so a rotated sprite otherwise vanishes.
+	HasQuad      bool
+	QuadX, QuadY [4]float32
 }
 
 // TexturedQuadPipeline manages GPU resources for image rendering (Tier 3).
@@ -462,11 +470,22 @@ func buildImageVertices(cmd *ImageDrawCommand) []byte {
 	const vertsPerQuad = 6
 	buf := make([]byte, vertsPerQuad*imageVertexStride)
 
-	// Quad corners in pixel coordinates.
-	x0 := cmd.DstX
-	y0 := cmd.DstY
-	x1 := cmd.DstX + cmd.DstW
-	y1 := cmd.DstY + cmd.DstH
+	// Quad corners (TL, TR, BR, BL) in device pixels. A rotated draw supplies
+	// arbitrary corners; otherwise they come from the axis-aligned DstX/W rect.
+	var tlX, tlY, trX, trY, brX, brY, blX, blY float32
+	if cmd.HasQuad {
+		tlX, tlY = cmd.QuadX[0], cmd.QuadY[0]
+		trX, trY = cmd.QuadX[1], cmd.QuadY[1]
+		brX, brY = cmd.QuadX[2], cmd.QuadY[2]
+		blX, blY = cmd.QuadX[3], cmd.QuadY[3]
+	} else {
+		x0, y0 := cmd.DstX, cmd.DstY
+		x1, y1 := cmd.DstX+cmd.DstW, cmd.DstY+cmd.DstH
+		tlX, tlY = x0, y0
+		trX, trY = x1, y0
+		brX, brY = x1, y1
+		blX, blY = x0, y1
+	}
 
 	// UV coordinates.
 	u0, v0, u1, v1 := cmd.U0, cmd.V0, cmd.U1, cmd.V1
@@ -478,12 +497,12 @@ func buildImageVertices(cmd *ImageDrawCommand) []byte {
 		u, v   float32
 	}
 	verts := [6]vertex{
-		{x0, y0, u0, v0}, // TL
-		{x1, y0, u1, v0}, // TR
-		{x0, y1, u0, v1}, // BL
-		{x1, y0, u1, v0}, // TR
-		{x1, y1, u1, v1}, // BR
-		{x0, y1, u0, v1}, // BL
+		{tlX, tlY, u0, v0}, // TL
+		{trX, trY, u1, v0}, // TR
+		{blX, blY, u0, v1}, // BL
+		{trX, trY, u1, v0}, // TR
+		{brX, brY, u1, v1}, // BR
+		{blX, blY, u0, v1}, // BL
 	}
 
 	offset := 0

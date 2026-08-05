@@ -1503,6 +1503,9 @@ type gpuContextOps interface {
 	QueueImageDraw(target GPURenderTarget, pixelData []byte, genID uint64, imgWidth, imgHeight, imgStride int,
 		dstX, dstY, dstW, dstH, opacity float32, viewportW, viewportH uint32,
 		u0, v0, u1, v1 float32)
+	QueueImageQuad(target GPURenderTarget, pixelData []byte, genID uint64, imgWidth, imgHeight, imgStride int,
+		quadX, quadY [4]float32, opacity float32, viewportW, viewportH uint32,
+		u0, v0, u1, v1 float32)
 	QueueGPUTextureDraw(target GPURenderTarget, view gpucontext.TextureView,
 		dstX, dstY, dstW, dstH, opacity float32, vpW, vpH uint32)
 	QueueBaseLayer(target GPURenderTarget, view gpucontext.TextureView,

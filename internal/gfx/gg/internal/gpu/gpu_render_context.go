@@ -410,6 +410,33 @@ func (rc *GPURenderContext) QueueImageDraw(target gg.GPURenderTarget, pixelData 
 	rc.queueImageCmd(target, cmd)
 }
 
+// QueueImageQuad is QueueImageDraw for a rotated/skewed image: quadX/quadY give
+// the four device-space corners (order TL, TR, BR, BL) instead of an
+// axis-aligned rect. Used for rotated sprites.
+func (rc *GPURenderContext) QueueImageQuad(target gg.GPURenderTarget, pixelData []byte, genID uint64, imgWidth, imgHeight, imgStride int,
+	quadX, quadY [4]float32, opacity float32, viewportW, viewportH uint32,
+	u0, v0, u1, v1 float32,
+) {
+	cmd := ImageDrawCommand{
+		PixelData:      pixelData,
+		GenerationID:   genID,
+		ImgWidth:       imgWidth,
+		ImgHeight:      imgHeight,
+		ImgStride:      imgStride,
+		HasQuad:        true,
+		QuadX:          quadX,
+		QuadY:          quadY,
+		Opacity:        opacity,
+		ViewportWidth:  viewportW,
+		ViewportHeight: viewportH,
+		U0:             u0,
+		V0:             v0,
+		U1:             u1,
+		V1:             v1,
+	}
+	rc.queueImageCmd(target, cmd)
+}
+
 // queueImageCmd accumulates an image draw command for Tier 3 dispatch via the
 // unified draw queue (ADR-051 Phase 2 Step 4). Per-draw clip is snapshotted at
 // queue time (same pattern as QueueText from Step 3).

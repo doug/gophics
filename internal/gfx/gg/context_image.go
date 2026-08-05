@@ -363,17 +363,17 @@ func (c *Context) tryGPUDrawImage(img *ImageBuf, opts DrawImageOptions, srcX, sr
 	// Compute the destination quad corners in device pixels.
 	// The CTM transforms user-space (opts.X, opts.Y) + (dstWidth, dstHeight)
 	// into device-space coordinates.
+	// The four destination corners in device pixels. A rotated/skewed CTM makes
+	// them a non-axis-aligned quad; the textured-quad path handles either via
+	// QueueImageDraw (axis-aligned rect) or QueueImageQuad (arbitrary corners),
+	// so — unlike before — a rotation no longer bails to the CPU pattern-fill
+	// fallback (which the direct-surface present path drops, dropping the sprite).
 	ctm := c.totalMatrix()
 	tl := ctm.TransformPoint(Pt(opts.X, opts.Y))
-	br := ctm.TransformPoint(Pt(opts.X+dstWidth, opts.Y+dstHeight))
-
-	// For rotated/skewed transforms the quad is not axis-aligned.
-	// Tier 3 currently supports only axis-aligned quads. Check if the
-	// transform is translation+scale only (no rotation/skew).
 	tr := ctm.TransformPoint(Pt(opts.X+dstWidth, opts.Y))
-	if !isAxisAligned(tl, tr, br) {
-		return false
-	}
+	br := ctm.TransformPoint(Pt(opts.X+dstWidth, opts.Y+dstHeight))
+	bl := ctm.TransformPoint(Pt(opts.X, opts.Y+dstHeight))
+	axisAligned := isAxisAligned(tl, tr, br)
 
 	target := c.gpuRenderTarget()
 	vpW := uint32(target.Width)  //nolint:gosec // viewport fits uint32
@@ -392,9 +392,16 @@ func (c *Context) tryGPUDrawImage(img *ImageBuf, opts DrawImageOptions, srcX, sr
 		return false
 	}
 
-	rc.QueueImageDraw(target, pixelData, img.GenerationID(), imgW, imgH, img.Stride(),
-		float32(tl.X), float32(tl.Y), float32(br.X-tl.X), float32(br.Y-tl.Y),
-		float32(opts.Opacity), vpW, vpH, u0, v0, u1, v1)
+	if axisAligned {
+		rc.QueueImageDraw(target, pixelData, img.GenerationID(), imgW, imgH, img.Stride(),
+			float32(tl.X), float32(tl.Y), float32(br.X-tl.X), float32(br.Y-tl.Y),
+			float32(opts.Opacity), vpW, vpH, u0, v0, u1, v1)
+	} else {
+		qx := [4]float32{float32(tl.X), float32(tr.X), float32(br.X), float32(bl.X)}
+		qy := [4]float32{float32(tl.Y), float32(tr.Y), float32(br.Y), float32(bl.Y)}
+		rc.QueueImageQuad(target, pixelData, img.GenerationID(), imgW, imgH, img.Stride(),
+			qx, qy, float32(opts.Opacity), vpW, vpH, u0, v0, u1, v1)
+	}
 	return true
 }
 
