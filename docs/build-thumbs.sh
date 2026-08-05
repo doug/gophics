@@ -33,8 +33,9 @@ specs=(
   "flowfield  6 "
   "flocking   6 "
   "particles  6 "
-  "2048       2 "
-  "sudoku     1 "
+  "2048        2 "
+  "sudoku      1 "
+  "drummachine 1 "
   "solitaire  8 "
   "hn        10 1"   # networked — realtime so the fetch completes
 )
