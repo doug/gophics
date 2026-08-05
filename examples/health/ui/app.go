@@ -119,7 +119,7 @@ func (s *healthState) Tick(dt float64) bool {
 
 func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
 	if !s.connected {
-		return s.onboarding()
+		return phoneFrame(s.onboarding())
 	}
 	// The dashboard is the Navigator's Home so it (and pushed detail pages) can
 	// reach the Nav handle. The provider lives here at the root and keeps
@@ -128,7 +128,29 @@ func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
 	if m, ok := metricByView(os.Getenv("HEALTH_VIEW")); ok {
 		home = detailPage{p: s.p, m: m} // deep-link for screenshots
 	}
-	return widget.Navigator{Home: home}
+	return phoneFrame(widget.Navigator{Home: home})
+}
+
+// maxContentW caps the app's content width so a phone-shaped UI doesn't stretch
+// awkwardly across a wide desktop/web window.
+const maxContentW = 440
+
+// phoneFrame centres child and caps its width at maxContentW on wide windows,
+// while letting it fill narrower ones (a real phone). The window background
+// (Config.Background = BG) shows on either side.
+func phoneFrame(child widget.Widget) widget.Widget {
+	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		w := cs.Max.W
+		if w > maxContentW {
+			w = maxContentW
+		}
+		return widget.Flex{
+			Axis:       layout.Horizontal,
+			MainAlign:  layout.MainCenter,
+			CrossAlign: layout.CrossStretch, // full height
+			Children:   []widget.Widget{widget.Sized{W: w, Child: child}},
+		}
+	}}
 }
 
 func (s *healthState) onboarding() widget.Widget {
