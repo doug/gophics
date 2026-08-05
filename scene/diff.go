@@ -68,13 +68,23 @@ var layoutInf = float32(1 << 30)
 // is expected to clip c to damage first — culling saves command execution
 // (text shaping, path setup), clipping guarantees pixel correctness.
 func (l *List) ReplayDamage(c paint.Canvas, damage geom.Rect, m Measurer) {
+	transformDepth := 0
 	for _, o := range l.ops {
 		switch o.(type) {
-		case pushClipOp, pushClipRRectOp, popClipOp, clearOp, pushOpacityOp, popOpacityOp,
-			pushTransformOp, popTransformOp:
+		case pushTransformOp:
+			transformDepth++
+			o.replay(c)
+		case popTransformOp:
+			transformDepth--
+			o.replay(c)
+		case pushClipOp, pushClipRRectOp, popClipOp, clearOp, pushOpacityOp, popOpacityOp:
 			o.replay(c)
 		default:
-			if opBounds(o, m).Intersect(damage).IsEmpty() {
+			// opBounds is in record space; while a transform is active it does
+			// not map to the surface-space damage rect, so culling by it could
+			// drop content the transform brings on-surface. Only cull at
+			// transform depth 0; the caller's clip still bounds pixels.
+			if transformDepth == 0 && opBounds(o, m).Intersect(damage).IsEmpty() {
 				continue
 			}
 			o.replay(c)
