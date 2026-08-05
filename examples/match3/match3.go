@@ -411,8 +411,10 @@ func (s *game) cellAt(p geom.Pt) cell {
 	if b.cell == 0 {
 		return noCell
 	}
-	c := int((p.X - b.x) / b.cell)
-	r := int((p.Y - b.y) / b.cell)
+	// Floor (not int truncation): a tap in the band just left of / above the
+	// board gives a negative offset, which must map to -1 (off-board), not 0.
+	c := int(math.Floor(float64((p.X - b.x) / b.cell)))
+	r := int(math.Floor(float64((p.Y - b.y) / b.cell)))
 	cl := cell{r, c}
 	if !cl.ok() {
 		return noCell
