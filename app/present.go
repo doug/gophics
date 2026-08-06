@@ -16,6 +16,9 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 		h.core.Owner.Camera = mw.Camera()
 		h.core.Owner.Audio = mw.Audio()
 	}
+	if hw, ok := w.(shell.HapticWindow); ok {
+		h.core.Owner.Haptic = hw.Haptic()
+	}
 }
 
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs

@@ -6,6 +6,7 @@ import (
 	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -48,10 +49,12 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: func() {
 			if f := s.W().OnChange; f != nil {
+				haptic(ctx, shell.HapticSelection) // a light tick as the value flips
 				f(!on)
 			}
 		}},
-		Child: widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
+		Child: widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) {
+			r := geom.Rect{Max: size.Pt()}
 			track := paint.Lerp(th.Border, th.Primary, t)
 			c.FillRRect(r, h/2, track)
 			cx := r.Min.X + h/2 + t*(w-h)
@@ -63,14 +66,15 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 
 // Checkbox is a labeled boolean box. Controlled via Checked/OnChange.
 type Checkbox struct {
-	Checked bool
-	Label   string
+	Checked  bool
+	Label    string
 	OnChange func(bool)
 }
 
 func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	box := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
+	box := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) {
+		r := geom.Rect{Max: size.Pt()}
 		if cb.Checked {
 			c.FillRRect(r, 5, th.Primary)
 			c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, th.OnPrimary)
@@ -87,6 +91,7 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: func() {
 			if cb.OnChange != nil {
+				haptic(ctx, shell.HapticSelection)
 				cb.OnChange(!cb.Checked)
 			}
 		}},
@@ -130,7 +135,8 @@ func (s *sliderState) Build(ctx widget.Ctx) widget.Widget {
 			OnPress: func(p geom.Pt) { s.set(p.X) },
 			OnDrag:  func(p, _ geom.Pt) { s.set(p.X) },
 		},
-		Child: widget.Canvas{H: 28, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
+		Child: widget.Canvas{H: 28, Draw: func(c paint.Canvas, size geom.Size) {
+			r := geom.Rect{Max: size.Pt()}
 			s.width = r.Dx()
 			cy := r.Min.Y + r.Dy()/2
 			c.FillRRect(geom.RectXYWH(r.Min.X, cy-2, r.Dx(), 4), 2, th.Border)
@@ -152,7 +158,8 @@ type Radio struct {
 
 func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	dot := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) { r := geom.Rect{Max: size.Pt()};
+	dot := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) {
+		r := geom.Rect{Max: size.Pt()}
 		ring := th.Border
 		if rd.Selected {
 			ring = th.Primary
@@ -169,6 +176,7 @@ func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: func() {
 			if rd.OnSelect != nil {
+				haptic(ctx, shell.HapticSelection)
 				rd.OnSelect()
 			}
 		}},

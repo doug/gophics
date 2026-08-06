@@ -57,6 +57,9 @@ type Owner struct {
 	// runner from the platform window (nil when unsupported). See shell/media.go.
 	Camera shell.Camera
 	Audio  shell.Audio
+	// Haptic is the optional tactile-feedback capability, set by the app runner
+	// from the platform window (nil when unsupported). See shell/haptic.go.
+	Haptic shell.Haptic
 	// Input is per-frame poll-style input state for games (held keys, pointer),
 	// fed by the app runner and read via Ctx.Input().
 	Input *input.State

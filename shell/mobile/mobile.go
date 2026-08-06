@@ -40,7 +40,8 @@ type Bridge struct {
 	dirty        atomic.Bool
 	dark         bool
 	a11y         []app.A11yNode
-	opened       []string // OpenURL requests for the host to perform
+	opened       []string           // OpenURL requests for the host to perform
+	haptics      []shell.HapticKind // pending haptic events for the host to play
 	clip         string
 	media        *mediaBridge // camera/audio capability plumbing (see media.go)
 	gpu          *mobileGPU   // GPU surface the host renders to (see gpu.go)

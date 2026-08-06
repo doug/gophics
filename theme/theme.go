@@ -17,8 +17,17 @@ import (
 	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
+
+// haptic plays a feedback event when the platform supports it (nil elsewhere),
+// so themed controls can add tactile feedback without every call site guarding.
+func haptic(ctx widget.Ctx, k shell.HapticKind) {
+	if h := ctx.Haptic(); h != nil {
+		h.Play(k)
+	}
+}
 
 // FontBold is the font family name themed components use for emphasis;
 // register it via app.Config.FontFamilies.

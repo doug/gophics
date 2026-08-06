@@ -115,6 +115,11 @@ func (c Ctx) Camera() shell.Camera { return c.el.owner.Camera }
 // unavailable. See shell/media.go.
 func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
 
+// Haptic returns the platform tactile-feedback capability, or nil when the
+// running platform can't provide it (e.g. desktop). Guard the nil, or use
+// Ctx.Haptic().Play only after a check; see shell/haptic.go.
+func (c Ctx) Haptic() shell.Haptic { return c.el.owner.Haptic }
+
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }
 
