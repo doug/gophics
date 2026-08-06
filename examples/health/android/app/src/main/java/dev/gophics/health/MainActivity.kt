@@ -18,7 +18,10 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -49,7 +52,7 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         val client = healthClient
         if (client != null && granted.containsAll(permissions)) {
-            lifecycleScope.launch { pump(client) }
+            startFeeds(client)
         } else {
             Healthmobile.setAuthorized(false)
             Log.w("gophics", "Health Connect permissions not granted")
@@ -67,9 +70,8 @@ class MainActivity : ComponentActivity() {
                 val client = HealthConnectClient.getOrCreate(this)
                 healthClient = client
                 lifecycleScope.launch {
-                    val granted = client.permissionController.getGrantedPermissions()
-                    if (granted.containsAll(permissions)) {
-                        pump(client)
+                    if (client.permissionController.getGrantedPermissions().containsAll(permissions)) {
+                        startFeeds(client)
                     } else {
                         requestPerms.launch(permissions)
                     }
@@ -134,22 +136,40 @@ class MainActivity : ComponentActivity() {
             Log.i("gophics", "sleep: ${recs.size} sessions")
         } catch (e: Exception) { Log.w("gophics", "sleep read: ${e.message}") }
 
-        // Heart rate → metric 0. The UI's HR chart is a live 60-second window
-        // (T in seconds), but Health Connect gives historical samples; place the
-        // most recent up-to-60 real readings one-per-second ending at now so the
-        // widget shows a live-looking trace of genuine bpm values.
+    }
+
+    /** startFeeds backfills steps/weight/sleep once, then polls heart rate live
+     *  for as long as the activity is started. */
+    private fun startFeeds(client: HealthConnectClient) {
+        lifecycleScope.launch {
+            pump(client)
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    pollHeartRate(client)
+                    delay(2500)
+                }
+            }
+        }
+    }
+
+    // pollHeartRate re-reads the last 60 minutes of heart rate each tick and
+    // pushes the most recent up-to-60 readings as metric 0. The chart plots by
+    // index and PushSample(capN=60) trims to the last 60, so each poll refreshes
+    // the window in place — genuine bpm, scrolling as new samples land. (Needs a
+    // watch feeding Health Connect; with no source it simply reads 0.)
+    private suspend fun pollHeartRate(client: HealthConnectClient) {
         try {
+            val now = Instant.now()
             val recs = client.readRecords(
                 ReadRecordsRequest(HeartRateRecord::class,
-                    TimeRangeFilter.between(now.minus(6, ChronoUnit.HOURS), now))
+                    TimeRangeFilter.between(now.minus(60, ChronoUnit.MINUTES), now))
             ).records
             val bpms = ArrayList<Double>()
             for (rec in recs) for (s in rec.samples) bpms.add(s.beatsPerMinute.toDouble())
             val last = bpms.takeLast(60)
             val base = last.size - 1
             for ((i, bpm) in last.withIndex()) Healthmobile.pushSample(0, (i - base).toDouble(), bpm, 60)
-            Log.i("gophics", "heart rate: ${bpms.size} samples, showing ${last.size}")
-        } catch (e: Exception) { Log.w("gophics", "heart rate read: ${e.message}") }
+        } catch (e: Exception) { Log.w("gophics", "heart rate poll: ${e.message}") }
     }
 }
 
