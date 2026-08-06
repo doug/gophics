@@ -43,7 +43,7 @@ func Start(storeName string) string {
 
 // --- health data feed (called from the native health-store callbacks) ---
 
-// Metric codes for PushSample / ReplaceSeries, matching healthui.Metric.
+// Metric codes for PushSample, matching healthui.Metric.
 const (
 	MetricHeartRate = int(healthui.HeartRate)
 	MetricSteps     = int(healthui.Steps)
@@ -58,21 +58,14 @@ func SetAuthorized(ok bool) { dev.SetAuthorized(ok) }
 // a metric-relative x coordinate (seconds for the live heart rate, days for
 // weight/sleep, hours for steps — see healthui.Sample); capN bounds retained
 // history (0 = keep all). Safe to call from any thread.
+//
+// To backfill a whole series, call this in a loop oldest→newest: the provider
+// is fresh each Start, so appended samples build the series. (There is
+// deliberately no batch PushSeries — gomobile can't bind a []float64 parameter,
+// only []byte, so such a method never appears in the generated iOS/Android
+// binding. See design/health-native-providers.md.)
 func PushSample(m int, t, v float64, capN int) {
 	dev.Push(healthui.Metric(m), t, v, capN)
-}
-
-// PushSeries backfills a metric's whole history at once from a host range query.
-// ts and vs are parallel arrays (equal length); mismatched lengths are ignored.
-func PushSeries(m int, ts, vs []float64) {
-	if len(ts) != len(vs) {
-		return
-	}
-	xs := make([]healthui.Sample, len(ts))
-	for i := range ts {
-		xs[i] = healthui.Sample{T: ts[i], V: vs[i]}
-	}
-	dev.ReplaceSeries(healthui.Metric(m), xs)
 }
 
 // --- render bridge (mirror of hnmobile; driven by the host each vsync) ---

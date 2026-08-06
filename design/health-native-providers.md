@@ -14,8 +14,7 @@ data on the phone.
    Health     │  · request permission                    │
    Connect  ──┼─▶ read history + observe live samples    │
               │  · call the gomobile bind:               │
-              │       PushSample / PushSeries /           │
-              │       SetAuthorized                       │
+              │       PushSample + SetAuthorized          │
               └───────────────┬─────────────────────────┘
                               ▼
         examples/health/mobile   (gomobile bind, healthmobile pkg)
@@ -27,11 +26,14 @@ data on the phone.
 
 The Go side is **done and tested** (`examples/health/ui`, `.../mobile`): the app
 takes a `Provider`; `DeviceProvider` receives pushes; the bind exposes
-`Start`, `PushSample`, `PushSeries`, `SetAuthorized`, `Touch`, and the render
-bridge. What remains is the per-platform host, which needs Xcode / Android
-Studio, entitlements/permissions, and a device to build and grant access. The
-host projects mirror the working ones in `examples/hn/ios` and
-`examples/hn/android` — copy those and add the health-store reader below.
+`Start`, `PushSample`, `SetAuthorized`, `Touch`, and the render bridge. The
+**Android host is built and verified** at `examples/health/android` (real Health
+Connect steps on a Pixel 10 Pro — see below); the iOS host still needs building.
+The hosts mirror the working ones in `examples/hn/ios` and `examples/hn/android`.
+
+**gomobile can't bind a `[]float64` parameter** (only `[]byte`), so there is no
+batch `PushSeries` — a whole series is backfilled by calling the scalar
+`PushSample` in a loop, oldest→newest (the provider is fresh each `Start`).
 
 ## Metric mapping
 
@@ -44,8 +46,8 @@ host projects mirror the working ones in `examples/hn/ios` and
 
 `PushSample(m, t, v, capN)` — `t` is the metric-relative x used by the charts
 (seconds for live HR, days-ago for weight/sleep, hour for steps); `capN` bounds
-retained history (e.g. 60 for the HR window, 0 = keep all). `PushSeries(m, ts,
-vs)` backfills a whole range at once.
+retained history (e.g. 60 for the HR window, 0 = keep all). Loop it oldest→newest
+to backfill a whole range.
 
 ## Build the bind artifacts
 
@@ -95,7 +97,8 @@ match what the binding emits.
            }
        }
 
-       // 30 days of weight → PushSeries(2, ts, vs), t = days ago (negative).
+       // 30 days of weight → PushSample(2, daysAgo, kg, 0) per reading (oldest
+       // first; no batch PushSeries — gomobile can't bind a []float64).
        func backfillWeight() {
            let cal = Calendar.current
            let start = cal.date(byAdding: .day, value: -30, to: Date())!
@@ -103,13 +106,11 @@ match what the binding emits.
                                  predicate: HKQuery.predicateForSamples(withStart: start, end: Date()),
                                  limit: HKObjectQueryNoLimit,
                                  sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]) { _, samples, _ in
-               let ts = (samples as? [HKQuantitySample] ?? []).map {
-                   -Date().timeIntervalSince($0.startDate) / 86_400  // days ago
+               for s in (samples as? [HKQuantitySample] ?? []) {
+                   let daysAgo = -Date().timeIntervalSince(s.startDate) / 86_400
+                   HealthmobilePushSample(2, daysAgo,
+                       s.quantity.doubleValue(for: .gramUnit(with: .kilo)), 0) // Metric.Weight
                }
-               let vs = (samples as? [HKQuantitySample] ?? []).map {
-                   $0.quantity.doubleValue(for: .gramUnit(with: .kilo))
-               }
-               HealthmobilePushSeries(2, ts, vs)   // Metric.Weight
            }
            store.execute(q)
        }
@@ -167,15 +168,16 @@ match what the binding emits.
    suspend fun pump(client: HealthConnectClient) {
        Healthmobile.setAuthorized(true)
 
-       // 30 days of weight → pushSeries(2, ts, vs), t = days ago (negative).
+       // 30 days of weight → pushSample(2, daysAgo, kg, 0) per reading, oldest
+       // first (no batch pushSeries — gomobile can't bind a []float64).
        val now = Instant.now()
-       val weights = client.readRecords(
+       client.readRecords(
            ReadRecordsRequest(WeightRecord::class,
                TimeRangeFilter.between(now.minusSeconds(30L * 86_400), now))
-       ).records
-       val ts = weights.map { -(now.epochSecond - it.time.epochSecond) / 86_400.0 }.toDoubleArray()
-       val vs = weights.map { it.weight.inKilograms }.toDoubleArray()
-       Healthmobile.pushSeries(2, ts, vs) // Metric.Weight
+       ).records.sortedBy { it.time }.forEach {
+           val daysAgo = -(now.epochSecond - it.time.epochSecond) / 86_400.0
+           Healthmobile.pushSample(2, daysAgo, it.weight.inKilograms, 0) // Metric.Weight
+       }
 
        // Latest heart-rate samples → pushSample(0, t, bpm, 60).
        var t = 0.0
@@ -192,13 +194,21 @@ match what the binding emits.
    }
    ```
    For a live feed, poll `readRecords` on a timer or use Health Connect's
-   changes API; call `Healthmobile.start("Health Connect")` at launch.
+   changes API; call `Healthmobile.start("Health Connect")` at launch. The full
+   working host — the render/surface/touch plumbing, the permission flow, and the
+   reader for all four metrics — is committed at `examples/health/android` (build
+   + run it with `gophics run -p android ./examples/health/mobile`).
 
 ## Status
 
 - **Done + tested (Go):** the `Provider` seam, `DeviceProvider`, the gomobile
   bind surface, and unit/-race tests. Builds native, `-tags nogpu`, and js/wasm.
-- **Needs a device (native):** the two host readers above, the HealthKit
-  entitlement + usage string, the Health Connect permissions + rationale
-  activity, and the `gomobile bind` step. Best iterated on your iPhone / Pixel;
-  the Simulator/emulator lack health data (fall back to the synthetic provider).
+- **Android host — DONE + device-verified.** `examples/health/android` reads
+  Health Connect and renders on the GPU; confirmed on a Pixel 10 Pro showing real
+  steps (10,991 today from 282 step records). Heart rate / weight / sleep read
+  correctly too — they just show "no data" unless a watch/scale/sleep-tracker
+  feeds Health Connect. Requires the user to grant the Health Connect permission
+  sheet at first launch.
+- **iOS host — still to build:** the HealthKit reader above, the entitlement +
+  usage string, and `gomobile bind -target=ios`. The Simulator lacks health data
+  (fall back to the synthetic provider); best iterated on an iPhone.
