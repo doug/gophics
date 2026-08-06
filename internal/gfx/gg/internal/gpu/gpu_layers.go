@@ -64,10 +64,11 @@ func (s *GPUShared) releaseChildContext(c *GPURenderContext) {
 	c.Close()
 }
 
-// hasLayerMarkers reports whether pendingDraws contains any opacity/blend group.
+// hasLayerMarkers reports whether pendingDraws needs the offscreen-resolve pass:
+// an opacity/blend group (drawCmdPushLayer) or a backdrop blur.
 func (rc *GPURenderContext) hasLayerMarkers() bool {
 	for i := range rc.pendingDraws {
-		if rc.pendingDraws[i].kind == drawCmdPushLayer {
+		if k := rc.pendingDraws[i].kind; k == drawCmdPushLayer || k == drawCmdBackdropBlur {
 			return true
 		}
 	}
@@ -108,6 +109,12 @@ func (rc *GPURenderContext) resolveDraws(src []drawCommand, w, h uint32, release
 	out := make([]drawCommand, 0, len(src))
 	i := 0
 	for i < len(src) {
+		if src[i].kind == drawCmdBackdropBlur {
+			// Frost the backdrop resolved so far, within this command's clip.
+			out = rc.appendBackdropBlur(out, src[i], w, h, releases)
+			i++
+			continue
+		}
 		if src[i].kind != drawCmdPushLayer {
 			out = append(out, src[i])
 			i++
@@ -217,6 +224,56 @@ func (rc *GPURenderContext) layerDims(target gg.GPURenderTarget) (uint32, uint32
 		return uint32(target.Width), uint32(target.Height) //nolint:gosec // dimensions fit uint32
 	}
 	return 0, 0
+}
+
+// appendBackdropBlur frosts the backdrop drawn so far (the commands already in
+// out) within cmd's clip. It renders that backdrop to a full-size offscreen,
+// halves it twice (bilinear averaging — the blur), then composites the reduced
+// texture back at full size (bilinear upscale), clipped to the panel's rounded
+// rect. It reuses the opacity-layer offscreen machinery, so everything
+// composites in the main pass — no mid-pass swapchain readback. If an offscreen
+// can't be made it degrades to no frost (the panel's translucent tint stands in).
+func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawCommand, w, h uint32, releases *[]func()) []drawCommand {
+	if len(out) == 0 || w < 8 || h < 8 {
+		return out // nothing behind, or too small to reduce
+	}
+	// Render the backdrop so far to a full-size offscreen, then halve it
+	// repeatedly (bilinear averaging). Each halving roughly doubles the blur
+	// width, so scale the count with the radius — ~one halving per doubling —
+	// capped so the smallest mip stays usable.
+	src, release := rc.renderLayerToTexture(out, w, h)
+	if src.IsNil() {
+		return out
+	}
+	*releases = append(*releases, release)
+	halvings := 1
+	for r := cmd.backdropRadius; r >= 8 && halvings < 5; r /= 2 {
+		halvings++
+	}
+	cw, ch := w, h
+	for i := 0; i < halvings && cw >= 8 && ch >= 8; i++ {
+		cw, ch = cw/2, ch/2
+		down, rel := rc.downsampleTexture(src, cw, ch)
+		if down.IsNil() {
+			break
+		}
+		*releases = append(*releases, rel)
+		src = down
+	}
+	// Composite the reduced mip back at full size (bilinear upscale = the blur),
+	// clipped to the panel's rounded rect so only it frosts.
+	comp := layerCompositeCommand(src, 1, w, h)
+	comp.clipRect = cmd.clipRect
+	comp.clipRRect = cmd.clipRRect
+	comp.clipPath = cmd.clipPath
+	return append(out, comp)
+}
+
+// downsampleTexture renders src into a fresh w×h offscreen (bilinear), halving
+// resolution to average it — one blur step.
+func (rc *GPURenderContext) downsampleTexture(src gpucontext.TextureView, w, h uint32) (gpucontext.TextureView, func()) {
+	shrink := layerCompositeCommand(src, 1, w, h)
+	return rc.renderLayerToTexture([]drawCommand{shrink}, w, h)
 }
 
 // stripLayerMarkers drops PushLayer/PopLayer markers, leaving the group's draws

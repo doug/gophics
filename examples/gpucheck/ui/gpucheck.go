@@ -142,6 +142,24 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	c.FillRRect(geom.RectXYWH(x+170, oy+6, 90, 52), 8, paint.RGB(0.30, 0.55, 0.95)) // 25% blue (nested)
 	c.PopOpacity()
 	c.PopOpacity()
+	y = oy + 70
+
+	// Backdrop blur (glass) — the right half of a colorful backdrop is frosted.
+	// On the GPU path this exercises the offscreen downsample + composite; the
+	// left half stays sharp for an A/B. If the right half isn't blurred, the GPU
+	// backdrop path is falling back to a plain tint.
+	c.Text("backdrop blur (glass): right half frosted", geom.Pt{X: x, Y: y}, 13, dim)
+	by := y + 10
+	c.FillRRectGradient(geom.RectXYWH(x, by, 280, 60), 10,
+		paint.RGB(0.95, 0.42, 0.36), paint.RGB(0.28, 0.52, 0.95), true)
+	c.FillRRect(geom.RectXYWH(x+28, by+8, 44, 44), 22, paint.RGB(0.24, 0.80, 0.42))
+	c.FillRRect(geom.RectXYWH(x+150, by+6, 48, 48), 24, paint.RGB(0.96, 0.82, 0.24))
+	gr := geom.RectXYWH(x+140, by, 140, 60)
+	c.PushClipRRect(gr, 10)
+	c.BackdropBlur(gr, 16)
+	c.PopClip()
+	c.FillRRect(gr, 10, paint.Color{R: 1, G: 1, B: 1, A: 0.32})
+	c.StrokeRRect(gr, 10, 1, paint.Color{R: 1, G: 1, B: 1, A: 0.55})
 
 	// Tap marker.
 	if s.taps > 0 {

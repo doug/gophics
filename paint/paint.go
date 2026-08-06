@@ -116,10 +116,10 @@ type Canvas interface {
 	// BackdropBlur frosts the already-drawn content within r by the given
 	// radius — the core of a glass/vibrancy material. It reads what is behind,
 	// so call it before painting a panel's translucent tint and content on top;
-	// clip to a rounded rect first for rounded glass. Effective on the CPU
-	// rasterizer (the reference renderer, headless, and the mobile CPU-present
-	// path); a no-op on the GPU direct-surface path (a translucent tint stands
-	// in) until GPU backdrop-texture sampling lands.
+	// clip to a rounded rect first for rounded glass. On the CPU rasterizer it
+	// is a box blur of the pixmap; on the GPU it renders the backdrop to a
+	// reduced-resolution offscreen and composites it back upscaled (a downsample
+	// blur), scissored to r — so it works on both paths.
 	BackdropBlur(r geom.Rect, radius float32)
 }
 

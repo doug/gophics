@@ -3,24 +3,18 @@ package gg
 import "math"
 
 // BackdropBlur blurs the already-rendered content within the logical rect
-// (x,y,w,h), by the given radius, in place — the core of a frosted-glass
-// material. It reads and writes the CPU pixmap, so it takes effect on the CPU
-// rasterizer: the reference renderer, all headless/offscreen renders, and the
-// mobile CPU-fallback present path. On a GPU-accelerated context the pixmap is
-// not the live backdrop, so this is a no-op (a caller's translucent tint stands
-// in for the glass) until GPU backdrop-texture sampling lands.
+// (x,y,w,h), by the given radius — the core of a frosted-glass material. On the
+// CPU rasterizer (the reference renderer, headless/offscreen, and the mobile
+// CPU-present path) it box-blurs the pixmap in place. On a GPU-accelerated
+// context the pixmap isn't the live backdrop, so it instead queues a
+// drawCmdBackdropBlur: the resolve pass renders the backdrop drawn so far to a
+// reduced-resolution offscreen and composites it back upscaled, scissored to
+// this rect (gpu_layers.go). Both produce a real blur.
 //
 // The rect is in the current user space; the active transform (e.g. a Canvas
 // box's translate) maps it to device pixels, matching every other draw call.
 func (c *Context) BackdropBlur(x, y, w, h, radius float64) {
 	if radius <= 0 || w <= 0 || h <= 0 {
-		return
-	}
-	if c.gpuCtxOps() != nil {
-		return // GPU direct path: c.pixmap isn't the composited backdrop
-	}
-	pm := c.pixmap
-	if pm == nil {
 		return
 	}
 	// Map the user-space rect to device pixels via the current transform.
@@ -32,6 +26,28 @@ func (c *Context) BackdropBlur(x, y, w, h, radius float64) {
 	x1 := int(math.Round(math.Max(tl.X, br.X)))
 	y1 := int(math.Round(math.Max(tl.Y, br.Y)))
 	r := int(math.Round(radius * c.deviceScale))
+
+	if rc := c.gpuCtxOps(); rc != nil {
+		// GPU path: queue a backdrop-blur command with the panel's device bounds
+		// as a scissor. The resolve pass frosts the backdrop within it. The
+		// pixmap isn't the live backdrop here, so the CPU blur below can't run.
+		bx, by := x0, y0
+		if bx < 0 {
+			bx = 0
+		}
+		if by < 0 {
+			by = 0
+		}
+		if x1 > bx && y1 > by {
+			rc.QueueBackdropBlur(c.gpuRenderTarget(), float32(r),
+				uint32(bx), uint32(by), uint32(x1-bx), uint32(y1-by)) //nolint:gosec // device px ≥ 0
+		}
+		return
+	}
+	pm := c.pixmap
+	if pm == nil {
+		return
+	}
 	blurPixmapRegion(pm.data, pm.width, pm.height, x0, y0, x1-x0, y1-y0, r)
 }
 

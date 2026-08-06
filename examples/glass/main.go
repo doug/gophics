@@ -1,9 +1,8 @@
 // Command glass demonstrates the frosted-glass material: theme.Glass() makes
 // themed surfaces translucent over a paint.Canvas backdrop blur, so panels
 // layered on a colorful backdrop show it softly through them. The blur is a real
-// primitive (paint.Canvas.BackdropBlur) on the CPU rasterizer — the reference
-// renderer and every headless/offscreen render; on the GPU direct-surface path
-// it degrades to the translucent tint until backdrop-texture sampling lands.
+// primitive (paint.Canvas.BackdropBlur) on both paths — a pixmap box blur on the
+// CPU rasterizer, and a reduced-offscreen downsample composite on the GPU.
 //
 //	go run ./examples/glass
 package main

@@ -32,6 +32,7 @@ const (
 	drawCmdBaseLayer                            // DrawGPUTextureBase, z-order: always first (Phase 2)
 	drawCmdPushLayer                            // opacity/blend group begin — offscreen layer (saveLayer)
 	drawCmdPopLayer                             // opacity/blend group end — composite offscreen layer
+	drawCmdBackdropBlur                         // frost the backdrop drawn so far, within this cmd's clip
 )
 
 // drawCommand is a backend-agnostic draw command stored at queue time.
@@ -78,6 +79,8 @@ type drawCommand struct {
 	// The Flush-time layer driver partitions pendingDraws on these markers.
 	layerOpacity float32      // drawCmdPushLayer: group alpha in [0,1]
 	layerBlend   gg.BlendMode // drawCmdPushLayer: composite blend mode
+
+	backdropRadius float32 // drawCmdBackdropBlur: blur radius in device px
 }
 
 // copyClipRect returns a deep copy of a scissor rect pointer.
@@ -535,6 +538,63 @@ func (rc *GPURenderContext) QueueGPUTextureDraw(target gg.GPURenderTarget, view 
 	})
 	rc.pendingTarget = target
 	rc.hasPendingTarget = true
+}
+
+// QueueBackdropBlur queues a frosted-glass backdrop blur. At resolve time the
+// backdrop drawn so far is rendered to a reduced-resolution offscreen and
+// composited back bilinearly-upscaled, confined to this command's clip (the
+// panel's rounded rect, snapshotted here) — a real GPU blur that reuses the
+// opacity-layer offscreen machinery, so it composites in the main pass with no
+// mid-pass swapchain readback. radius is in device px.
+func (rc *GPURenderContext) QueueBackdropBlur(target gg.GPURenderTarget, radius float32, x, y, w, h uint32) {
+	if rc.hasPendingTarget && !sameTarget(&rc.pendingTarget, &target) {
+		if fErr := rc.Flush(rc.pendingTarget); fErr != nil {
+			slogger().Warn("auto-flush failed", "err", fErr)
+		}
+	}
+	// The panel's device-px bounds as a scissor: the composite is a textured
+	// quad, which honors the rect scissor (clipRect), not the analytic rounded
+	// clip alone — without this the frosted backdrop would cover the whole frame.
+	// Intersect with any outer scissor already in effect.
+	box := intersectClip([4]uint32{x, y, w, h}, rc.clipRect)
+	rc.pendingDraws = append(rc.pendingDraws, drawCommand{
+		kind:           drawCmdBackdropBlur,
+		backdropRadius: radius,
+		clipRect:       &box,
+		clipRRect:      copyClipRRect(rc.clipRRect),
+		clipPath:       rc.clipPath,
+	})
+	rc.pendingTarget = target
+	rc.hasPendingTarget = true
+}
+
+// intersectClip clips box [x,y,w,h] to an optional outer scissor.
+func intersectClip(box [4]uint32, outer *[4]uint32) [4]uint32 {
+	if outer == nil {
+		return box
+	}
+	x0 := maxU32(box[0], outer[0])
+	y0 := maxU32(box[1], outer[1])
+	x1 := minU32(box[0]+box[2], outer[0]+outer[2])
+	y1 := minU32(box[1]+box[3], outer[1]+outer[3])
+	if x1 <= x0 || y1 <= y0 {
+		return [4]uint32{x0, y0, 0, 0}
+	}
+	return [4]uint32{x0, y0, x1 - x0, y1 - y0}
+}
+
+func maxU32(a, b uint32) uint32 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minU32(a, b uint32) uint32 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // QueueGlyphMask accumulates a glyph mask batch for dispatch via the unified

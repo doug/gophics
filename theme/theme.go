@@ -146,8 +146,7 @@ func Auto(ctx widget.Ctx) Theme {
 // Glass is the identity as a frosted-glass material: translucent light surfaces
 // over a backdrop blur, for UIs layered on a photo or gradient. It derives from
 // Light (same accent, type scale, chart palette) — only the material changes.
-// On the GPU direct-surface path the blur is a no-op and the translucent tint
-// stands in (see paint.Canvas.BackdropBlur).
+// The blur is real on both the CPU and GPU paths (see paint.Canvas.BackdropBlur).
 func Glass() Theme {
 	t := Light()
 	t.Surface = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
