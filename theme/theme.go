@@ -32,47 +32,85 @@ type Theme struct {
 	OnPrimary    paint.Color // content on Primary
 	Text         paint.Color
 	Muted        paint.Color
+	Success      paint.Color
+	Warning      paint.Color
 	Danger       paint.Color
 	Border       paint.Color
 	Selection    paint.Color
+	// Chart is a categorical palette for data series and per-item accents,
+	// read positionally with ChartAt so a re-theme restyles charts too.
+	Chart [6]paint.Color
 
 	Radius float32
 }
 
-// Light is the default light theme.
+// ChartAt returns the i-th categorical color, wrapping if i is out of range.
+func (t Theme) ChartAt(i int) paint.Color { return t.Chart[((i%6)+6)%6] }
+
+// Light is the default light theme — the gophics identity: warm neutrals, a
+// single clay accent, and a muted categorical palette. Opinionated on purpose
+// (apps look considered out of the box) and just a struct (copy + tweak to
+// re-theme, or swap wholesale).
 func Light() Theme {
 	return Theme{
-		Bg:           paint.RGB(0.97, 0.97, 0.96),
+		Bg:           paint.RGB(0.980, 0.976, 0.961), // warm off-white
 		Surface:      paint.RGB(1, 1, 1),
-		SurfaceHover: paint.RGB(0.94, 0.94, 0.95),
-		Primary:      paint.RGB(0.13, 0.45, 0.90),
+		SurfaceHover: paint.RGB(0.957, 0.949, 0.929),
+		Primary:      paint.RGB(0.851, 0.467, 0.341), // clay
 		OnPrimary:    paint.RGB(1, 1, 1),
-		Text:         paint.RGB(0.10, 0.10, 0.12),
-		Muted:        paint.RGB(0.45, 0.46, 0.50),
-		Danger:       paint.RGB(0.80, 0.25, 0.25),
-		Border:       paint.RGB(0.85, 0.85, 0.87),
-		Selection:    paint.Color{R: 0.13, G: 0.45, B: 0.90, A: 0.30},
-		Radius:       8,
+		Text:         paint.RGB(0.086, 0.086, 0.078), // warm near-black
+		Muted:        paint.RGB(0.427, 0.416, 0.384),
+		Success:      paint.RGB(0.361, 0.545, 0.376),
+		Warning:      paint.RGB(0.831, 0.639, 0.290),
+		Danger:       paint.RGB(0.776, 0.361, 0.318),
+		Border:       paint.RGB(0.898, 0.886, 0.859),
+		Selection:    paint.Color{R: 0.851, G: 0.467, B: 0.341, A: 0.24},
+		Chart:        lightChart,
+		Radius:       10,
 	}
 }
 
-// Dark is the default dark theme.
+// Dark is the default dark theme — the same identity on a warm near-black.
 func Dark() Theme {
 	return Theme{
 		Dark:         true,
-		Bg:           paint.RGB(0.09, 0.10, 0.12),
-		Surface:      paint.RGB(0.14, 0.15, 0.18),
-		SurfaceHover: paint.RGB(0.18, 0.20, 0.24),
-		Primary:      paint.RGB(0.40, 0.64, 0.98),
-		OnPrimary:    paint.RGB(0.05, 0.08, 0.12),
-		Text:         paint.RGB(0.92, 0.93, 0.95),
-		Muted:        paint.RGB(0.55, 0.57, 0.62),
-		Danger:       paint.RGB(0.92, 0.45, 0.45),
-		Border:       paint.RGB(0.26, 0.28, 0.33),
-		Selection:    paint.Color{R: 0.40, G: 0.64, B: 0.98, A: 0.35},
-		Radius:       8,
+		Bg:           paint.RGB(0.086, 0.086, 0.078), // warm near-black
+		Surface:      paint.RGB(0.137, 0.133, 0.125),
+		SurfaceHover: paint.RGB(0.180, 0.176, 0.165),
+		Primary:      paint.RGB(0.878, 0.522, 0.396), // clay, lifted for dark
+		OnPrimary:    paint.RGB(0.086, 0.086, 0.078),
+		Text:         paint.RGB(0.949, 0.937, 0.914), // warm off-white
+		Muted:        paint.RGB(0.667, 0.647, 0.612),
+		Success:      paint.RGB(0.451, 0.647, 0.451),
+		Warning:      paint.RGB(0.878, 0.694, 0.361),
+		Danger:       paint.RGB(0.851, 0.451, 0.408),
+		Border:       paint.RGB(0.271, 0.263, 0.247),
+		Selection:    paint.Color{R: 0.878, G: 0.522, B: 0.396, A: 0.30},
+		Chart:        darkChart,
+		Radius:       10,
 	}
 }
+
+// The muted categorical palette (clay, cactus, sky, heather, kraft, fig),
+// tuned per scheme for contrast against the background.
+var (
+	lightChart = [6]paint.Color{
+		paint.RGB(0.851, 0.467, 0.341), // clay
+		paint.RGB(0.400, 0.596, 0.463), // cactus
+		paint.RGB(0.416, 0.608, 0.780), // sky
+		paint.RGB(0.545, 0.478, 0.706), // heather
+		paint.RGB(0.780, 0.545, 0.361), // kraft
+		paint.RGB(0.639, 0.400, 0.439), // fig
+	}
+	darkChart = [6]paint.Color{
+		paint.RGB(0.878, 0.522, 0.396),
+		paint.RGB(0.478, 0.678, 0.545),
+		paint.RGB(0.494, 0.671, 0.843),
+		paint.RGB(0.627, 0.561, 0.784),
+		paint.RGB(0.843, 0.616, 0.435),
+		paint.RGB(0.718, 0.478, 0.518),
+	}
+)
 
 // Auto picks Light or Dark from the platform color scheme.
 func Auto(ctx widget.Ctx) Theme {

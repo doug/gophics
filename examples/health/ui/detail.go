@@ -4,6 +4,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
@@ -47,6 +48,8 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	cfg := s.W()
 	p, m := cfg.p, cfg.m
 	sp := specFor(m)
+	th := theme.Of(ctx)
+	accent := th.ChartAt(sp.accentIdx)
 	nav := widget.MustOf[widget.Nav](ctx)
 
 	ranges := rangesFor(m)
@@ -62,14 +65,14 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 
 	back := widget.Interactive{
 		Handler: widget.Handler{OnTap: nav.Pop},
-		Child:   widget.Text{S: "‹  Back", Size: 15, Color: sp.accent},
+		Child:   widget.Text{S: "‹  Back", Size: 15, Color: accent},
 	}
 	head := widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Bottom: 16}, Child: back},
-		widget.Text{S: sp.label, Size: 15, Color: sp.accent},
+		widget.Text{S: sp.label, Size: 15, Color: accent},
 		widget.Row(
-			widget.Text{S: sp.fmtVal(val.V), Size: 40, Color: ink},
-			widget.Padding{Insets: geom.Insets{Left: 6, Top: 16}, Child: widget.Text{S: sp.unit, Size: 15, Color: sub}},
+			widget.Text{S: sp.fmtVal(val.V), Size: 40, Color: th.Text},
+			widget.Padding{Insets: geom.Insets{Left: 6, Top: 16}, Child: widget.Text{S: sp.unit, Size: 15, Color: th.Muted}},
 		),
 	}}
 
@@ -79,7 +82,7 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 		chips := make([]widget.Widget, len(ranges))
 		for i, r := range ranges {
 			idx := i
-			chips[i] = chip(r.label, i == s.rangeIdx, sp.accent, func() {
+			chips[i] = chip(th, r.label, i == s.rangeIdx, accent, func() {
 				s.SetState(func() { s.rangeIdx = idx })
 			})
 		}
@@ -88,31 +91,31 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 
 	kids = append(kids, widget.Padding{
 		Insets: geom.Insets{Top: 14, Bottom: 18},
-		Child: widget.Sized{H: 230, Child: widget.Decorated{Color: surface, Radius: 18, Child: widget.Padding{
+		Child: widget.Sized{H: 230, Child: widget.Decorated{Color: th.Surface, Radius: th.Radius + 8, BorderColor: th.Border, BorderWidth: 1, Child: widget.Padding{
 			All: 14,
 			Child: widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
-				sp.draw(c, size, series, sp.accent)
+				sp.draw(c, size, series, accent)
 			}},
 		}}},
 	})
 
 	kids = append(kids, widget.Row(
-		statBlock("Min", sp.fmtVal(lo)),
-		statBlock("Avg", sp.fmtVal(avg)),
-		statBlock("Max", sp.fmtVal(hi)),
+		statBlock(th, "Min", sp.fmtVal(lo)),
+		statBlock(th, "Avg", sp.fmtVal(avg)),
+		statBlock(th, "Max", sp.fmtVal(hi)),
 	))
 
-	return widget.Fill{Color: BG, Child: widget.Scroll{Child: widget.Padding{
+	return widget.Fill{Color: th.Bg, Child: widget.Scroll{Child: widget.Padding{
 		Insets: geom.InsetsSymmetric(18, 22),
 		Child:  widget.Flex{CrossAlign: layout.CrossStretch, Children: kids},
 	}}}
 }
 
 // chip is a pill-shaped range tab.
-func chip(label string, selected bool, accent paint.Color, onTap func()) widget.Widget {
-	fg, bgc := sub, paint.RGB(0.90, 0.91, 0.93)
+func chip(th theme.Theme, label string, selected bool, accent paint.Color, onTap func()) widget.Widget {
+	fg, bgc := th.Muted, th.SurfaceHover
 	if selected {
-		fg, bgc = white, accent
+		fg, bgc = th.OnPrimary, accent
 	}
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: onTap},
@@ -124,10 +127,10 @@ func chip(label string, selected bool, accent paint.Color, onTap func()) widget.
 }
 
 // statBlock is one equal-width Min/Avg/Max cell.
-func statBlock(label, value string) widget.Widget {
+func statBlock(th theme.Theme, label, value string) widget.Widget {
 	return widget.Expand(widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
-		widget.Text{S: value, Size: 22, Color: ink},
-		widget.Text{S: label, Size: 12, Color: sub},
+		widget.Text{S: value, Size: 22, Color: th.Text},
+		widget.Text{S: label, Size: 12, Color: th.Muted},
 	}})
 }
 

@@ -18,39 +18,33 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
-// Palette — a light, calm health-app look.
-var (
-	BG      = paint.RGB(0.95, 0.96, 0.975)
-	surface = paint.RGB(1, 1, 1)
-	ink     = paint.RGB(0.11, 0.12, 0.14)
-	sub     = paint.RGB(0.55, 0.57, 0.62)
-	white   = paint.RGB(1, 1, 1)
-	heart   = paint.RGB(0.94, 0.27, 0.35)
-	steps   = paint.RGB(0.18, 0.72, 0.45)
-	weight  = paint.RGB(0.24, 0.52, 0.96)
-	sleep   = paint.RGB(0.45, 0.40, 0.86)
-)
+// BG is the window background used at Start, before a widget context exists (the
+// mobile bind passes it as Config.Background). Inside the tree every color comes
+// from theme.Of(ctx), so the whole app also follows the platform light/dark
+// scheme for free. This matches the light identity's background.
+var BG = theme.Light().Bg
 
-// spec is one metric's presentation: label, unit, accent, formatting, chart.
+// spec is one metric's presentation: label, unit, chart-accent slot, chart.
 type spec struct {
 	m          Metric
 	label      string
 	unit       string
 	caption    string
-	accent     paint.Color
+	accentIdx  int // slot in theme.Theme.Chart — resolved per active theme
 	cardWindow int // last N samples shown on the dashboard card (0 = all)
 	fmtVal     func(float64) string
 	draw       func(c paint.Canvas, size geom.Size, xs []Sample, accent paint.Color)
 }
 
 var specs = []spec{
-	{HeartRate, "Heart Rate", "bpm", "live", heart, 0, fmt0, drawLineArea},
-	{Steps, "Steps", "", "today", steps, 0, fmtInt, drawLineArea},
-	{Weight, "Weight", "kg", "30 days", weight, 30, fmt1, drawLineArea},
-	{Sleep, "Sleep", "h", "7 nights", sleep, 7, fmt1, drawBars},
+	{HeartRate, "Heart Rate", "bpm", "live", 0, 0, fmt0, drawLineArea},
+	{Steps, "Steps", "", "today", 1, 0, fmtInt, drawLineArea},
+	{Weight, "Weight", "kg", "30 days", 2, 30, fmt1, drawLineArea},
+	{Sleep, "Sleep", "h", "7 nights", 3, 7, fmt1, drawBars},
 }
 
 // specFor returns a metric's spec (specs is indexed by Metric).
@@ -118,17 +112,27 @@ func (s *healthState) Tick(dt float64) bool {
 }
 
 func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the theme from the platform color scheme and provide it to the
+	// tree, so every page below reads colors with theme.Of(ctx) and the whole
+	// app follows light/dark automatically.
+	th := theme.Auto(ctx)
+	var content widget.Widget
 	if !s.connected {
-		return phoneFrame(s.onboarding())
+		content = s.onboarding(th)
+	} else {
+		// The dashboard is the Navigator's Home so it (and pushed detail pages)
+		// can reach the Nav handle. The provider lives here at the root and keeps
+		// streaming regardless of which page is on top.
+		home := widget.Widget(dashboard{p: s.p})
+		if m, ok := metricByView(os.Getenv("HEALTH_VIEW")); ok {
+			home = detailPage{p: s.p, m: m} // deep-link for screenshots
+		}
+		content = widget.Navigator{Home: home}
 	}
-	// The dashboard is the Navigator's Home so it (and pushed detail pages) can
-	// reach the Nav handle. The provider lives here at the root and keeps
-	// streaming regardless of which page is on top.
-	home := widget.Widget(dashboard{p: s.p})
-	if m, ok := metricByView(os.Getenv("HEALTH_VIEW")); ok {
-		home = detailPage{p: s.p, m: m} // deep-link for screenshots
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: phoneFrame(content)},
 	}
-	return phoneFrame(widget.Navigator{Home: home})
 }
 
 // maxContentW caps the app's content width so a phone-shaped UI doesn't stretch
@@ -153,24 +157,24 @@ func phoneFrame(child widget.Widget) widget.Widget {
 	}}
 }
 
-func (s *healthState) onboarding() widget.Widget {
+func (s *healthState) onboarding(th theme.Theme) widget.Widget {
 	connect := widget.Interactive{
 		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.connected = true }) }},
-		Child: widget.Decorated{Color: heart, Radius: 14, Child: widget.Padding{
+		Child: widget.Decorated{Color: th.Primary, Radius: 14, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(28, 14),
-			Child:  widget.Text{S: "Connect " + s.p.Name(), Size: 16, Color: white},
+			Child:  widget.Text{S: "Connect " + s.p.Name(), Size: 16, Color: th.OnPrimary},
 		}},
 	}
-	return widget.Fill{Color: BG, Child: widget.Align{X: 0.5, Y: 0.5, Child: widget.Padding{
+	return widget.Align{X: 0.5, Y: 0.5, Child: widget.Padding{
 		All: 32,
 		Child: widget.Flex{CrossAlign: layout.CrossCenter, Children: []widget.Widget{
-			widget.Text{S: "♥", Size: 72, Color: heart},
-			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{S: "Health", Size: 34, Color: ink}},
+			widget.Text{S: "♥", Size: 72, Color: th.Primary},
+			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{S: "Health", Size: 34, Color: th.Text}},
 			widget.Padding{Insets: geom.Insets{Top: 6, Bottom: 26}, Child: widget.Text{
-				S: "Connect your data to see it live.", Size: 15, Color: sub}},
+				S: "Connect your data to see it live.", Size: 15, Color: th.Muted}},
 			connect,
 		}},
-	}}}
+	}}
 }
 
 // --- dashboard page (Navigator Home) ---
@@ -178,13 +182,14 @@ func (s *healthState) onboarding() widget.Widget {
 type dashboard struct{ p Provider }
 
 func (d dashboard) Build(ctx widget.Ctx) widget.Widget {
+	th := theme.Of(ctx)
 	nav := widget.MustOf[widget.Nav](ctx)
-	children := []widget.Widget{header(d.p)}
+	children := []widget.Widget{header(th, d.p)}
 	for _, sp := range specs {
 		m := sp.m
-		children = append(children, card(d.p, sp, func() { nav.Push(detailPage{p: d.p, m: m}) }))
+		children = append(children, card(th, d.p, sp, func() { nav.Push(detailPage{p: d.p, m: m}) }))
 	}
-	return widget.Fill{Color: BG, Child: widget.Scroll{
+	return widget.Fill{Color: th.Bg, Child: widget.Scroll{
 		Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(18, 22),
 			Child:  widget.Flex{CrossAlign: layout.CrossStretch, Children: children},
@@ -192,35 +197,36 @@ func (d dashboard) Build(ctx widget.Ctx) widget.Widget {
 	}}
 }
 
-func header(p Provider) widget.Widget {
+func header(th theme.Theme, p Provider) widget.Widget {
 	return widget.Padding{
 		Insets: geom.Insets{Bottom: 18},
 		Child: widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
-			widget.Text{S: "Health", Size: 32, Color: ink},
-			widget.Text{S: p.Name(), Size: 14, Color: sub},
+			widget.Text{S: "Health", Size: 32, Color: th.Text},
+			widget.Text{S: p.Name(), Size: 14, Color: th.Muted},
 		}},
 	}
 }
 
 // card renders one dashboard metric card, tappable through to its detail page.
-func card(p Provider, sp spec, onTap func()) widget.Widget {
+func card(th theme.Theme, p Provider, sp spec, onTap func()) widget.Widget {
 	val, _ := p.Latest(sp.m)
 	series := lastN(p.Series(sp.m), sp.cardWindow)
+	accent := th.ChartAt(sp.accentIdx)
 
 	title := widget.Row(
-		widget.Text{S: sp.label, Size: 14, Color: sp.accent},
+		widget.Text{S: sp.label, Size: 14, Color: accent},
 		widget.Spacer(),
-		widget.Text{S: sp.caption, Size: 12, Color: sub},
+		widget.Text{S: sp.caption, Size: 12, Color: th.Muted},
 	)
 	value := widget.Row(
-		widget.Text{S: sp.fmtVal(val.V), Size: 34, Color: ink},
-		widget.Padding{Insets: geom.Insets{Left: 5, Top: 12}, Child: widget.Text{S: sp.unit, Size: 14, Color: sub}},
+		widget.Text{S: sp.fmtVal(val.V), Size: 34, Color: th.Text},
+		widget.Padding{Insets: geom.Insets{Left: 5, Top: 12}, Child: widget.Text{S: sp.unit, Size: 14, Color: th.Muted}},
 	)
 	chart := widget.Expand(widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
-		sp.draw(c, size, series, sp.accent)
+		sp.draw(c, size, series, accent)
 	}})
 
-	body := widget.Decorated{Color: surface, Radius: 18, Child: widget.Padding{
+	body := widget.Decorated{Color: th.Surface, Radius: th.Radius + 8, BorderColor: th.Border, BorderWidth: 1, Child: widget.Padding{
 		All:   16,
 		Child: widget.Flex{CrossAlign: layout.CrossStretch, Children: []widget.Widget{title, value, chart}},
 	}}

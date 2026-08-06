@@ -65,13 +65,13 @@ if { [ ${#want[@]} -eq 0 ] || printf '%s\n' "${want[@]}" | grep -qx health; }; t
     env HEALTH_VIEW=dashboard GOPHICS_THUMB="$tmp/raw.png" GOPHICS_THUMB_OUT= \
         GOPHICS_THUMB_SIZE=340x600 GOPHICS_THUMB_SCALE=2 GOPHICS_THUMB_SETTLE=20 \
         go run ./examples/health
-    read -r w h < <(magick identify -format '%w %h' "$tmp/raw.png")
+    read -r w h < <(magick identify -format '%w %h\n' "$tmp/raw.png")
     magick -size "${w}x${h}" xc:black -fill white \
       -draw "roundrectangle 0,0,$((w - 1)),$((h - 1)),40,40" "$tmp/mask.png"
     magick "$tmp/raw.png" "$tmp/mask.png" -alpha off -compose CopyOpacity -composite "$tmp/round.png"
     magick "$tmp/round.png" -resize x500 \
       \( +clone -background black -shadow 60x18+0+12 \) +swap -background none -layers merge +repage "$tmp/shadow.png"
-    magick -size 760x565 xc:'#eef1f4' "$tmp/shadow.png" -gravity center -composite "$OUT/health.png"
+    magick -size 760x565 xc:'#f5f1ea' "$tmp/shadow.png" -gravity center -composite "$OUT/health.png"
     rm -rf "$tmp"
   else
     echo "== health: skipped (needs ImageMagick 'magick') =="
