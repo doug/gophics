@@ -10,9 +10,9 @@ import (
 	"testing"
 	"unsafe"
 
+	platformdarwin "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/darwin"
 	"github.com/go-webgpu/goffi/ffi"
 	"github.com/go-webgpu/goffi/types"
-	platformdarwin "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/darwin"
 )
 
 type nsPoint struct {

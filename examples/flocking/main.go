@@ -31,8 +31,14 @@ const (
 
 // --- tiny vector helpers over geom.Pt (self-contained, no framework additions) ---
 
-func vlen(p geom.Pt) float32       { return float32(math.Hypot(float64(p.X), float64(p.Y))) }
-func vnorm(p geom.Pt) geom.Pt      { l := vlen(p); if l == 0 { return geom.Pt{} }; return p.Mul(1 / l) }
+func vlen(p geom.Pt) float32 { return float32(math.Hypot(float64(p.X), float64(p.Y))) }
+func vnorm(p geom.Pt) geom.Pt {
+	l := vlen(p)
+	if l == 0 {
+		return geom.Pt{}
+	}
+	return p.Mul(1 / l)
+}
 func vsetlen(p geom.Pt, l float32) geom.Pt { return vnorm(p).Mul(l) }
 func vlimit(p geom.Pt, max float32) geom.Pt {
 	if vlen(p) > max {
@@ -40,8 +46,8 @@ func vlimit(p geom.Pt, max float32) geom.Pt {
 	}
 	return p
 }
-func vdist(a, b geom.Pt) float32  { return vlen(a.Sub(b)) }
-func vangle(p geom.Pt) float64    { return math.Atan2(float64(p.Y), float64(p.X)) }
+func vdist(a, b geom.Pt) float32 { return vlen(a.Sub(b)) }
+func vangle(p geom.Pt) float64   { return math.Atan2(float64(p.Y), float64(p.X)) }
 func fromAngle(a float64, l float32) geom.Pt {
 	return geom.Pt{X: l * float32(math.Cos(a)), Y: l * float32(math.Sin(a))}
 }

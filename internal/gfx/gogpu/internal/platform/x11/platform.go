@@ -13,11 +13,11 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/go-webgpu/goffi/ffi"
-	"github.com/go-webgpu/goffi/types"
 	"github.com/doug/gophics/internal/gfx/gogpu/internal/platform/eventqueue"
 	xkbcommon "github.com/doug/gophics/internal/gfx/gogpu/internal/platform/xkb"
 	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/go-webgpu/goffi/ffi"
+	"github.com/go-webgpu/goffi/types"
 )
 
 // Config holds configuration for creating a platform window.

@@ -175,8 +175,8 @@ func (b *Opacity) VisitChildren(visit func(Box, geom.Pt)) {
 // grids).
 type Grid struct {
 	Base
-	Columns int
-	Spacing float32
+	Columns  int
+	Spacing  float32
 	Children []Box
 	offsets  []geom.Pt
 }

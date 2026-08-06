@@ -201,9 +201,9 @@ func unfx(v fixed.Int26_6) float32 { return float32(v) / 64 }
 
 func (s *Shaper) shapeRuns(runes []rune, size float32) []shaping.Output {
 	inputs := s.seg.Split(shaping.Input{
-		Text:     runes,
-		RunEnd:   len(runes),
-		Size:     fx(size),
+		Text:      runes,
+		RunEnd:    len(runes),
+		Size:      fx(size),
 		Direction: di.DirectionLTR,
 	}, s)
 	outs := make([]shaping.Output, len(inputs))

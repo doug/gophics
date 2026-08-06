@@ -19,9 +19,9 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 	"github.com/go-webgpu/goffi/ffi"
 	"github.com/go-webgpu/goffi/types"
-	"github.com/doug/gophics/internal/gfx/wgpu/hal"
 )
 
 // X11 constants (from X.h / Xlib.h).

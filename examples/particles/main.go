@@ -17,16 +17,16 @@ import (
 )
 
 const (
-	gravity   = 520 // px/s²
-	drag      = 0.9 // per-second velocity retention
-	perFrame  = 14  // sparks emitted each frame
-	maxAlive  = 1400
+	gravity  = 520 // px/s²
+	drag     = 0.9 // per-second velocity retention
+	perFrame = 14  // sparks emitted each frame
+	maxAlive = 1400
 )
 
 type spark struct {
-	pos, vel geom.Pt
+	pos, vel        geom.Pt
 	life, max, size float32
-	col      paint.Color
+	col             paint.Color
 }
 
 type Fountain struct{}

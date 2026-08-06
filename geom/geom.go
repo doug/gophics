@@ -13,10 +13,10 @@ type Pt struct {
 	X, Y float32
 }
 
-func (p Pt) Add(q Pt) Pt          { return Pt{p.X + q.X, p.Y + q.Y} }
-func (p Pt) Sub(q Pt) Pt          { return Pt{p.X - q.X, p.Y - q.Y} }
-func (p Pt) Mul(s float32) Pt     { return Pt{p.X * s, p.Y * s} }
-func (p Pt) In(r Rect) bool       { return r.Contains(p) }
+func (p Pt) Add(q Pt) Pt      { return Pt{p.X + q.X, p.Y + q.Y} }
+func (p Pt) Sub(q Pt) Pt      { return Pt{p.X - q.X, p.Y - q.Y} }
+func (p Pt) Mul(s float32) Pt { return Pt{p.X * s, p.Y * s} }
+func (p Pt) In(r Rect) bool   { return r.Contains(p) }
 
 // Lerp linearly interpolates from p to q; t=0 yields p, t=1 yields q.
 func (p Pt) Lerp(q Pt, t float32) Pt {

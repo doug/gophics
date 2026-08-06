@@ -172,11 +172,11 @@ type countSink struct {
 	moves, lines, curves, closes int
 }
 
-func (c *countSink) MoveTo(x, y float32)                          { c.moves++ }
-func (c *countSink) LineTo(x, y float32)                          { c.lines++ }
-func (c *countSink) QuadTo(cx, cy, x, y float32)                  { c.curves++ }
-func (c *countSink) CubeTo(a, b, d, e, x, y float32)              { c.curves++ }
-func (c *countSink) Close()                                       { c.closes++ }
+func (c *countSink) MoveTo(x, y float32)             { c.moves++ }
+func (c *countSink) LineTo(x, y float32)             { c.lines++ }
+func (c *countSink) QuadTo(cx, cy, x, y float32)     { c.curves++ }
+func (c *countSink) CubeTo(a, b, d, e, x, y float32) { c.curves++ }
+func (c *countSink) Close()                          { c.closes++ }
 
 func TestSystemFontFallback(t *testing.T) {
 	if testing.Short() {
