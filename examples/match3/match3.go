@@ -10,6 +10,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
@@ -29,12 +30,15 @@ const (
 )
 
 var (
-	colBG    = paint.RGB(0.09, 0.10, 0.16)
-	colBoard = paint.RGB(0.14, 0.16, 0.24)
-	colInk   = paint.RGB(0.92, 0.94, 0.98)
-	colDim   = paint.RGB(0.55, 0.60, 0.72)
-	colSel   = paint.RGB(1.0, 0.95, 0.55)
-	white    = paint.RGB(1, 1, 1)
+	// colBG is the window background at Start, before a widget context exists
+	// (main passes it as Config.Background). Inside the tree every chrome color
+	// comes from the active theme (theme.Auto in Build, captured onto the state
+	// for the ctx-less Canvas draw), so the game follows the platform light/dark
+	// scheme. This matches the light identity's background.
+	colBG = theme.Light().Bg
+	// white is the gem gloss + colorblind glyph ink — part of the signature gem
+	// look, not chrome, so it stays fixed across themes.
+	white = paint.RGB(1, 1, 1)
 )
 
 // gem is a type's fill (dark→light gradient) plus a symbol id for colorblind
@@ -98,6 +102,11 @@ type game struct {
 	chain int
 	moves int
 	size  geom.Size
+
+	// th is the active theme, refreshed each Build. The Canvas draw closure has
+	// no ctx, so chrome colors are read from here (th.Bg/Surface/Text/Muted/
+	// Primary); the gem palette stays the game's own signature colors.
+	th theme.Theme
 }
 
 func (s *game) Init(ctx widget.Ctx) {
@@ -123,14 +132,21 @@ func (s *game) Init(ctx widget.Ctx) {
 
 func (s *game) Dispose() { s.ctx.RemoveTicker(s.ctrl) }
 
-func (s *game) Build(_ widget.Ctx) widget.Widget {
-	return widget.Interactive{
+func (s *game) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the platform theme and provide it to the tree; also capture it on
+	// the state so the ctx-less Canvas draw closure can read chrome colors.
+	s.th = theme.Auto(ctx)
+	board := widget.Interactive{
 		Handler: widget.Handler{
 			OnPress:   s.onPress,
 			OnDrag:    s.onDrag,
 			OnRelease: s.onRelease,
 		},
 		Child: widget.Canvas{Clip: true, Draw: s.draw},
+	}
+	return widget.Provide[theme.Theme]{
+		Value: s.th,
+		Child: widget.Fill{Color: s.th.Bg, Child: board},
 	}
 }
 
@@ -425,21 +441,25 @@ func (s *game) cellAt(p geom.Pt) cell {
 func (s *game) draw(c paint.Canvas, size geom.Size) {
 	s.size = size
 	b := s.layout()
-	c.Clear(colBG)
+	th := s.th
+	c.Clear(th.Bg)
 
 	// Score panel.
-	c.TextIn("bold", "MATCH 3", geom.Pt{X: b.x, Y: 40}, 30, colInk)
-	c.Text(fmt.Sprintf("Score %d", s.score), geom.Pt{X: b.x, Y: 68}, 16, colDim)
+	c.TextIn("bold", "MATCH 3", geom.Pt{X: b.x, Y: 40}, 30, th.Text)
+	c.Text(fmt.Sprintf("Score %d", s.score), geom.Pt{X: b.x, Y: 68}, 16, th.Muted)
 	moves := fmt.Sprintf("Moves %d", s.moves)
-	c.Text(moves, geom.Pt{X: b.x + b.cell*cols - textW(moves, 16), Y: 68}, 16, colDim)
+	c.Text(moves, geom.Pt{X: b.x + b.cell*cols - textW(moves, 16), Y: 68}, 16, th.Muted)
 	if s.chain > 1 && s.phase == phaseClear {
 		tag := fmt.Sprintf("x%d CHAIN!", s.chain+1)
-		c.TextIn("bold", tag, geom.Pt{X: b.x + b.cell*cols - textW(tag, 18), Y: 42}, 18, colSel)
+		c.TextIn("bold", tag, geom.Pt{X: b.x + b.cell*cols - textW(tag, 18), Y: 42}, 18, th.Primary)
 	}
 
-	// Board backing.
+	// Board backing — a neutral surface with a hairline border so the board
+	// reads against the app background in both light and dark schemes.
 	boardW, boardH := b.cell*cols, b.cell*rows
-	c.FillRRect(geom.RectXYWH(b.x-6, b.y-6, boardW+12, boardH+12), 16, colBoard)
+	backing := geom.RectXYWH(b.x-6, b.y-6, boardW+12, boardH+12)
+	c.FillRRect(backing, 16, th.Surface)
+	c.StrokeRRect(backing, 16, 1, th.Border)
 
 	// Clip gems to the board so those falling in from above stay hidden until
 	// they cross the top edge (otherwise they'd draw over the score panel).
@@ -486,11 +506,11 @@ func (s *game) draw(c paint.Canvas, size geom.Size) {
 	if s.sel.ok() && s.phase == phaseIdle {
 		x := b.x + float32(s.sel.c)*b.cell
 		y := b.y + float32(s.sel.r)*b.cell
-		c.StrokeRRect(geom.RectXYWH(x+3, y+3, b.cell-6, b.cell-6), b.cell*0.28, 3, colSel)
+		c.StrokeRRect(geom.RectXYWH(x+3, y+3, b.cell-6, b.cell-6), b.cell*0.28, 3, th.Primary)
 	}
 
 	c.Text("swipe a gem, or tap two neighbors, to swap",
-		geom.Pt{X: b.x, Y: b.y + b.cell*rows + 26}, 13, colDim)
+		geom.Pt{X: b.x, Y: b.y + b.cell*rows + 26}, 13, th.Muted)
 }
 
 func (s *game) lerpCenter(b box, from, to cell, p float32) (x, y float32) {

@@ -20,7 +20,7 @@ func newHeadless(t *testing.T) (*app.Headless, *todoState) {
 
 	h, err := app.NewHeadless(Todo{}, app.Config{
 		Size:       geom.Size{W: 440, H: 560},
-		Background: colBg,
+		Background: BG,
 		Font:       goregular.TTF,
 	}, 2)
 	if err != nil {

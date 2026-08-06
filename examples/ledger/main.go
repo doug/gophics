@@ -18,7 +18,7 @@ func main() {
 	err := app.Run(Ledger{}, app.Config{
 		Title:        "Ledger",
 		Size:         geom.Size{W: 900, H: 820},
-		Background:   colBG,
+		Background:   BG,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	})

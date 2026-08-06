@@ -28,37 +28,15 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
-// --- Theme -------------------------------------------------------------------
-
-type theme struct {
-	bg, card, text, dim, accent, danger paint.Color
-}
-
-func themeFor(dark bool) theme {
-	if dark {
-		return theme{
-			bg:     paint.RGB(0.07, 0.08, 0.11),
-			card:   paint.RGB(0.12, 0.14, 0.19),
-			text:   paint.RGB(0.92, 0.93, 0.95),
-			dim:    paint.RGB(0.52, 0.55, 0.62),
-			accent: paint.RGB(0.36, 0.62, 0.98),
-			danger: paint.RGB(0.90, 0.35, 0.38),
-		}
-	}
-	return theme{
-		bg:     paint.RGB(0.96, 0.97, 0.99),
-		card:   paint.RGB(1, 1, 1),
-		text:   paint.RGB(0.10, 0.12, 0.16),
-		dim:    paint.RGB(0.45, 0.48, 0.55),
-		accent: paint.RGB(0.20, 0.50, 0.95),
-		danger: paint.RGB(0.85, 0.25, 0.30),
-	}
-}
-
-func th(ctx widget.Ctx) theme { return themeFor(ctx.DarkMode()) }
+// Chrome (backgrounds, surfaces, text, accents) is drawn entirely from the
+// theme package's design tokens, provided at the root and read via
+// theme.Of(ctx), so the whole showcase follows the platform light/dark scheme
+// and demonstrates gophics's own design system. The procedural swatch imagery
+// below is content, not chrome, and keeps its own hues.
 
 // --- Data (procedural, deterministic) ---------------------------------------
 
@@ -184,8 +162,15 @@ func (Gallery) CreateState() widget.State { return &galleryState{} }
 
 type galleryState struct{ widget.StateBase[Gallery] }
 
-func (s *galleryState) Build(widget.Ctx) widget.Widget {
-	return widget.Navigator{Home: feedPage{}}
+func (s *galleryState) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the theme from the platform color scheme and provide it to the
+	// tree; every page below reads colors with theme.Of(ctx), so the whole
+	// showcase follows light/dark automatically.
+	th := theme.Auto(ctx)
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: widget.Navigator{Home: feedPage{}}},
+	}
 }
 
 type feedPage struct{}
@@ -235,7 +220,7 @@ func (s *feedState) remove(id int) {
 }
 
 func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
-	t := th(ctx)
+	th := theme.Of(ctx)
 	nav := widget.MustOf[widget.Nav](ctx)
 	list := widget.LazyList{
 		Count:           len(s.cards),
@@ -246,11 +231,11 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 			c := s.cards[i]
 			row := widget.Interactive{
 				Handler: widget.Handler{OnTap: func() { nav.Push(detailPage{card: c}) }},
-				Child:   cardTile(t, c),
+				Child:   cardTile(th, c),
 			}
 			return widget.WithKey{Key: c.id, Child: widget.Dismissible{
 				OnDismissed: func() { s.remove(c.id) },
-				Background:  dismissPanel(t),
+				Background:  dismissPanel(th),
 				Child:       row,
 			}}
 		},
@@ -258,11 +243,11 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	return scaffold(ctx, "Gallery", "pull to refresh · swipe a card away", widget.Expand(list))
 }
 
-func cardTile(t theme, c card) widget.Widget {
+func cardTile(th theme.Theme, c card) widget.Widget {
 	info := widget.Column(
-		widget.Text{S: c.title, Font: "bold", Size: 16, Color: t.text, MaxLines: 1, Ellipsis: true},
+		widget.Text{S: c.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text, MaxLines: 1, Ellipsis: true},
 		widget.Sized{H: 4},
-		widget.Text{S: "@" + c.author + " · " + fmt.Sprintf("%d likes", c.likes), Size: 13, Color: t.dim},
+		widget.Text{S: "@" + c.author + " · " + fmt.Sprintf("%d likes", c.likes), Size: th.Type.Label, Color: th.Muted},
 	)
 	info.CrossAlign = layout.CrossStart
 	row := widget.Row(
@@ -270,14 +255,13 @@ func cardTile(t theme, c card) widget.Widget {
 		widget.Sized{W: 14},
 		widget.Expand(info),
 	)
-	return widget.Padding{All: 10, Child: widget.Decorated{
-		Color: t.card, Radius: 16, Child: widget.Padding{All: 12, Child: row},
-	}}
+	// theme.Card provides the surface chrome (Surface fill + themed radius).
+	return widget.Padding{All: 10, Child: theme.Card{Pad: 12, Child: row}}
 }
 
-func dismissPanel(t theme) widget.Widget {
-	label := widget.Text{S: "remove", Font: "bold", Size: 14, Color: paint.RGB(1, 1, 1)}
-	return widget.Padding{All: 10, Child: widget.Decorated{Color: t.danger, Radius: 16,
+func dismissPanel(th theme.Theme) widget.Widget {
+	label := widget.Text{S: "remove", Font: theme.FontBold, Size: th.Type.Label, Color: th.OnPrimary}
+	return widget.Padding{All: 10, Child: widget.Decorated{Color: th.Danger, Radius: th.Radius,
 		Child: widget.Padding{Insets: geom.Insets{Left: 24, Right: 24},
 			Child: widget.Row(label, widget.Spacer(), label)}}}
 }
@@ -295,7 +279,7 @@ type detailState struct {
 }
 
 func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
-	t := th(ctx)
+	th := theme.Of(ctx)
 	nav := widget.MustOf[widget.Nav](ctx)
 	c := s.card
 
@@ -306,9 +290,9 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	}
 
 	heartSize := float32(22)
-	heartColor := t.dim
+	heartColor := th.Muted
 	if s.liked {
-		heartSize, heartColor = 30, t.danger
+		heartSize, heartColor = 30, th.Danger
 	}
 	likeCount := c.likes
 	if s.liked {
@@ -324,47 +308,43 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 					return widget.Text{S: "♥", Size: sz, Color: heartColor}
 				}))},
 			widget.Sized{W: 8},
-			widget.Text{S: fmt.Sprintf("%d", likeCount), Size: 15, Color: t.text},
+			widget.Text{S: fmt.Sprintf("%d", likeCount), Size: th.Type.Body, Color: th.Text},
 		),
 	}
 
 	body := widget.Column(
-		backChip(t, nav),
+		backChip(nav),
 		widget.Sized{H: 10},
-		widget.Text{S: c.title, Font: "bold", Size: 22, Color: t.text, Wrap: true},
+		widget.Text{S: c.title, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true},
 		widget.Sized{H: 4},
-		widget.Text{S: "by @" + c.author, Size: 14, Color: t.dim},
+		widget.Text{S: "by @" + c.author, Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{H: 14},
-		widget.SelectableText{S: bodyFor(c), Size: 15, Color: t.text, Wrap: true},
+		widget.SelectableText{S: bodyFor(c), Size: th.Type.Body, Color: th.Text, Wrap: true},
 		widget.Sized{H: 16},
 		like,
 		widget.Sized{H: 18},
-		widget.Text{S: "COMMENTS", Font: "bold", Size: 12, Color: t.dim},
+		widget.Text{S: "COMMENTS", Font: theme.FontBold, Size: th.Type.Caption, Color: th.Muted},
 	)
 	body.CrossAlign = layout.CrossStart
 
 	page := widget.Column(
 		header,
 		widget.Padding{All: 16, Child: body},
-		widget.Expand(commentList(t, c)),
+		widget.Expand(commentList(th, c)),
 	)
 	page.CrossAlign = layout.CrossStretch
-	return widget.Fill{Color: t.bg, Child: page}
+	return widget.Fill{Color: th.Bg, Child: page}
 }
 
-func backChip(t theme, nav widget.Nav) widget.Widget {
-	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Pop() }},
-		Child: widget.Decorated{Color: t.card, Radius: 20, Child: widget.Padding{
-			Insets: geom.Insets{Left: 14, Right: 14, Top: 7, Bottom: 7},
-			Child:  widget.Text{S: "← back", Size: 13, Color: t.text},
-		}},
-	}
+// backChip is the themed "back" button — a ready-made theme.Button, so the
+// showcase demonstrates the design system's own control.
+func backChip(nav widget.Nav) widget.Widget {
+	return theme.Button{Label: "← back", OnTap: func() { nav.Pop() }}
 }
 
 // commentList is a reverse (bottom-anchored) list: newest comment rests at the
 // bottom, scroll up for older — the chat-log layout.
-func commentList(t theme, c card) widget.Widget {
+func commentList(th theme.Theme, c card) widget.Widget {
 	comments := commentsFor(c)
 	list := widget.LazyList{
 		Count:           len(comments),
@@ -372,8 +352,8 @@ func commentList(t theme, c card) widget.Widget {
 		Reverse:         true,
 		Build: func(i int) widget.Widget {
 			return widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 5, Bottom: 5},
-				Child: widget.Decorated{Color: t.card, Radius: 14, Child: widget.Padding{All: 12,
-					Child: widget.Text{S: comments[i], Size: 14, Color: t.text, Wrap: true}}}}
+				Child: widget.Decorated{Color: th.Surface, Radius: th.Radius, Child: widget.Padding{All: 12,
+					Child: widget.Text{S: comments[i], Size: th.Type.Body, Color: th.Text, Wrap: true}}}}
 		},
 	}
 	return list
@@ -382,11 +362,11 @@ func commentList(t theme, c card) widget.Widget {
 // --- Shared chrome & helpers -------------------------------------------------
 
 func scaffold(ctx widget.Ctx, title, subtitle string, body widget.Widget) widget.Widget {
-	t := th(ctx)
+	th := theme.Of(ctx)
 	head := widget.Column(
-		widget.Text{S: title, Font: "bold", Size: 26, Color: t.text},
+		theme.Title(title),
 		widget.Sized{H: 2},
-		widget.Text{S: subtitle, Size: 13, Color: t.dim},
+		theme.Label(subtitle),
 	)
 	head.CrossAlign = layout.CrossStart
 	col := widget.Column(
@@ -394,7 +374,7 @@ func scaffold(ctx widget.Ctx, title, subtitle string, body widget.Widget) widget
 		body,
 	)
 	col.CrossAlign = layout.CrossStretch
-	return widget.Fill{Color: t.bg, Child: col}
+	return widget.Fill{Color: th.Bg, Child: col}
 }
 
 func heroTag(id int) string { return fmt.Sprintf("swatch-%d", id) }
@@ -448,7 +428,7 @@ func main() {
 	err := app.Run(Gallery{}, app.Config{
 		Title:        "Gophics Gallery",
 		Size:         geom.Size{W: 420, H: 680},
-		Background:   themeFor(true).bg,
+		Background:   theme.Dark().Bg,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	})

@@ -21,18 +21,15 @@ import (
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
-var (
-	colBg     = paint.RGB(0.07, 0.08, 0.11)
-	colCard   = paint.RGB(0.12, 0.14, 0.19)
-	colText   = paint.RGB(0.92, 0.93, 0.95)
-	colDim    = paint.RGB(0.52, 0.55, 0.62)
-	colAccent = paint.RGB(0.36, 0.62, 0.98)
-	colRec    = paint.RGB(0.92, 0.35, 0.38)
-	colBorder = paint.RGB(0.20, 0.22, 0.28)
-)
+// bg is the window background used at Start, before a widget context exists
+// (passed as app.Config.Background). Inside the tree every color comes from
+// theme.Of(ctx), so the whole app follows the platform light/dark scheme; this
+// matches the light identity's background.
+var bg = theme.Light().Bg
 
 // Journal is the root widget.
 type Journal struct{}
@@ -163,30 +160,39 @@ func (s *journalState) save() {
 // --- build -------------------------------------------------------------------
 
 func (s *journalState) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the theme from the platform color scheme and provide it to the
+	// tree, so every part below draws from theme tokens and the whole app
+	// follows light/dark automatically. Helpers below take th directly since
+	// they build inline (no child widget with its own Build/ctx).
+	th := theme.Auto(ctx)
 	hasMedia := ctx.Camera() != nil || ctx.Audio() != nil
 
 	col := widget.Column(
 		widget.Padding{Insets: geom.InsetsSymmetric(18, 16),
-			Child: widget.Text{S: "Journal", Font: "bold", Size: 24, Color: colText}},
-		widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Bottom: 12}, Child: s.composer(ctx, hasMedia)},
-		widget.Sized{H: 1, Child: widget.Decorated{Color: colBorder}},
-		widget.Expand(widget.Scroll{Child: s.timeline()}),
+			Child: widget.Text{S: "Journal", Font: "bold", Size: th.Type.Title, Color: th.Text}},
+		widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Bottom: 12}, Child: s.composer(ctx, th, hasMedia)},
+		widget.Sized{H: 1, Child: widget.Decorated{Color: th.Border}},
+		widget.Expand(widget.Scroll{Child: s.timeline(th)}),
 	)
 	col.CrossAlign = layout.CrossStretch
-	return widget.Decorated{Color: colBg, Child: col}
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Decorated{Color: th.Bg, Child: col},
+	}
 }
 
-func (s *journalState) composer(ctx widget.Ctx, hasMedia bool) widget.Widget {
+func (s *journalState) composer(ctx widget.Ctx, th theme.Theme, hasMedia bool) widget.Widget {
 	field := widget.Decorated{
-		Color: colCard, Radius: 10, BorderColor: colBorder, BorderWidth: 1,
+		Color: th.Surface, Radius: 10, BorderColor: th.Border, BorderWidth: 1,
 		Child: widget.Padding{All: 12, Child: widget.Sized{H: 72, Child: widget.TextField{
 			Value:            s.draft,
 			Placeholder:      "What happened?",
 			Multiline:        true,
-			Size:             15,
-			TextColor:        colText,
-			PlaceholderColor: colDim,
-			CaretColor:       colAccent,
+			Size:             th.Type.Body,
+			TextColor:        th.Text,
+			PlaceholderColor: th.Muted,
+			CaretColor:       th.Primary,
+			SelectionColor:   th.Selection,
 			OnChange:         func(t string) { s.SetState(func() { s.draft = t }) },
 		}}},
 	}
@@ -194,20 +200,20 @@ func (s *journalState) composer(ctx widget.Ctx, hasMedia bool) widget.Widget {
 	var controls []widget.Widget
 	if hasMedia {
 		if ctx.Camera() != nil {
-			controls = append(controls, chip("📷 Photo", colCard, colText, s.capturePhoto))
+			controls = append(controls, chip(th, "📷 Photo", th.Surface, th.Text, s.capturePhoto))
 		}
 		if ctx.Audio() != nil {
-			label, bg := "🎙 Record", colCard
+			label, cbg, cfg := "🎙 Record", th.Surface, th.Text
 			if s.rec != nil {
-				label, bg = "⏹ Stop", colRec
+				label, cbg, cfg = "⏹ Stop", th.Danger, th.OnPrimary
 			}
-			controls = append(controls, chip(label, bg, colText, s.toggleRecord))
+			controls = append(controls, chip(th, label, cbg, cfg, s.toggleRecord))
 		}
 	} else {
 		controls = append(controls, widget.Padding{Insets: geom.InsetsSymmetric(4, 8),
-			Child: widget.Text{S: "Photo/audio capture runs on the web or mobile build.", Size: 12, Color: colDim}})
+			Child: widget.Text{S: "Photo/audio capture runs on the web or mobile build.", Size: th.Type.Caption, Color: th.Muted}})
 	}
-	controls = append(controls, widget.Expand(widget.Sized{}), chip("Save", colAccent, paint.RGB(1, 1, 1), s.save))
+	controls = append(controls, widget.Expand(widget.Sized{}), chip(th, "Save", th.Primary, th.OnPrimary, s.save))
 	bar := widget.Row(controls...)
 	bar.CrossAlign = layout.CrossCenter
 
@@ -215,10 +221,10 @@ func (s *journalState) composer(ctx widget.Ctx, hasMedia bool) widget.Widget {
 
 	// Live recording meter, or a preview of the pending photo/clip.
 	if s.rec != nil {
-		items = append(items, widget.Sized{H: 10}, s.levelMeter())
+		items = append(items, widget.Sized{H: 10}, s.levelMeter(th))
 	}
 	if s.photo != nil || s.clip != nil {
-		items = append(items, widget.Sized{H: 10}, s.preview())
+		items = append(items, widget.Sized{H: 10}, s.preview(th))
 	}
 
 	c := widget.Column(items...)
@@ -226,13 +232,13 @@ func (s *journalState) composer(ctx widget.Ctx, hasMedia bool) widget.Widget {
 	return c
 }
 
-func (s *journalState) preview() widget.Widget {
+func (s *journalState) preview(th theme.Theme) widget.Widget {
 	var row []widget.Widget
 	if s.photo != nil {
 		row = append(row, thumb(s.photo), widget.Sized{W: 12})
 	}
 	if s.clip != nil {
-		row = append(row, widget.Expand(s.player(s.clip)))
+		row = append(row, widget.Expand(s.player(th, s.clip)))
 	}
 	r := widget.Row(row...)
 	r.CrossAlign = layout.CrossCenter
@@ -240,7 +246,7 @@ func (s *journalState) preview() widget.Widget {
 }
 
 // player draws the clip waveform with a play/stop button and a progress cursor.
-func (s *journalState) player(clip *shell.Clip) widget.Widget {
+func (s *journalState) player(th theme.Theme, clip *shell.Clip) widget.Widget {
 	label := "▶"
 	if s.play != nil {
 		label = "⏸"
@@ -249,60 +255,62 @@ func (s *journalState) player(clip *shell.Clip) widget.Widget {
 	if s.play != nil && clip.Duration > 0 {
 		progress = float32(s.play.Position()) / float32(clip.Duration)
 	}
+	border, played, unplayed := th.Border, th.Primary, th.Muted
 	wave := widget.Canvas{H: 40, Draw: func(cv paint.Canvas, size geom.Size) {
-		drawWave(cv, size, clip.Envelope, progress)
+		drawWave(cv, size, clip.Envelope, progress, border, unplayed, played)
 	}}
-	dur := widget.Text{S: fmtDur(clip.Duration), Size: 12, Color: colDim}
+	dur := widget.Text{S: fmtDur(clip.Duration), Size: th.Type.Caption, Color: th.Muted}
 	row := widget.Row(
-		chip(label, colCard, colText, func() { s.togglePlay(clip) }),
+		chip(th, label, th.Surface, th.Text, func() { s.togglePlay(clip) }),
 		widget.Sized{W: 10},
 		widget.Expand(wave),
 		widget.Sized{W: 8},
 		dur,
 	)
 	row.CrossAlign = layout.CrossCenter
-	return widget.Decorated{Color: colCard, Radius: 10,
+	return widget.Decorated{Color: th.Surface, Radius: 10,
 		Child: widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: row}}
 }
 
-func (s *journalState) levelMeter() widget.Widget {
+func (s *journalState) levelMeter(th theme.Theme) widget.Widget {
 	lvl := s.recLevel
 	el := s.rec.Elapsed()
-	return widget.Decorated{Color: colCard, Radius: 10, Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 10),
+	track, active := th.Border, th.Danger
+	return widget.Decorated{Color: th.Surface, Radius: 10, Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 10),
 		Child: widget.Row(
-			widget.Text{S: "● " + fmtDur(el), Size: 13, Color: colRec},
+			widget.Text{S: "● " + fmtDur(el), Size: th.Type.Label, Color: th.Danger},
 			widget.Sized{W: 12},
 			widget.Expand(widget.Canvas{H: 24, Draw: func(cv paint.Canvas, size geom.Size) {
 				w := size.W * lvl
-				cv.FillRRect(geom.RectXYWH(0, size.H/2-4, size.W, 8), 4, colBorder)
+				cv.FillRRect(geom.RectXYWH(0, size.H/2-4, size.W, 8), 4, track)
 				if w > 0 {
-					cv.FillRRect(geom.RectXYWH(0, size.H/2-4, w, 8), 4, colRec)
+					cv.FillRRect(geom.RectXYWH(0, size.H/2-4, w, 8), 4, active)
 				}
 			}})),
 	}}
 }
 
-func (s *journalState) timeline() widget.Widget {
+func (s *journalState) timeline(th theme.Theme) widget.Widget {
 	if len(s.entries) == 0 {
-		return widget.Padding{All: 24, Child: widget.Text{S: "No entries yet.", Size: 14, Color: colDim}}
+		return widget.Padding{All: 24, Child: widget.Text{S: "No entries yet.", Size: th.Type.Body, Color: th.Muted}}
 	}
 	items := make([]widget.Widget, 0, len(s.entries))
 	for i := range s.entries {
 		e := &s.entries[i]
 		var parts []widget.Widget
 		if e.text != "" {
-			parts = append(parts, widget.Text{S: e.text, Size: 15, Color: colText, Wrap: true})
+			parts = append(parts, widget.Text{S: e.text, Size: th.Type.Body, Color: th.Text, Wrap: true})
 		}
 		if e.photo != nil {
 			parts = append(parts, widget.Sized{H: 8}, thumb(e.photo))
 		}
 		if e.clip != nil {
-			parts = append(parts, widget.Sized{H: 8}, s.player(e.clip))
+			parts = append(parts, widget.Sized{H: 8}, s.player(th, e.clip))
 		}
 		body := widget.Column(parts...)
 		body.CrossAlign = layout.CrossStart
 		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(16, 8),
-			Child: widget.Decorated{Color: colCard, Radius: 12,
+			Child: widget.Decorated{Color: th.Surface, Radius: 12,
 				Child: widget.Padding{All: 14, Child: body}}})
 	}
 	c := widget.Column(items...)
@@ -312,12 +320,12 @@ func (s *journalState) timeline() widget.Widget {
 
 // --- small widgets -----------------------------------------------------------
 
-func chip(label string, bg, fg paint.Color, onTap func()) widget.Widget {
+func chip(th theme.Theme, label string, bg, fg paint.Color, onTap func()) widget.Widget {
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: onTap},
 		Child: widget.Decorated{Color: bg, Radius: 8, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(12, 8),
-			Child:  widget.Text{S: label, Size: 14, Color: fg},
+			Child:  widget.Text{S: label, Size: th.Type.Label, Color: fg},
 		}},
 	}
 }
@@ -326,9 +334,11 @@ func thumb(img image.Image) widget.Widget {
 	return widget.Decorated{Radius: 8, Child: widget.Sized{W: 72, H: 72, Child: widget.Image{Src: img, W: 72, H: 72}}}
 }
 
-func drawWave(cv paint.Canvas, size geom.Size, env []float32, progress float32) {
+// drawWave paints the clip envelope: bars up to progress use played, the rest
+// unplayed, and an empty envelope draws a flat border-colored baseline.
+func drawWave(cv paint.Canvas, size geom.Size, env []float32, progress float32, border, unplayed, played paint.Color) {
 	if len(env) == 0 {
-		cv.FillRRect(geom.RectXYWH(0, size.H/2-1, size.W, 2), 1, colBorder)
+		cv.FillRRect(geom.RectXYWH(0, size.H/2-1, size.W, 2), 1, border)
 		return
 	}
 	n := len(env)
@@ -339,9 +349,9 @@ func drawWave(cv paint.Canvas, size geom.Size, env []float32, progress float32) 
 			h = 2
 		}
 		x := float32(i) * bw
-		col := colDim
+		col := unplayed
 		if progress > 0 && float32(i)/float32(n) <= progress {
-			col = colAccent
+			col = played
 		}
 		cv.FillRRect(geom.RectXYWH(x, size.H/2-h/2, bw*0.7, h), bw*0.35, col)
 	}
@@ -356,7 +366,7 @@ func main() {
 	err := app.Run(Journal{}, app.Config{
 		Title:        "Journal",
 		Size:         geom.Size{W: 440, H: 720},
-		Background:   colBg,
+		Background:   bg,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	})

@@ -16,7 +16,7 @@ func Config() app.Config {
 	return app.Config{
 		Title:      "gophics · notes",
 		Size:       geom.Size{W: 900, H: 640},
-		Background: colBg,
+		Background: BG,
 		Font:       goregular.TTF,
 		FontFamilies: map[string][]byte{
 			"bold":   gobold.TTF,

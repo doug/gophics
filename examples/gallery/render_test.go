@@ -11,6 +11,7 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/theme"
 )
 
 func harness(t *testing.T) (*app.Headless, *feedState) {
@@ -21,7 +22,7 @@ func harness(t *testing.T) (*app.Headless, *feedState) {
 
 	h, err := app.NewHeadless(Gallery{}, app.Config{
 		Size:         geom.Size{W: 420, H: 680},
-		Background:   themeFor(true).bg,
+		Background:   theme.Dark().Bg,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	}, 2)

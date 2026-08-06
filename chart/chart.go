@@ -20,6 +20,35 @@ type Chart struct {
 	YAxis   Axis
 	Legend  bool // show a color key for named marks
 	Animate bool // grow marks in on mount (skipped under reduce-motion)
+
+	// Chrome overrides the axis/label/gridline colors; each is used only when its
+	// alpha is non-zero, so the zero Chart keeps the scheme-adaptive default.
+	// Set these from a design theme (e.g. LabelColor: th.Text, AxisColor: th.Muted,
+	// GridColor: th.Border) so a chart matches the surrounding app in light and dark.
+	LabelColor paint.Color // tick labels, axis titles, legend text
+	AxisColor  paint.Color // axis baselines
+	GridColor  paint.Color // gridlines
+	// Palette overrides the categorical series colors used for marks and pie
+	// slices that don't set their own color; nil keeps the scheme palette.
+	Palette []paint.Color
+}
+
+// chrome applies any non-zero color overrides on top of the scheme-resolved
+// theme, so callers can theme a chart's axes, labels, and series palette.
+func (w Chart) chrome(t theme) theme {
+	if w.LabelColor.A > 0 {
+		t.text = w.LabelColor
+	}
+	if w.AxisColor.A > 0 {
+		t.axis = w.AxisColor
+	}
+	if w.GridColor.A > 0 {
+		t.grid = w.GridColor
+	}
+	if len(w.Palette) > 0 {
+		t.series = w.Palette
+	}
+	return t
 }
 
 // legendEntry is one color-key row.
@@ -75,7 +104,7 @@ func (s *chartState) Dispose() {
 func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	w := s.W()
 	xs, ys := resolveScales(w)
-	th := themeFor(ctx.DarkMode())
+	th := w.chrome(themeFor(ctx.DarkMode()))
 	p := ctx.Painter()
 	s.xs, s.ys = xs, ys
 

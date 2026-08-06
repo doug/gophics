@@ -17,15 +17,16 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
 const boardN = 4
 
+// textDark/textLite are the tile ink colors — part of the classic 2048 identity,
+// consumed only by tileText(). The board CHROME (window, frame, slots, header,
+// buttons, chips) is themed and follows the platform light/dark scheme; see draw.
 var (
-	bg       = paint.RGB(0.98, 0.97, 0.94)
-	boardBG  = paint.RGB(0.73, 0.68, 0.63)
-	slotBG   = paint.RGB(0.80, 0.76, 0.71)
 	textDark = paint.RGB(0.47, 0.43, 0.39)
 	textLite = paint.RGB(0.98, 0.96, 0.94)
 )
@@ -88,7 +89,8 @@ type game struct {
 	swDX, swDY float32 // swipe accumulator
 	swiped     bool
 	pressPos   geom.Pt
-	newBtn     geom.Rect // set during draw, hit-tested on tap
+	newBtn     geom.Rect   // set during draw, hit-tested on tap
+	th         theme.Theme // chrome theme captured in Build (draw has no ctx)
 	ctx        widget.Ctx
 }
 
@@ -265,8 +267,12 @@ func (s *game) move(dir int) {
 	s.ctx.Invalidate()
 }
 
-func (s *game) Build(_ widget.Ctx) widget.Widget {
-	return widget.Interactive{
+func (s *game) Build(ctx widget.Ctx) widget.Widget {
+	// Derive the theme from the platform color scheme, provide it to the tree,
+	// and capture it for draw (which has no ctx) so the chrome follows light/dark.
+	th := theme.Auto(ctx)
+	s.th = th
+	content := widget.Interactive{
 		Handler: widget.Handler{
 			OnKey: func(k shell.Key) {
 				if k.Kind != shell.KeyPress {
@@ -315,10 +321,15 @@ func (s *game) Build(_ widget.Ctx) widget.Widget {
 		},
 		Child: widget.Canvas{Clip: true, Draw: s.draw},
 	}
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: content},
+	}
 }
 
 func (s *game) draw(c paint.Canvas, sz geom.Size) {
-	c.Clear(bg)
+	th := s.th
+	c.Clear(th.Bg)
 	const pad, headerH = 18, 104
 	board := min(sz.W-2*pad, sz.H-headerH-pad)
 	if board < 40 {
@@ -327,15 +338,17 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	bx, by := (sz.W-board)/2, float32(headerH)
 
 	// Header: title, score/best chips, New Game.
-	c.Text("2048", geom.Pt{X: bx, Y: 56}, 42, textDark)
-	drawChip(c, geom.RectXYWH(bx+board-158, 24, 74, 48), "SCORE", s.score)
-	drawChip(c, geom.RectXYWH(bx+board-78, 24, 78, 48), "BEST", s.best)
+	c.Text("2048", geom.Pt{X: bx, Y: 56}, 42, th.Text)
+	drawChip(c, geom.RectXYWH(bx+board-158, 24, 74, 48), "SCORE", s.score, th)
+	drawChip(c, geom.RectXYWH(bx+board-78, 24, 78, 48), "BEST", s.best, th)
 	s.newBtn = geom.RectXYWH(bx, 78, 118, 32)
-	c.FillRRect(s.newBtn, 6, boardBG)
-	c.Text("New Game", geom.Pt{X: bx + 18, Y: 99}, 14, textLite)
+	c.FillRRect(s.newBtn, 6, th.Primary)
+	c.Text("New Game", geom.Pt{X: bx + 18, Y: 99}, 14, th.OnPrimary)
 
-	// Board + slots.
-	c.FillRRect(geom.RectXYWH(bx, by, board, board), 8, boardBG)
+	// Board + slots — neutral chrome that frames the tiles in both schemes:
+	// the frame (Border) sits darker than Bg on light and lighter on dark, and
+	// the empty slots (Surface) recede so the classic tile ramp stays the focus.
+	c.FillRRect(geom.RectXYWH(bx, by, board, board), 8, th.Border)
 	gap := board * 0.028
 	cell := (board - gap*float32(boardN+1)) / boardN
 	xy := func(r, cc int) (float32, float32) {
@@ -344,7 +357,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	for r := 0; r < boardN; r++ {
 		for cc := 0; cc < boardN; cc++ {
 			x, y := xy(r, cc)
-			c.FillRRect(geom.RectXYWH(x, y, cell, cell), 5, slotBG)
+			c.FillRRect(geom.RectXYWH(x, y, cell, cell), 5, th.Surface)
 		}
 	}
 
@@ -381,20 +394,20 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	}
 
 	if s.over {
-		c.FillRRect(geom.RectXYWH(bx, by, board, board), 8, paint.Color{R: 0.98, G: 0.97, B: 0.94, A: 0.62})
+		c.FillRRect(geom.RectXYWH(bx, by, board, board), 8, th.Bg.WithAlpha(0.62))
 		mid := bx + board/2
-		c.Text("Game Over", geom.Pt{X: mid - 82, Y: by + board/2}, 30, textDark)
-		c.Text("tap to try again", geom.Pt{X: mid - 56, Y: by + board/2 + 30}, 15, textDark)
+		c.Text("Game Over", geom.Pt{X: mid - 82, Y: by + board/2}, 30, th.Text)
+		c.Text("tap to try again", geom.Pt{X: mid - 56, Y: by + board/2 + 30}, 15, th.Muted)
 	}
 }
 
-func drawChip(c paint.Canvas, r geom.Rect, label string, val int) {
-	c.FillRRect(r, 6, boardBG)
+func drawChip(c paint.Canvas, r geom.Rect, label string, val int, th theme.Theme) {
+	c.FillRRect(r, 6, th.Border)
 	lw := float32(len(label)) * 5.4
-	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-lw)/2, Y: r.Min.Y + 17}, 10, paint.RGB(0.93, 0.90, 0.86))
+	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-lw)/2, Y: r.Min.Y + 17}, 10, th.Muted)
 	vs := fmt.Sprintf("%d", val)
 	vw := float32(len(vs)) * 10
-	c.Text(vs, geom.Pt{X: r.Min.X + (r.Dx()-vw)/2, Y: r.Min.Y + 40}, 18, textLite)
+	c.Text(vs, geom.Pt{X: r.Min.X + (r.Dx()-vw)/2, Y: r.Min.Y + 40}, 18, th.Text)
 }
 
 // tileFont shrinks the number as it grows more digits.
@@ -422,7 +435,7 @@ func main() {
 	if err := app.Run(Game{}, app.Config{
 		Title:      "2048",
 		Size:       geom.Size{W: 420, H: 560},
-		Background: bg,
+		Background: theme.Light().Bg, // pre-context window fill; the tree themes itself
 		Font:       goregular.TTF,
 	}); err != nil {
 		log.Fatal(err)

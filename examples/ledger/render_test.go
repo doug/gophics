@@ -17,7 +17,7 @@ import (
 func TestLedgerRenders(t *testing.T) {
 	size := geom.Size{W: 900, H: 820}
 	h, err := app.NewHeadless(Ledger{}, app.Config{
-		Size: size, Background: colBG,
+		Size: size, Background: BG,
 		Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	}, 2)
 	if err != nil {

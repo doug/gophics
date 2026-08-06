@@ -113,10 +113,13 @@ func TestDialogConfirmButton(t *testing.T) {
 	h, st := dlgHarness(t)
 	h.Tap(geom.Pt{X: 200, Y: 200})
 	h.Render()
-	// Scan the centered card for the Confirm button.
-	for y := float32(160); y < 260; y += 3 {
-		h.Tap(geom.Pt{X: 200, Y: y})
-		if st.confirmed {
+	// Tap the Confirm button at its semantic bounds. A positional scan is
+	// fragile: a tap on the card's non-button area falls through to the modal
+	// scrim and dismisses the dialog before the button is reached, and the card
+	// height tracks the theme's type scale.
+	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+		if n.Role == layout.RoleButton && strings.Contains(n.Label, "Confirm") {
+			h.Tap(geom.Pt{X: n.Rect.Min.X + n.Rect.Dx()/2, Y: n.Rect.Min.Y + n.Rect.Dy()/2})
 			break
 		}
 	}

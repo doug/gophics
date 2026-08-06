@@ -19,18 +19,14 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
-var (
-	colBg      = paint.RGB(0.07, 0.08, 0.11)
-	colCard    = paint.RGB(0.12, 0.14, 0.19)
-	colCardHov = paint.RGB(0.15, 0.17, 0.23)
-	colAccent  = paint.RGB(0.36, 0.62, 0.98)
-	colText    = paint.RGB(0.92, 0.93, 0.95)
-	colDim     = paint.RGB(0.52, 0.55, 0.62)
-	colDanger  = paint.RGB(0.90, 0.42, 0.42)
-)
+// BG is the window background used at Start, before a widget context exists
+// (passed as Config.Background). Inside the tree every color comes from
+// theme.Of(ctx), so the app follows the platform light/dark scheme for free.
+var BG = theme.Light().Bg
 
 type item struct {
 	text string
@@ -68,6 +64,10 @@ func (s *todoState) Init(widget.Ctx) {
 }
 
 func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the theme from the platform color scheme and provide it to the
+	// tree, so every widget below reads colors with theme.Of(ctx) and the whole
+	// app follows light/dark automatically.
+	th := theme.Auto(ctx)
 	left := 0
 	rows := make([]widget.Widget, 0, 2*len(s.items))
 	for i, it := range s.items {
@@ -77,12 +77,12 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 		i := i
 		rows = append(rows, widget.WithKey{Key: it.text, Child: widget.Dismissible{
 			OnDismissed: func() { s.SetState(func() { s.remove(i) }) },
-			Background: widget.Fill{Color: colDanger, Child: widget.Padding{
+			Background: widget.Fill{Color: th.Danger, Child: widget.Padding{
 				Insets: geom.Insets{Left: 16, Right: 16},
 				Child: widget.Row(
-					widget.Text{S: "delete", Size: 13, Color: colText},
+					widget.Text{S: "delete", Size: th.Type.Label, Color: th.OnPrimary},
 					widget.Expand(widget.Sized{}),
-					widget.Text{S: "delete", Size: 13, Color: colText},
+					widget.Text{S: "delete", Size: th.Type.Label, Color: th.OnPrimary},
 				),
 			}},
 			Child: todoRow{
@@ -99,59 +99,23 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 
 	footer := fmt.Sprintf("%d left · click row to toggle · hover shows delete", left)
 	col := widget.Column(
-		widget.Text{S: "gophics · todo", Size: 15, Color: colDim},
+		widget.Text{S: "gophics · todo", Size: th.Type.Body, Color: th.Muted},
 		widget.Sized{H: 16},
-		inputField{
-			Value:    s.input,
-			OnChange: func(v string) { s.SetState(func() { s.input = v }) },
-			OnSubmit: s.submit,
+		theme.Field{
+			Value:       s.input,
+			Placeholder: "What needs doing?  (Enter adds)",
+			OnChange:    func(v string) { s.SetState(func() { s.input = v }) },
+			OnSubmit:    s.submit,
 		},
 		widget.Sized{H: 12},
 		widget.Expand(widget.Scroll{Child: list}),
 		widget.Sized{H: 12},
-		widget.Text{S: footer, Size: 12, Color: colDim},
+		widget.Text{S: footer, Size: th.Type.Caption, Color: th.Muted},
 	)
 	col.CrossAlign = layout.CrossStretch
-	return widget.Padding{All: 20, Child: col}
-}
-
-// inputField wraps widget.TextField with the app's chrome: card background
-// and a border that tracks focus.
-type inputField struct {
-	Value    string
-	OnChange func(string)
-	OnSubmit func(string)
-}
-
-func (f inputField) CreateState() widget.State { return &inputState{} }
-
-type inputState struct {
-	widget.StateBase[inputField]
-	focused bool
-}
-
-func (s *inputState) Build(widget.Ctx) widget.Widget {
-	f := s.W()
-	border, borderW := colDim, float32(1)
-	if s.focused {
-		border, borderW = colAccent, 1.5
-	}
-	return widget.Decorated{
-		Color: colCard, Radius: 8, BorderColor: border, BorderWidth: borderW,
-		Child: widget.Padding{
-			Insets: geom.InsetsSymmetric(14, 12),
-			Child: widget.TextField{
-				Value:            f.Value,
-				Placeholder:      "What needs doing?  (Enter adds)",
-				OnChange:         f.OnChange,
-				OnSubmit:         f.OnSubmit,
-				OnFocus:          func(v bool) { s.SetState(func() { s.focused = v }) },
-				TextColor:        colText,
-				PlaceholderColor: colDim,
-				CaretColor:       colAccent,
-				SelectionColor:   paint.Color{R: 0.36, G: 0.62, B: 0.98, A: 0.35},
-			},
-		},
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: widget.Padding{All: 20, Child: col}},
 	}
 }
 
@@ -184,18 +148,19 @@ func (s *rowState) Init(ctx widget.Ctx) {
 
 func (s *rowState) Dispose() { s.ctx.RemoveTicker(s.hover) }
 
-func (s *rowState) Build(widget.Ctx) widget.Widget {
+func (s *rowState) Build(ctx widget.Ctx) widget.Widget {
+	th := theme.Of(ctx)
 	r := s.W()
-	bg := paint.Lerp(colCard, colCardHov, s.hover.Value())
-	label := widget.Text{S: r.Item.text, Color: colText}
+	bg := paint.Lerp(th.Surface, th.SurfaceHover, s.hover.Value())
+	label := widget.Text{S: r.Item.text, Color: th.Text}
 	if r.Item.done {
-		label.Color, label.Strike = colDim, true
+		label.Color, label.Strike = th.Muted, true
 	}
 	var del widget.Widget = widget.Sized{W: 20, H: 20}
 	if s.hovered {
 		del = widget.Interactive{
 			Handler: widget.Handler{OnTap: r.OnDelete},
-			Child:   widget.Text{S: "×", Size: 16, Color: colDanger},
+			Child:   widget.Text{S: "×", Size: 16, Color: th.Danger},
 		}
 	}
 	return widget.Interactive{
@@ -219,7 +184,7 @@ func (s *rowState) Build(widget.Ctx) widget.Widget {
 			Child: widget.Padding{
 				Insets: geom.InsetsSymmetric(12, 12),
 				Child: widget.Row(
-					checkbox(r.Item.done),
+					checkbox(th, r.Item.done),
 					widget.Sized{W: 12},
 					label,
 					widget.Expand(widget.Sized{}),
@@ -230,19 +195,19 @@ func (s *rowState) Build(widget.Ctx) widget.Widget {
 	}
 }
 
-func checkbox(done bool) widget.Widget {
+func checkbox(th theme.Theme, done bool) widget.Widget {
 	if done {
 		return widget.Decorated{
-			Color: colAccent, Radius: 5,
+			Color: th.Primary, Radius: 5,
 			Child: widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) {
 				r := geom.Rect{Max: size.Pt()}
-				c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, colBg)
-				c.Line(r.Min.Add(geom.Pt{X: 8, Y: 14}), r.Min.Add(geom.Pt{X: 16, Y: 5}), 2, colBg)
+				c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, th.OnPrimary)
+				c.Line(r.Min.Add(geom.Pt{X: 8, Y: 14}), r.Min.Add(geom.Pt{X: 16, Y: 5}), 2, th.OnPrimary)
 			}},
 		}
 	}
 	return widget.Decorated{
-		BorderColor: colDim, BorderWidth: 1.5, Radius: 5,
+		BorderColor: th.Border, BorderWidth: 1.5, Radius: 5,
 		Child: widget.Sized{W: 20, H: 20},
 	}
 }
@@ -271,7 +236,7 @@ func main() {
 	err := app.Run(Todo{}, app.Config{
 		Title:      "gophics todo",
 		Size:       geom.Size{W: 440, H: 560},
-		Background: colBg,
+		Background: BG,
 		Font:       goregular.TTF,
 	})
 	if err != nil {

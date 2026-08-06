@@ -20,21 +20,18 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
-	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
 // book is parsed once at startup from the bundled sample epub.
 var book = loadBook()
 
-// Warm-paper palette.
-var (
-	paper  = paint.RGB(0.96, 0.94, 0.89)
-	ink    = paint.RGB(0.17, 0.15, 0.13)
-	muted  = paint.RGB(0.46, 0.42, 0.37)
-	accent = paint.RGB(0.60, 0.33, 0.20)
-	rule   = paint.RGB(0.84, 0.80, 0.72)
-)
+// BG is the window background used at Start, before a widget context exists (the
+// mobile bind / app.Config passes it as Config.Background). Inside the tree every
+// color comes from theme.Of(ctx), so the reader follows the platform light/dark
+// scheme for free — the light theme's warm off-white doubles as the reading paper.
+var BG = theme.Light().Bg
 
 // maxColW keeps the text column at a comfortable measure on wide windows.
 const maxColW = 680
@@ -42,6 +39,10 @@ const maxColW = 680
 type App struct{}
 
 func (App) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the theme from the platform color scheme and provide it to the tree,
+	// so every page below reads colors with theme.Of(ctx) and the whole reader
+	// follows light/dark automatically.
+	th := theme.Auto(ctx)
 	// EPUB_CHAPTER deep-links straight to a chapter — for screenshots/thumbnails.
 	home := widget.Widget(library{})
 	if v := os.Getenv("EPUB_CHAPTER"); v != "" {
@@ -49,20 +50,23 @@ func (App) Build(ctx widget.Ctx) widget.Widget {
 			home = reader{idx: i}
 		}
 	}
-	return frame(widget.Navigator{Home: home})
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: frame(widget.Navigator{Home: home})},
+	}
 }
 
 // frame centres content and caps its width for readability, filling narrower
-// screens. The paper background shows on either side.
+// screens. The reading background (provided by the root Fill) shows on either side.
 func frame(child widget.Widget) widget.Widget {
-	return widget.Fill{Color: paper, Child: widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
 		w := cs.Max.W
 		if w > maxColW {
 			w = maxColW
 		}
 		return widget.Flex{Axis: layout.Horizontal, MainAlign: layout.MainCenter, CrossAlign: layout.CrossStretch,
 			Children: []widget.Widget{widget.Sized{W: w, Child: child}}}
-	}}}
+	}}
 }
 
 // --- library: title page + table of contents (Navigator Home) ---
@@ -70,29 +74,30 @@ func frame(child widget.Widget) widget.Widget {
 type library struct{}
 
 func (library) Build(ctx widget.Ctx) widget.Widget {
+	th := theme.Of(ctx)
 	nav := widget.MustOf[widget.Nav](ctx)
 	kids := []widget.Widget{
-		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{S: book.Title, Font: "bold", Size: 30, Color: ink, Wrap: true}},
-		widget.Padding{Insets: geom.Insets{Bottom: 40}, Child: widget.Text{S: "by " + book.Author, Size: 16, Color: muted}},
-		widget.Text{S: "CONTENTS", Font: "bold", Size: 12, Color: accent},
-		widget.Padding{Insets: geom.Insets{Top: 8}, Child: divider()},
+		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{S: book.Title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text, Wrap: true}},
+		widget.Padding{Insets: geom.Insets{Bottom: 40}, Child: widget.Text{S: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
+		widget.Text{S: "CONTENTS", Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary},
+		widget.Padding{Insets: geom.Insets{Top: 8}, Child: divider(th)},
 	}
 	for i, ch := range book.Chapters {
 		idx := i
-		kids = append(kids, tocRow(i+1, ch.Title, func() { nav.Push(reader{idx: idx}) }), divider())
+		kids = append(kids, tocRow(th, i+1, ch.Title, func() { nav.Push(reader{idx: idx}) }), divider(th))
 	}
-	return widget.Fill{Color: paper, Child: widget.Scroll{Child: widget.Padding{
+	return widget.Fill{Color: th.Bg, Child: widget.Scroll{Child: widget.Padding{
 		Insets: geom.InsetsSymmetric(28, 12),
 		Child:  widget.Flex{CrossAlign: layout.CrossStretch, Children: kids},
 	}}}
 }
 
-func tocRow(n int, title string, onTap func()) widget.Widget {
+func tocRow(th theme.Theme, n int, title string, onTap func()) widget.Widget {
 	return widget.Interactive{Handler: widget.Handler{OnTap: onTap}, Child: widget.Padding{
 		Insets: geom.InsetsSymmetric(2, 15),
 		Child: widget.Row(
-			widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d", n), Size: 15, Color: accent}},
-			widget.Expand(widget.Text{S: title, Size: 17, Color: ink, Wrap: true}),
+			widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d", n), Size: th.Type.Body, Color: th.Primary}},
+			widget.Expand(widget.Text{S: title, Size: th.Type.Heading, Color: th.Text, Wrap: true}),
 		),
 	}}
 }
@@ -118,21 +123,22 @@ func (s *readerState) go2(delta int) {
 }
 
 func (s *readerState) Build(ctx widget.Ctx) widget.Widget {
+	th := theme.Of(ctx)
 	nav := widget.MustOf[widget.Nav](ctx)
 	ch := book.Chapters[s.idx]
 
 	top := widget.Padding{Insets: geom.InsetsSymmetric(20, 14), Child: widget.Row(
-		widget.Interactive{Handler: widget.Handler{OnTap: nav.Pop}, Child: widget.Text{S: "‹  Contents", Size: 15, Color: accent}},
+		widget.Interactive{Handler: widget.Handler{OnTap: nav.Pop}, Child: widget.Text{S: "‹  Contents", Size: th.Type.Body, Color: th.Primary}},
 		widget.Spacer(),
-		widget.Text{S: fmt.Sprintf("%d / %d", s.idx+1, len(book.Chapters)), Size: 13, Color: muted},
+		widget.Text{S: fmt.Sprintf("%d / %d", s.idx+1, len(book.Chapters)), Size: th.Type.Label, Color: th.Muted},
 	)}
 
 	var body []widget.Widget
 	for _, b := range ch.Blocks {
 		if b.Heading {
-			body = append(body, widget.Padding{Insets: geom.Insets{Top: 10, Bottom: 14}, Child: widget.Text{S: b.Text, Font: "bold", Size: 25, Color: ink, Wrap: true}})
+			body = append(body, widget.Padding{Insets: geom.Insets{Top: 10, Bottom: 14}, Child: widget.Text{S: b.Text, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true}})
 		} else {
-			body = append(body, widget.Padding{Insets: geom.Insets{Bottom: 18}, Child: widget.Text{S: b.Text, Size: 17, Color: ink, Wrap: true}})
+			body = append(body, widget.Padding{Insets: geom.Insets{Bottom: 18}, Child: widget.Text{S: b.Text, Size: th.Type.Body, Color: th.Text, Wrap: true}})
 		}
 	}
 	// Key the scroll on the chapter so moving to another chapter starts at the top.
@@ -142,35 +148,37 @@ func (s *readerState) Build(ctx widget.Ctx) widget.Widget {
 	}}}
 
 	bottom := widget.Padding{Insets: geom.InsetsSymmetric(20, 14), Child: widget.Row(
-		navBtn("‹ Prev", s.idx > 0, func() { s.go2(-1) }),
+		navBtn(th, "‹ Prev", s.idx > 0, func() { s.go2(-1) }),
 		widget.Spacer(),
-		navBtn("Next ›", s.idx < len(book.Chapters)-1, func() { s.go2(1) }),
+		navBtn(th, "Next ›", s.idx < len(book.Chapters)-1, func() { s.go2(1) }),
 	)}
 
-	return widget.Fill{Color: paper, Child: widget.Flex{CrossAlign: layout.CrossStretch, Children: []widget.Widget{
-		top, divider(), widget.Expand(page), divider(), bottom,
+	return widget.Fill{Color: th.Bg, Child: widget.Flex{CrossAlign: layout.CrossStretch, Children: []widget.Widget{
+		top, divider(th), widget.Expand(page), divider(th), bottom,
 	}}}
 }
 
-func navBtn(label string, enabled bool, onTap func()) widget.Widget {
-	col := muted
+func navBtn(th theme.Theme, label string, enabled bool, onTap func()) widget.Widget {
+	col := th.Muted
 	if enabled {
-		col = accent
+		col = th.Primary
 	}
-	t := widget.Text{S: label, Size: 15, Color: col}
+	t := widget.Text{S: label, Size: th.Type.Body, Color: col}
 	if !enabled {
 		return t
 	}
 	return widget.Interactive{Handler: widget.Handler{OnTap: onTap}, Child: t}
 }
 
-func divider() widget.Widget { return widget.Sized{H: 1, Child: widget.Decorated{Color: rule}} }
+func divider(th theme.Theme) widget.Widget {
+	return widget.Sized{H: 1, Child: widget.Decorated{Color: th.Border}}
+}
 
 func main() {
 	if err := app.Run(App{}, app.Config{
 		Title:        "Reader",
 		Size:         geom.Size{W: 460, H: 720},
-		Background:   paper,
+		Background:   BG,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	}); err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
@@ -265,10 +266,10 @@ func hasMonoSpan(blocks []widget.Widget) bool {
 }
 
 func TestCodeBlocksRenderMono(t *testing.T) {
-	if !hasMonoSpan(renderMarkdown("t\n\n```\nfenced\n```\n", mdTheme(), nil)) {
+	if !hasMonoSpan(renderMarkdown("t\n\n```\nfenced\n```\n", mdTheme(theme.Light()), nil)) {
 		t.Error("fenced code block should render mono")
 	}
-	if !hasMonoSpan(renderMarkdown("t\n\n    indented code\n", mdTheme(), nil)) {
+	if !hasMonoSpan(renderMarkdown("t\n\n    indented code\n", mdTheme(theme.Light()), nil)) {
 		t.Error("indented code block should render mono")
 	}
 }

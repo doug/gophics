@@ -18,28 +18,63 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
-var (
-	bg        = paint.RGB(0.95, 0.96, 0.97)
-	cellBg    = paint.RGB(1, 1, 1)
-	selBg     = paint.RGB(0.76, 0.85, 0.99)
-	peerBg    = paint.RGB(0.90, 0.93, 0.98)
-	sameBg    = paint.RGB(0.83, 0.89, 0.97)
-	badBg     = paint.RGB(0.99, 0.87, 0.87)
-	ink       = paint.RGB(0.12, 0.14, 0.18)
-	player    = paint.RGB(0.16, 0.42, 0.90)
-	badFg     = paint.RGB(0.83, 0.18, 0.20)
-	noteInk   = paint.RGB(0.52, 0.55, 0.60)
-	lineThin  = paint.RGB(0.80, 0.83, 0.86)
-	lineThick = paint.RGB(0.30, 0.34, 0.40)
-	btnBg     = paint.RGB(1, 1, 1)
-	accent    = paint.RGB(0.16, 0.42, 0.90)
-	disabled  = paint.RGB(0.72, 0.75, 0.79)
-	good      = paint.RGB(0.13, 0.60, 0.34)
-	sub       = paint.RGB(0.45, 0.48, 0.53)
-)
+// palette is the board's resolved chrome — the colors the Canvas Draw func needs,
+// captured from the active theme.Theme each Build so the whole game follows the
+// platform light/dark scheme. The signature Sudoku semantics (player blue,
+// conflict red, selection/peer/same washes) are preserved but re-expressed in
+// theme tokens so they read on both light and dark cells. Cell washes are Lerped
+// onto Surface (not alpha-over-bg) so an empty highlighted cell stays an opaque,
+// legible surface color in either scheme.
+type palette struct {
+	bg        paint.Color // page/window background
+	cellBg    paint.Color // empty cell
+	selBg     paint.Color // selected cell wash
+	peerBg    paint.Color // same row/col/box wash
+	sameBg    paint.Color // matching-value wash
+	badBg     paint.Color // conflict cell wash
+	ink       paint.Color // given clue + title text
+	player    paint.Color // player-entered digit (blue → Primary)
+	badFg     paint.Color // conflict digit (red → Danger)
+	noteInk   paint.Color // pencil marks
+	lineThin  paint.Color // thin grid lines
+	lineThick paint.Color // thick box lines
+	btnBg     paint.Color // number pad + control button chrome
+	accent    paint.Color // active control / notes-on
+	onAccent  paint.Color // label on an active (accent) control
+	disabled  paint.Color // exhausted number-pad digit
+	good      paint.Color // "Solved!" status
+	sub       paint.Color // idle status
+}
+
+// paletteFrom maps the theme tokens onto the Sudoku chrome, keeping the game's
+// signature look while adapting it for contrast in both schemes.
+func paletteFrom(th theme.Theme) palette {
+	surf := th.Surface
+	return palette{
+		bg:        th.Bg,
+		cellBg:    surf,
+		selBg:     paint.Lerp(surf, th.Primary, 0.34),
+		peerBg:    paint.Lerp(surf, th.Primary, 0.12),
+		sameBg:    paint.Lerp(surf, th.Primary, 0.22),
+		badBg:     paint.Lerp(surf, th.Danger, 0.28),
+		ink:       th.Text,
+		player:    th.Primary,
+		badFg:     th.Danger,
+		noteInk:   th.Muted,
+		lineThin:  th.Border,
+		lineThick: th.Muted, // darker/stronger box divider
+		btnBg:     surf,
+		accent:    th.Primary,
+		onAccent:  th.OnPrimary,
+		disabled:  th.Muted,
+		good:      th.Success,
+		sub:       th.Muted,
+	}
+}
 
 // clueTarget is how few givens generation aims for (uniqueness may keep more).
 const clueTarget = 32
@@ -60,6 +95,7 @@ type game struct {
 	noteMode bool
 	won      bool
 
+	pal       palette // chrome colors captured from the active theme in Build
 	ctx       widget.Ctx
 	boardRect geom.Rect // set during draw, hit-tested on press
 	cell      float32
@@ -187,8 +223,13 @@ func (s *game) onPress(p geom.Pt) {
 	}
 }
 
-func (s *game) Build(_ widget.Ctx) widget.Widget {
-	return widget.Interactive{
+func (s *game) Build(ctx widget.Ctx) widget.Widget {
+	// Resolve the theme from the platform color scheme, capture the chrome colors
+	// for the Canvas Draw func (which has no ctx), and provide the theme so the
+	// whole game follows light/dark automatically.
+	th := theme.Auto(ctx)
+	s.pal = paletteFrom(th)
+	board := widget.Interactive{
 		Handler: widget.Handler{
 			OnKey: func(k shell.Key) {
 				if k.Kind != shell.KeyPress {
@@ -220,12 +261,17 @@ func (s *game) Build(_ widget.Ctx) widget.Widget {
 		},
 		Child: widget.Canvas{Clip: true, Draw: s.draw},
 	}
+	return widget.Provide[theme.Theme]{
+		Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: board},
+	}
 }
 
 func (s *game) draw(c paint.Canvas, sz geom.Size) {
-	c.Clear(bg)
+	p := s.pal
+	c.Clear(p.bg)
 	const pad = 16
-	c.Text("Sudoku", geom.Pt{X: pad, Y: 34}, 24, ink)
+	c.Text("Sudoku", geom.Pt{X: pad, Y: 34}, 24, p.ink)
 	if status, col := s.status(); status != "" {
 		w := float32(len(status)) * 8
 		c.Text(status, geom.Pt{X: sz.W - pad - w, Y: 34}, 16, col)
@@ -254,15 +300,15 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 		var col paint.Color
 		switch {
 		case i == s.sel:
-			col = selBg
+			col = p.selBg
 		case bad[i]:
-			col = badBg
+			col = p.badBg
 		case selR >= 0 && (r == selR || cc == selC || (r/3 == selR/3 && cc/3 == selC/3)):
-			col = peerBg
+			col = p.peerBg
 		case selV != 0 && s.board[i] == selV:
-			col = sameBg
+			col = p.sameBg
 		default:
-			col = cellBg
+			col = p.cellBg
 		}
 		c.FillRect(geom.RectXYWH(bx+float32(cc)*cell, by+float32(r)*cell, cell, cell), col)
 	}
@@ -270,9 +316,9 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	// Grid lines, thick every third for the boxes.
 	for k := 0; k <= 9; k++ {
 		off := float32(k) * cell
-		w, col := float32(1), lineThin
+		w, col := float32(1), p.lineThin
 		if k%3 == 0 {
-			w, col = 2.4, lineThick
+			w, col = 2.4, p.lineThick
 		}
 		c.Line(geom.Pt{X: bx, Y: by + off}, geom.Pt{X: bx + B, Y: by + off}, w, col)
 		c.Line(geom.Pt{X: bx + off, Y: by}, geom.Pt{X: bx + off, Y: by + B}, w, col)
@@ -283,12 +329,12 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 		r, cc := i/9, i%9
 		x, y := bx+float32(cc)*cell, by+float32(r)*cell
 		if v := s.board[i]; v != 0 {
-			col := player
+			col := p.player
 			if s.given[i] {
-				col = ink
+				col = p.ink
 			}
 			if bad[i] {
-				col = badFg
+				col = p.badFg
 			}
 			fs := cell * 0.62
 			c.Text(digit(v), geom.Pt{X: x + cell/2 - fs*0.28, Y: y + cell/2 + fs*0.35}, fs, col)
@@ -299,7 +345,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 					nx := x + float32((v-1)%3)*ns
 					ny := y + float32((v-1)/3)*ns
 					fs := ns * 0.72
-					c.Text(digit(v), geom.Pt{X: nx + ns/2 - fs*0.28, Y: ny + ns/2 + fs*0.34}, fs, noteInk)
+					c.Text(digit(v), geom.Pt{X: nx + ns/2 - fs*0.28, Y: ny + ns/2 + fs*0.34}, fs, p.noteInk)
 				}
 			}
 		}
@@ -312,10 +358,10 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	for v := 1; v <= 9; v++ {
 		rect := geom.RectXYWH(bx+float32(v-1)*cell+1.5, padY, cell-3, padH)
 		s.numBtn[v-1] = rect
-		c.FillRRect(rect, 6, btnBg)
-		fg := ink
+		c.FillRRect(rect, 6, p.btnBg)
+		fg := p.ink
 		if counts[v] >= 9 {
-			fg = disabled
+			fg = p.disabled
 		}
 		fs := padH * 0.5
 		c.Text(digit(v), geom.Pt{X: rect.Min.X + rect.Dx()/2 - fs*0.28, Y: rect.Min.Y + rect.Dy()/2 + fs*0.35}, fs, fg)
@@ -336,18 +382,18 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 func (s *game) status() (string, paint.Color) {
 	switch {
 	case s.won:
-		return "Solved!", good
+		return "Solved!", s.pal.good
 	case s.noteMode:
-		return "Notes on", accent
+		return "Notes on", s.pal.accent
 	default:
-		return "", sub
+		return "", s.pal.sub
 	}
 }
 
 func (s *game) button(c paint.Canvas, rect geom.Rect, label string, active bool) {
-	bgc, fg := btnBg, ink
+	bgc, fg := s.pal.btnBg, s.pal.ink
 	if active {
-		bgc, fg = accent, paint.RGB(1, 1, 1)
+		bgc, fg = s.pal.accent, s.pal.onAccent
 	}
 	c.FillRRect(rect, 8, bgc)
 	w := float32(len(label)) * 7.4
@@ -379,7 +425,7 @@ func main() {
 	if err := app.Run(Game{}, app.Config{
 		Title:      "Sudoku",
 		Size:       geom.Size{W: 400, H: 600},
-		Background: bg,
+		Background: theme.Light().Bg,
 		Font:       goregular.TTF,
 	}); err != nil {
 		log.Fatal(err)
