@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 
 	"golang.org/x/image/font/gofont/goregular"
@@ -86,6 +87,10 @@ type game struct {
 	spawning bool
 	spawnT   float64
 
+	merges  [][2]int // cells that merged this move — they pop after the slide
+	popping bool
+	popT    float64
+
 	swDX, swDY float32 // swipe accumulator
 	swiped     bool
 	pressPos   geom.Pt
@@ -98,8 +103,9 @@ type game struct {
 type mov struct{ v, fr, fc, tr, tc int }
 
 const (
-	slideDur = 0.09
-	spawnDur = 0.12
+	slideDur = 0.13 // tile glide — long enough to read the motion
+	spawnDur = 0.16 // new-tile pop-in
+	popDur   = 0.18 // merged-tile bounce
 )
 
 // stateHook, if set, receives the game state on mount — for tests to drive and
@@ -118,7 +124,8 @@ func (s *game) Init(ctx widget.Ctx) {
 func (s *game) reset() {
 	s.grid = [boardN][boardN]int{}
 	s.score, s.over = 0, false
-	s.anims, s.sliding, s.spawning = nil, false, false
+	s.anims, s.sliding, s.spawning, s.popping = nil, false, false, false
+	s.merges = nil
 	s.addRandomTile()
 	s.addRandomTile()
 }
@@ -161,11 +168,20 @@ func (s *game) Tick(dt float64) bool {
 		}
 		s.ctx.Invalidate()
 	}
-	return s.sliding || s.spawning
+	if s.popping {
+		if s.popT += dt / popDur; s.popT >= 1 {
+			s.popT, s.popping = 1, false
+		}
+		s.ctx.Invalidate()
+	}
+	return s.sliding || s.spawning || s.popping
 }
 
 func (s *game) afterSlide() {
 	s.anims = nil
+	if len(s.merges) > 0 { // the tiles that combined bounce once
+		s.popping, s.popT = true, 0
+	}
 	s.addRandomTile()
 	if !s.movesAvailable() {
 		s.over = true
@@ -263,7 +279,20 @@ func (s *game) move(dir int) {
 	if s.score += gained; s.score > s.best {
 		s.best = s.score
 	}
+	// A destination reached by two movements is a merge — remember it so it can
+	// pop when the slide lands.
+	destCount := map[[2]int]int{}
+	for _, m := range movements {
+		destCount[[2]int{m.tr, m.tc}]++
+	}
+	s.merges = s.merges[:0]
+	for cell, n := range destCount {
+		if n >= 2 {
+			s.merges = append(s.merges, cell)
+		}
+	}
 	s.anims, s.sliding, s.slideT = movements, true, 0
+	s.popping = false
 	s.ctx.Invalidate()
 }
 
@@ -338,12 +367,16 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	bx, by := (sz.W-board)/2, float32(headerH)
 
 	// Header: title, score/best chips, New Game.
+	p := s.ctx.Painter()
 	c.Text("2048", geom.Pt{X: bx, Y: 56}, 42, th.Text)
-	drawChip(c, geom.RectXYWH(bx+board-158, 24, 74, 48), "SCORE", s.score, th)
-	drawChip(c, geom.RectXYWH(bx+board-78, 24, 78, 48), "BEST", s.best, th)
-	s.newBtn = geom.RectXYWH(bx, 78, 118, 32)
+	drawChip(c, geom.RectXYWH(bx+board-158, 24, 74, 48), "SCORE", s.score, th, p)
+	drawChip(c, geom.RectXYWH(bx+board-78, 24, 78, 48), "BEST", s.best, th, p)
+	// Size the button to its label (+ padding) so the text never clips.
+	const btnLabel, btnSize, btnPadX = "New Game", float32(14), float32(16)
+	lblW := p.MeasureWidth(btnLabel, btnSize)
+	s.newBtn = geom.RectXYWH(bx, 78, lblW+2*btnPadX, 32)
 	c.FillRRect(s.newBtn, 6, th.Primary)
-	c.Text("New Game", geom.Pt{X: bx + 18, Y: 99}, 14, th.OnPrimary)
+	c.Text(btnLabel, geom.Pt{X: s.newBtn.Min.X + btnPadX, Y: 78 + 16 + btnSize*0.35}, btnSize, th.OnPrimary)
 
 	// Board + slots — neutral chrome that frames the tiles in both schemes:
 	// the frame (Border) sits darker than Bg on light and lighter on dark, and
@@ -361,16 +394,25 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 		}
 	}
 
+	// drawTile paints one tile at full size; scale (≠1) applies a transform about
+	// the tile centre for spawn/merge pops, so the number glyph is rasterized once
+	// at a whole-pixel size and scaled by the GPU — no per-frame atlas churn.
 	drawTile := func(v int, x, y, scale float32) {
 		if v == 0 {
 			return
 		}
-		in := cell * (1 - scale) / 2
-		c.FillRRect(geom.RectXYWH(x+in, y+in, cell*scale, cell*scale), 5, tileColor(v))
+		cx, cy := x+cell/2, y+cell/2
+		if scale != 1 {
+			c.PushTransform(paint.Transform{SX: scale, SY: scale, PivotX: cx, PivotY: cy})
+		}
+		c.FillRRect(geom.RectXYWH(x, y, cell, cell), 5, tileColor(v))
 		txt := fmt.Sprintf("%d", v)
-		fs := tileFont(v, cell) * scale
-		tw := float32(len(txt)) * fs * 0.56
-		c.Text(txt, geom.Pt{X: x + cell/2 - tw/2, Y: y + cell/2 + fs*0.35}, fs, tileText(v))
+		fs := tileFont(v, cell)
+		tw := p.MeasureWidth(txt, fs)
+		c.Text(txt, geom.Pt{X: cx - tw/2, Y: cy + fs*0.35}, fs, tileText(v))
+		if scale != 1 {
+			c.PopTransform()
+		}
 	}
 
 	if s.sliding {
@@ -384,8 +426,11 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 		for r := 0; r < boardN; r++ {
 			for cc := 0; cc < boardN; cc++ {
 				scale := float32(1)
-				if s.spawning && r == s.spR && cc == s.spC {
-					scale = easeOut(float32(s.spawnT))
+				switch {
+				case s.spawning && r == s.spR && cc == s.spC:
+					scale = spawnScale(float32(s.spawnT))
+				case s.popping && s.isMerge(r, cc):
+					scale = mergePop(float32(s.popT))
 				}
 				x, y := xy(r, cc)
 				drawTile(s.grid[r][cc], x, y, scale)
@@ -396,34 +441,64 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	if s.over {
 		c.FillRRect(geom.RectXYWH(bx, by, board, board), 8, th.Bg.WithAlpha(0.62))
 		mid := bx + board/2
-		c.Text("Game Over", geom.Pt{X: mid - 82, Y: by + board/2}, 30, th.Text)
-		c.Text("tap to try again", geom.Pt{X: mid - 56, Y: by + board/2 + 30}, 15, th.Muted)
+		center(c, p, "Game Over", mid, by+board/2, 30, th.Text)
+		center(c, p, "tap to try again", mid, by+board/2+30, 15, th.Muted)
 	}
 }
 
-func drawChip(c paint.Canvas, r geom.Rect, label string, val int, th theme.Theme) {
-	c.FillRRect(r, 6, th.Border)
-	lw := float32(len(label)) * 5.4
-	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-lw)/2, Y: r.Min.Y + 17}, 10, th.Muted)
-	vs := fmt.Sprintf("%d", val)
-	vw := float32(len(vs)) * 10
-	c.Text(vs, geom.Pt{X: r.Min.X + (r.Dx()-vw)/2, Y: r.Min.Y + 40}, 18, th.Text)
+// center draws s horizontally centred on x at baseline y (measured, not guessed).
+func center(c paint.Canvas, p *paint.Painter, s string, x, y, size float32, col paint.Color) {
+	c.Text(s, geom.Pt{X: x - p.MeasureWidth(s, size)/2, Y: y}, size, col)
 }
 
-// tileFont shrinks the number as it grows more digits.
+// isMerge reports whether cell (r,c) is a destination that merged this move.
+func (s *game) isMerge(r, c int) bool {
+	for _, m := range s.merges {
+		if m[0] == r && m[1] == c {
+			return true
+		}
+	}
+	return false
+}
+
+func drawChip(c paint.Canvas, r geom.Rect, label string, val int, th theme.Theme, p *paint.Painter) {
+	c.FillRRect(r, 6, th.Border)
+	center(c, p, label, r.Min.X+r.Dx()/2, r.Min.Y+17, 10, th.Muted)
+	center(c, p, fmt.Sprintf("%d", val), r.Min.X+r.Dx()/2, r.Min.Y+40, 18, th.Text)
+}
+
+// tileFont shrinks the number as it grows more digits. The result is rounded to
+// a whole pixel: pop/spawn animations scale the glyph with a transform (not by
+// re-sizing the font), and the board size snaps per resize, so the text
+// rasterizer only ever sees a small set of integer sizes — no per-frame churn.
 func tileFont(v int, cell float32) float32 {
+	var f float32
 	switch {
 	case v >= 1000:
-		return cell * 0.30
+		f = cell * 0.30
 	case v >= 100:
-		return cell * 0.38
+		f = cell * 0.38
 	default:
-		return cell * 0.46
+		f = cell * 0.46
 	}
+	return float32(math.Round(float64(f)))
 }
 
 func lerp(a, b, t float32) float32 { return a + (b-a)*t }
 func easeOut(t float32) float32    { u := 1 - t; return 1 - u*u*u }
+
+// spawnScale grows a new tile 0→1 with a slight overshoot (easeOutBack) so it
+// pops in rather than fading up.
+func spawnScale(t float32) float32 {
+	const s = 1.70158
+	u := t - 1
+	return 1 + (s+1)*u*u*u + s*u*u
+}
+
+// mergePop is a one-shot bounce (1 → ~1.2 → 1) for a tile that just merged.
+func mergePop(t float32) float32 {
+	return 1 + 0.22*float32(math.Sin(math.Pi*float64(t)))
+}
 func abs(x float32) float32 {
 	if x < 0 {
 		return -x
