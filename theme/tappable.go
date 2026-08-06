@@ -57,6 +57,8 @@ func (s *tappableState) Init(ctx widget.Ctx) {
 	ctx.AddTicker(s.press)
 }
 
+func (s *tappableState) Dispose() { s.ctx.RemoveTicker(s.press) }
+
 func (s *tappableState) pressIn() { s.press.Jump(1) }
 
 func (s *tappableState) pressOut() {

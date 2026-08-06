@@ -195,7 +195,7 @@ type Counter struct{ Start int }
 func (c Counter) CreateState() widget.State { return &counterState{} }
 
 type counterState struct {
-    widget.StateBase[Counter]   // provides W() Counter, Context(), SetState()
+    widget.StateBase[Counter]   // provides W() Counter, SetState()
     n int
 }
 

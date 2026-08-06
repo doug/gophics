@@ -81,7 +81,7 @@ type Counter struct{}
 func (Counter) CreateState() widget.State { return &counterState{} }
 
 type counterState struct {
-	widget.StateBase[Counter] // gives W(), Context(), SetState()
+	widget.StateBase[Counter] // gives W(), SetState()
 	n int
 }
 

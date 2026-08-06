@@ -283,6 +283,8 @@ func (s *buttonState) Init(ctx widget.Ctx) {
 	ctx.AddTicker(s.press)
 }
 
+func (s *buttonState) Dispose() { s.ctx.RemoveTicker(s.press) }
+
 // pressIn lights the highlight fully on pointer-down.
 func (s *buttonState) pressIn() { s.press.Jump(1) }
 

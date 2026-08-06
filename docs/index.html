@@ -62,7 +62,7 @@
 <span class="t-kw">func</span> (Counter) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;counterState{} }
 
 <span class="t-kw">type</span> counterState <span class="t-kw">struct</span> {
-	widget.StateBase[Counter] <span class="t-com">// gives W(), Context(), SetState()</span>
+	widget.StateBase[Counter] <span class="t-com">// gives W(), SetState()</span>
 	n <span class="t-typ">int</span>
 }
 
