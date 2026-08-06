@@ -142,12 +142,11 @@ func (s *workspaceState) sidebar(th theme.Theme, v *Vault) widget.Widget {
 		if n.Path == s.OpenPath {
 			bg = th.Selection
 		}
-		items = append(items, widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.open(n.Path) }},
-			Child: widget.Decorated{Color: bg, Child: widget.Padding{
-				Insets: geom.InsetsSymmetric(16, 9),
-				Child:  widget.Text{S: n.Name, Size: th.Type.Body, Color: th.Text},
-			}},
+		items = append(items, theme.Tappable{
+			OnTap:      func() { s.open(n.Path) },
+			Background: bg,
+			Pad:        geom.InsetsSymmetric(16, 9),
+			Child:      widget.Text{S: n.Name, Size: th.Type.Body, Color: th.Text},
 		})
 	}
 	col := widget.Column(items...)

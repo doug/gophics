@@ -220,10 +220,11 @@ func (s *feedState) storyRow(th theme.Theme, nav widget.Nav, i int) widget.Widge
 		widget.Expand(title),
 	)
 	row.CrossAlign = layout.CrossStart
-	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Push(threadPage{Story: st}) }},
-		Child: widget.Decorated{Color: th.Surface,
-			Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 10), Child: row}},
+	return theme.Tappable{
+		OnTap:      func() { nav.Push(threadPage{Story: st}) },
+		Background: th.Surface,
+		Pad:        geom.InsetsSymmetric(12, 10),
+		Child:      row,
 	}
 }
 
