@@ -359,7 +359,9 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	th := s.th
 	c.Clear(th.Bg)
-	const pad, headerH = 18, 104
+	// headerH must clear the header's tallest element — the New Game button,
+	// whose bottom is at y=110 (top 78 + height 32) — plus a gap before the board.
+	const pad, headerH = 18, 124
 	board := min(sz.W-2*pad, sz.H-headerH-pad)
 	if board < 40 {
 		return
