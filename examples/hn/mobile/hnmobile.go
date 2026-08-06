@@ -91,6 +91,17 @@ func SetDarkMode(dark bool) { bridge.SetDarkMode(dark) }
 // launches it in the browser.
 func TakeOpenedURL() string { return bridge.TakeOpenedURL() }
 
+// TakeHaptic returns the next queued haptic event's kind (see shell.HapticKind:
+// 0 selection, 1 light, 2 medium, 3 heavy, 4 success, 5 warning, 6 error), or -1
+// when none are pending. The host drains it each frame and plays it on the OS
+// generator (View.performHapticFeedback / Vibrator).
+func TakeHaptic() int {
+	if k, ok := bridge.TakeHaptic(); ok {
+		return k
+	}
+	return -1
+}
+
 // Focused forwards app focus/visibility.
 func Focused(f bool) { bridge.Focused(f) }
 

@@ -224,6 +224,7 @@ func (s *feedState) storyRow(th theme.Theme, nav widget.Nav, i int) widget.Widge
 		OnTap:      func() { nav.Push(threadPage{Story: st}) },
 		Background: th.Surface,
 		Pad:        geom.InsetsSymmetric(12, 10),
+		Haptic:     true, // a selection tick when opening a story
 		Child:      row,
 	}
 }

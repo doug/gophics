@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.Choreographer
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -77,6 +78,7 @@ class GophicsView(private val activity: Activity) :
         holder.addCallback(this)
         isFocusable = true
         isFocusableInTouchMode = true
+        isHapticFeedbackEnabled = true
     }
 
     // --- IME: the view is a text editor whose InputConnection forwards
@@ -191,9 +193,32 @@ class GophicsView(private val activity: Activity) :
                 if (url.isEmpty()) break
                 activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }
+            while (true) {
+                val h = Hnmobile.takeHaptic().toInt()
+                if (h < 0) break
+                playHaptic(h)
+            }
         }
         syncIME()
         Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    // playHaptic maps a gophics shell.HapticKind (drained from the bridge) to the
+    // closest Android performHapticFeedback constant. FLAG_IGNORE_VIEW_SETTING
+    // fires it even if the view's own haptic flag is off; the system "touch
+    // feedback" setting still gates it, which is the behaviour we want.
+    private fun playHaptic(kind: Int) {
+        val effect = when (kind) {
+            0 -> HapticFeedbackConstants.CLOCK_TICK    // selection — light tick
+            1 -> HapticFeedbackConstants.KEYBOARD_TAP  // light impact
+            2 -> HapticFeedbackConstants.CONTEXT_CLICK // medium impact
+            3 -> HapticFeedbackConstants.LONG_PRESS    // heavy impact
+            4 -> HapticFeedbackConstants.CONFIRM       // success
+            5 -> HapticFeedbackConstants.REJECT        // warning
+            6 -> HapticFeedbackConstants.REJECT        // error
+            else -> HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        performHapticFeedback(effect, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
 
     // presentCPU rasterizes one frame on the Go side (Hnmobile.snapshot →
