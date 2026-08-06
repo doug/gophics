@@ -26,6 +26,7 @@ import (
 //	GOPHICS_THUMB_SIZE     logical WxH to render at (default: cfg.Size)
 //	GOPHICS_THUMB_OUT      final WxH to downscale to (default: no downscale)
 //	GOPHICS_THUMB_SCALE    device-pixel scale to render at (default: 2, supersamples)
+//	GOPHICS_THUMB_DARK     if set, render the dark color scheme (SetDarkMode)
 //	GOPHICS_THUMB_SETTLE   max seconds of animation to step before capture (default: 8)
 //	GOPHICS_THUMB_REALTIME if set, also sleep real time each step so async work
 //	                       (e.g. a network fetch) can land before capture
@@ -63,6 +64,9 @@ func maybeCaptureThumb(root widget.Widget, cfg Config) (bool, error) {
 	h, err := NewHeadless(root, tc, scale)
 	if err != nil {
 		return true, fmt.Errorf("thumb: headless: %w", err)
+	}
+	if os.Getenv("GOPHICS_THUMB_DARK") != "" {
+		h.SetDarkMode(true) // render the dark scheme (for dark-mode QA)
 	}
 
 	// Step animation forward so one-shot intros (e.g. a deal) settle and
