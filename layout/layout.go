@@ -453,7 +453,10 @@ type Decorated struct {
 	Radius      float32
 	BorderColor paint.Color
 	BorderWidth float32
-	Child       Box
+	// Blur, when > 0, frosts the backdrop behind the surface (a glass material)
+	// before the Color tint is painted over it. Pair with a translucent Color.
+	Blur  float32
+	Child Box
 }
 
 func (b *Decorated) Layout(cs Constraints) geom.Size {
@@ -468,6 +471,12 @@ func (b *Decorated) Layout(cs Constraints) geom.Size {
 
 func (b *Decorated) Paint(c paint.Canvas, at geom.Pt) {
 	r := geom.Rect{Min: at, Max: at.Add(b.Size().Pt())}
+	if b.Blur > 0 {
+		// Frost the backdrop within the rounded surface before tinting over it.
+		c.PushClipRRect(r, b.Radius)
+		c.BackdropBlur(r, b.Blur)
+		c.PopClip()
+	}
 	if b.Color.A > 0 {
 		c.FillRRect(r, b.Radius, b.Color)
 	}

@@ -96,6 +96,8 @@ func opEqual(a, b op) bool { return a == b }
 
 func opBounds(o op, m Measurer) geom.Rect {
 	switch o := o.(type) {
+	case backdropBlurOp:
+		return o.r
 	case rectOp:
 		return o.r
 	case rrectOp:

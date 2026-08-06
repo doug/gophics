@@ -95,7 +95,10 @@ type Decorated struct {
 	Radius      float32
 	BorderColor paint.Color
 	BorderWidth float32
-	Child       Widget
+	// Blur, when > 0, frosts the backdrop behind the surface (glass) before the
+	// Color tint is painted over it. Pair with a translucent Color.
+	Blur  float32
+	Child Widget
 }
 
 func (d Decorated) createBox(Ctx) layout.Box { return &layout.Decorated{} }
@@ -103,6 +106,7 @@ func (d Decorated) updateBox(_ Ctx, b layout.Box) {
 	db := b.(*layout.Decorated)
 	db.Color, db.Radius = d.Color, d.Radius
 	db.BorderColor, db.BorderWidth = d.BorderColor, d.BorderWidth
+	db.Blur = d.Blur
 }
 func (d Decorated) childWidgets() []Widget { return []Widget{d.Child} }
 func (d Decorated) attach(b layout.Box, kids []layout.Box) {

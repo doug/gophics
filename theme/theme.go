@@ -43,6 +43,10 @@ type Theme struct {
 
 	Radius float32
 	Type   TypeScale // named text sizes
+	// Blur, when > 0, is the backdrop-blur radius themed surfaces use for a
+	// frosted-glass material (the Glass presets set it and make Surface
+	// translucent). Zero = opaque surfaces.
+	Blur float32
 }
 
 // TypeScale is the theme's named text sizes, in logical px — the ramp app text
@@ -139,6 +143,30 @@ func Auto(ctx widget.Ctx) Theme {
 	return Light()
 }
 
+// Glass is the identity as a frosted-glass material: translucent light surfaces
+// over a backdrop blur, for UIs layered on a photo or gradient. It derives from
+// Light (same accent, type scale, chart palette) — only the material changes.
+// On the GPU direct-surface path the blur is a no-op and the translucent tint
+// stands in (see paint.Canvas.BackdropBlur).
+func Glass() Theme {
+	t := Light()
+	t.Surface = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
+	t.SurfaceHover = paint.Color{R: 1, G: 1, B: 1, A: 0.72}
+	t.Border = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
+	t.Blur = 24
+	return t
+}
+
+// GlassDark is Glass over a dark backdrop.
+func GlassDark() Theme {
+	t := Dark()
+	t.Surface = paint.Color{R: 0.13, G: 0.13, B: 0.12, A: 0.48}
+	t.SurfaceHover = paint.Color{R: 0.22, G: 0.22, B: 0.21, A: 0.6}
+	t.Border = paint.Color{R: 1, G: 1, B: 1, A: 0.16}
+	t.Blur = 24
+	return t
+}
+
 // Of returns the provided Theme, falling back to Auto when none is
 // provided — themed components work without any setup.
 func Of(ctx widget.Ctx) Theme {
@@ -210,7 +238,7 @@ func (c Card) Build(ctx widget.Ctx) widget.Widget {
 		pad = 12
 	}
 	return widget.Decorated{
-		Color: th.Surface, Radius: th.Radius,
+		Color: th.Surface, Radius: th.Radius, Blur: th.Blur,
 		Child: widget.Padding{All: pad, Child: c.Child},
 	}
 }

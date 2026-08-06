@@ -113,6 +113,14 @@ type Canvas interface {
 	// Balance every PushTransform with PopTransform.
 	PushTransform(t Transform)
 	PopTransform()
+	// BackdropBlur frosts the already-drawn content within r by the given
+	// radius — the core of a glass/vibrancy material. It reads what is behind,
+	// so call it before painting a panel's translucent tint and content on top;
+	// clip to a rounded rect first for rounded glass. Effective on the CPU
+	// rasterizer (the reference renderer, headless, and the mobile CPU-present
+	// path); a no-op on the GPU direct-surface path (a translucent tint stands
+	// in) until GPU backdrop-texture sampling lands.
+	BackdropBlur(r geom.Rect, radius float32)
 }
 
 // Transform is an affine transform: content is translated by (TX, TY) and
@@ -932,6 +940,10 @@ func (c *ggCanvas) PushTransform(t Transform) {
 }
 
 func (c *ggCanvas) PopTransform() { c.dc.Pop() }
+
+func (c *ggCanvas) BackdropBlur(r geom.Rect, radius float32) {
+	c.dc.BackdropBlur(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
+}
 
 // LoadSystemFonts extends every family with the platform's installed fonts
 // (see text.Shaper.UseSystemFonts). Call after loading fonts.

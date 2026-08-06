@@ -121,6 +121,11 @@ type pushOpacityOp struct{ alpha float32 }
 
 type popOpacityOp struct{}
 
+type backdropBlurOp struct {
+	r      geom.Rect
+	radius float32
+}
+
 type pushTransformOp struct{ t paint.Transform }
 
 type popTransformOp struct{}
@@ -145,6 +150,7 @@ func (o pushOpacityOp) replay(c paint.Canvas)   { c.PushOpacity(o.alpha) }
 func (o popOpacityOp) replay(c paint.Canvas)    { c.PopOpacity() }
 func (o pushTransformOp) replay(c paint.Canvas) { c.PushTransform(o.t) }
 func (o popTransformOp) replay(c paint.Canvas)  { c.PopTransform() }
+func (o backdropBlurOp) replay(c paint.Canvas)  { c.BackdropBlur(o.r, o.radius) }
 
 type recorder struct{ l *List }
 
@@ -223,3 +229,7 @@ func (r recorder) PushTransform(t paint.Transform) {
 	r.l.ops = append(r.l.ops, pushTransformOp{t})
 }
 func (r recorder) PopTransform() { r.l.ops = append(r.l.ops, popTransformOp{}) }
+
+func (r recorder) BackdropBlur(rect geom.Rect, radius float32) {
+	r.l.ops = append(r.l.ops, backdropBlurOp{rect, radius})
+}
