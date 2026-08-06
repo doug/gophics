@@ -98,7 +98,29 @@ class GophicsView: UIView, UIKeyInput {
             if url.isEmpty { break }
             if let u = URL(string: url) { UIApplication.shared.open(u) }
         }
+        while true {
+            let h = HnmobileTakeHaptic()
+            if h < 0 { break }
+            playHaptic(h)
+        }
         syncKeyboard()
+    }
+
+    // playHaptic maps a gophics shell.HapticKind (drained from the bridge each
+    // frame) to the matching UIFeedbackGenerator — the iOS counterpart to the
+    // Android host's performHapticFeedback. Generators are cheap to create; the
+    // system honours the user's system-haptics setting.
+    private func playHaptic(_ kind: Int) {
+        switch kind {
+        case 0: UISelectionFeedbackGenerator().selectionChanged()
+        case 1: UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case 2: UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        case 3: UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        case 4: UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case 5: UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case 6: UINotificationFeedbackGenerator().notificationOccurred(.error)
+        default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
     }
 
     // presentCPU renders one frame on the CPU (Hnmobile.Snapshot → RGBA8888)
