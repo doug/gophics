@@ -238,6 +238,20 @@ func (s *Surface) ReadPixels() ([]byte, error) {
 	return nil, fmt.Errorf("wgpu: ReadPixels not supported on this backend")
 }
 
+// PresentPixels is a software-backend-only extension (direct CPU pixel blit,
+// bypassing the render pass); browser WebGPU presents through the normal pass.
+// The stub keeps gogpu (which has a js/wasm renderer) compiling for the browser;
+// the web shell never takes this path.
+func (s *Surface) PresentPixels(data []byte, width, height uint32, damageRects []image.Rectangle) error {
+	if s == nil || s.released {
+		return ErrReleased
+	}
+	if s.device == nil {
+		return fmt.Errorf("wgpu: surface not configured")
+	}
+	return fmt.Errorf("wgpu: PresentPixels not supported on this backend")
+}
+
 // ActualExtent returns the configured surface dimensions.
 // On browser, the canvas dimensions are always used as-is (no driver clamping).
 // Returns (0, 0) if the surface is not configured.
