@@ -12,6 +12,9 @@
 package theme
 
 import (
+	"time"
+
+	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/widget"
@@ -253,7 +256,35 @@ func (b Button) CreateState() widget.State { return &buttonState{} }
 
 type buttonState struct {
 	widget.StateBase[Button]
+	ctx     widget.Ctx
 	hovered bool
+	// press drives the pressed-down highlight: it jumps to full on pointer-down
+	// and eases back to 0 on release, so a tap flashes even when press and
+	// release land in the same frame. This is the touch-native feedback hover
+	// can't give (touch has no hover).
+	press *anim.Controller
+}
+
+func (s *buttonState) Init(ctx widget.Ctx) {
+	s.ctx = ctx
+	s.press = &anim.Controller{
+		Duration: 160 * time.Millisecond, Curve: anim.EaseOut,
+		OnChange: func() { s.SetState(func() {}) },
+	}
+	ctx.AddTicker(s.press)
+}
+
+// pressIn lights the highlight fully on pointer-down.
+func (s *buttonState) pressIn() { s.press.Jump(1) }
+
+// pressOut releases it: an eased fade, or instant when reduce-motion is set.
+func (s *buttonState) pressOut() {
+	if s.ctx.ReduceMotion() {
+		s.press.Jump(0)
+		return
+	}
+	s.press.Reverse()
+	s.ctx.Invalidate() // kick the frame loop so the fade advances
 }
 
 func (s *buttonState) Build(ctx widget.Ctx) widget.Widget {
@@ -266,11 +297,18 @@ func (s *buttonState) Build(ctx widget.Ctx) widget.Widget {
 	if s.hovered {
 		bg = paint.Lerp(bg, th.Text, 0.08)
 	}
+	// Pressed highlight sits on top of hover: a firmer darken toward the text
+	// color, scaled by the press animation (full on down, fading on release).
+	if p := s.press.Value(); p > 0 {
+		bg = paint.Lerp(bg, th.Text, 0.16*p)
+	}
 	return widget.Interactive{
 		Handler: widget.Handler{
-			OnTap:   b.OnTap,
-			OnEnter: func() { s.SetState(func() { s.hovered = true }) },
-			OnExit:  func() { s.SetState(func() { s.hovered = false }) },
+			OnTap:      b.OnTap,
+			OnEnter:    func() { s.SetState(func() { s.hovered = true }) },
+			OnExit:     func() { s.SetState(func() { s.hovered = false }) },
+			OnPress:    func(geom.Pt) { s.pressIn() },
+			OnPressEnd: s.pressOut,
 		},
 		Child: widget.Decorated{
 			Color: bg, Radius: th.Radius, BorderColor: border, BorderWidth: 1,

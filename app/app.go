@@ -78,7 +78,8 @@ type Core struct {
 
 	hovered        []*widget.InteractiveBox
 	pressed        *widget.InteractiveBox
-	longPress      *widget.InteractiveBox // box eligible for long-press
+	pressBoxes     []*widget.InteractiveBox // boxes that got OnPress this gesture, awaiting OnPressEnd
+	longPress      *widget.InteractiveBox   // box eligible for long-press
 	dragging       *widget.InteractiveBox
 	dragCandidates []hitInteractive // OnDrag boxes awaiting directional commit
 	dragOrigin     geom.Pt          // window origin of the dragging box at press time
@@ -468,6 +469,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 					}
 				}
 				c.dragCandidates = c.dragCandidates[:0]
+				c.firePressEnd() // the press became a drag/scroll: end any highlight
 			}
 		}
 		if c.moved && c.dragging != nil && c.dragging.Handler.OnDrag != nil {
@@ -504,11 +506,15 @@ func (c *Core) Pointer(e shell.Pointer) {
 		c.downTouch = e.Source == shell.SourceTouch
 		c.pressed, c.dragging, c.longPress = nil, nil, nil
 		c.dragCandidates = c.dragCandidates[:0]
+		c.pressBoxes = c.pressBoxes[:0]
 		c.pressHeld, c.longFired = 0, false
 		hits := c.interactivesAt(e.Pos)
 		for _, h := range hits {
 			if h.box.Handler.OnPress != nil {
 				h.box.Handler.OnPress(h.local)
+			}
+			if h.box.Handler.OnPressEnd != nil {
+				c.pressBoxes = append(c.pressBoxes, h.box)
 			}
 			if c.pressed == nil && (h.box.Handler.OnTap != nil || h.box.Handler.OnDoubleTap != nil) {
 				c.pressed = h.box
@@ -538,7 +544,20 @@ func (c *Core) Pointer(e shell.Pointer) {
 		if pressed != nil && slices.Contains(boxes(c.interactivesAt(e.Pos)), pressed) {
 			c.fireTap(pressed, e.Pos)
 		}
+		c.firePressEnd() // end any press highlight, tapped or not
 	}
+}
+
+// firePressEnd notifies every box that received OnPress this gesture that the
+// press has concluded (up, cancel, or a drag steal), then clears the list. It
+// is idempotent: the second call in a gesture finds an empty list.
+func (c *Core) firePressEnd() {
+	for _, b := range c.pressBoxes {
+		if b.Handler.OnPressEnd != nil {
+			b.Handler.OnPressEnd()
+		}
+	}
+	c.pressBoxes = c.pressBoxes[:0]
 }
 
 // focusFrom moves keyboard focus to the topmost focusable hit, if any.

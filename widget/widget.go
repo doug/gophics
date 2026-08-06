@@ -188,6 +188,13 @@ type Handler struct {
 	// OnPress fires on pointer-down over this widget with the local
 	// position (before tap/drag disambiguation).
 	OnPress func(pos geom.Pt)
+	// OnPressEnd fires once when a press that reached OnPress concludes for any
+	// reason — pointer-up (whether or not it became a tap), a drag/scroll
+	// stealing the gesture, or a cancel (focus loss). It is the counterpart to
+	// OnPress for driving a press-down visual: set a highlight in OnPress, clear
+	// it in OnPressEnd. Unlike OnRelease (drag boxes only), it fires for tap
+	// targets too, so touch UIs get reliable pressed-state feedback.
+	OnPressEnd func()
 	// OnDrag receives pointer movement while pressed on this widget. Once a
 	// drag exceeds the tap slop, a pending tap is cancelled.
 	OnDrag func(pos, delta geom.Pt)
