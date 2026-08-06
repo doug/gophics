@@ -42,6 +42,23 @@ type Theme struct {
 	Chart [6]paint.Color
 
 	Radius float32
+	Type   TypeScale // named text sizes
+}
+
+// TypeScale is the theme's named text sizes, in logical px — the ramp app text
+// should lean on (and that the themed text helpers use). Special one-off sizes
+// (a giant hero number) can still be set explicitly; the scale is the default.
+type TypeScale struct {
+	Display float32 // hero numbers / splash
+	Title   float32 // page titles
+	Heading float32 // section / card headings
+	Body    float32 // default reading size
+	Label   float32 // controls, chips, dense captions
+	Caption float32 // fine print, timestamps
+}
+
+func defaultType() TypeScale {
+	return TypeScale{Display: 32, Title: 22, Heading: 17, Body: 15, Label: 13, Caption: 11}
 }
 
 // ChartAt returns the i-th categorical color, wrapping if i is out of range.
@@ -67,6 +84,7 @@ func Light() Theme {
 		Selection:    paint.Color{R: 0.851, G: 0.467, B: 0.341, A: 0.24},
 		Chart:        lightChart,
 		Radius:       10,
+		Type:         defaultType(),
 	}
 }
 
@@ -88,6 +106,7 @@ func Dark() Theme {
 		Selection:    paint.Color{R: 0.878, G: 0.522, B: 0.396, A: 0.30},
 		Chart:        darkChart,
 		Radius:       10,
+		Type:         defaultType(),
 	}
 }
 
@@ -129,47 +148,53 @@ func Of(ctx widget.Ctx) Theme {
 	return Auto(ctx)
 }
 
-// Title returns bold title text.
-func Title(s string) widget.Widget {
-	return themedText{S: s, Size: 17, Bold: true, Role: roleText}
-}
-
-// Body returns body text.
-func Body(s string) widget.Widget {
-	return themedText{S: s, Size: 14, Wrap: true, Role: roleText}
-}
-
-// Caption returns small muted text.
-func Caption(s string) widget.Widget {
-	return themedText{S: s, Size: 12, Role: roleMuted}
-}
+// Display, Title, Heading, Body, Label, and Caption return themed text at the
+// matching TypeScale size and semantic color, tracking the active theme so an
+// app never hardcodes a size or a text color for standard copy.
+func Display(s string) widget.Widget { return themedText{S: s, Role: roleDisplay} }
+func Title(s string) widget.Widget   { return themedText{S: s, Role: roleTitle} }
+func Heading(s string) widget.Widget { return themedText{S: s, Role: roleHeading} }
+func Body(s string) widget.Widget    { return themedText{S: s, Role: roleBody, Wrap: true} }
+func Label(s string) widget.Widget   { return themedText{S: s, Role: roleLabel} }
+func Caption(s string) widget.Widget { return themedText{S: s, Role: roleCaption} }
 
 type textRole uint8
 
 const (
-	roleText textRole = iota
-	roleMuted
+	roleDisplay textRole = iota
+	roleTitle
+	roleHeading
+	roleBody
+	roleLabel
+	roleCaption
 )
 
 type themedText struct {
 	S    string
-	Size float32
-	Bold bool
 	Wrap bool
 	Role textRole
 }
 
 func (t themedText) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	col := th.Text
-	if t.Role == roleMuted {
-		col = th.Muted
+	size, col, bold := th.Type.Body, th.Text, false
+	switch t.Role {
+	case roleDisplay:
+		size, bold = th.Type.Display, true
+	case roleTitle:
+		size, bold = th.Type.Title, true
+	case roleHeading:
+		size, bold = th.Type.Heading, true
+	case roleLabel:
+		size, col = th.Type.Label, th.Muted
+	case roleCaption:
+		size, col = th.Type.Caption, th.Muted
 	}
 	font := ""
-	if t.Bold {
+	if bold {
 		font = FontBold
 	}
-	return widget.Text{S: t.S, Font: font, Size: t.Size, Color: col, Wrap: t.Wrap}
+	return widget.Text{S: t.S, Font: font, Size: size, Color: col, Wrap: t.Wrap}
 }
 
 // Card wraps content in a themed surface.
