@@ -33,7 +33,6 @@ func (s *dmState) remove(id int) {
 func (s *dmState) Build(widget.Ctx) widget.Widget {
 	rows := make([]widget.Widget, 0, len(s.items))
 	for _, id := range s.items {
-		id := id
 		rows = append(rows, widget.WithKey{Key: id, Child: widget.Dismissible{
 			OnDismissed: func() { s.remove(id) },
 			Child:       widget.Sized{W: 200, H: 40},
@@ -123,7 +122,6 @@ func (s *dirState) Init(widget.Ctx) { s.hook(s); s.items = []int{0, 1, 2} }
 func (s *dirState) Build(widget.Ctx) widget.Widget {
 	rows := make([]widget.Widget, 0, len(s.items))
 	for _, id := range s.items {
-		id := id
 		rows = append(rows, widget.WithKey{Key: id, Child: widget.Dismissible{
 			Direction: widget.DismissLeft,
 			OnDismissed: func() {

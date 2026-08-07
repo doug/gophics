@@ -153,7 +153,7 @@ func (s *flockState) Build(widget.Ctx) widget.Widget {
 		c.Clear(bg)
 		for _, b := range s.boids {
 			a := vangle(b.vel)
-			col := hsv(wrapf(float32(a*180/math.Pi), 0, 360), 0.55, 1)
+			col := paint.HSV(wrapf(float32(a*180/math.Pi), 0, 360), 0.55, 1)
 			// an arrowhead pointing along the velocity
 			p := paint.NewPath()
 			p.MoveTo(tri(b.pos, a, 7, 0)).LineTo(tri(b.pos, a, -4, 3)).LineTo(tri(b.pos, a, -4, -3))
@@ -180,27 +180,6 @@ func wrapf(v, lo, hi float32) float32 {
 }
 
 // hsv converts H∈[0,360), S,V∈[0,1] to a paint.Color.
-func hsv(h, sat, val float32) paint.Color {
-	c := val * sat
-	x := c * (1 - float32(math.Abs(math.Mod(float64(h)/60, 2)-1)))
-	m := val - c
-	var r, g, b float32
-	switch {
-	case h < 60:
-		r, g, b = c, x, 0
-	case h < 120:
-		r, g, b = x, c, 0
-	case h < 180:
-		r, g, b = 0, c, x
-	case h < 240:
-		r, g, b = 0, x, c
-	case h < 300:
-		r, g, b = x, 0, c
-	default:
-		r, g, b = c, 0, x
-	}
-	return paint.RGB(r+m, g+m, b+m)
-}
 
 func main() {
 	if err := app.Run(Flock{}, app.Config{

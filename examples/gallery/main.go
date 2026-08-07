@@ -59,7 +59,7 @@ var authors = []string{"mira", "koji", "petra", "sol", "wren", "arturo", "ines",
 // colorful and deterministic (no RNG — regenerating is reproducible).
 func swatchHues(i int) (paint.Color, paint.Color) {
 	h := float32(i*47%360) / 360
-	return hsv(h, 0.55, 0.95), hsv(mod01(h+0.12), 0.65, 0.75)
+	return paint.HSV(h*360, 0.55, 0.95), paint.HSV(mod01(h+0.12)*360, 0.65, 0.75)
 }
 
 func makeCards(n, seed int) []card {
@@ -397,25 +397,6 @@ func swatch(img image.Image, w, h, radius float32) widget.Widget {
 }
 
 // hsv converts to an sRGB-ish Color (h,s,v in [0,1]).
-func hsv(h, s, v float32) paint.Color {
-	i := int(h * 6)
-	f := h*6 - float32(i)
-	p, q, t := v*(1-s), v*(1-f*s), v*(1-(1-f)*s)
-	switch i % 6 {
-	case 0:
-		return paint.RGB(v, t, p)
-	case 1:
-		return paint.RGB(q, v, p)
-	case 2:
-		return paint.RGB(p, v, t)
-	case 3:
-		return paint.RGB(p, q, v)
-	case 4:
-		return paint.RGB(t, p, v)
-	default:
-		return paint.RGB(v, p, q)
-	}
-}
 
 func mod01(v float32) float32 {
 	for v >= 1 {

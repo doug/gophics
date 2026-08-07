@@ -335,10 +335,18 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 					return
 				case abs(s.swDX) > abs(s.swDY):
 					s.swiped = true
-					s.move(map[bool]int{true: 0, false: 1}[s.swDX < 0])
+					if s.swDX < 0 {
+						s.move(0) // left
+					} else {
+						s.move(1) // right
+					}
 				default:
 					s.swiped = true
-					s.move(map[bool]int{true: 2, false: 3}[s.swDY < 0])
+					if s.swDY < 0 {
+						s.move(2) // up
+					} else {
+						s.move(3) // down
+					}
 				}
 			},
 			OnTap: func() {

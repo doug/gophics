@@ -137,7 +137,6 @@ func (s *workspaceState) sidebar(th theme.Theme, v *Vault) widget.Widget {
 	}})
 
 	for _, n := range v.Search(s.Query) {
-		n := n
 		bg := th.Bg
 		if n.Path == s.OpenPath {
 			bg = th.Selection
@@ -267,7 +266,6 @@ func (s *workspaceState) backlinks(th theme.Theme, v *Vault, note Note) []widget
 		block(widget.Text{S: "Linked references", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
 	}
 	for _, n := range refs {
-		n := n
 		out = append(out, block(widget.Interactive{
 			Handler: widget.Handler{OnTap: func() { s.open(n.Path) }},
 			Child:   widget.Text{S: "← " + n.Name, Size: th.Type.Body, Color: th.Primary},

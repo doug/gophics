@@ -29,6 +29,30 @@ type Color struct {
 // RGB returns an opaque Color.
 func RGB(r, g, b float32) Color { return Color{r, g, b, 1} }
 
+// HSV returns an opaque Color from hue (degrees in [0,360)), saturation and
+// value (each in [0,1]) — handy for procedural palettes, alongside RGB/Lerp.
+func HSV(hue, sat, val float32) Color {
+	c := val * sat
+	x := c * (1 - float32(math.Abs(math.Mod(float64(hue)/60, 2)-1)))
+	m := val - c
+	var r, g, b float32
+	switch {
+	case hue < 60:
+		r, g, b = c, x, 0
+	case hue < 120:
+		r, g, b = x, c, 0
+	case hue < 180:
+		r, g, b = 0, c, x
+	case hue < 240:
+		r, g, b = 0, x, c
+	case hue < 300:
+		r, g, b = x, 0, c
+	default:
+		r, g, b = c, 0, x
+	}
+	return RGB(r+m, g+m, b+m)
+}
+
 // Lerp interpolates between colors a and b; t=0 yields a, t=1 yields b.
 func Lerp(a, b Color, t float32) Color {
 	return Color{

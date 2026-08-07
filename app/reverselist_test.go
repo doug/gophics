@@ -26,7 +26,6 @@ func (s *chatState) Init(widget.Ctx) { s.hook(s); s.n = 20; s.tapped = -1 }
 func (s *chatState) Build(widget.Ctx) widget.Widget {
 	rows := make([]widget.Widget, 0, s.n)
 	for i := 0; i < s.n; i++ {
-		i := i
 		rows = append(rows, widget.WithKey{Key: i, Child: widget.Interactive{
 			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.tapped = i }) }},
 			Child:   widget.Sized{W: 200, H: 40},

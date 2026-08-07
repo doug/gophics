@@ -31,7 +31,6 @@ func (s *rowsState) Build(widget.Ctx) widget.Widget {
 		if i == s.hover {
 			col = paint.RGB(0.5, 0.5, 0.6)
 		}
-		i := i
 		rows[i] = widget.Interactive{
 			Handler: widget.Handler{
 				OnEnter: func() { s.SetState(func() { s.hover = i }) },

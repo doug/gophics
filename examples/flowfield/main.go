@@ -102,7 +102,7 @@ func (s *flowState) Build(widget.Ctx) widget.Widget {
 			for _, pt := range p.trail[1:] {
 				path.LineTo(pt)
 			}
-			c.StrokePath(path, 1.3, hsv(hue, 0.6, 1).WithAlpha(0.5))
+			c.StrokePath(path, 1.3, paint.HSV(hue, 0.6, 1).WithAlpha(0.5))
 		}
 	}}
 }
@@ -119,27 +119,6 @@ func wrapf(v, lo, hi float32) float32 {
 		v -= r
 	}
 	return v
-}
-func hsv(h, sat, val float32) paint.Color {
-	c := val * sat
-	x := c * (1 - float32(math.Abs(math.Mod(float64(h)/60, 2)-1)))
-	m := val - c
-	var r, g, b float32
-	switch {
-	case h < 60:
-		r, g, b = c, x, 0
-	case h < 120:
-		r, g, b = x, c, 0
-	case h < 180:
-		r, g, b = 0, c, x
-	case h < 240:
-		r, g, b = 0, x, c
-	case h < 300:
-		r, g, b = x, 0, c
-	default:
-		r, g, b = c, 0, x
-	}
-	return paint.RGB(r+m, g+m, b+m)
 }
 
 func main() {

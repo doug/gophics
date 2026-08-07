@@ -54,8 +54,8 @@ func (t moverTick) Tick(dt float64) bool {
 	s.pos.Y += dy * speed * float32(dt)
 	s.pos.X = clampf(s.pos.X, 20, s.size.W-20)
 	s.pos.Y = clampf(s.pos.Y, 20, s.size.H-20)
-	s.ctx.Invalidate() // keep frames coming so we keep polling
-	return true
+	s.ctx.Invalidate() // the position moved this tick — request a repaint
+	return true        // stay active: keep ticking every frame to poll held keys
 }
 
 func (s *moverState) Build(ctx widget.Ctx) widget.Widget {

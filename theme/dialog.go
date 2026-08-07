@@ -49,7 +49,6 @@ func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()
 	}
 	rows := make([]widget.Widget, len(items))
 	for i, it := range items {
-		it := it
 		rows[i] = widget.Interactive{
 			Handler: widget.Handler{OnTap: func() {
 				close()

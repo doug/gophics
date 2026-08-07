@@ -74,7 +74,6 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 		if !it.done {
 			left++
 		}
-		i := i
 		rows = append(rows, widget.WithKey{Key: it.text, Child: widget.Dismissible{
 			OnDismissed: func() { s.SetState(func() { s.remove(i) }) },
 			Background: widget.Fill{Color: th.Danger, Child: widget.Padding{
