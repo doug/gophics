@@ -7,17 +7,25 @@
 <style>
   html, body { margin: 0; height: 100%; background: #0d0e15; overflow: hidden; font-family: system-ui, sans-serif; }
   canvas { display: block; }
-  /* Poster: the demo's pre-rendered thumbnail, shown instantly so the page is
-     never blank while the ~MB wasm downloads and compiles, then faded out once
-     the live canvas has painted its first frame. */
-  #poster { position: fixed; inset: 0; z-index: 10; background: #0d0e15 center/contain no-repeat;
-            transition: opacity .45s ease; }
-  #poster.hide { opacity: 0; pointer-events: none; }
-  #spin { position: fixed; left: 50%; bottom: 30px; width: 24px; height: 24px; margin-left: -12px; z-index: 11;
-          border: 3px solid #ffffff2e; border-top-color: #8aa0ff; border-radius: 50%;
-          animation: spin .8s linear infinite; transition: opacity .3s; }
-  #spin.hide { opacity: 0; }
+  /* Loader: a lightweight, on-brand loading animation shown while the ~MB wasm
+     downloads and compiles, then cross-faded out once the live canvas appears.
+     It's pure CSS (no image to fetch), so it paints instantly. Three additive-
+     blended discs — an RGB colour-mixing motif, apt for a graphics framework —
+     orbit a shared centre while each gently breathes. */
+  #loader { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 22px; background: #0d0e15;
+            transition: opacity .5s ease; }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .orbit { position: relative; width: 62px; height: 62px; animation: spin 1.5s linear infinite; }
+  .orbit i { position: absolute; width: 34px; height: 34px; border-radius: 50%;
+             mix-blend-mode: screen; animation: breathe 1.5s ease-in-out infinite; }
+  .orbit i:nth-child(1) { background: #ff4d6d; top: 0; left: 14px; }
+  .orbit i:nth-child(2) { background: #3d8bff; bottom: 0; left: 0; animation-delay: -.5s; }
+  .orbit i:nth-child(3) { background: #46e08a; bottom: 0; right: 0; animation-delay: -1s; }
+  .loading { font-size: 13px; letter-spacing: .08em; color: #6b7391; }
+  .loading b { color: #8aa0ff; font-weight: 600; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
   #err { position: fixed; inset: 0; z-index: 12; display: none; align-items: center; justify-content: center;
          color: #c9cee0; font-size: 14px; text-align: center; padding: 24px; line-height: 1.6; }
   #err a { color: #8aa0ff; }
@@ -42,8 +50,10 @@
     <a id="rend" href="#" title="Toggle renderer">GPU</a>
     <a id="src" href="gallery.html">view source</a>
   </div>
-  <div id="poster"></div>
-  <div id="spin"></div>
+  <div id="loader">
+    <div class="orbit"><i></i><i></i><i></i></div>
+    <div class="loading">loading <b id="lname">demo</b></div>
+  </div>
   <div id="err"></div>
   <script src="demos/wasm_exec.js"></script>
   <script>
@@ -52,14 +62,9 @@
     document.getElementById("src").href = "source/" + demo + ".html";
     document.title = "gophics — " + demo;
     const nm = document.getElementById("nm");
-    const poster = document.getElementById("poster");
-    const spin = document.getElementById("spin");
+    const loader = document.getElementById("loader");
     const err = document.getElementById("err");
-
-    // Show the pre-rendered thumbnail immediately — the same CPU render that
-    // ships in the gallery, so first meaningful paint is instant instead of a
-    // blank page for the length of the wasm compile.
-    poster.style.backgroundImage = `url("thumbs/${demo}.png")`;
+    document.getElementById("lname").textContent = demo;
 
     // ?cpu forces the CPU rasterizer by hiding WebGPU before the wasm reads it.
     // WebGPU is only exposed in a secure context (https or localhost) and on a
@@ -85,13 +90,12 @@
     };
 
     // The Go web shell creates its own <canvas>; when it appears, wait two
-    // frames (so the first live frame is on screen) then cross-fade the poster
-    // away — the thumbnail dissolves into the running app.
+    // frames (so the first live frame is on screen) then cross-fade the loader
+    // away — the animation dissolves into the running app.
     function reveal() {
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        poster.classList.add("hide");
-        spin.classList.add("hide");
-        setTimeout(() => { poster.remove(); spin.remove(); }, 500);
+        loader.classList.add("hide");
+        setTimeout(() => loader.remove(), 550);
       }));
     }
     const obs = new MutationObserver(() => {
@@ -103,7 +107,7 @@
     WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
       .then((res) => go.run(res.instance))
       .catch((e) => {
-        spin.remove();
+        loader.remove();
         err.style.display = "flex";
         err.innerHTML = "Couldn't load <code>" + demo + "</code>: " + e;
       });
