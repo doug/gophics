@@ -1,12 +1,9 @@
 // Package geom provides the geometric primitives used throughout gophics:
-// points, sizes, rectangles, rounded rectangles, edge insets, and 2D affine
-// transforms.
+// points, sizes, rectangles, and edge insets.
 //
 // All values are float32 in logical pixels (see design/adr/0001-float32-geometry.md).
 // Types are small immutable values; methods return new values.
 package geom
-
-import "math"
 
 // Pt is a point or vector in 2D space.
 type Pt struct {
@@ -16,7 +13,6 @@ type Pt struct {
 func (p Pt) Add(q Pt) Pt      { return Pt{p.X + q.X, p.Y + q.Y} }
 func (p Pt) Sub(q Pt) Pt      { return Pt{p.X - q.X, p.Y - q.Y} }
 func (p Pt) Mul(s float32) Pt { return Pt{p.X * s, p.Y * s} }
-func (p Pt) In(r Rect) bool   { return r.Contains(p) }
 
 // Lerp linearly interpolates from p to q; t=0 yields p, t=1 yields q.
 func (p Pt) Lerp(q Pt, t float32) Pt {
@@ -112,26 +108,6 @@ func (r Rect) Translate(p Pt) Rect {
 	return Rect{r.Min.Add(p), r.Max.Add(p)}
 }
 
-// Radius is an x/y corner radius pair (elliptical corners).
-type Radius struct {
-	X, Y float32
-}
-
-// RadiusCircular returns a circular corner radius.
-func RadiusCircular(r float32) Radius { return Radius{r, r} }
-
-// RRect is a rectangle with per-corner elliptical radii.
-type RRect struct {
-	Rect
-	TL, TR, BR, BL Radius
-}
-
-// RRectUniform returns an RRect with the same circular radius on all corners.
-func RRectUniform(r Rect, radius float32) RRect {
-	c := RadiusCircular(radius)
-	return RRect{Rect: r, TL: c, TR: c, BR: c, BL: c}
-}
-
 // Insets describes offsets from the four edges of a rectangle.
 type Insets struct {
 	Top, Right, Bottom, Left float32
@@ -165,70 +141,4 @@ func (i Insets) Inset(r Rect) Rect {
 		out.Min.Y, out.Max.Y = c, c
 	}
 	return out
-}
-
-// Affine is a 2D affine transform:
-//
-//	| A C Tx |
-//	| B D Ty |
-//
-// mapping (x, y) to (A*x + C*y + Tx, B*x + D*y + Ty).
-type Affine struct {
-	A, B, C, D, Tx, Ty float32
-}
-
-// Identity returns the identity transform.
-func Identity() Affine { return Affine{A: 1, D: 1} }
-
-// Translate returns a transform that translates by p.
-func Translate(p Pt) Affine { return Affine{A: 1, D: 1, Tx: p.X, Ty: p.Y} }
-
-// Scale returns a transform that scales by sx, sy about the origin.
-func Scale(sx, sy float32) Affine { return Affine{A: sx, D: sy} }
-
-// Rotate returns a transform that rotates by radians about the origin,
-// clockwise in gophics's y-down coordinate system.
-func Rotate(radians float32) Affine {
-	sin, cos := math.Sincos(float64(radians))
-	s, c := float32(sin), float32(cos)
-	return Affine{A: c, B: s, C: -s, D: c}
-}
-
-// Mul returns the composition m∘n: applying the result is equivalent to
-// applying n first, then m.
-func (m Affine) Mul(n Affine) Affine {
-	return Affine{
-		A:  m.A*n.A + m.C*n.B,
-		B:  m.B*n.A + m.D*n.B,
-		C:  m.A*n.C + m.C*n.D,
-		D:  m.B*n.C + m.D*n.D,
-		Tx: m.A*n.Tx + m.C*n.Ty + m.Tx,
-		Ty: m.B*n.Tx + m.D*n.Ty + m.Ty,
-	}
-}
-
-// Apply transforms the point p.
-func (m Affine) Apply(p Pt) Pt {
-	return Pt{
-		X: m.A*p.X + m.C*p.Y + m.Tx,
-		Y: m.B*p.X + m.D*p.Y + m.Ty,
-	}
-}
-
-// Invert returns the inverse transform and whether it exists (the transform
-// is not degenerate).
-func (m Affine) Invert() (Affine, bool) {
-	det := m.A*m.D - m.B*m.C
-	if det == 0 || float32(math.Abs(float64(det))) < 1e-12 {
-		return Affine{}, false
-	}
-	inv := 1 / det
-	return Affine{
-		A:  m.D * inv,
-		B:  -m.B * inv,
-		C:  -m.C * inv,
-		D:  m.A * inv,
-		Tx: (m.C*m.Ty - m.D*m.Tx) * inv,
-		Ty: (m.B*m.Tx - m.A*m.Ty) * inv,
-	}, true
 }

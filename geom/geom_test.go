@@ -79,48 +79,6 @@ func TestInsets(t *testing.T) {
 	}
 }
 
-func TestAffineComposition(t *testing.T) {
-	// m.Mul(n) applies n first, then m.
-	m := Translate(Pt{10, 0})
-	n := Scale(2, 2)
-	p := Pt{3, 4}
-
-	composed := m.Mul(n).Apply(p)
-	sequential := m.Apply(n.Apply(p))
-	if !ptApprox(composed, sequential) {
-		t.Fatalf("composed %v != sequential %v", composed, sequential)
-	}
-	if !ptApprox(composed, Pt{16, 8}) {
-		t.Fatalf("got %v, want {16 8}", composed)
-	}
-}
-
-func TestAffineRotate(t *testing.T) {
-	// 90° clockwise in y-down coordinates maps +x to +y.
-	m := Rotate(math.Pi / 2)
-	got := m.Apply(Pt{1, 0})
-	if !ptApprox(got, Pt{0, 1}) {
-		t.Fatalf("rotate 90° of (1,0) = %v, want (0,1)", got)
-	}
-}
-
-func TestAffineInvert(t *testing.T) {
-	m := Translate(Pt{5, -3}).Mul(Rotate(0.7)).Mul(Scale(2, 0.5))
-	inv, ok := m.Invert()
-	if !ok {
-		t.Fatal("transform should be invertible")
-	}
-	p := Pt{12, 34}
-	round := inv.Apply(m.Apply(p))
-	if !ptApprox(round, p) {
-		t.Fatalf("invert roundtrip = %v, want %v", round, p)
-	}
-
-	if _, ok := Scale(0, 0).Invert(); ok {
-		t.Fatal("degenerate transform should not invert")
-	}
-}
-
 func TestPtOps(t *testing.T) {
 	if got := (Pt{1, 2}).Add(Pt{3, 4}); got != (Pt{4, 6}) {
 		t.Fatalf("Add = %v", got)
