@@ -140,7 +140,7 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		drawYAxis(c, area, ys, w.YAxis, th, p)
 		drawXAxis(c, area, xs, w.XAxis, th, p)
 
-		pl := Plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
+		pl := plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
 		c.PushClip(area)
 		gi := 0
 		for i, mk := range w.Marks {

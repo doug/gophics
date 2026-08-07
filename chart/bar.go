@@ -29,7 +29,7 @@ func (b BarMark) yDomain() (lo, hi float64) {
 	return min(lo, 0), max(hi, 0) // bars anchor at zero
 }
 
-func (b BarMark) draw(p Plot) {
+func (b BarMark) draw(p plot) {
 	if len(b.Data) == 0 {
 		return
 	}
@@ -76,7 +76,7 @@ func colorOr(c, fallback paint.Color) paint.Color {
 
 // slotWidth is the pixel width available to one bar's slot: a band's bandwidth,
 // or the smallest pixel gap between adjacent numeric points.
-func slotWidth(d []Datum, p Plot) float32 {
+func slotWidth(d []Datum, p plot) float32 {
 	if bd, ok := p.X.(bander); ok {
 		return bd.Bandwidth() * p.Area.Dx()
 	}

@@ -33,7 +33,7 @@ func (l LineMark) yDomain() (lo, hi float64) {
 	return minMaxY(l.Data)
 }
 
-func (l LineMark) draw(p Plot) {
+func (l LineMark) draw(p plot) {
 	if len(l.Data) == 0 {
 		return
 	}

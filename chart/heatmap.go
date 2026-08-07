@@ -51,7 +51,7 @@ type RectMark struct {
 func (RectMark) xDomain() (lo, hi float64, c []string) { return math.Inf(1), math.Inf(-1), nil }
 func (RectMark) yDomain() (lo, hi float64)             { return math.Inf(1), math.Inf(-1) }
 
-func (m RectMark) draw(p Plot) {
+func (m RectMark) draw(p plot) {
 	if len(m.Cells) == 0 {
 		return
 	}

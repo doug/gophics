@@ -33,7 +33,7 @@ func (m PointMark) yDomain() (lo, hi float64) {
 	return minMaxY(m.Data)
 }
 
-func (m PointMark) draw(p Plot) {
+func (m PointMark) draw(p plot) {
 	col := colorOr(m.Color, p.th.series[p.series%len(p.th.series)])
 	d := m.Size
 	if d <= 0 {

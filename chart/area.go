@@ -34,7 +34,7 @@ func (a AreaMark) yDomain() (lo, hi float64) {
 	return min(lo, 0), max(hi, 0) // area anchors at the baseline
 }
 
-func (a AreaMark) draw(p Plot) {
+func (a AreaMark) draw(p plot) {
 	if len(a.Data) < 2 {
 		return
 	}

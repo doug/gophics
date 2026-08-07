@@ -26,7 +26,7 @@ func (s SectorMark) sliceColor(i int, th theme) paint.Color {
 	return th.series[i%len(th.series)]
 }
 
-func (s SectorMark) draw(p Plot) {
+func (s SectorMark) draw(p plot) {
 	var total float64
 	for _, d := range s.Data {
 		total += d.Y

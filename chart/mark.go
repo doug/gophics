@@ -97,10 +97,10 @@ func cats(d []Datum) []string {
 	return out
 }
 
-// Plot is the resolved drawing context handed to each mark: the pixel rect of
+// plot is the resolved drawing context handed to each mark: the pixel rect of
 // the plot area, the axis scales, the canvas, the theme, and the 0..1 animation
 // progress.
-type Plot struct {
+type plot struct {
 	Area   geom.Rect
 	X, Y   Scale
 	Canvas paint.Canvas
@@ -112,17 +112,17 @@ type Plot struct {
 }
 
 // px maps a domain X to a pixel x within the plot area.
-func (p Plot) px(v float64) float32 { return p.Area.Min.X + p.X.Map(v)*p.Area.Dx() }
+func (p plot) px(v float64) float32 { return p.Area.Min.X + p.X.Map(v)*p.Area.Dx() }
 
 // py maps a domain Y to a pixel y (inverted: larger Y is higher on screen).
-func (p Plot) py(v float64) float32 { return p.Area.Max.Y - p.Y.Map(v)*p.Area.Dy() }
+func (p plot) py(v float64) float32 { return p.Area.Max.Y - p.Y.Map(v)*p.Area.Dy() }
 
 // Mark is one visual layer of a chart. Domain methods feed scale inference;
 // draw renders the mark against resolved scales.
 type Mark interface {
 	xDomain() (lo, hi float64, cats []string)
 	yDomain() (lo, hi float64)
-	draw(p Plot)
+	draw(p plot)
 }
 
 // named marks contribute an entry to the legend (empty name → omitted).
@@ -130,7 +130,7 @@ type named interface{ markName() string }
 
 // seriesSlot is the pixel width one item may occupy: a band's bandwidth, or the
 // smallest pixel gap between adjacent x positions.
-func seriesSlot(p Plot, xs []float64) float32 {
+func seriesSlot(p plot, xs []float64) float32 {
 	if bd, ok := p.X.(bander); ok {
 		return bd.Bandwidth() * p.Area.Dx()
 	}

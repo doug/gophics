@@ -48,7 +48,7 @@ func (m RangeMark) yDomain() (lo, hi float64) {
 	return lo, hi
 }
 
-func (m RangeMark) draw(p Plot) {
+func (m RangeMark) draw(p plot) {
 	if len(m.Data) == 0 {
 		return
 	}

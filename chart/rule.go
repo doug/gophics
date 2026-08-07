@@ -31,7 +31,7 @@ func (r RuleMark) yDomain() (lo, hi float64) {
 	return math.Inf(1), math.Inf(-1)
 }
 
-func (r RuleMark) draw(p Plot) {
+func (r RuleMark) draw(p plot) {
 	col := colorOr(r.Color, gray(0.5, 0.7))
 	w := r.Width
 	if w <= 0 {
