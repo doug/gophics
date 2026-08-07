@@ -89,7 +89,7 @@ func TestFieldSelectionShortcuts(t *testing.T) {
 
 	h.KeyMod(shell.KeyA, shell.ModSuper) // select all
 	h.KeyMod(shell.KeyC, shell.ModSuper) // copy
-	clip := h.Core.Owner.Clipboard.(*MemClipboard)
+	clip := h.core.Owner.Clipboard.(*MemClipboard)
 	if clip.S != "select me" {
 		t.Fatalf("clipboard = %q", clip.S)
 	}
@@ -145,7 +145,7 @@ func TestFieldClickPlacesCaret(t *testing.T) {
 func TestFieldDragSelects(t *testing.T) {
 	h, st := fieldHarness(t)
 	h.Type("abcdef")
-	w := h.Core.Painter.MeasureWidth("abcdef", 14)
+	w := h.core.Painter.MeasureWidth("abcdef", 14)
 	// Drag from before text start to past its end: selects everything.
 	h.DragTo(geom.Pt{X: 10, Y: 30}, geom.Pt{X: 12 + w, Y: 30})
 	h.Release(geom.Pt{X: 12 + w, Y: 30})

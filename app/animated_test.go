@@ -48,7 +48,7 @@ func TestAnimatedColorTweens(t *testing.T) {
 	}
 	// Flip target to white; over ~100ms it should pass through greys.
 	st.on = true
-	h.Core.Owner.RebuildAll()
+	h.core.Owner.RebuildAll()
 	h.Render()
 	h.Step(0.03) // ~30% through
 	h.Render()

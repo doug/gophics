@@ -60,7 +60,7 @@ func (s *benchState) Build(ctx widget.Ctx) widget.Widget {
 func hoverAndRender(h *Headless, st *rowsState, row int) {
 	st.hover = row
 	// benchState owns the rows; mark the root dirty through a state change.
-	h.Core.Owner.SetRoot(benchRoot{hook: func(*rowsState) {}})
+	h.core.Owner.SetRoot(benchRoot{hook: func(*rowsState) {}})
 	h.Render()
 }
 
@@ -70,7 +70,7 @@ func BenchmarkFrameUnchanged(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		h.Render()
-		if !h.Core.Skipped {
+		if !h.core.Skipped {
 			b.Fatal("frame should skip")
 		}
 	}
@@ -90,7 +90,7 @@ func BenchmarkFrameFullRepaint(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		h.Core.prev.Reset() // empty previous scene: everything is damage
+		h.core.prev.Reset() // empty previous scene: everything is damage
 		hoverAndRender(h, st, i%2)
 	}
 }
@@ -101,6 +101,6 @@ func BenchmarkRecordAndDiff(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		h.Core.RecordScene(size, 2)
+		h.core.RecordScene(size, 2)
 	}
 }

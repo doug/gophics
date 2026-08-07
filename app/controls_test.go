@@ -108,7 +108,7 @@ func TestRadioSelects(t *testing.T) {
 func TestControlsGolden(t *testing.T) {
 	h, st := controlsHarness(t)
 	st.sw, st.cb, st.slider, st.radio = true, true, 0.6, 1
-	h.Core.Owner.RebuildAll()
+	h.core.Owner.RebuildAll()
 	h.Render() // build runs → switch starts its on-animation
 	for h.Step(0.016) {
 		h.Render()

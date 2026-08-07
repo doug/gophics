@@ -24,9 +24,9 @@ type gpuRenderer struct {
 // backends. Available only under -tags gophics_gpu; returns nil when no GPU
 // adapter is present (so callers can t.Skip).
 func (h *Headless) RenderGPU() image.Image {
-	h.Core.drainPosted()
-	h.Core.Layout(h.size)
-	h.Core.RecordScene(h.size, h.scale) // record; the GPU replays the full scene
+	h.core.drainPosted()
+	h.core.Layout(h.size)
+	h.core.RecordScene(h.size, h.scale) // record; the GPU replays the full scene
 
 	pw, ph := int(h.size.W*h.scale), int(h.size.H*h.scale)
 	if pw <= 0 || ph <= 0 {
@@ -58,7 +58,7 @@ func (h *Headless) RenderGPU() image.Image {
 
 	img, err := g.r.RenderToImage(pw, ph, func(dc *gogpu.Context) {
 		_ = g.ggc.Draw(func(cc *gg.Context) {
-			h.Core.ReplayScene(h.Core.Painter.GPUCanvas(cc))
+			h.core.ReplayScene(h.core.Painter.GPUCanvas(cc))
 		})
 		_ = g.ggc.Render(dc.RenderTarget())
 	})

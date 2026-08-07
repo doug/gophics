@@ -24,7 +24,7 @@ func writeNote(t *testing.T, dir, name, body string) string {
 
 func labels(h *app.Headless) []string {
 	var out []string
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.Semantics()) {
 		if n.Label != "" {
 			out = append(out, n.Label)
 		}
@@ -215,7 +215,7 @@ func TestNotesSessionRestore(t *testing.T) {
 	h.Render()
 
 	// Snapshot → JSON → fresh app → restore.
-	blob, err := json.Marshal(h.Core.Owner.SnapshotState())
+	blob, err := json.Marshal(h.Owner().SnapshotState())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestNotesSessionRestore(t *testing.T) {
 	if st2.OpenPath != "" {
 		t.Fatalf("fresh app should have nothing open, got %q", st2.OpenPath)
 	}
-	h2.Core.Owner.RestoreState(snap)
+	h2.Owner().RestoreState(snap)
 	h2.Render()
 
 	if st2.OpenPath != beta {

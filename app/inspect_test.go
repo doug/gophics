@@ -29,7 +29,7 @@ func TestInspectTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	nodes := h.Core.InspectTree()
+	nodes := h.core.InspectTree()
 	if len(nodes) < 5 {
 		t.Fatalf("tree too shallow: %d nodes", len(nodes))
 	}
@@ -95,7 +95,7 @@ func TestInspectHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	page := h.Core.InspectHTML()
+	page := h.core.InspectHTML()
 	for _, want := range []string{"<!doctype html>", "render-tree inspector", "Flex", "button", "Header", `class="node"`, `class="row"`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("inspector HTML missing %q", want)

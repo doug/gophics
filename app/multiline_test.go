@@ -101,7 +101,7 @@ func TestMultilineWrapGrowsHeight(t *testing.T) {
 	// The wrapped field must be taller than a single line: probe semantics rect.
 	// (Field width 200 → this text wraps to several lines.)
 	found := false
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.core.Semantics()) {
 		if n.Role == layout.RoleTextField && n.Rect.Dy() > 40 {
 			found = true
 		}

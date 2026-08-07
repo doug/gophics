@@ -45,13 +45,13 @@ func TestThemeAutoFollowsDarkMode(t *testing.T) {
 
 	h.SetDarkMode(true)
 	h.Render()
-	if h.Core.Skipped {
+	if h.core.Skipped {
 		t.Fatal("dark switch must repaint")
 	}
 
 	// Button label present via semantics either way.
 	found := false
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.core.Semantics()) {
 		if n.Role == layout.RoleButton && strings.Contains(n.Label, "Go") {
 			found = true
 		}
@@ -63,7 +63,7 @@ func TestThemeAutoFollowsDarkMode(t *testing.T) {
 
 func TestBoldFamilyMeasuresWider(t *testing.T) {
 	h := themedHarness(t)
-	p := h.Core.Painter
+	p := h.core.Painter
 	reg := p.MeasureWidthIn("", "Hello Bold World", 16)
 	bold := p.MeasureWidthIn(theme.FontBold, "Hello Bold World", 16)
 	if bold <= reg {
@@ -94,15 +94,15 @@ func TestBuildPanicIsolatedToSubtree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.Core.Owner.OnBuildPanic = func(r any) { recovered = r }
-	h.Core.Owner.RebuildAll()
+	h.core.Owner.OnBuildPanic = func(r any) { recovered = r }
+	h.core.Owner.RebuildAll()
 	h.Render()
 
 	if recovered == nil {
 		t.Fatal("panic not observed")
 	}
 	healthy, errBox := false, false
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.core.Semantics()) {
 		if strings.Contains(n.Label, "healthy sibling") {
 			healthy = true
 		}

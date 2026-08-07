@@ -9,7 +9,6 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
-	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -37,9 +36,9 @@ func TestButtonPressHighlight(t *testing.T) {
 	red := func() uint8 { r, _, _, _ := h.Render().At(8, 8).RGBA(); return uint8(r >> 8) }
 
 	rest := red()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 60, Y: 40}})
+	h.Press(geom.Pt{X: 60, Y: 40})
 	held := red()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 60, Y: 40}})
+	h.Release(geom.Pt{X: 60, Y: 40})
 	for i := 0; i < 40; i++ { // let the release fade settle
 		h.Step(1.0 / 60)
 	}

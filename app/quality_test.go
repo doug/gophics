@@ -39,19 +39,19 @@ func TestKeyboardFocusClearedOnUnmount(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render() // mounts the focusable → autofocus takes it
-	if h.Core.Owner.KeyboardTarget == nil {
+	if h.core.Owner.KeyboardTarget == nil {
 		t.Fatal("focusable Interactive did not autofocus on mount")
 	}
 
 	focusToggle.SetState(func() { focusToggle.show = false }) // remove it from the tree
 	h.Render()
-	if h.Core.Owner.KeyboardTarget != nil {
+	if h.core.Owner.KeyboardTarget != nil {
 		t.Fatal("KeyboardTarget was not cleared after the focused widget unmounted")
 	}
 
 	focusToggle.SetState(func() { focusToggle.show = true }) // a new focusable should autofocus again
 	h.Render()
-	if h.Core.Owner.KeyboardTarget == nil {
+	if h.core.Owner.KeyboardTarget == nil {
 		t.Fatal("a new focusable did not autofocus after focus was released")
 	}
 }

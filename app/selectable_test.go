@@ -35,7 +35,7 @@ func selHarness(t *testing.T, text string) *Headless {
 }
 
 func clip(h *Headless) string {
-	return h.Core.Owner.Clipboard.(*MemClipboard).S
+	return h.core.Owner.Clipboard.(*MemClipboard).S
 }
 
 func TestSelectableCopyAll(t *testing.T) {

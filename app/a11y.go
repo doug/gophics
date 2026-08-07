@@ -8,7 +8,7 @@ import (
 // A11yNode is one accessibility node in a flat, ID-addressed tree — the
 // shape platform screen-reader bridges (Android AccessibilityNodeProvider,
 // iOS UIAccessibilityElement, AccessKit) consume. Rects are in physical
-// pixels. Built from the semantics tree (Core.Semantics).
+// pixels. Built from the semantics tree (core.Semantics).
 type A11yNode struct {
 	ID       int
 	ParentID int // -1 for the root
@@ -37,7 +37,7 @@ type a11yTree struct {
 // A11yTree flattens the current semantics tree into ID-addressed nodes at
 // the given device scale (physical px). Call after a frame. The activation
 // callbacks are retained so A11yActivate can invoke them.
-func (c *Core) A11yTree(scale float32) []A11yNode {
+func (c *core) A11yTree(scale float32) []A11yNode {
 	t := &a11yTree{byID: map[int]int{}, actions: map[int]func(){}}
 	sem := c.Semantics()
 	next := 0
@@ -84,7 +84,7 @@ func (c *Core) A11yTree(scale float32) []A11yNode {
 
 // A11yActivate invokes the activation action of the node (screen-reader
 // activate). Safe to call with an unknown or non-actionable ID.
-func (c *Core) A11yActivate(id int) {
+func (c *core) A11yActivate(id int) {
 	if c.a11y == nil {
 		return
 	}
@@ -95,7 +95,7 @@ func (c *Core) A11yActivate(id int) {
 
 // A11yHitTest returns the ID of the deepest tappable/labeled node at the
 // physical-pixel point, or -1 — for explore-by-touch.
-func (c *Core) A11yHitTest(xPx, yPx int, scale float32) int {
+func (c *core) A11yHitTest(xPx, yPx int, scale float32) int {
 	if c.a11y == nil {
 		return -1
 	}

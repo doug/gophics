@@ -47,7 +47,7 @@ func lpHarness(t *testing.T) (*Headless, *lpState) {
 func TestLongPressFires(t *testing.T) {
 	h, st := lpHarness(t)
 	// Press and hold, no release, advance time past the threshold.
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 100}})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 100}})
 	for i := 0; i < 40 && st.longs == 0; i++ {
 		h.Step(0.02) // 20ms/frame; ~0.5s → fires
 	}
@@ -55,7 +55,7 @@ func TestLongPressFires(t *testing.T) {
 		t.Fatalf("long-press fired %d times, want 1", st.longs)
 	}
 	// Release after long-press: no tap.
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 100, Y: 100}})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 100, Y: 100}})
 	if st.taps != 0 {
 		t.Fatalf("long-press consumed the gesture; taps should be 0, got %d", st.taps)
 	}
@@ -71,8 +71,8 @@ func TestQuickTapNotLongPress(t *testing.T) {
 
 func TestMoveCancelsLongPress(t *testing.T) {
 	h, st := lpHarness(t)
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 100}})
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 130, Y: 100}}) // past slop
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 100}})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 130, Y: 100}}) // past slop
 	for i := 0; i < 40; i++ {
 		h.Step(0.02)
 	}

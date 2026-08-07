@@ -107,7 +107,7 @@ func TestGallerySelectableBody(t *testing.T) {
 	h.Release(geom.Pt{X: 380, Y: 345})
 	h.KeyMod(shell.KeyC, shell.ModSuper)
 
-	got := h.Core.Owner.Clipboard.(*app.MemClipboard).S
+	got := h.Owner().Clipboard.(*app.MemClipboard).S
 	if got == "" {
 		t.Fatal("dragging across the detail body selected nothing")
 	}

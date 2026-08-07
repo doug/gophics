@@ -80,9 +80,9 @@ func TestHitTestAfterRebuildBeforeLayout(t *testing.T) {
 	for range 30 {
 		// Scroll mutates the visible window (rebuild pending), then a raw
 		// pointer event hits immediately — no Render in between.
-		h.Core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{Y: -300}})
-		h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 150}})
-		h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 100, Y: 150}})
+		h.core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{Y: -300}})
+		h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 150}})
+		h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 100, Y: 150}})
 	}
 	h.Render()
 }

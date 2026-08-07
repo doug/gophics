@@ -36,7 +36,7 @@ func TestSemanticsRolesAndLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	flat := layout.FlattenSemantics(h.Core.Semantics())
+	flat := layout.FlattenSemantics(h.core.Semantics())
 
 	var labels []string
 	byRole := map[layout.Role]int{}
@@ -68,7 +68,7 @@ func TestFieldSemantics(t *testing.T) {
 	h.Type("read me")
 	h.Render()
 
-	flat := layout.FlattenSemantics(h.Core.Semantics())
+	flat := layout.FlattenSemantics(h.core.Semantics())
 	var field *layout.SemNode
 	for i := range flat {
 		if flat[i].Role == layout.RoleTextField {

@@ -77,7 +77,7 @@ func TestAnimatedOpacityFadesIn(t *testing.T) {
 		t.Fatalf("starts hidden, got %d", r>>8)
 	}
 	st.show = true
-	h.Core.Owner.RebuildAll()
+	h.core.Owner.RebuildAll()
 	h.Render()
 	h.Step(0.04)
 	h.Render()

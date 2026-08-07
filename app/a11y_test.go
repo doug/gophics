@@ -28,7 +28,7 @@ func TestA11yTreeAndActivate(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	nodes := h.Core.A11yTree(2)
+	nodes := h.core.A11yTree(2)
 	if len(nodes) < 3 {
 		t.Fatalf("a11y nodes = %d", len(nodes))
 	}
@@ -62,12 +62,12 @@ func TestA11yTreeAndActivate(t *testing.T) {
 		t.Fatalf("button x=%d, expected >= 20 physical", button.X)
 	}
 	// Activation invokes OnTap.
-	h.Core.A11yActivate(button.ID)
+	h.core.A11yActivate(button.ID)
 	if activated != 1 {
 		t.Fatalf("activate did not fire OnTap: %d", activated)
 	}
 	// Hit test lands on the button.
-	if id := h.Core.A11yHitTest(button.X+button.W/2, button.Y+button.H/2, 2); id != button.ID {
+	if id := h.core.A11yHitTest(button.X+button.W/2, button.Y+button.H/2, 2); id != button.ID {
 		t.Fatalf("hit test = %d, want button %d", id, button.ID)
 	}
 }

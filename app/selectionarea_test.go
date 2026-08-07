@@ -166,11 +166,11 @@ func TestSelectionAreaVerticalDragOverScroll(t *testing.T) {
 // touchDown/touchMove dispatch touch-sourced pointer events (the harness
 // helpers default to a mouse).
 func touchDown(h *Headless, p geom.Pt) {
-	h.Core.Layout(geom.Size{W: 400, H: 200})
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p, Source: shell.SourceTouch})
+	h.core.Layout(geom.Size{W: 400, H: 200})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p, Source: shell.SourceTouch})
 }
 func touchMove(h *Headless, p geom.Pt) {
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: shell.SourceTouch})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: shell.SourceTouch})
 }
 
 // TestSelectionAreaTouchDragScrolls verifies that on touch, a plain drag (no

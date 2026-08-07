@@ -77,7 +77,7 @@ func settle(h *app.Headless) {
 
 func semLabels(h *app.Headless) []string {
 	var out []string
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.Semantics()) {
 		out = append(out, n.Label)
 	}
 	return out

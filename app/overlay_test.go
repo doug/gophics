@@ -71,7 +71,7 @@ func dlgHarness(t *testing.T) (*Headless, *dlgState) {
 }
 
 func hasSemLabel(h *Headless, sub string) bool {
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.core.Semantics()) {
 		if strings.Contains(n.Label, sub) {
 			return true
 		}
@@ -117,7 +117,7 @@ func TestDialogConfirmButton(t *testing.T) {
 	// fragile: a tap on the card's non-button area falls through to the modal
 	// scrim and dismisses the dialog before the button is reached, and the card
 	// height tracks the theme's type scale.
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.core.Semantics()) {
 		if n.Role == layout.RoleButton && strings.Contains(n.Label, "Confirm") {
 			h.Tap(geom.Pt{X: n.Rect.Min.X + n.Rect.Dx()/2, Y: n.Rect.Min.Y + n.Rect.Dy()/2})
 			break

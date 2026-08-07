@@ -61,7 +61,7 @@ func damageApp(t *testing.T) *Headless {
 func TestUnchangedFrameSkipsRasterization(t *testing.T) {
 	h := damageApp(t)
 	h.Render() // no state change since last render
-	if !h.Core.Skipped {
+	if !h.core.Skipped {
 		t.Fatal("identical frame must skip rasterization")
 	}
 }
@@ -70,10 +70,10 @@ func TestHoverDamageIsLocalized(t *testing.T) {
 	h := damageApp(t)
 	h.Move(geom.Pt{X: 100, Y: 50}) // hover a row
 	h.Render()
-	if h.Core.Skipped {
+	if h.core.Skipped {
 		t.Fatal("hover change must repaint")
 	}
-	d := h.Core.LastDamage
+	d := h.core.LastDamage
 	full := geom.RectFromSize(geom.Size{W: 200, H: 300})
 	if d == full || d.Dy() > 40 {
 		t.Fatalf("hover damage %v should be one row, not the surface", d)

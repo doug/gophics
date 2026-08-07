@@ -54,7 +54,7 @@ func TestHotRestartRestoresThread(t *testing.T) {
 	}
 
 	// Snapshot and round-trip through JSON — what a restart does.
-	blob, err := json.Marshal(h.Core.Owner.SnapshotState())
+	blob, err := json.Marshal(h.Owner().SnapshotState())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestHotRestartRestoresThread(t *testing.T) {
 	if hasLabel(h2, "Back") {
 		t.Fatal("fresh app should start on the feed, not a thread")
 	}
-	h2.Core.Owner.RestoreState(snap)
+	h2.Owner().RestoreState(snap)
 	if !waitLabel(h2, "Back") {
 		t.Error("restored app did not land back on the thread page")
 	}

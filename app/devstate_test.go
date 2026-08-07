@@ -36,7 +36,7 @@ func (s *devCounterState) Build(widget.Ctx) widget.Widget {
 
 // TestDevStateFileRoundTrip exercises the exact path a hot-restart takes: an
 // app snapshots its state to a file, a freshly booted app reads that file and
-// restores — through the real Core (which wraps the root in OverlayHost).
+// restores — through the real core (which wraps the root in OverlayHost).
 func TestDevStateFileRoundTrip(t *testing.T) {
 	cfg := Config{Size: geom.Size{W: 100, H: 100}, Font: goregular.TTF}
 
@@ -53,7 +53,7 @@ func TestDevStateFileRoundTrip(t *testing.T) {
 	h1.Render()
 
 	file := filepath.Join(t.TempDir(), "dev-state.json")
-	if err := writeDevSnapshot(file, h1.Core.Owner.SnapshotState()); err != nil {
+	if err := writeDevSnapshot(file, h1.core.Owner.SnapshotState()); err != nil {
 		t.Fatalf("write snapshot: %v", err)
 	}
 
@@ -76,7 +76,7 @@ func TestDevStateFileRoundTrip(t *testing.T) {
 		t.Fatalf("fresh app N = %d, want 0", ref2.N)
 	}
 
-	h2.Core.Owner.RestoreState(snap)
+	h2.core.Owner.RestoreState(snap)
 
 	if ref2.N != 42 {
 		t.Errorf("restored N = %d, want 42", ref2.N)

@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
@@ -12,7 +13,7 @@ import (
 // Drive input with Tap/Move/Type/Key, then Render to inspect pixels — or
 // assert on state directly.
 type Headless struct {
-	Core *Core
+	core *core
 	// OpenedURLs records ctx.OpenURL calls for assertions.
 	OpenedURLs []string
 
@@ -26,13 +27,13 @@ type Headless struct {
 
 // NewHeadless builds a headless app at the given logical size and scale.
 func NewHeadless(root widget.Widget, cfg Config, scale float32) (*Headless, error) {
-	core, err := NewCore(root, cfg)
+	core, err := newCore(root, cfg)
 	if err != nil {
 		return nil, err
 	}
 	core.Owner.RequestFrame = func() {} // frames are pulled via Render
 	core.Owner.Clipboard = &MemClipboard{}
-	h := &Headless{Core: core, size: cfg.Size, scale: scale}
+	h := &Headless{core: core, size: cfg.Size, scale: scale}
 	core.Owner.OpenURL = func(url string) error {
 		h.OpenedURLs = append(h.OpenedURLs, url)
 		return nil
@@ -49,37 +50,37 @@ func (m *MemClipboard) ClipboardWrite(s string) error  { m.S = s; return nil }
 
 // Render lays out and paints a frame through the damage-aware pipeline,
 // returning the physical-pixel image (retained across frames, so an
-// unchanged scene skips rasterization — check Core.Skipped).
+// unchanged scene skips rasterization — check core.Skipped).
 func (h *Headless) Render() image.Image {
-	h.Core.drainPosted()
-	h.Core.Layout(h.size)
-	if changed, damage := h.Core.RecordScene(h.size, h.scale); changed {
-		c := h.Core.Painter.BeginOffscreen(h.size, h.scale)
-		h.Core.ReplayDamaged(c, damage)
+	h.core.drainPosted()
+	h.core.Layout(h.size)
+	if changed, damage := h.core.RecordScene(h.size, h.scale); changed {
+		c := h.core.Painter.BeginOffscreen(h.size, h.scale)
+		h.core.ReplayDamaged(c, damage)
 	}
-	return h.Core.Painter.Image()
+	return h.core.Painter.Image()
 }
 
 // SetDarkMode sets the simulated platform color scheme and rebuilds.
 func (h *Headless) SetDarkMode(dark bool) {
-	h.Core.Owner.DarkMode = dark
-	h.Core.Owner.RebuildAll()
+	h.core.Owner.DarkMode = dark
+	h.core.Owner.RebuildAll()
 }
 
 // Resize changes the logical surface size (simulates a window resize) and
 // delivers a Resize event so the tree can react.
 func (h *Headless) Resize(size geom.Size) {
 	h.size = size
-	h.Core.Owner.RebuildAll()
+	h.core.Owner.RebuildAll()
 }
 
 // Step advances animations by dt seconds, reporting whether any are still
 // running. Deterministic replacement for vsync in tests.
 func (h *Headless) Step(dt float64) bool {
-	h.Core.TickGestures(dt)
-	r := h.Core.Owner.TickAll(dt)
-	if h.Core.Owner.Input != nil {
-		h.Core.Owner.Input.NewFrame() // clear per-frame edges after tickers read them
+	h.core.TickGestures(dt)
+	r := h.core.Owner.TickAll(dt)
+	if h.core.Owner.Input != nil {
+		h.core.Owner.Input.NewFrame() // clear per-frame edges after tickers read them
 	}
 	return r
 }
@@ -88,90 +89,107 @@ func (h *Headless) Step(dt float64) bool {
 // release at to.
 func (h *Headless) Drag(from, to geom.Pt) {
 	h.layoutForInput()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: to})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: to})
 }
 
 // Scroll dispatches a scroll delta at the last pointer position (Move first
 // to position the pointer).
 func (h *Headless) Scroll(delta geom.Pt) {
 	h.layoutForInput()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: delta})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: delta})
 }
 
 // Move dispatches a pointer move (hover) to p.
 func (h *Headless) Move(p geom.Pt) {
 	h.layoutForInput()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p})
 }
 
 // Tap dispatches a press+release at p.
 func (h *Headless) Tap(p geom.Pt) {
 	h.layoutForInput()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p})
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
 // Type dispatches committed text input. Pending rebuilds are flushed
 // first, mirroring the frame between events in a real shell.
 func (h *Headless) Type(s string) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Text{S: s})
+	h.core.Keyboard(shell.Text{S: s})
 }
 
-// Key dispatches a key press (flushing pending rebuilds first).
+// Key dispatches a full key tap — press then release — flushing pending
+// rebuilds first. For held-key tests (Ctx.Input() polling) use KeyDown/KeyUp.
 func (h *Headless) Key(code shell.KeyCode) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
+	h.core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
+	h.core.Keyboard(shell.Key{Kind: shell.KeyRelease, Code: code})
 }
 
-// KeyDown dispatches a key-press (held). Pair with KeyUp to test held-state
-// polling via Ctx.Input().
+// KeyDown dispatches a key-press and holds it. Pair with KeyUp to test
+// held-state polling via Ctx.Input().
 func (h *Headless) KeyDown(code shell.KeyCode) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
+	h.core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code})
 }
 
 // KeyUp dispatches a key-release.
 func (h *Headless) KeyUp(code shell.KeyCode) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Key{Kind: shell.KeyRelease, Code: code})
+	h.core.Keyboard(shell.Key{Kind: shell.KeyRelease, Code: code})
 }
 
 // Compose dispatches an IME composition update (Start on first call).
 func (h *Headless) Compose(preedit string, cursor int) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Composition{Kind: shell.CompositionUpdate, Preedit: preedit, Cursor: cursor})
+	h.core.Keyboard(shell.Composition{Kind: shell.CompositionUpdate, Preedit: preedit, Cursor: cursor})
 }
 
 // CommitComposition ends composition, committing s.
 func (h *Headless) CommitComposition(s string) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Composition{Kind: shell.CompositionEnd, Committed: s})
+	h.core.Keyboard(shell.Composition{Kind: shell.CompositionEnd, Committed: s})
 }
 
 // KeyMod dispatches a key press with modifiers.
 func (h *Headless) KeyMod(code shell.KeyCode, mods shell.Mods) {
 	h.layoutForInput()
-	h.Core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code, Mods: mods})
+	h.core.Keyboard(shell.Key{Kind: shell.KeyPress, Code: code, Mods: mods})
 }
 
 // DragTo dispatches press at from and a move to to without releasing
 // (for selection dragging; call Release to finish).
 func (h *Headless) DragTo(from, to geom.Pt) {
 	h.layoutForInput()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
+}
+
+// Owner returns the widget Owner: the tree's shared services — state
+// snapshot/restore (hot-restart tests), clipboard, semantics. For tests that
+// assert past the input/render surface.
+func (h *Headless) Owner() *widget.Owner { return h.core.Owner }
+
+// Semantics returns the flattened accessibility tree for assertions.
+func (h *Headless) Semantics() []layout.SemNode { return h.core.Semantics() }
+
+// Press dispatches pointer-down at p without releasing — for testing
+// press-and-hold feedback (pressed highlights, long-press). Pair with Release.
+func (h *Headless) Press(p geom.Pt) {
+	h.layoutForInput()
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p})
 }
 
 // Release dispatches pointer-up at p.
 func (h *Headless) Release(p geom.Pt) {
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
 // layoutForInput ensures hit testing sees current sizes even before the
 // first Render.
 func (h *Headless) layoutForInput() {
-	h.Core.Layout(h.size)
+	h.core.Layout(h.size)
 }

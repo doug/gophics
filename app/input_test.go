@@ -8,14 +8,14 @@ import (
 	"github.com/doug/gophics/widget"
 )
 
-// TestInputHeldStateHeadless drives keys through the real Core dispatch and
+// TestInputHeldStateHeadless drives keys through the real core dispatch and
 // checks held-state polling + per-frame edge clearing, focus-free.
 func TestInputHeldStateHeadless(t *testing.T) {
 	h, err := NewHeadless(widget.Canvas{W: 100, H: 100}, Config{Size: geom.Size{W: 200, H: 200}}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := h.Core.Owner.Input
+	in := h.core.Owner.Input
 	if in == nil {
 		t.Fatal("Owner.Input is nil")
 	}

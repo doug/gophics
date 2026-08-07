@@ -11,7 +11,7 @@ import (
 )
 
 func semLabelsHas(h *Headless, substr string) bool {
-	for _, n := range layout.FlattenSemantics(h.Core.Semantics()) {
+	for _, n := range layout.FlattenSemantics(h.core.Semantics()) {
 		if strings.Contains(n.Label, substr) {
 			return true
 		}

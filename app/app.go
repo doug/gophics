@@ -1,7 +1,7 @@
 // Package app ties the widget tree to a shell: the gophics runtime.
 //
 // Run drives a real window; Headless drives the same core without a display
-// for tests and golden images. Both share Core, so behavior verified
+// for tests and golden images. Both share core, so behavior verified
 // headless is the shipping behavior (PLAN.md principle 3).
 package app
 
@@ -32,7 +32,7 @@ type Config struct {
 	// selectable per text run via widget.Text.Font / layout.RichSpan.Font.
 	FontFamilies map[string][]byte
 	// Debug draws box-bounds outlines over the app (Flutter's
-	// debugPaintSize). Toggle at runtime via Core.SetDebugPaint.
+	// debugPaintSize). Toggle at runtime via core.SetDebugPaint.
 	Debug bool
 	// Renderer selects the rasterization backend: Auto (default) prefers the
 	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
@@ -50,9 +50,9 @@ const (
 	RendererCPU  = shell.RendererCPU
 )
 
-// Core is the shell-independent runtime: element tree, layout, paint, and
+// core is the shell-independent runtime: element tree, layout, paint, and
 // input dispatch. All methods run on the UI goroutine.
-type Core struct {
+type core struct {
 	Owner   *widget.Owner
 	Painter *paint.Painter
 
@@ -112,14 +112,14 @@ const longPressSeconds = 0.5
 // longPressPending reports whether a time-based gesture (long-press or a
 // deferred single-tap) is running — the shell keeps frames coming while it
 // is so the timers advance.
-func (c *Core) longPressPending() bool {
+func (c *core) longPressPending() bool {
 	return (c.longPress != nil && !c.moved && !c.longFired) || c.pendingTap != nil
 }
 
 // TickGestures advances time-based gestures by dt seconds: fires OnLongPress
 // for a held unmoved press, and flushes a deferred single-tap once the
 // double-tap window elapses.
-func (c *Core) TickGestures(dt float64) {
+func (c *core) TickGestures(dt float64) {
 	if c.longPress != nil && !c.moved && !c.longFired {
 		c.pressHeld += dt
 		if c.pressHeld >= longPressSeconds {
@@ -150,7 +150,7 @@ const doubleTapSlop = 8
 // fireTap handles a completed tap on box at pos: immediate for a plain tap; for
 // a double-tap-capable box, completes a double only if the second tap is near
 // the first, else defers the single.
-func (c *Core) fireTap(box *widget.InteractiveBox, pos geom.Pt) {
+func (c *core) fireTap(box *widget.InteractiveBox, pos geom.Pt) {
 	if box.Handler.OnDoubleTap == nil {
 		if box.Handler.OnTap != nil {
 			box.Handler.OnTap()
@@ -176,8 +176,8 @@ func near(a, b geom.Pt, slop float32) bool {
 	return dx*dx+dy*dy <= slop*slop
 }
 
-// NewCore builds a runtime for the given root widget.
-func NewCore(root widget.Widget, cfg Config) (*Core, error) {
+// newCore builds a runtime for the given root widget.
+func newCore(root widget.Widget, cfg Config) (*core, error) {
 	p := paint.NewPainter()
 	if cfg.Font != nil {
 		if err := p.LoadFont(cfg.Font); err != nil {
@@ -189,7 +189,7 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 			return nil, err
 		}
 	}
-	c := &Core{
+	c := &core{
 		Owner:      &widget.Owner{Painter: p, Input: input.New()},
 		Painter:    p,
 		background: cfg.Background,
@@ -209,7 +209,7 @@ func NewCore(root widget.Widget, cfg Config) (*Core, error) {
 // launch goroutines that immediately Post (e.g. a cached NetworkImage), so
 // the hooks must already be in place — otherwise a background Post races
 // the caller still assigning them.
-func (c *Core) mount() {
+func (c *core) mount() {
 	// Wrap the app in an OverlayHost so any widget can show dialogs, menus,
 	// and snackbars above the whole tree (widget.Overlay via Of).
 	c.Owner.SetRoot(widget.OverlayHost{Child: c.root})
@@ -218,14 +218,14 @@ func (c *Core) mount() {
 // Post schedules fn to run on the UI goroutine before the next frame's
 // build phase (§4.6): the one safe way for background goroutines to touch
 // widget state. Safe to call from any goroutine.
-func (c *Core) Post(fn func()) {
+func (c *core) Post(fn func()) {
 	c.posted <- fn
 	c.Owner.RequestFrameThreadSafe()
 }
 
 // drainPosted runs pending posted work; called on the UI goroutine at the
 // top of each frame.
-func (c *Core) drainPosted() {
+func (c *core) drainPosted() {
 	for {
 		select {
 		case fn := <-c.posted:
@@ -237,7 +237,7 @@ func (c *Core) drainPosted() {
 }
 
 // Layout flushes pending builds and lays out the tree at the given size.
-func (c *Core) Layout(size geom.Size) layout.Box {
+func (c *core) Layout(size geom.Size) layout.Box {
 	c.size = size
 	box := c.Owner.RootBox()
 	if box == nil {
@@ -256,22 +256,13 @@ func (c *Core) Layout(size geom.Size) layout.Box {
 	return box
 }
 
-// Paint draws the current tree onto canvas (after Layout), unconditionally.
-// The damage-aware path is RecordScene + ReplayDamaged.
-func (c *Core) Paint(canvas paint.Canvas) {
-	canvas.Clear(c.background)
-	if box := c.Owner.RootBox(); box != nil {
-		box.Paint(canvas, geom.Pt{})
-	}
-}
-
 // SetDebugPaint toggles the box-bounds debug overlay at runtime.
-func (c *Core) SetDebugPaint(on bool) { c.debugPaint = on }
+func (c *core) SetDebugPaint(on bool) { c.debugPaint = on }
 
 // SetInspect toggles the interactive widget inspector: while on, the box
 // under the pointer is highlighted and labeled with its type and size (like
 // Flutter's widget inspector). Pairs with InspectTree for the full dump.
-func (c *Core) SetInspect(on bool) {
+func (c *core) SetInspect(on bool) {
 	c.inspect = on
 	c.Owner.RequestFrameThreadSafe()
 }
@@ -279,7 +270,7 @@ func (c *Core) SetInspect(on bool) {
 // InspectTree returns the current render tree as a flat, depth-ordered dump
 // (types, rects, semantics) — the data behind a widget inspector. Call
 // after a frame. Runs headless.
-func (c *Core) InspectTree() []layout.InspectNode {
+func (c *core) InspectTree() []layout.InspectNode {
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
@@ -289,7 +280,7 @@ func (c *Core) InspectTree() []layout.InspectNode {
 
 // FrameStats returns the average and worst raster+record time (ms) over the
 // last frames — the honest frame-pacing readout (PLAN.md §6.4).
-func (c *Core) FrameStats() (avg, worst float32) {
+func (c *core) FrameStats() (avg, worst float32) {
 	var sum, n float32
 	for _, t := range c.frameTimes {
 		if t > 0 {
@@ -306,7 +297,7 @@ func (c *Core) FrameStats() (avg, worst float32) {
 	return avg, worst
 }
 
-func (c *Core) recordFrameTime(ms float32) {
+func (c *core) recordFrameTime(ms float32) {
 	c.frameTimes[c.frameHead] = ms
 	c.frameHead = (c.frameHead + 1) % len(c.frameTimes)
 }
@@ -315,7 +306,7 @@ func (c *Core) recordFrameTime(ms float32) {
 // against the previous frame's. It reports whether rasterization is needed
 // and the (surface-clamped) damage rect. A size or scale change forces full
 // damage, since the painter's retained surface is reallocated.
-func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage geom.Rect) {
+func (c *core) RecordScene(size geom.Size, scale float32) (changed bool, damage geom.Rect) {
 	c.cur.Reset()
 	rec := c.cur.Recorder()
 	surface := geom.RectFromSize(size)
@@ -364,7 +355,7 @@ func (c *Core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 // culling ops that don't intersect it. Pixels outside damage are untouched
 // and remain valid from the previous frame (the painter's surface is
 // retained across frames).
-func (c *Core) ReplayDamaged(canvas paint.Canvas, damage geom.Rect) {
+func (c *core) ReplayDamaged(canvas paint.Canvas, damage geom.Rect) {
 	canvas.PushClip(damage)
 	c.prev.ReplayDamage(canvas, damage, c.Painter)
 	canvas.PopClip()
@@ -373,7 +364,7 @@ func (c *Core) ReplayDamaged(canvas paint.Canvas, damage geom.Rect) {
 // ReplayScene replays the most recent recorded scene in full onto canvas. The
 // GPU present path rasterizes the whole frame on the GPU each frame, so it
 // uses this rather than damage-culled partial replay. Call after RecordScene.
-func (c *Core) ReplayScene(canvas paint.Canvas) {
+func (c *core) ReplayScene(canvas paint.Canvas) {
 	c.prev.Replay(canvas)
 }
 
@@ -386,7 +377,7 @@ type hitInteractive struct {
 
 // Semantics returns the semantics tree of the current layout (a11y
 // foundation, PLAN.md §6.5). Call after a frame (or Headless.Render).
-func (c *Core) Semantics() []layout.SemNode {
+func (c *core) Semantics() []layout.SemNode {
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
@@ -398,7 +389,7 @@ func (c *Core) Semantics() []layout.SemNode {
 // Pending rebuilds are flushed AND laid out first: hit geometry (child
 // offsets, sizes) is only valid after layout, and events can arrive
 // between a state change and its frame.
-func (c *Core) interactivesAt(p geom.Pt) []hitInteractive {
+func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
@@ -425,7 +416,7 @@ func boxes(hits []hitInteractive) []*widget.InteractiveBox {
 
 // Pointer dispatches a pointer event: hover enter/exit, drag, scroll,
 // tap on press+release over the same Interactive, and tap-to-focus.
-func (c *Core) Pointer(e shell.Pointer) {
+func (c *core) Pointer(e shell.Pointer) {
 	if c.Owner.Input != nil {
 		c.Owner.Input.HandlePointer(e)
 	}
@@ -551,7 +542,7 @@ func (c *Core) Pointer(e shell.Pointer) {
 // firePressEnd notifies every box that received OnPress this gesture that the
 // press has concluded (up, cancel, or a drag steal), then clears the list. It
 // is idempotent: the second call in a gesture finds an empty list.
-func (c *Core) firePressEnd() {
+func (c *core) firePressEnd() {
 	for _, b := range c.pressBoxes {
 		if b.Handler.OnPressEnd != nil {
 			b.Handler.OnPressEnd()
@@ -562,7 +553,7 @@ func (c *Core) firePressEnd() {
 
 // focusFrom moves keyboard focus to the topmost focusable hit, if any.
 // A press on nothing focusable leaves focus where it is.
-func (c *Core) focusFrom(hits []hitInteractive) {
+func (c *core) focusFrom(hits []hitInteractive) {
 	for _, hit := range hits {
 		h := &hit.box.Handler
 		if h.OnText == nil && h.OnKey == nil {
@@ -584,7 +575,7 @@ func (c *Core) focusFrom(hits []hitInteractive) {
 }
 
 // Keyboard dispatches key/text events to the current keyboard target.
-func (c *Core) Keyboard(e shell.Event) {
+func (c *core) Keyboard(e shell.Event) {
 	// Feed held-state polling first, before the focus early-return — a game
 	// canvas polls keys with no focused widget.
 	if in := c.Owner.Input; in != nil {
@@ -642,7 +633,7 @@ func Run(root widget.Widget, cfg Config) error {
 // for embedded hosts (shell/mobile bridges) that own the surface and
 // event loop.
 func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
-	core, err := NewCore(root, cfg)
+	core, err := newCore(root, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -657,7 +648,7 @@ func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
 }
 
 type shellHandler struct {
-	core   *Core
+	core   *core
 	window shell.Window
 
 	// Dev-mode state-preserving hot-restart (set only under `gophics dev` via

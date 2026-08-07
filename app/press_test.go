@@ -31,7 +31,7 @@ func TestOnPressEnd(t *testing.T) {
 	}
 	h.layoutForInput()
 	at := func(k shell.PointerKind, x, y float32) {
-		h.Core.Pointer(shell.Pointer{Kind: k, Pos: geom.Pt{X: x, Y: y}})
+		h.core.Pointer(shell.Pointer{Kind: k, Pos: geom.Pt{X: x, Y: y}})
 	}
 
 	// A clean tap: press, tap, and press-end each fire once.

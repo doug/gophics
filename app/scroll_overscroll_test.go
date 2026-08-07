@@ -24,7 +24,7 @@ func overscrollHarness(t *testing.T) (*Headless, func() *viewportRead) {
 	}
 	h.Render()
 	read := func() *viewportRead {
-		vp := findViewport(h.Core.Owner.RootBox())
+		vp := findViewport(h.core.Owner.RootBox())
 		if vp == nil {
 			t.Fatal("no viewport in tree")
 		}

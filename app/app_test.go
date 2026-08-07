@@ -110,7 +110,7 @@ func TestScrollWidget(t *testing.T) {
 	}
 	h.Render()
 
-	vp := findViewport(h.Core.Owner.RootBox())
+	vp := findViewport(h.core.Owner.RootBox())
 	if vp == nil {
 		t.Fatal("no viewport in tree")
 	}
@@ -200,17 +200,17 @@ func TestFlingDeceleration(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	vp := findViewport(h.Core.Owner.RootBox())
+	vp := findViewport(h.core.Owner.RootBox())
 
 	// Drag upward with real timing so velocity tracking sees speed.
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 50, Y: 90}})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 50, Y: 90}})
 	y := float32(90)
 	for i := 0; i < 5; i++ {
 		time.Sleep(8 * time.Millisecond)
 		y -= 12
-		h.Core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 50, Y: y}})
+		h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 50, Y: y}})
 	}
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 50, Y: y}})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 50, Y: y}})
 	h.Render()
 	dragged := vp.Offset
 	if dragged <= 0 {

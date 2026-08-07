@@ -365,13 +365,13 @@ func BenchmarkRasterCPU(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	h.Core.Layout(h.size)
-	h.Core.RecordScene(h.size, h.scale)
+	h.core.Layout(h.size)
+	h.core.RecordScene(h.size, h.scale)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c := h.Core.Painter.BeginOffscreen(h.size, h.scale)
-		h.Core.ReplayScene(c)
-		_ = h.Core.Painter.Image()
+		c := h.core.Painter.BeginOffscreen(h.size, h.scale)
+		h.core.ReplayScene(c)
+		_ = h.core.Painter.Image()
 	}
 }
 

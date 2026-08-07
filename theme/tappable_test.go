@@ -9,7 +9,6 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -37,9 +36,9 @@ func TestTappablePressHighlight(t *testing.T) {
 	red := func() uint8 { r, _, _, _ := h.Render().At(6, 6).RGBA(); return uint8(r >> 8) }
 
 	rest := red()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 60, Y: 30}})
+	h.Press(geom.Pt{X: 60, Y: 30})
 	held := red()
-	h.Core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 60, Y: 30}})
+	h.Release(geom.Pt{X: 60, Y: 30})
 	for i := 0; i < 40; i++ {
 		h.Step(1.0 / 60)
 	}

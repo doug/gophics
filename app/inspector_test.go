@@ -36,7 +36,7 @@ func inspHarness(t *testing.T) *Headless {
 
 func TestDeepestAtFindsLeaf(t *testing.T) {
 	h := inspHarness(t)
-	root := h.Core.Owner.RootBox()
+	root := h.core.Owner.RootBox()
 
 	// The 100×40 box is centered in 300×200: x∈[100,200], y∈[80,120].
 	_, rect, ok := layout.DeepestAt(root, geom.Pt{X: 150, Y: 100})
@@ -70,7 +70,7 @@ func TestInspectorOverlayDraws(t *testing.T) {
 	h := inspHarness(t)
 	plain := encode(t, h.Render())
 
-	h.Core.SetInspect(true)
+	h.core.SetInspect(true)
 	h.Move(geom.Pt{X: 150, Y: 100}) // hover the centered box
 	withOverlay := encode(t, h.Render())
 
@@ -79,7 +79,7 @@ func TestInspectorOverlayDraws(t *testing.T) {
 	}
 
 	// Toggling off restores the plain frame.
-	h.Core.SetInspect(false)
+	h.core.SetInspect(false)
 	h.Move(geom.Pt{X: 150, Y: 100})
 	off := encode(t, h.Render())
 	if !bytes.Equal(plain, off) {
