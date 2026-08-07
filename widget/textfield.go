@@ -107,7 +107,7 @@ func (s *textFieldState) display() (str string, preStart, preEnd int) {
 		return s.ed.Text(), 0, 0
 	}
 	runes := []rune(s.ed.Text())
-	caret := s.ed.Caret
+	caret := s.ed.Caret()
 	pre := []rune(s.preedit)
 	out := make([]rune, 0, len(runes)+len(pre))
 	out = append(out, runes[:caret]...)
@@ -199,8 +199,8 @@ func (s *textFieldState) moveVertical(ctx Ctx, dir int, extend bool) {
 	if len(lines) == 0 {
 		return
 	}
-	li := lineOf(lines, s.ed.Caret)
-	x := lines[li].CaretX(s.ed.Caret - lines[li].Start)
+	li := lineOf(lines, s.ed.Caret())
+	x := lines[li].CaretX(s.ed.Caret() - lines[li].Start)
 	li += dir
 	if li < 0 || li >= len(lines) {
 		return
@@ -300,7 +300,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				f.OnSubmit(s.ed.Text())
 			}
 		case shell.KeyEscape:
-			s.ed.MoveTo(s.ed.Caret, false) // collapse selection
+			s.ed.MoveTo(s.ed.Caret(), false) // collapse selection
 			s.SetState(nil)
 		case shell.KeyA:
 			if k.Mods.Command() {
@@ -379,7 +379,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				// OnPress already placed the caret at the click; select the word
 				// around it.
 				s.activity()
-				s.ed.SelectWordAt(s.ed.Caret)
+				s.ed.SelectWordAt(s.ed.Caret())
 				s.SetState(nil)
 			},
 			OnText:        onText,
@@ -463,7 +463,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 		return b.size
 	}
 	// Keep the caret visible: adjust scrollX so it lies within the box.
-	caretX := b.painter.Shape(b.state.ed.Text(), f.size()).CaretX(b.state.ed.Caret)
+	caretX := b.painter.Shape(b.state.ed.Text(), f.size()).CaretX(b.state.ed.Caret())
 	if caretX-b.state.scrollX > b.size.W-2 {
 		b.state.scrollX = caretX - b.size.W + 2
 	}
@@ -537,7 +537,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 
 	if b.state.caretVisible() {
-		caretIdx := b.state.ed.Caret
+		caretIdx := b.state.ed.Caret()
 		if composing {
 			caretIdx = preStart + b.state.preeditCursor
 		}
@@ -548,7 +548,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	c.PopClip()
 
 	if b.state.revealPending {
-		b.doReveal(origin.X+line.CaretX(b.state.ed.Caret), at.Y, at.Y+b.size.H)
+		b.doReveal(origin.X+line.CaretX(b.state.ed.Caret()), at.Y, at.Y+b.size.H)
 	}
 }
 
@@ -591,8 +591,8 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 	}
 
 	if b.state.caretVisible() && len(lines) > 0 {
-		li := lineOf(lines, b.state.ed.Caret)
-		x := at.X + lines[li].CaretX(b.state.ed.Caret-lines[li].Start)
+		li := lineOf(lines, b.state.ed.Caret())
+		x := at.X + lines[li].CaretX(b.state.ed.Caret()-lines[li].Start)
 		top := at.Y + float32(li)*lineH
 		c.Line(geom.Pt{X: x, Y: top}, geom.Pt{X: x, Y: top + lineH}, 1.5, caretC)
 	}
@@ -601,8 +601,8 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 
 	if b.state.revealPending {
 		if len(lines) > 0 {
-			li := lineOf(lines, b.state.ed.Caret)
-			x := at.X + lines[li].CaretX(b.state.ed.Caret-lines[li].Start)
+			li := lineOf(lines, b.state.ed.Caret())
+			x := at.X + lines[li].CaretX(b.state.ed.Caret()-lines[li].Start)
 			top := at.Y + float32(li)*lineH
 			b.doReveal(x, top, top+lineH)
 		} else {

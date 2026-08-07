@@ -48,7 +48,7 @@ type textFieldSnap struct {
 }
 
 func (s *textFieldState) SaveState() any {
-	return textFieldSnap{Text: s.ed.Text(), Caret: s.ed.Caret, Anchor: s.ed.Anchor}
+	return textFieldSnap{Text: s.ed.Text(), Caret: s.ed.Caret(), Anchor: s.ed.Anchor()}
 }
 func (s *textFieldState) LoadState(d json.RawMessage) {
 	var v textFieldSnap
@@ -56,7 +56,7 @@ func (s *textFieldState) LoadState(d json.RawMessage) {
 		return
 	}
 	s.ed.SetText(v.Text)
-	s.ed.Caret, s.ed.Anchor = clampInt(v.Caret, len(v.Text)), clampInt(v.Anchor, len(v.Text))
+	s.ed.SetSelection(v.Anchor, v.Caret) // clamps into the new text
 }
 
 // SelectableText: the selection anchor/focus (linear rune offsets).

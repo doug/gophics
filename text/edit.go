@@ -9,14 +9,14 @@ import (
 // Editor is a single-line text editing model: content, caret, and
 // selection. It is pure state — widgets own one and render from it.
 //
-// Caret and Anchor are rune indices in [0, len(runes)]. When they differ,
-// [min,max) is the selection and Caret is the moving end. Horizontal
-// movement and deletion step by grapheme cluster (UAX #29), so emoji and
-// combining sequences behave as single characters.
+// The caret and anchor (see Caret/Anchor) are rune indices in [0, Len]. When
+// they differ, [min,max) is the selection and the caret is the moving end.
+// Horizontal movement and deletion step by grapheme cluster (UAX #29), so emoji
+// and combining sequences behave as single characters.
 type Editor struct {
 	runes  []rune
-	Caret  int
-	Anchor int
+	caret  int // rune index of the caret, always in [0, len(runes)]
+	anchor int // rune index of the selection anchor, always in [0, len(runes)]
 
 	seg segmenter.Segmenter
 }
@@ -24,8 +24,23 @@ type Editor struct {
 // SetText replaces the content and clamps the caret/selection.
 func (e *Editor) SetText(s string) {
 	e.runes = []rune(s)
-	e.Caret = clampIdx(e.Caret, len(e.runes))
-	e.Anchor = clampIdx(e.Anchor, len(e.runes))
+	e.caret = clampIdx(e.caret, len(e.runes))
+	e.anchor = clampIdx(e.anchor, len(e.runes))
+}
+
+// Caret returns the caret position, a rune index in [0, Len].
+func (e *Editor) Caret() int { return e.caret }
+
+// Anchor returns the selection anchor, a rune index in [0, Len]; when it differs
+// from Caret, [min,max) of the two is the selection.
+func (e *Editor) Anchor() int { return e.anchor }
+
+// SetSelection places the anchor and caret, clamping both into range. This is
+// the only way to set them from outside the package: a raw write could leave an
+// index past the end of the text and panic the next edit.
+func (e *Editor) SetSelection(anchor, caret int) {
+	e.anchor = clampIdx(anchor, len(e.runes))
+	e.caret = clampIdx(caret, len(e.runes))
 }
 
 // Text returns the content.
@@ -37,14 +52,14 @@ func (e *Editor) Len() int { return len(e.runes) }
 // Selection returns the selected range [start, end); start == end means no
 // selection.
 func (e *Editor) Selection() (start, end int) {
-	if e.Anchor <= e.Caret {
-		return e.Anchor, e.Caret
+	if e.anchor <= e.caret {
+		return e.anchor, e.caret
 	}
-	return e.Caret, e.Anchor
+	return e.caret, e.anchor
 }
 
 // HasSelection reports whether a nonempty range is selected.
-func (e *Editor) HasSelection() bool { return e.Anchor != e.Caret }
+func (e *Editor) HasSelection() bool { return e.anchor != e.caret }
 
 // SelectedText returns the selected content.
 func (e *Editor) SelectedText() string {
@@ -61,14 +76,14 @@ func (e *Editor) Insert(s string) {
 	out = append(out, ins...)
 	out = append(out, e.runes[end:]...)
 	e.runes = out
-	e.Caret = start + len(ins)
-	e.Anchor = e.Caret
+	e.caret = start + len(ins)
+	e.anchor = e.caret
 }
 
 // DeleteBackward deletes the selection, or the grapheme before the caret.
 func (e *Editor) DeleteBackward() {
 	if !e.HasSelection() {
-		e.Anchor = e.prevBoundary(e.Caret)
+		e.anchor = e.prevBoundary(e.caret)
 	}
 	e.Insert("")
 }
@@ -76,7 +91,7 @@ func (e *Editor) DeleteBackward() {
 // DeleteForward deletes the selection, or the grapheme after the caret.
 func (e *Editor) DeleteForward() {
 	if !e.HasSelection() {
-		e.Anchor = e.nextBoundary(e.Caret)
+		e.anchor = e.nextBoundary(e.caret)
 	}
 	e.Insert("")
 }
@@ -88,29 +103,29 @@ func (e *Editor) Move(dir int, extend bool) {
 	if !extend && e.HasSelection() {
 		start, end := e.Selection()
 		if dir < 0 {
-			e.Caret = start
+			e.caret = start
 		} else {
-			e.Caret = end
+			e.caret = end
 		}
-		e.Anchor = e.Caret
+		e.anchor = e.caret
 		return
 	}
 	if dir < 0 {
-		e.Caret = e.prevBoundary(e.Caret)
+		e.caret = e.prevBoundary(e.caret)
 	} else {
-		e.Caret = e.nextBoundary(e.Caret)
+		e.caret = e.nextBoundary(e.caret)
 	}
 	if !extend {
-		e.Anchor = e.Caret
+		e.anchor = e.caret
 	}
 }
 
 // MoveTo places the caret at the given rune index; with extend the anchor
 // stays put.
 func (e *Editor) MoveTo(idx int, extend bool) {
-	e.Caret = clampIdx(idx, len(e.runes))
+	e.caret = clampIdx(idx, len(e.runes))
 	if !extend {
-		e.Anchor = e.Caret
+		e.anchor = e.caret
 	}
 }
 
@@ -120,8 +135,8 @@ func (e *Editor) End(extend bool)  { e.MoveTo(len(e.runes), extend) }
 
 // SelectAll selects the whole content.
 func (e *Editor) SelectAll() {
-	e.Anchor = 0
-	e.Caret = len(e.runes)
+	e.anchor = 0
+	e.caret = len(e.runes)
 }
 
 // SelectWordAt selects the word (run of letters/digits/underscore) containing
@@ -149,7 +164,7 @@ func (e *Editor) SelectWordAt(idx int) {
 			lo = idx - 1
 		}
 	}
-	e.Anchor, e.Caret = lo, hi
+	e.anchor, e.caret = lo, hi
 }
 
 func isWordRune(r rune) bool {
