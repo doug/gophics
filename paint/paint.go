@@ -88,11 +88,14 @@ type Canvas interface {
 	// TextIn draws s with its baseline-left at pos, in the named font family
 	// ("" = the default family).
 	TextIn(font, s string, pos geom.Pt, size float32, c Color)
-	// Image draws img scaled into dst (bilinear). Pass the same image
-	// value across frames — scene diffing compares by identity.
+	// Image draws img scaled into dst (bilinear). Pass the same image value
+	// across frames — scene diffing compares by identity. img must be
+	// comparable (a pointer, as every standard-library image is): the recorded
+	// op is compared with ==, which panics on a non-comparable dynamic type.
 	Image(img image.Image, dst geom.Rect)
 	// DrawSprite blits a source region of atlas into Dst (see Sprite). Pass the
-	// same atlas value across calls to share one cached texture.
+	// same atlas value across calls to share one cached texture; like Image, the
+	// atlas must be comparable.
 	DrawSprite(atlas image.Image, s Sprite)
 	// PushClip clips subsequent drawing to r; balance with PopClip.
 	// Nested clips intersect.
@@ -126,9 +129,13 @@ type Canvas interface {
 // scaled/rotated about Pivot (in pre-transform coordinates). Zero SX/SY mean
 // no scaling (treated as 1); zero Rotation means none. The mapping is
 // translate, then about the pivot: rotate, then scale.
+//
+// Because 0 SX/SY means 1, a scale animation that sweeps through 0 (a
+// zoom-from-nothing entrance) must start from a small positive value, not
+// exactly 0 — at exactly 0 the content renders full size, not invisible.
 type Transform struct {
 	TX, TY         float32
-	SX, SY         float32 // 0 → 1 (no scale)
+	SX, SY         float32 // 0 → 1 (no scale); animate from a small ε, not 0
 	Rotation       float32 // radians
 	PivotX, PivotY float32
 }

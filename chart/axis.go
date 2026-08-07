@@ -8,7 +8,7 @@ import (
 // Axis configures one axis of a chart.
 type Axis struct {
 	Hide   bool                 // omit the axis and its labels entirely
-	Grid   bool                 // draw gridlines for this axis (Y grid is on by default)
+	Grid   bool                 // X axis: draw vertical gridlines at the ticks. (Horizontal Y gridlines are always drawn as chart chrome, so this field has no effect on the Y axis.)
 	Ticks  int                  // target tick count; 0 → a sensible default
 	Format func(float64) string // tick label formatter for numeric values
 }

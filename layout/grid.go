@@ -1,8 +1,6 @@
 package layout
 
 import (
-	"math"
-
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 )
@@ -276,7 +274,7 @@ func (b *Wrap) Layout(cs Constraints) geom.Size {
 	}
 	maxW := cs.Max.W
 	if !cs.BoundedW() {
-		maxW = float32(math.MaxFloat32)
+		maxW = Inf // the unbounded sentinel, so a child's BoundedW() stays false
 	}
 	childCS := Constraints{Max: geom.Size{W: maxW, H: Inf}}
 
