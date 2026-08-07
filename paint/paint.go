@@ -92,6 +92,21 @@ func clamp01(v float32) float32 {
 	return v
 }
 
+// evictHalf drops about half of m's entries when a cache hits its bound. Map
+// iteration order is randomized, so this is a cheap approximate eviction — and
+// unlike clearing the whole map it keeps a working set sitting just over the
+// bound from re-filling from empty (re-shaping every run) on every frame.
+func evictHalf[K comparable, V any](m map[K]V) {
+	n := len(m) / 2
+	for k := range m {
+		if n <= 0 {
+			return
+		}
+		delete(m, k)
+		n--
+	}
+}
+
 // Canvas is the drawing interface for one frame, in logical pixels.
 // Implemented by the gg-backed painter canvas and by scene.Recorder.
 type Canvas interface {
@@ -426,7 +441,7 @@ func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
 		return l
 	}
 	if len(p.shapes) >= shapeCacheLimit {
-		clear(p.shapes)
+		evictHalf(p.shapes)
 	}
 	l := p.shaperFor(font).Line(s, size)
 	p.shapes[k] = l
@@ -850,7 +865,7 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 		offY: -m.Ascent - pad/scale,
 	}
 	if len(p.runs) >= runCacheLimit {
-		clear(p.runs)
+		evictHalf(p.runs)
 	}
 	p.runs[k] = r
 	return r
@@ -875,7 +890,7 @@ func (c *ggCanvas) imgBuf(img image.Image) *gg.ImageBuf {
 	buf, ok := c.p.imgBufs[img]
 	if !ok {
 		if len(c.p.imgBufs) > 256 {
-			clear(c.p.imgBufs)
+			evictHalf(c.p.imgBufs)
 		}
 		buf = gg.ImageBufFromImage(img)
 		c.p.imgBufs[img] = buf

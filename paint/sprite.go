@@ -59,7 +59,7 @@ func (p *Painter) tinted(atlas image.Image, src image.Rectangle, tint Color) *gg
 		return b
 	}
 	if len(p.tintBufs) > 512 {
-		clear(p.tintBufs)
+		evictHalf(p.tintBufs)
 	}
 	w, h := src.Dx(), src.Dy()
 	out := image.NewRGBA(image.Rect(0, 0, w, h))
