@@ -271,13 +271,15 @@ func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawComman
 	}
 	*releases = append(*releases, release)
 
-	// Downsample first: the shader uses a fixed 13 taps, so shrinking the
-	// backdrop keeps those taps dense relative to the content for wide radii (and
-	// halves work each level). The UV blur step below is invariant to how far we
-	// downsample — ±6 taps always span the radius — so this only trades quality
-	// for speed, never the amount of blur.
+	// Downsample first: the shader uses a fixed 13 taps spaced radius/2 device px
+	// apart (see below), so shrink the backdrop until that step is only ~1–2
+	// reduced texels — dense enough that the wide kernel reconstructs smoothly
+	// instead of rippling. The UV blur step below is invariant to how far we
+	// downsample (taps and texels shrink together), so this only trades quality
+	// for speed, never the amount of blur. The Gaussian-smoothed source also
+	// upsamples cleanly in the final composite, so heavy reduction is safe here.
 	cw, ch := w, h
-	for r := cmd.backdropRadius; r > 12 && cw >= 32 && ch >= 32; r /= 2 {
+	for r := cmd.backdropRadius; r > 4 && cw >= 32 && ch >= 32; r /= 2 {
 		cw, ch = cw/2, ch/2
 		down, rel := rc.resampleTexture(src, cw, ch)
 		if down.IsNil() {
@@ -287,12 +289,16 @@ func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawComman
 		src = down
 	}
 
-	// Separable Gaussian: one horizontal pass, then one vertical, each into its
-	// own reduced-size target. step is the per-tap UV offset that puts the ±6
-	// taps exactly across backdropRadius device pixels (independent of the
-	// downsample level, as derived above): radius/(6·fullDim).
-	stepX := cmd.backdropRadius / (6 * float32(w))
-	stepY := cmd.backdropRadius / (6 * float32(h))
+	// Separable Gaussian sized to MATCH the CPU path's 3-pass box blur (backdrop.go
+	// blurPixmapRegion), whose effective sigma ≈ radius (sqrt(r²+r)). The kernel is
+	// 13 taps at sigma=2 in tap space, so sigma_device = 2·stepDevice; a step of
+	// radius/2 gives sigma_device = radius and lands the ±6 taps at ±3·sigma. In UV
+	// that per-tap step is (radius/2)/fullDim = radius/(2·fullDim) — invariant to
+	// the downsample level. (An earlier radius/(6·fullDim) put the taps at only
+	// ±radius, so sigma came out ~radius/3 and the GPU frost read visibly sharper
+	// than the CPU one.)
+	stepX := cmd.backdropRadius / (2 * float32(w))
+	stepY := cmd.backdropRadius / (2 * float32(h))
 	hp := blurComposite(src, cw, ch, stepX, 0, 0)
 	if hv, rel := rc.renderLayerToTexture([]drawCommand{hp}, cw, ch); !hv.IsNil() {
 		*releases = append(*releases, rel)
