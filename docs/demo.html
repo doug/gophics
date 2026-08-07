@@ -6,10 +6,21 @@
 <title>Gophics — live demo</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0d0e15; overflow: hidden; font-family: system-ui, sans-serif; }
-  #msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-         color: #c9cee0; font-size: 14px; text-align: center; padding: 24px; line-height: 1.6; }
-  #msg a { color: #8aa0ff; }
   canvas { display: block; }
+  /* Poster: the demo's pre-rendered thumbnail, shown instantly so the page is
+     never blank while the ~MB wasm downloads and compiles, then faded out once
+     the live canvas has painted its first frame. */
+  #poster { position: fixed; inset: 0; z-index: 10; background: #0d0e15 center/contain no-repeat;
+            transition: opacity .45s ease; }
+  #poster.hide { opacity: 0; pointer-events: none; }
+  #spin { position: fixed; left: 50%; bottom: 30px; width: 24px; height: 24px; margin-left: -12px; z-index: 11;
+          border: 3px solid #ffffff2e; border-top-color: #8aa0ff; border-radius: 50%;
+          animation: spin .8s linear infinite; transition: opacity .3s; }
+  #spin.hide { opacity: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #err { position: fixed; inset: 0; z-index: 12; display: none; align-items: center; justify-content: center;
+         color: #c9cee0; font-size: 14px; text-align: center; padding: 24px; line-height: 1.6; }
+  #err a { color: #8aa0ff; }
   #bar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 20;
          display: flex; align-items: center; gap: 14px; padding: 0 14px;
          font-size: 13px; color: #aab; background: linear-gradient(#000c, #0000);
@@ -31,15 +42,24 @@
     <a id="rend" href="#" title="Toggle renderer">GPU</a>
     <a id="src" href="gallery.html">view source</a>
   </div>
-  <div id="msg">Loading demo…</div>
+  <div id="poster"></div>
+  <div id="spin"></div>
+  <div id="err"></div>
   <script src="demos/wasm_exec.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const demo = (params.get("sketch") || params.get("demo") || "hn").replace(/[^a-z0-9]/gi, "");
     document.getElementById("src").href = "source/" + demo + ".html";
     document.title = "gophics — " + demo;
-    const msg = document.getElementById("msg");
     const nm = document.getElementById("nm");
+    const poster = document.getElementById("poster");
+    const spin = document.getElementById("spin");
+    const err = document.getElementById("err");
+
+    // Show the pre-rendered thumbnail immediately — the same CPU render that
+    // ships in the gallery, so first meaningful paint is instant instead of a
+    // blank page for the length of the wasm compile.
+    poster.style.backgroundImage = `url("thumbs/${demo}.png")`;
 
     // ?cpu forces the CPU rasterizer by hiding WebGPU before the wasm reads it.
     // WebGPU is only exposed in a secure context (https or localhost) and on a
@@ -64,10 +84,29 @@
       location.replace(u.toString());
     };
 
+    // The Go web shell creates its own <canvas>; when it appears, wait two
+    // frames (so the first live frame is on screen) then cross-fade the poster
+    // away — the thumbnail dissolves into the running app.
+    function reveal() {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        poster.classList.add("hide");
+        spin.classList.add("hide");
+        setTimeout(() => { poster.remove(); spin.remove(); }, 500);
+      }));
+    }
+    const obs = new MutationObserver(() => {
+      if (document.querySelector("canvas")) { obs.disconnect(); reveal(); }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+
     const go = new Go();
     WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
-      .then((res) => { msg.remove(); return go.run(res.instance); })
-      .catch((err) => { msg.innerHTML = "Couldn't load <code>" + demo + "</code>: " + err; });
+      .then((res) => go.run(res.instance))
+      .catch((e) => {
+        spin.remove();
+        err.style.display = "flex";
+        err.innerHTML = "Couldn't load <code>" + demo + "</code>: " + e;
+      });
   </script>
 </body>
 </html>
