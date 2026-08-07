@@ -98,7 +98,12 @@ type Frame interface {
 	Target() Target
 }
 
-// Target is a platform presentation target: GPUTarget or PixelTarget.
+// Target is a frame's presentation target — deliberately an open type, not a
+// sealed union: the present path (app.present) type-switches on it, so besides
+// the two portable kinds here (GPUTarget, PixelTarget) a backend may return its
+// own private target type that the present path recognizes by interface (e.g. a
+// GPU-canvas target exposing RenderGPU). Consumers must handle an unknown target
+// gracefully rather than assume the set is closed.
 type Target any
 
 // GPUTarget presents by compositing onto a WebGPU texture view.

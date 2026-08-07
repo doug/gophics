@@ -1,6 +1,7 @@
 package chart
 
 import (
+	"fmt"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 )
@@ -18,18 +19,25 @@ type Datum struct {
 //
 //	chart.Values("Mon", 3, "Tue", 5, "Wed", 2)
 //
-// Each label becomes a band; X is the band index. Non-string labels or
-// non-number values are skipped.
+// Each label becomes a band; X is the band index; the value may be any int/uint/
+// float type. It panics on an odd argument count, a non-string label, or a
+// non-numeric value — all programming errors in a literal-args helper (like a
+// bad fmt verb), surfaced immediately rather than silently dropped.
 func Values(pairs ...any) []Datum {
-	var out []Datum
-	for i := 0; i+1 < len(pairs); i += 2 {
+	if len(pairs)%2 != 0 {
+		panic("chart.Values: odd argument count (want label, value pairs)")
+	}
+	out := make([]Datum, 0, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
 		label, ok := pairs[i].(string)
 		if !ok {
-			continue
+			panic(fmt.Sprintf("chart.Values: argument %d is not a string label: %T", i, pairs[i]))
 		}
-		if y, ok := toFloat(pairs[i+1]); ok {
-			out = append(out, Datum{X: float64(len(out)), Y: y, Label: label})
+		y, ok := toFloat(pairs[i+1])
+		if !ok {
+			panic(fmt.Sprintf("chart.Values: value for %q is not numeric: %T", label, pairs[i+1]))
 		}
+		out = append(out, Datum{X: float64(len(out)), Y: y, Label: label})
 	}
 	return out
 }
@@ -47,12 +55,28 @@ func toFloat(v any) (float64, bool) {
 	switch n := v.(type) {
 	case int:
 		return float64(n), true
+	case int8:
+		return float64(n), true
+	case int16:
+		return float64(n), true
+	case int32:
+		return float64(n), true
 	case int64:
+		return float64(n), true
+	case uint:
+		return float64(n), true
+	case uint8:
+		return float64(n), true
+	case uint16:
+		return float64(n), true
+	case uint32:
+		return float64(n), true
+	case uint64:
+		return float64(n), true
+	case float32:
 		return float64(n), true
 	case float64:
 		return n, true
-	case float32:
-		return float64(n), true
 	}
 	return 0, false
 }
