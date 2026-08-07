@@ -606,6 +606,11 @@ func (c *core) Keyboard(e shell.Event) {
 }
 
 // Run opens a window and runs the app until the window closes.
+//
+// Two environment variables adjust it, so any example doubles as a tool:
+// GOPHICS_THUMB=<path> renders one frame headless to a PNG and exits (no window
+// — the gallery-thumbnail hook, see thumb.go), and GOPHICS_RENDERER=auto|gpu|cpu
+// overrides cfg.Renderer at startup.
 func Run(root widget.Widget, cfg Config) error {
 	// Gallery-thumbnail capture: when GOPHICS_THUMB is set, render the real app
 	// headless to a PNG and exit — no display, no browser. See thumb.go.

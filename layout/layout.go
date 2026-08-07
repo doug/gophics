@@ -1,7 +1,7 @@
 // Package layout implements gophics's render layer: the box protocol and
-// the core layout boxes. It is Flutter's rendering/ analog (PLAN.md M2).
+// the core layout boxes. It is Flutter's rendering/ analog.
 //
-// The protocol is Flutter's, kept exactly (PLAN.md §4.5): constraints flow
+// The protocol is Flutter's, kept exactly: constraints flow
 // down, sizes flow up, the parent positions the child. Layout is a single
 // pass; a Box must return a size that satisfies the constraints it was given.
 //

@@ -206,7 +206,7 @@ func clampIdx(v, n int) int {
 // CaretX returns the x position of the caret placed before rune index idx,
 // as the summed advance of glyphs in earlier clusters. Correct for LTR
 // content; RTL caret geometry arrives with paragraph-direction support
-// (PLAN.md §6.1).
+// .
 func (l Line) CaretX(idx int) float32 {
 	var x float32
 	for _, g := range l.Glyphs {

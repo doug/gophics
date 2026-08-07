@@ -6,7 +6,7 @@ import (
 	"github.com/doug/gophics/geom"
 )
 
-// This file is the accessibility foundation (PLAN.md §6.5): a semantics
+// This file is the accessibility foundation: a semantics
 // tree collected from the laid-out box tree, testable headless. Platform
 // bridges (AccessKit-style) consume these nodes later; correctness is
 // assertable long before OS integration exists.

@@ -1,9 +1,8 @@
 // Package text is gophics's text stack: shaping, bidi, font fallback, and
 // line breaking, built on go-text/typesetting (the shared pure-Go
 // HarfBuzz-family stack used by Gio, Fyne, and Ebitengine). It exists
-// because the rendering backend's own shaper handles Latin only (PLAN.md
-// §5.1, §6.1): gophics shapes here and hands positioned glyph outlines to
-// the paint backend.
+// because the rendering backend's own shaper handles Latin only: gophics
+// shapes here and hands positioned glyph outlines to the paint backend.
 //
 // Coordinates follow gophics conventions: logical pixels, y down, line
 // origin at the left end of the baseline.
@@ -338,7 +337,7 @@ func (s *Shaper) fontFor(face *font.Face) *Font {
 // visualOrder reorders logical runs for display: maximal sequences of RTL
 // runs are reversed. This handles the common single-embedding-level bidi
 // case; full UBA multi-level reordering arrives with paragraph-level
-// direction support (PLAN.md §6.1).
+// direction support.
 func visualOrder(runs []shaping.Output) []shaping.Output {
 	out := make([]shaping.Output, 0, len(runs))
 	i := 0

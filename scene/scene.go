@@ -1,6 +1,6 @@
 // Package scene provides display lists: recorded paint commands that can be
 // replayed onto any paint.Canvas. This is the M1 layer that decouples what
-// the render tree paints from how a backend draws it (PLAN.md §5) — the
+// the render tree paints from how a backend draws it — the
 // foundation for damage tracking, repaint caching, and alternative backends.
 package scene
 
@@ -23,9 +23,10 @@ func (l *List) Recorder() paint.Canvas { return recorder{l} }
 // Reset clears the list for re-recording, keeping capacity.
 func (l *List) Reset() { l.ops, l.hasLayers = l.ops[:0], false }
 
-// HasLayers reports whether an opacity group was recorded. Such frames must
-// repaint in full — culled partial replay would composite an incomplete
-// layer.
+// HasLayers reports whether the frame recorded anything that forces a full
+// repaint instead of damage-culled partial replay: an opacity group or a
+// transform, whose inside ops can't be bounds-culled correctly. When true the
+// caller must replay the whole list (do not call ReplayDamage).
 func (l *List) HasLayers() bool { return l.hasLayers }
 
 // Len returns the number of recorded commands.

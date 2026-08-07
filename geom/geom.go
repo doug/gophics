@@ -23,8 +23,7 @@ func (p Pt) Lerp(q Pt, t float32) Pt {
 	return Pt{p.X + (q.X-p.X)*t, p.Y + (q.Y-p.Y)*t}
 }
 
-// Size is a width and height. Sizes are non-negative by convention; operations
-// that could produce negative dimensions clamp to zero.
+// Size is a width and height in logical pixels, non-negative by convention.
 type Size struct {
 	W, H float32
 }

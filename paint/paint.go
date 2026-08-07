@@ -3,7 +3,7 @@
 // Canvas is the drawing interface the render layer paints into. The default
 // implementation wraps gogpu/gg's CPU rasterizer (analytic AA), presented to
 // the shell's frame target; scene.Recorder implements the same interface to
-// capture display lists (PLAN.md §5: backends are pluggable behind Canvas).
+// capture display lists (backends are pluggable behind Canvas).
 // Coordinates are logical pixels; HiDPI is handled via gg's device scale.
 package paint
 
@@ -166,8 +166,8 @@ func (t Transform) sy() float32 {
 }
 
 // DropShadow paints a soft shadow under the rounded rect r. It approximates
-// a Gaussian blur with layered rrects (gg has no blur primitive — spike
-// finding, PLAN.md §5.1); blur is the softness radius, offset shifts the
+// a Gaussian blur with layered rrects (gg has no blur primitive); blur is the
+// softness radius, offset shifts the
 // shadow. Works on any Canvas, including recorders.
 func DropShadow(c Canvas, r geom.Rect, radius float32, offset geom.Pt, blur float32, col Color) {
 	const steps = 5
@@ -262,6 +262,10 @@ type metricsKey struct {
 
 const shapeCacheLimit = 1 << 13
 
+// NewPainter creates a Painter — the app's text shaper and font/metrics/shape
+// caches, and the factory for offscreen Canvases (BeginOffscreen). Make one per
+// app or test and reuse it; it is not safe for concurrent use (the UI goroutine
+// owns it). app.Run and app.Headless each hold one.
 func NewPainter() *Painter {
 	return &Painter{
 		families:  map[string]*text.Font{},
