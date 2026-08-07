@@ -11,16 +11,21 @@ package text
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/go-text/typesetting/di"
 	"github.com/go-text/typesetting/font"
 	ot "github.com/go-text/typesetting/font/opentype"
-	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 )
+
+// systemFontMap is the platform system-font fallback (satisfied by
+// fontscan.FontMap on desktop). Abstracting it keeps the heavy fontscan
+// package — OS font scanning that only desktop uses — out of the wasm binary;
+// see UseSystemFonts in system_native.go / system_js.go.
+type systemFontMap interface {
+	ResolveFace(r rune) *font.Face
+}
 
 // Font is a parsed font usable for shaping and outline extraction.
 type Font struct {
@@ -133,7 +138,7 @@ type Line struct {
 // state; it is not safe for concurrent use (UI goroutine only).
 type Shaper struct {
 	fonts  []*Font
-	system *fontscan.FontMap
+	system systemFontMap
 	byFace map[*font.Face]*Font
 	hb     shaping.HarfbuzzShaper
 	seg    shaping.Segmenter
@@ -148,27 +153,6 @@ func NewShaper(fonts ...*Font) *Shaper {
 
 // SetFonts replaces the fallback chain.
 func (s *Shaper) SetFonts(fonts ...*Font) { s.fonts = fonts }
-
-// UseSystemFonts extends the fallback chain with the platform's installed
-// fonts (via fontscan): runes not covered by the explicit chain — CJK,
-// emoji, symbols — resolve to a system font. cacheDir holds fontscan's
-// index ("" uses the OS user cache dir). Scanning is slow the first time
-// and cached afterward.
-func (s *Shaper) UseSystemFonts(cacheDir string) error {
-	if cacheDir == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			return fmt.Errorf("text: no cache dir: %w", err)
-		}
-		cacheDir = filepath.Join(base, "gophics", "fontscan")
-	}
-	fm := fontscan.NewFontMap(nil)
-	if err := fm.UseSystemFonts(cacheDir); err != nil {
-		return fmt.Errorf("text: system fonts: %w", err)
-	}
-	s.system = fm
-	return nil
-}
 
 // Primary returns the primary font, or nil.
 func (s *Shaper) Primary() *Font {
