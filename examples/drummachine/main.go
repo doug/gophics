@@ -281,21 +281,21 @@ func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 	if s.playing {
 		pbg, plabel = stopBg, "Stop"
 	}
-	button(c, s.playBtn, plabel, pbg, paint.RGB(1, 1, 1))
+	s.button(c, s.playBtn, plabel, pbg, paint.RGB(1, 1, 1))
 
 	s.tempoDn = geom.RectXYWH(gridLeft+110, ty, 40, bh)
 	s.tempoUp = geom.RectXYWH(gridLeft+214, ty, 40, bh)
-	button(c, s.tempoDn, "–", btnBg, btnFg)
-	button(c, s.tempoUp, "+", btnBg, btnFg)
+	s.button(c, s.tempoDn, "–", btnBg, btnFg)
+	s.button(c, s.tempoUp, "+", btnBg, btnFg)
 	c.Text("tempo", geom.Pt{X: gridLeft + 160, Y: ty + bh/2 + 5}, 14, subCol)
 
 	s.clrBtn = geom.RectXYWH(gridRight-96, ty, 96, bh)
-	button(c, s.clrBtn, "Clear", btnBg, btnFg)
+	s.button(c, s.clrBtn, "Clear", btnBg, btnFg)
 }
 
-func button(c paint.Canvas, r geom.Rect, label string, bgc, fg paint.Color) {
+func (s *drum) button(c paint.Canvas, r geom.Rect, label string, bgc, fg paint.Color) {
 	c.FillRRect(r, 8, bgc)
-	w := float32(len(label)) * 7.6
+	w := s.ctx.Painter().MeasureWidth(label, 15)
 	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 15, fg)
 }
 

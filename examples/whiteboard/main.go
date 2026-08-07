@@ -282,19 +282,19 @@ func (s *board) draw(c paint.Canvas, sz geom.Size) {
 	s.clearBtn = geom.RectXYWH(rx, cy-bh/2, bw, bh)
 	s.redoBtn = geom.RectXYWH(rx-8-bw, cy-bh/2, bw, bh)
 	s.undoBtn = geom.RectXYWH(rx-2*(8+bw), cy-bh/2, bw, bh)
-	textBtn(c, s.undoBtn, "Undo", len(s.undo) > 0)
-	textBtn(c, s.redoBtn, "Redo", len(s.redo) > 0)
-	textBtn(c, s.clearBtn, "Clear", len(s.strokes) > 0)
+	s.textBtn(c, s.undoBtn, "Undo", len(s.undo) > 0)
+	s.textBtn(c, s.redoBtn, "Redo", len(s.redo) > 0)
+	s.textBtn(c, s.clearBtn, "Clear", len(s.strokes) > 0)
 }
 
-func textBtn(c paint.Canvas, r geom.Rect, label string, enabled bool) {
+func (s *board) textBtn(c paint.Canvas, r geom.Rect, label string, enabled bool) {
 	c.FillRRect(r, 7, btnBg)
 	c.StrokeRRect(r, 7, 1, borderCol)
 	fg := btnFg
 	if !enabled {
 		fg = paint.RGB(0.75, 0.77, 0.80)
 	}
-	w := float32(len(label)) * 7
+	w := s.ctx.Painter().MeasureWidth(label, 14)
 	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 14, fg)
 }
 

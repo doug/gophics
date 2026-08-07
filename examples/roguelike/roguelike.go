@@ -260,5 +260,5 @@ func (s *gameState) drawHUD(c paint.Canvas, size geom.Size) {
 
 func (s *gameState) banner(c paint.Canvas, size geom.Size, msg string) {
 	c.FillRect(geom.RectXYWH(0, size.H*0.4, size.W, 60), colBanner)
-	c.TextIn("bold", msg, geom.Pt{X: size.W*0.5 - float32(len(msg))*4.6, Y: size.H*0.4 + 38}, 22, colInk)
+	c.TextIn("bold", msg, geom.Pt{X: size.W*0.5 - s.ctx.Painter().MeasureWidth(msg, 22)/2, Y: size.H*0.4 + 38}, 22, colInk)
 }

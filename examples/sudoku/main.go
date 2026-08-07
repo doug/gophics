@@ -273,7 +273,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	const pad = 16
 	c.Text("Sudoku", geom.Pt{X: pad, Y: 34}, 24, p.ink)
 	if status, col := s.status(); status != "" {
-		w := float32(len(status)) * 8
+		w := s.ctx.Painter().MeasureWidth(status, 16)
 		c.Text(status, geom.Pt{X: sz.W - pad - w, Y: 34}, 16, col)
 	}
 
@@ -396,7 +396,7 @@ func (s *game) button(c paint.Canvas, rect geom.Rect, label string, active bool)
 		bgc, fg = s.pal.accent, s.pal.onAccent
 	}
 	c.FillRRect(rect, 8, bgc)
-	w := float32(len(label)) * 7.4
+	w := s.ctx.Painter().MeasureWidth(label, 14.5)
 	c.Text(label, geom.Pt{X: rect.Min.X + (rect.Dx()-w)/2, Y: rect.Min.Y + rect.Dy()/2 + 5}, 14.5, fg)
 }
 

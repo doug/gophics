@@ -448,10 +448,10 @@ func (s *game) draw(c paint.Canvas, size geom.Size) {
 	c.TextIn("bold", "MATCH 3", geom.Pt{X: b.x, Y: 40}, 30, th.Text)
 	c.Text(fmt.Sprintf("Score %d", s.score), geom.Pt{X: b.x, Y: 68}, 16, th.Muted)
 	moves := fmt.Sprintf("Moves %d", s.moves)
-	c.Text(moves, geom.Pt{X: b.x + b.cell*cols - textW(moves, 16), Y: 68}, 16, th.Muted)
+	c.Text(moves, geom.Pt{X: b.x + b.cell*cols - s.textW(moves, 16), Y: 68}, 16, th.Muted)
 	if s.chain > 1 && s.phase == phaseClear {
 		tag := fmt.Sprintf("x%d CHAIN!", s.chain+1)
-		c.TextIn("bold", tag, geom.Pt{X: b.x + b.cell*cols - textW(tag, 18), Y: 42}, 18, th.Primary)
+		c.TextIn("bold", tag, geom.Pt{X: b.x + b.cell*cols - s.textW(tag, 18), Y: 42}, 18, th.Primary)
 	}
 
 	// Board backing — a neutral surface with a hairline border so the board
@@ -594,4 +594,6 @@ func abs2(x float32) float32 {
 }
 
 // textW estimates a string's width for right-alignment (approx, monospace-ish).
-func textW(s string, size float32) float32 { return float32(len(s)) * size * 0.52 }
+func (s *game) textW(str string, size float32) float32 {
+	return s.ctx.Painter().MeasureWidth(str, size)
+}
