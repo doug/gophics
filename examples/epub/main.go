@@ -73,15 +73,46 @@ func frame(child widget.Widget) widget.Widget {
 
 type library struct{}
 
-func (library) Build(ctx widget.Ctx) widget.Widget {
+func (library) CreateState() widget.State { return &libraryState{} }
+
+type libraryState struct {
+	widget.StateBase[library]
+	loadErr bool
+}
+
+// open pops the platform's EPUB picker (a file dialog on web; the EPUB_PATH file
+// on desktop — see open_web.go / open_other.go) and, on success, swaps in the
+// loaded book and rebuilds. The bundled sample stays put on cancel or a parse
+// error, so the demo is never left empty.
+func (s *libraryState) open() {
+	openEPUB(func(data []byte) {
+		b, err := parseEPUB(data)
+		if err != nil {
+			s.SetState(func() { s.loadErr = true })
+			return
+		}
+		s.SetState(func() {
+			book = b
+			s.loadErr = false
+		})
+	})
+}
+
+func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	nav := widget.MustOf[widget.Nav](ctx)
 	kids := []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{S: book.Title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text, Wrap: true}},
-		widget.Padding{Insets: geom.Insets{Bottom: 40}, Child: widget.Text{S: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
-		widget.Text{S: "CONTENTS", Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary},
-		widget.Padding{Insets: geom.Insets{Top: 8}, Child: divider(th)},
+		widget.Padding{Insets: geom.Insets{Bottom: 20}, Child: widget.Text{S: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
+		widget.Row(theme.Button{Label: "Open EPUB…", OnTap: s.open}, widget.Spacer()),
 	}
+	if s.loadErr {
+		kids = append(kids, widget.Padding{Insets: geom.Insets{Top: 8}, Child: widget.Text{S: "Couldn't read that file as an EPUB.", Size: th.Type.Label, Color: th.Muted}})
+	}
+	kids = append(kids,
+		widget.Padding{Insets: geom.Insets{Top: 32, Bottom: 0}, Child: widget.Text{S: "CONTENTS", Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary}},
+		widget.Padding{Insets: geom.Insets{Top: 8}, Child: divider(th)},
+	)
 	for i, ch := range book.Chapters {
 		idx := i
 		kids = append(kids, tocRow(th, i+1, ch.Title, func() { nav.Push(reader{idx: idx}) }), divider(th))
