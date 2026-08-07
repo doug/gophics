@@ -12,29 +12,37 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/theme"
+	"github.com/doug/gophics/widget"
 )
 
-func harness(t *testing.T) (*app.Headless, *feedState) {
-	t.Helper()
-	var st *feedState
-	feedHook = func(s *feedState) { st = s }
-	defer func() { feedHook = nil }()
-
-	h, err := app.NewHeadless(Gallery{}, app.Config{
-		Size:         geom.Size{W: 420, H: 680},
-		Background:   theme.Dark().Bg,
+func cfg() app.Config {
+	return app.Config{
+		Size:         geom.Size{W: 420, H: 760},
+		Background:   theme.Light().Bg,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
-	}, 2)
+	}
+}
+
+// startHome boots the catalog and returns the headless app, the Navigator
+// handle from the home screen, and the root state (for driving the theme).
+func startHome(t *testing.T) (*app.Headless, widget.Nav, *galleryState) {
+	t.Helper()
+	var nav widget.Nav
+	var root *galleryState
+	rootHook = func(s *galleryState) { root = s }
+	homeHook = func(n widget.Nav) { nav = n }
+	defer func() { rootHook, homeHook = nil, nil }()
+
+	h, err := app.NewHeadless(Gallery{}, cfg(), 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.SetDarkMode(true)
 	h.Render()
-	if st == nil {
-		t.Fatal("feed state hook did not fire")
+	if root == nil {
+		t.Fatal("root state hook did not fire")
 	}
-	return h, st
+	return h, nav, root
 }
 
 func settle(h *app.Headless) {
@@ -44,12 +52,18 @@ func settle(h *app.Headless) {
 	h.Render()
 }
 
-// colorful reports whether the pixel at logical (lx,ly) is a vivid swatch
-// color (scale 2), distinguishing the gradient header from the dark feed.
+// lum returns the red channel (0..1) of the logical pixel at (lx,ly), scale 2.
+func lum(img image.Image, lx, ly int) float64 {
+	r, _, _, _ := img.At(lx*2, ly*2).RGBA()
+	return float64(r) / 0xffff
+}
+
+// colorful reports whether the pixel at logical (lx,ly) is a vivid swatch color
+// (scale 2), distinguishing a gradient header from flat chrome.
 func colorful(img image.Image, lx, ly int) bool {
 	r, g, b, _ := img.At(lx*2, ly*2).RGBA()
 	max, min := maxu(r, g, b), minu(r, g, b)
-	return max > 0x6000 && max-min > 0x2000 // bright and saturated
+	return max > 0x6000 && max-min > 0x2000
 }
 
 func maxu(vs ...uint32) uint32 {
@@ -72,63 +86,89 @@ func minu(vs ...uint32) uint32 {
 	return m
 }
 
-func TestGalleryHeroNavigation(t *testing.T) {
-	h, _ := harness(t)
+// TestHomeThemeSwitch checks the home renders and that flipping the root theme
+// mode re-provides the theme, repainting the background from light to dark.
+func TestHomeThemeSwitch(t *testing.T) {
+	h, _, root := startHome(t)
 
-	// Feed: the header strip (y≈100) is dark chrome, not a swatch.
-	if colorful(h.Render(), 210, 100) {
+	// The Light background is a warm off-white — bright.
+	if got := lum(h.Render(), 405, 8); got < 0.7 {
+		t.Fatalf("light background should be bright, got r=%.2f", got)
+	}
+
+	// Drive the switcher via root state; Build re-provides theme.Dark().
+	root.SetState(func() { root.mode = modeDark })
+	settle(h)
+	if got := lum(h.Render(), 405, 8); got > 0.3 {
+		t.Fatalf("dark background should be dark, got r=%.2f", got)
+	}
+}
+
+// TestSectionsSmoke pushes each catalog section, renders it, and pops back — so
+// every section builds and lays out without panicking.
+func TestSectionsSmoke(t *testing.T) {
+	h, nav, _ := startHome(t)
+	for i, sec := range sections() {
+		nav.Push(sec.page())
+		settle(h)
+		if d := nav.Depth(); d != 2 {
+			t.Fatalf("section %d (%s): depth = %d, want 2", i, sec.title, d)
+		}
+		h.Render()
+		nav.Pop()
+		settle(h)
+		if d := nav.Depth(); d != 1 {
+			t.Fatalf("section %d (%s): after pop depth = %d, want 1", i, sec.title, d)
+		}
+	}
+}
+
+// openFeed pushes the Navigation & gestures feed page and returns its state.
+func openFeed(t *testing.T, h *app.Headless, nav widget.Nav) *feedState {
+	t.Helper()
+	var st *feedState
+	feedHook = func(s *feedState) { st = s }
+	defer func() { feedHook = nil }()
+	nav.Push(feedPage{})
+	settle(h)
+	if st == nil {
+		t.Fatal("feed state hook did not fire")
+	}
+	return st
+}
+
+func TestFeedHeroNavigation(t *testing.T) {
+	h, nav, _ := startHome(t)
+	openFeed(t, h, nav)
+
+	// On the feed the header area (center column) is chrome, not a swatch.
+	if colorful(h.Render(), 210, 80) {
 		t.Fatal("feed header area should not be a swatch color")
 	}
 
 	// Tap a card → push detail; the hero swatch flies into a full-bleed header.
-	h.Tap(geom.Pt{X: 210, Y: 150})
+	h.Tap(geom.Pt{X: 210, Y: 220})
 	settle(h)
-	if !colorful(h.Render(), 210, 100) {
+	if !colorful(h.Render(), 210, 80) {
 		t.Fatal("detail should show a full-bleed gradient header after the flight")
 	}
 
 	// Tap the header → pop back to the feed.
-	h.Tap(geom.Pt{X: 210, Y: 100})
+	h.Tap(geom.Pt{X: 210, Y: 80})
 	settle(h)
-	if colorful(h.Render(), 210, 100) {
-		t.Fatal("back on the feed the header area should be dark again")
+	if colorful(h.Render(), 210, 80) {
+		t.Fatal("back on the feed the header area should be chrome again")
 	}
 }
 
-func TestGallerySelectableBody(t *testing.T) {
-	h, _ := harness(t)
-	h.Tap(geom.Pt{X: 210, Y: 150}) // open detail
-	settle(h)
-
-	// Drag horizontally across the body paragraph and copy. The body sits
-	// below the 200px header, back chip, title and byline. Start past the
-	// left back-swipe edge strip (~22px), which reserves the very left edge.
-	h.DragTo(geom.Pt{X: 40, Y: 345}, geom.Pt{X: 380, Y: 345})
-	h.Release(geom.Pt{X: 380, Y: 345})
-	h.KeyMod(shell.KeyC, shell.ModSuper)
-
-	got := h.Owner().Clipboard.(*app.MemClipboard).S
-	if got == "" {
-		t.Fatal("dragging across the detail body selected nothing")
-	}
-	// A single-line horizontal selection is a contiguous slice of the body.
-	body := bodyFor(makeCards(12, 0)[0])
-	if !strings.Contains(body, got) {
-		t.Fatalf("selection %q is not a substring of the body", got)
-	}
-	if len(got) < 8 {
-		t.Fatalf("selection %q suspiciously short for a full-width drag", got)
-	}
-}
-
-func TestGalleryPullToRefresh(t *testing.T) {
-	h, st := harness(t)
+func TestFeedPullToRefresh(t *testing.T) {
+	h, nav, _ := startHome(t)
+	st := openFeed(t, h, nav)
 	first := st.cards[0].id
 
-	// Pull down from the top of the list, past the trigger, and release.
-	h.Move(geom.Pt{X: 210, Y: 200})
-	h.DragTo(geom.Pt{X: 210, Y: 200}, geom.Pt{X: 210, Y: 460})
-	h.Release(geom.Pt{X: 210, Y: 460})
+	h.Move(geom.Pt{X: 210, Y: 220})
+	h.DragTo(geom.Pt{X: 210, Y: 220}, geom.Pt{X: 210, Y: 470})
+	h.Release(geom.Pt{X: 210, Y: 470})
 	settle(h)
 
 	if st.cards[0].id == first {
@@ -136,16 +176,44 @@ func TestGalleryPullToRefresh(t *testing.T) {
 	}
 }
 
-func TestGallerySwipeDismiss(t *testing.T) {
-	h, st := harness(t)
+func TestFeedSwipeDismiss(t *testing.T) {
+	h, nav, _ := startHome(t)
+	st := openFeed(t, h, nav)
 	before := len(st.cards)
 
-	// Swipe the first card far to the right, past the threshold.
-	h.DragTo(geom.Pt{X: 120, Y: 150}, geom.Pt{X: 380, Y: 150})
-	h.Release(geom.Pt{X: 380, Y: 150})
+	h.DragTo(geom.Pt{X: 120, Y: 220}, geom.Pt{X: 380, Y: 220})
+	h.Release(geom.Pt{X: 380, Y: 220})
 	settle(h)
 
 	if len(st.cards) != before-1 {
 		t.Fatalf("swipe should remove one card: %d → %d", before, len(st.cards))
+	}
+}
+
+func TestDetailSelectableBody(t *testing.T) {
+	h, nav, _ := startHome(t)
+	openFeed(t, h, nav)
+
+	// Open a known card's detail directly, so the selection is deterministic.
+	c := makeCards(12, 0)[0]
+	nav.Push(detailPage{card: c})
+	settle(h)
+
+	// Drag horizontally across the body paragraph and copy. The body sits below
+	// the 200px header, the back button, title and byline; start past the
+	// left-edge back-swipe strip (~22px).
+	h.DragTo(geom.Pt{X: 40, Y: 360}, geom.Pt{X: 380, Y: 360})
+	h.Release(geom.Pt{X: 380, Y: 360})
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+
+	got := h.Owner().Clipboard.(*app.MemClipboard).S
+	if got == "" {
+		t.Fatal("dragging across the detail body selected nothing")
+	}
+	if !strings.Contains(bodyFor(c), got) {
+		t.Fatalf("selection %q is not a substring of the body", got)
+	}
+	if len(got) < 8 {
+		t.Fatalf("selection %q suspiciously short for a full-width drag", got)
 	}
 }

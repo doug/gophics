@@ -1,25 +1,21 @@
-// Command gallery is a polished showcase of gophics's higher-level widgets,
-// built entirely on procedural (network-free) content so it runs anywhere and
-// stays testable headless.
+// Command gallery is the gophics widget catalog: a sectioned, interactive
+// showcase of the framework's higher-level components — controls, typography,
+// charts, dialogs, layout primitives, implicit animations, and the
+// Navigator/Hero/gesture stack — all built on procedural (network-free)
+// content so it runs anywhere and stays testable headless.
 //
-// It exercises, in one cohesive app:
-//   - Navigator with Hero shared-element transitions (a card's swatch flies
-//     into the detail header and back)
-//   - LazyList with pull-to-refresh (reshuffles the feed)
-//   - Dismissible cards (swipe to remove)
-//   - SelectableText (drag-select + copy the detail body)
-//   - AnimatedScale (the like button pops)
-//   - a reverse / bottom-anchored LazyList (the comments read like a chat log)
-//   - dark/light theming from the platform color scheme
+// Structure: a Navigator whose home screen lists the catalog sections as
+// tappable cards; tapping one pushes that section's page. A theme switcher in
+// the home top bar cycles Light / Dark / Glass / GlassDark, held in root state
+// and re-provided via widget.Provide[theme.Theme] so every section — which
+// reads its colors through theme.Of(ctx) — follows the switch live.
+//
+// The sections live in sections_*.go; this file holds the root, the theme
+// switcher, the home list, and the shared page chrome (scaffold + helpers).
 package main
 
 import (
-	"fmt"
-	"image"
-	"image/color"
 	"log"
-	"math"
-	"time"
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
@@ -32,384 +28,353 @@ import (
 	"github.com/doug/gophics/widget"
 )
 
-// Chrome (backgrounds, surfaces, text, accents) is drawn entirely from the
-// theme package's design tokens, provided at the root and read via
-// theme.Of(ctx), so the whole showcase follows the platform light/dark scheme
-// and demonstrates gophics's own design system. The procedural swatch imagery
-// below is content, not chrome, and keeps its own hues.
+// --- Theme mode & root -------------------------------------------------------
 
-// --- Data (procedural, deterministic) ---------------------------------------
+// themeMode selects which built-in theme the whole catalog runs under; the
+// switcher in the home top bar cycles it and root state re-provides the theme.
+type themeMode int
 
-type card struct {
-	id            int
-	title, author string
-	img           image.Image // a real decoded image (procedurally generated)
-	likes         int
-}
+const (
+	modeLight themeMode = iota
+	modeDark
+	modeGlass
+	modeGlassDark
+)
 
-var titles = []string{
-	"Aurora over the fjords", "Concrete and light", "Tidepools at dawn",
-	"The last analog radio", "Rooftop gardens of Kyoto", "Salt flats, no horizon",
-	"Neon in the rain", "A quiet cartography", "Machines that dream",
-	"Paper airplanes to Mars", "The color of patience", "Signal and moss",
-}
-var authors = []string{"mira", "koji", "petra", "sol", "wren", "arturo", "ines", "dax"}
-
-// swatchHues returns two gradient colors derived from an index, so the feed is
-// colorful and deterministic (no RNG — regenerating is reproducible).
-func swatchHues(i int) (paint.Color, paint.Color) {
-	h := float32(i*47%360) / 360
-	return paint.HSV(h*360, 0.55, 0.95), paint.HSV(mod01(h+0.12)*360, 0.65, 0.75)
-}
-
-func makeCards(n, seed int) []card {
-	cards := make([]card, n)
-	for i := range cards {
-		k := i + seed
-		cards[i] = card{
-			id:     k*100 + 7, // stable id independent of position
-			title:  titles[k%len(titles)],
-			author: authors[k%len(authors)],
-			img:    genImage(k),
-			likes:  (k*37)%90 + 3,
-		}
+func (m themeMode) theme() theme.Theme {
+	switch m {
+	case modeDark:
+		return theme.Dark()
+	case modeGlass:
+		return theme.Glass()
+	case modeGlassDark:
+		return theme.GlassDark()
+	default:
+		return theme.Light()
 	}
-	return cards
 }
 
-// genImage builds a deterministic, photographic-ish image (layered plasma over
-// a two-tone gradient, with a vignette and a little grain) so the feed shows
-// real decoded images — exercising the image decode/blit/scale path — instead
-// of flat gradients.
-func genImage(seed int) image.Image {
-	const n = 220 // large enough to stay crisp scaled up into the detail header
-	img := image.NewRGBA(image.Rect(0, 0, n, n))
-	a, b := swatchHues(seed)
-	fs := float64(seed)
-	for y := 0; y < n; y++ {
-		fy := float64(y) / n
-		for x := 0; x < n; x++ {
-			fx := float64(x) / n
-			v := 0.5 + 0.25*math.Sin((fx*3.7+fs)*math.Pi) +
-				0.22*math.Cos((fy*2.9-fs*0.7)*math.Pi) +
-				0.18*math.Sin((fx+fy)*5*math.Pi+fs)
-			v = clamp01f(v)
-			t := float32(v)*0.7 + float32(fy)*0.3
-			col := paint.Lerp(a, b, t)
-			dx, dy := fx-0.5, fy-0.5
-			vig := float32(clamp01f(1 - (dx*dx+dy*dy)*0.9))
-			if vig < 0.4 {
-				vig = 0.4
-			}
-			grain := float32((x*131+y*197+seed*17)%19)/19*0.06 - 0.03
-			img.SetRGBA(x, y, color.RGBA{
-				R: to8(col.R*vig + grain),
-				G: to8(col.G*vig + grain),
-				B: to8(col.B*vig + grain),
-				A: 255,
-			})
-		}
+func (m themeMode) label() string {
+	switch m {
+	case modeDark:
+		return "Dark"
+	case modeGlass:
+		return "Glass"
+	case modeGlassDark:
+		return "Glass Dark"
+	default:
+		return "Light"
 	}
-	return img
 }
 
-func clamp01f(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
+var allModes = []themeMode{modeLight, modeDark, modeGlass, modeGlassDark}
+
+// themeControl is provided alongside the theme so the switcher (and anything
+// else) can read the active mode and request a new one, without threading a
+// callback through every page.
+type themeControl struct {
+	mode themeMode
+	set  func(themeMode)
 }
 
-func to8(v float32) uint8 {
-	if v < 0 {
-		v = 0
-	}
-	if v > 1 {
-		v = 1
-	}
-	return uint8(v * 255)
-}
-
-func bodyFor(c card) string {
-	return fmt.Sprintf("%s is a study in restraint by @%s — long exposures, "+
-		"muted palettes, and a stubborn belief that the frame should breathe. "+
-		"Try selecting this text: press and drag, then Cmd/Ctrl+C to copy.", c.title, c.author)
-}
-
-func commentsFor(c card) []string {
-	base := []string{
-		"the gradient in the corner is doing a lot of work here",
-		"@" + c.author + " what lens was this?",
-		"saved to my board immediately",
-		"that second color choice is inspired",
-		"reminds me of early Saul Leiter",
-		"how long was the exposure?",
-		"the restraint is the whole point",
-		"instant favorite, no notes",
-	}
-	return base
-}
-
-// --- Root & feed -------------------------------------------------------------
-
-// Gallery is the root widget: a Navigator over the feed.
+// Gallery is the root widget: stateful so it can hold the selected theme mode.
 type Gallery struct{}
 
 func (Gallery) CreateState() widget.State { return &galleryState{} }
 
-type galleryState struct{ widget.StateBase[Gallery] }
+type galleryState struct {
+	widget.StateBase[Gallery]
+	mode themeMode
+}
+
+// rootHook lets tests observe (and drive) the root state.
+var rootHook func(*galleryState)
+
+func (s *galleryState) Init(ctx widget.Ctx) {
+	// Seed from the platform scheme so first paint matches the OS; the switcher
+	// takes over from there.
+	if ctx.DarkMode() {
+		s.mode = modeDark
+	}
+	if rootHook != nil {
+		rootHook(s)
+	}
+}
 
 func (s *galleryState) Build(ctx widget.Ctx) widget.Widget {
-	// Resolve the theme from the platform color scheme and provide it to the
-	// tree; every page below reads colors with theme.Of(ctx), so the whole
-	// showcase follows light/dark automatically.
-	th := theme.Auto(ctx)
+	th := s.mode.theme()
+	ctl := themeControl{mode: s.mode, set: func(m themeMode) {
+		s.SetState(func() { s.mode = m })
+	}}
+	// Provide the theme and the switcher control to the whole tree, then run the
+	// Navigator over the catalog home. appSurface paints the page background
+	// (a flat fill, or a gradient backdrop under the glass themes so their
+	// translucent surfaces have something to frost).
 	return widget.Provide[theme.Theme]{
 		Value: th,
-		Child: widget.Fill{Color: th.Bg, Child: widget.Navigator{Home: feedPage{}}},
-	}
-}
-
-type feedPage struct{}
-
-func (feedPage) CreateState() widget.State { return &feedState{} }
-
-type feedState struct {
-	widget.StateBase[feedPage]
-	cards      []card
-	seed       int
-	refreshing bool
-}
-
-// feedHook lets tests observe the mounted feed.
-var feedHook func(*feedState)
-
-func (s *feedState) Init(widget.Ctx) {
-	if feedHook != nil {
-		feedHook(s)
-	}
-	s.cards = makeCards(12, 0)
-}
-
-func (s *feedState) refresh(ctx widget.Ctx) {
-	s.SetState(func() { s.refreshing = true })
-	// Regenerate from a new seed on the next frame (no network to await; a
-	// real app would fetch here, then clear refreshing when done).
-	post := ctx.Post()
-	post(func() {
-		s.SetState(func() {
-			s.seed += 12
-			s.cards = makeCards(12, s.seed)
-			s.refreshing = false
-		})
-	})
-}
-
-func (s *feedState) remove(id int) {
-	s.SetState(func() {
-		for i, c := range s.cards {
-			if c.id == id {
-				s.cards = append(s.cards[:i], s.cards[i+1:]...)
-				return
-			}
-		}
-	})
-}
-
-func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
-	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
-	list := widget.LazyList{
-		Count:           len(s.cards),
-		EstimatedExtent: 96,
-		Refreshing:      s.refreshing,
-		OnRefresh:       func() { s.refresh(ctx) },
-		Build: func(i int) widget.Widget {
-			c := s.cards[i]
-			row := widget.Interactive{
-				Handler: widget.Handler{OnTap: func() { nav.Push(detailPage{card: c}) }},
-				Child:   cardTile(th, c),
-			}
-			return widget.WithKey{Key: c.id, Child: widget.Dismissible{
-				OnDismissed: func() { s.remove(c.id) },
-				Background:  dismissPanel(th),
-				Child:       row,
-			}}
+		Child: widget.Provide[themeControl]{
+			Value: ctl,
+			Child: appSurface(th, widget.Navigator{Home: homePage{}}),
 		},
 	}
-	return scaffold(ctx, "Gallery", "pull to refresh · swipe a card away", widget.Expand(list))
 }
 
-func cardTile(th theme.Theme, c card) widget.Widget {
-	info := widget.Column(
-		widget.Text{S: c.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text, MaxLines: 1, Ellipsis: true},
+// --- Home: section catalog + theme switcher ----------------------------------
+
+// section is one catalog entry: a title, a one-line summary, and a factory for
+// the page tapping it pushes.
+type section struct {
+	title, subtitle string
+	page            func() widget.Widget
+}
+
+// sections returns the catalog in display order. Each page factory returns a
+// self-contained widget; most wrap their demo in sectionPage (adds the scaffold
+// chrome + a scrolling body), while Navigation & gestures pushes its own
+// full-page feed.
+func sections() []section {
+	sp := func(title, subtitle string, body widget.Widget) func() widget.Widget {
+		return func() widget.Widget { return sectionPage{title: title, subtitle: subtitle, body: body} }
+	}
+	return []section{
+		{"Buttons & tappables", "Button, Primary, press-feedback rows",
+			sp("Buttons & tappables", "Button, Primary, and Tappable rows", buttonsSection{})},
+		{"Form controls", "Switch, Checkbox, Radio, Slider — all live",
+			sp("Form controls", "Switch, Checkbox, Radio group, Slider", formSection{})},
+		{"Text input", "Field with live caret, selection & echo",
+			sp("Text input", "Field / TextField, echoing what you type", textInputSection{})},
+		{"Typography", "The Display → Caption type scale",
+			sp("Typography", "The theme's TypeScale, role by role", typographySection{})},
+		{"Cards & surfaces", "Card, Decorated, Opacity",
+			sp("Cards & surfaces", "Surfaces, borders, and group opacity", cardsSection{})},
+		{"Charts", "Line, area, bar, pie & heatmap marks",
+			sp("Charts", "Declarative marks over shared scales", chartsSection{})},
+		{"Dialogs & menus", "ShowDialog and ShowMenu overlays",
+			sp("Dialogs & menus", "Modal dialog and anchored menu", dialogsSection{})},
+		{"Layout", "Grid, Wrap, Stack, AspectRatio",
+			sp("Layout", "The core layout primitives, live", layoutSection{})},
+		{"Animations", "AnimateColor, AnimateFloat, Scale, Rotation",
+			sp("Animations", "Implicit animations you can trigger", animationsSection{})},
+		{"Navigation & gestures", "Navigator + Hero, pull-to-refresh, swipe",
+			func() widget.Widget { return feedPage{} }},
+	}
+}
+
+type homePage struct{}
+
+// homeHook lets tests grab the Navigator handle and push pages directly.
+var homeHook func(widget.Nav)
+
+func (homePage) Build(ctx widget.Ctx) widget.Widget {
+	th := theme.Of(ctx)
+	nav := widget.MustOf[widget.Nav](ctx)
+	if homeHook != nil {
+		homeHook(nav)
+	}
+
+	rows := make([]widget.Widget, 0, len(sections())*2)
+	for _, sec := range sections() {
+		sec := sec
+		if len(rows) > 0 {
+			rows = append(rows, widget.Sized{H: 10})
+		}
+		rows = append(rows, sectionCard(th, sec, func() { nav.Push(sec.page()) }))
+	}
+	list := widget.Scroll{Child: widget.Padding{
+		Insets: geom.Insets{Left: 16, Right: 16, Top: 4, Bottom: 28},
+		Child:  sectionColumn(rows...),
+	}}
+
+	head := widget.Column(
+		theme.Display("Catalog"),
 		widget.Sized{H: 4},
-		widget.Text{S: "@" + c.author + " · " + fmt.Sprintf("%d likes", c.likes), Size: th.Type.Label, Color: th.Muted},
+		theme.Label("A tour of the gophics component set"),
+		widget.Sized{H: 14},
+		themeSwitcher(ctx),
+	)
+	head.CrossAlign = layout.CrossStart
+
+	col := widget.Column(
+		widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 22, Bottom: 12}, Child: head},
+		widget.Expand(list),
+	)
+	col.CrossAlign = layout.CrossStretch
+	return appSurface(th, col)
+}
+
+// themeSwitcher is a row of buttons cycling the four built-in themes; the active
+// one shows the filled Primary style.
+func themeSwitcher(ctx widget.Ctx) widget.Widget {
+	ctl := widget.MustOf[themeControl](ctx)
+	btns := make([]widget.Widget, len(allModes))
+	for i, m := range allModes {
+		m := m
+		btns[i] = theme.Button{
+			Label:   m.label(),
+			Primary: m == ctl.mode,
+			OnTap:   func() { ctl.set(m) },
+		}
+	}
+	return widget.Wrap{Spacing: 8, RunSpacing: 8, Children: btns}
+}
+
+// sectionCard is one tappable catalog entry.
+func sectionCard(th theme.Theme, sec section, onTap func()) widget.Widget {
+	info := widget.Column(
+		widget.Text{S: sec.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Sized{H: 3},
+		widget.Text{S: sec.subtitle, Size: th.Type.Label, Color: th.Muted, MaxLines: 1, Ellipsis: true},
 	)
 	info.CrossAlign = layout.CrossStart
 	row := widget.Row(
-		widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 60, 60, 14)},
-		widget.Sized{W: 14},
 		widget.Expand(info),
+		widget.Sized{W: 8},
+		widget.Text{S: "›", Size: th.Type.Title, Color: th.Muted},
 	)
-	// theme.Card provides the surface chrome (Surface fill + themed radius).
-	return widget.Padding{All: 10, Child: theme.Card{Pad: 12, Child: row}}
-}
-
-func dismissPanel(th theme.Theme) widget.Widget {
-	label := widget.Text{S: "remove", Font: theme.FontBold, Size: th.Type.Label, Color: th.OnPrimary}
-	return widget.Padding{All: 10, Child: widget.Decorated{Color: th.Danger, Radius: th.Radius,
-		Child: widget.Padding{Insets: geom.Insets{Left: 24, Right: 24},
-			Child: widget.Row(label, widget.Spacer(), label)}}}
-}
-
-// --- Detail ------------------------------------------------------------------
-
-type detailPage struct{ card card }
-
-func (d detailPage) CreateState() widget.State { return &detailState{card: d.card} }
-
-type detailState struct {
-	widget.StateBase[detailPage]
-	card  card
-	liked bool
-}
-
-func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
-	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
-	c := s.card
-
-	// Full-bleed hero header — tapping it (or the back chip) pops.
-	header := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Pop() }},
-		Child:   widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 0, 200, 0)},
+	return theme.Tappable{
+		Background: th.Surface,
+		Radius:     th.Radius,
+		Pad:        geom.InsetsSymmetric(14, 14),
+		Haptic:     true,
+		OnTap:      onTap,
+		Child:      row,
 	}
-
-	heartSize := float32(22)
-	heartColor := th.Muted
-	if s.liked {
-		heartSize, heartColor = 30, th.Danger
-	}
-	likeCount := c.likes
-	if s.liked {
-		likeCount++
-	}
-	// Animate the glyph's font size (re-rasterized each frame, so it stays
-	// crisp) rather than scaling a cached glyph bitmap, which would soften it.
-	like := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.liked = !s.liked }) }},
-		Child: widget.Row(
-			widget.Sized{W: 30, Child: widget.Center(
-				widget.AnimateFloat(heartSize, 140*time.Millisecond, func(sz float32) widget.Widget {
-					return widget.Text{S: "♥", Size: sz, Color: heartColor}
-				}))},
-			widget.Sized{W: 8},
-			widget.Text{S: fmt.Sprintf("%d", likeCount), Size: th.Type.Body, Color: th.Text},
-		),
-	}
-
-	body := widget.Column(
-		backChip(nav),
-		widget.Sized{H: 10},
-		widget.Text{S: c.title, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true},
-		widget.Sized{H: 4},
-		widget.Text{S: "by @" + c.author, Size: th.Type.Label, Color: th.Muted},
-		widget.Sized{H: 14},
-		widget.SelectableText{S: bodyFor(c), Size: th.Type.Body, Color: th.Text, Wrap: true},
-		widget.Sized{H: 16},
-		like,
-		widget.Sized{H: 18},
-		widget.Text{S: "COMMENTS", Font: theme.FontBold, Size: th.Type.Caption, Color: th.Muted},
-	)
-	body.CrossAlign = layout.CrossStart
-
-	page := widget.Column(
-		header,
-		widget.Padding{All: 16, Child: body},
-		widget.Expand(commentList(th, c)),
-	)
-	page.CrossAlign = layout.CrossStretch
-	return widget.Fill{Color: th.Bg, Child: page}
 }
 
-// backChip is the themed "back" button — a ready-made theme.Button, so the
-// showcase demonstrates the design system's own control.
-func backChip(nav widget.Nav) widget.Widget {
-	return theme.Button{Label: "← back", OnTap: func() { nav.Pop() }}
+// --- Section page chrome -----------------------------------------------------
+
+// sectionPage wraps a demo body in the shared scaffold and a scrolling area.
+type sectionPage struct {
+	title, subtitle string
+	body            widget.Widget
 }
 
-// commentList is a reverse (bottom-anchored) list: newest comment rests at the
-// bottom, scroll up for older — the chat-log layout.
-func commentList(th theme.Theme, c card) widget.Widget {
-	comments := commentsFor(c)
-	list := widget.LazyList{
-		Count:           len(comments),
-		EstimatedExtent: 52,
-		Reverse:         true,
-		Build: func(i int) widget.Widget {
-			return widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 5, Bottom: 5},
-				Child: widget.Decorated{Color: th.Surface, Radius: th.Radius, Child: widget.Padding{All: 12,
-					Child: widget.Text{S: comments[i], Size: th.Type.Body, Color: th.Text, Wrap: true}}}}
-		},
-	}
-	return list
+func (p sectionPage) Build(ctx widget.Ctx) widget.Widget {
+	scroll := widget.Scroll{Child: widget.Padding{
+		Insets: geom.Insets{Left: 16, Right: 16, Top: 4, Bottom: 32},
+		Child:  p.body,
+	}}
+	return scaffold(ctx, p.title, p.subtitle, widget.Expand(scroll))
 }
 
-// --- Shared chrome & helpers -------------------------------------------------
-
+// scaffold is the shared page frame: a title/subtitle header (with a Back button
+// once there's something to pop) over the page body, on the app surface.
 func scaffold(ctx widget.Ctx, title, subtitle string, body widget.Widget) widget.Widget {
 	th := theme.Of(ctx)
-	head := widget.Column(
+	titleCol := widget.Column(
 		theme.Title(title),
 		widget.Sized{H: 2},
 		theme.Label(subtitle),
 	)
-	head.CrossAlign = layout.CrossStart
+	titleCol.CrossAlign = layout.CrossStart
+
+	var head widget.Widget = titleCol
+	if nav, ok := widget.Of[widget.Nav](ctx); ok && nav.Depth() > 1 {
+		back := theme.Button{Label: "← Back", OnTap: func() { nav.Pop() }}
+		row := widget.Row(back, widget.Sized{W: 12}, widget.Expand(titleCol))
+		head = row
+	}
+
 	col := widget.Column(
 		widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 20, Bottom: 8}, Child: head},
 		body,
 	)
 	col.CrossAlign = layout.CrossStretch
-	return widget.Fill{Color: th.Bg, Child: col}
+	return appSurface(th, col)
 }
 
-func heroTag(id int) string { return fmt.Sprintf("swatch-%d", id) }
+// --- Shared helpers ----------------------------------------------------------
 
-// swatch draws a real image clipped to a rounded rectangle — the card
-// thumbnail and detail header, and the Hero that flies between them (the
-// image scales with bilinear filtering, so the flight stays smooth). W or H
-// of 0 fills the available space.
-func swatch(img image.Image, w, h, radius float32) widget.Widget {
-	return widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) {
-		r := geom.Rect{Max: size.Pt()}
-		if radius > 0 {
-			c.PushClipRRect(r, radius)
-			c.Image(img, r)
-			c.PopClip()
+// appSurface paints the page background behind child. Opaque themes get a flat
+// fill; the glass themes (Blur > 0) get a soft gradient backdrop so their
+// translucent surfaces have real content to frost over. The tree shape is kept
+// constant (a Stack over a background Canvas) across every theme, so switching
+// themes never remounts the Navigator underneath it — page and scroll state
+// survive the switch.
+func appSurface(th theme.Theme, child widget.Widget) widget.Widget {
+	bg := widget.Canvas{Draw: func(c paint.Canvas, size geom.Size) {
+		if th.Blur > 0 {
+			drawBackdrop(c, size, th.Dark)
 		} else {
-			c.Image(img, r)
+			c.FillRect(geom.Rect{Max: size.Pt()}, th.Bg)
 		}
+	}}
+	return widget.Stack{Children: []widget.Widget{bg, capWidth(child)}}
+}
+
+// contentMaxW keeps the catalog content in a single readable column, centered
+// over the full-bleed background, instead of sprawling across a wide window.
+const contentMaxW = 760
+
+// capWidth centers child and caps it at contentMaxW, filling narrower screens.
+// It centers with symmetric padding (rather than a MainCenter flex) so it works
+// under the loose constraints the Stack hands it — the pad fills the surplus and
+// the child gets exactly contentMaxW.
+func capWidth(child widget.Widget) widget.Widget {
+	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		pad := (cs.Max.W - contentMaxW) / 2
+		if pad <= 0 {
+			return child
+		}
+		return widget.Padding{Insets: geom.Insets{Left: pad, Right: pad}, Child: child}
 	}}
 }
 
-// hsv converts to an sRGB-ish Color (h,s,v in [0,1]).
-
-func mod01(v float32) float32 {
-	for v >= 1 {
-		v -= 1
+// drawBackdrop fills the surface with a diagonal two-tone gradient plus a
+// couple of soft color blooms — a photo-ish backdrop for the glass material.
+func drawBackdrop(c paint.Canvas, size geom.Size, dark bool) {
+	r := geom.Rect{Max: size.Pt()}
+	var a, b paint.Color
+	if dark {
+		a, b = paint.RGB(0.10, 0.12, 0.20), paint.RGB(0.18, 0.10, 0.16)
+	} else {
+		a, b = paint.RGB(0.78, 0.84, 0.93), paint.RGB(0.93, 0.82, 0.78)
 	}
-	return v
+	c.FillRRectGradient(r, 0, a, b, false)
+	// Two blooms of the accent hues, painted translucent for a lit-glass feel.
+	bloom := func(cx, cy, rad float32, col paint.Color) {
+		c.FillRRect(geom.RectXYWH(cx-rad, cy-rad, rad*2, rad*2), rad, col)
+	}
+	if dark {
+		bloom(size.W*0.2, size.H*0.18, size.W*0.5, paint.Color{R: 0.30, G: 0.20, B: 0.45, A: 0.35})
+		bloom(size.W*0.85, size.H*0.7, size.W*0.5, paint.Color{R: 0.45, G: 0.22, B: 0.20, A: 0.30})
+	} else {
+		bloom(size.W*0.2, size.H*0.18, size.W*0.5, paint.Color{R: 0.55, G: 0.62, B: 0.95, A: 0.30})
+		bloom(size.W*0.85, size.H*0.7, size.W*0.5, paint.Color{R: 0.95, G: 0.62, B: 0.45, A: 0.28})
+	}
+}
+
+// sectionColumn is a cross-stretched vertical stack — the default body layout,
+// so full-width controls (Field, Slider, dividers) fill the page width.
+func sectionColumn(children ...widget.Widget) widget.Widget {
+	col := widget.Column(children...)
+	col.CrossAlign = layout.CrossStretch
+	return col
+}
+
+// leftColumn stacks children left-aligned (for control groups like a checkbox or
+// radio list that should sit at the start of the column, not centered).
+func leftColumn(children ...widget.Widget) widget.Widget {
+	col := widget.Column(children...)
+	col.CrossAlign = layout.CrossStart
+	return col
+}
+
+// groupLabel titles a group of demos within a section.
+func groupLabel(s string) widget.Widget {
+	return widget.Padding{Insets: geom.Insets{Top: 12, Bottom: 6}, Child: theme.Heading(s)}
+}
+
+// divider is a hairline rule in the theme's border color.
+func divider(th theme.Theme) widget.Widget {
+	return widget.Sized{H: 1, Child: widget.Fill{Color: th.Border}}
 }
 
 func main() {
 	err := app.Run(Gallery{}, app.Config{
-		Title:        "Gophics Gallery",
-		Size:         geom.Size{W: 420, H: 680},
-		Background:   theme.Dark().Bg,
+		Title:        "Gophics Catalog",
+		Size:         geom.Size{W: 420, H: 760},
+		Background:   theme.Light().Bg,
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	})
