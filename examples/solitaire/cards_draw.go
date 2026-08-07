@@ -9,18 +9,20 @@ import (
 )
 
 var (
-	colFelt   = paint.RGB(0.10, 0.44, 0.30)
-	colFeltHi = paint.RGB(0.13, 0.50, 0.34)
-	colFeltLo = paint.RGB(0.06, 0.33, 0.22)
-	colFace   = paint.RGB(0.99, 0.99, 0.98)
-	colEdge   = paint.Color{R: 0, G: 0, B: 0, A: 0.10} // subtle card outline
-	colShadow = paint.Color{R: 0, G: 0, B: 0, A: 0.28}
-	colRed    = paint.RGB(0.79, 0.13, 0.17)
-	colBlack  = paint.RGB(0.11, 0.12, 0.15)
-	colBack1  = paint.RGB(0.28, 0.42, 0.72)
-	colBack2  = paint.RGB(0.12, 0.22, 0.46)
-	colBack3  = paint.RGB(0.40, 0.54, 0.82) // back motif
-	colSlot   = paint.Color{R: 1, G: 1, B: 1, A: 0.14}
+	colFelt      = paint.RGB(0.10, 0.44, 0.30)
+	colFeltHi    = paint.RGB(0.13, 0.50, 0.34)
+	colFeltLo    = paint.RGB(0.06, 0.33, 0.22)
+	colFace      = paint.RGB(0.99, 0.99, 0.98)
+	colEdge      = paint.Color{R: 0, G: 0, B: 0, A: 0.10} // subtle card outline
+	colShadow    = paint.Color{R: 0, G: 0, B: 0, A: 0.28}
+	colRed       = paint.RGB(0.79, 0.13, 0.17)
+	colBlack     = paint.RGB(0.11, 0.12, 0.15)
+	colBack1     = paint.RGB(0.28, 0.42, 0.72)
+	colBack2     = paint.RGB(0.12, 0.22, 0.46)
+	colBack3     = paint.Color{R: 0.60, G: 0.72, B: 0.98, A: 0.55} // light argyle diamond (over gradient)
+	colBack4     = paint.Color{R: 0.08, G: 0.16, B: 0.40, A: 0.40} // dark argyle diamond
+	colBackFrame = paint.Color{R: 0.85, G: 0.90, B: 1.0, A: 0.35}  // hairline back frame
+	colSlot      = paint.Color{R: 1, G: 1, B: 1, A: 0.14}
 )
 
 func suitColor(s klondike.Suit) paint.Color {
@@ -73,12 +75,7 @@ func drawCardBody(c paint.Canvas, r geom.Rect, card klondike.Card) {
 	sz := r.Dx()
 	rad := sz * 0.08
 	if !card.Up {
-		c.FillRRectGradient(r, rad, colBack1, colBack2, false)
-		// A centered diamond motif inside a hairline frame.
-		cx, cy := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
-		c.PushTransform(paint.Transform{Rotation: 0.7853982, PivotX: cx, PivotY: cy})
-		c.FillRect(geom.RectXYWH(cx-sz*0.15, cy-sz*0.15, sz*0.30, sz*0.30), colBack3)
-		c.PopTransform()
+		drawCardBack(c, r, rad)
 		return
 	}
 	c.FillRRect(r, rad, colFace)
@@ -114,6 +111,39 @@ func drawCardBody(c paint.Canvas, r geom.Rect, card klondike.Card) {
 		centerGlyph(c, rl, cx, r.Min.Y+r.Dy()*0.46, sz*0.5, col)
 		centerGlyph(c, glyph, cx, r.Min.Y+r.Dy()*0.72, sz*0.26, col)
 	}
+}
+
+// drawCardBack paints a face-down card: a blue gradient overlaid with an argyle
+// diamond lattice (two alternating translucent tones so the gradient still shows
+// through for depth), inside a hairline frame — a classic playing-card back. The
+// lattice is a rotated square grid clipped to the card's rounded rect, so the
+// squares read as diamonds and the pattern runs edge to edge like a real deck.
+func drawCardBack(c paint.Canvas, r geom.Rect, rad float32) {
+	sz := r.Dx()
+	c.FillRRectGradient(r, rad, colBack1, colBack2, false)
+
+	cx, cy := r.Min.X+r.Dx()/2, r.Min.Y+r.Dy()/2
+	c.PushClipRRect(r, rad)
+	c.PushTransform(paint.Transform{Rotation: 0.7853982, PivotX: cx, PivotY: cy})
+	cell := sz * 0.26
+	reach := r.Dx() + r.Dy() // covers the rotated card with margin; the clip trims the overflow
+	n := int(reach/cell) + 2
+	x0 := cx - float32(n)*cell/2
+	y0 := cy - float32(n)*cell/2
+	for iy := 0; iy < n; iy++ {
+		for ix := 0; ix < n; ix++ {
+			col := colBack3
+			if (ix+iy)%2 == 1 {
+				col = colBack4
+			}
+			c.FillRect(geom.RectXYWH(x0+float32(ix)*cell, y0+float32(iy)*cell, cell, cell), col)
+		}
+	}
+	c.PopTransform()
+	c.PopClip()
+
+	m := sz * 0.06
+	c.StrokeRRect(geom.RectXYWH(r.Min.X+m, r.Min.Y+m, r.Dx()-2*m, r.Dy()-2*m), rad*0.7, 1, colBackFrame)
 }
 
 // drawCorner paints the top-left rank index over a small pip. Kept compact so a
