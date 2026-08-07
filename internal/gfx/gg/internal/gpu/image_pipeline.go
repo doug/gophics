@@ -520,6 +520,15 @@ func buildImageVertices(cmd *ImageDrawCommand) []byte {
 // makeImageUniform creates the uniform buffer data for an image draw.
 // Contains an orthographic projection matrix and opacity.
 func makeImageUniform(viewportW, viewportH uint32, opacity float32) []byte {
+	return makeImageUniformFrost(viewportW, viewportH, opacity, 0, 0, 0)
+}
+
+// makeImageUniformFrost is makeImageUniform plus the frosted-glass extras
+// (saturation, blurStepX, blurStepY) packed into the three trailing floats that
+// were formerly zero pads. FROST-BLUR (VULKAN-VERIFY): pass 0/0/0 for a plain
+// image draw — every existing caller does, via makeImageUniform — which keeps
+// the textured-quad shader on its unchanged single-sample, no-saturation path.
+func makeImageUniformFrost(viewportW, viewportH uint32, opacity, saturation, blurStepX, blurStepY float32) []byte {
 	buf := make([]byte, imageUniformSize)
 
 	// Orthographic projection: pixel coords → NDC.
@@ -548,7 +557,11 @@ func makeImageUniform(viewportW, viewportH uint32, opacity float32) []byte {
 
 	// Opacity (offset 64).
 	binary.LittleEndian.PutUint32(buf[64:], math.Float32bits(opacity))
-	// Padding bytes 68..79 remain zero.
+	// FROST-BLUR (VULKAN-VERIFY): saturation (68), blur_step_x (72),
+	// blur_step_y (76) — the shader's former _pad0.._pad2. Zero for normal draws.
+	binary.LittleEndian.PutUint32(buf[68:], math.Float32bits(saturation))
+	binary.LittleEndian.PutUint32(buf[72:], math.Float32bits(blurStepX))
+	binary.LittleEndian.PutUint32(buf[76:], math.Float32bits(blurStepY))
 
 	return buf
 }

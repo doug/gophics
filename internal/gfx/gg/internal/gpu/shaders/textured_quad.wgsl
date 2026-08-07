@@ -25,9 +25,13 @@ struct ImageUniforms {
     // the shader expect 96, so Metal's validation aborted every image/sprite draw:
     // "argument uniforms[0] ... has space for 80 bytes, but argument has a
     // length(96)". Three f32s keep the struct at exactly 80 bytes.
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
+    // FROST-BLUR (VULKAN-VERIFY): repurposed from _pad0.._pad2 — the 80-byte
+    // layout is unchanged (three f32s, same as the pads), so the Metal validation
+    // note above still holds. All three are 0 for normal image/sprite draws, so
+    // fs_main takes the plain single-sample, no-op-saturation path for those.
+    saturation: f32,   // >0 pushes color away from its luma (glass vibrancy); 0 = unchanged
+    blur_step_x: f32,  // per-tap UV offset of a separable Gaussian; 0/0 = single sample
+    blur_step_y: f32,
 }
 
 struct VertexInput {
@@ -79,9 +83,57 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let texel = textureSample(image_texture, image_sampler, in.tex_coord);
-    let clip_cov = rrect_clip_coverage(in.position.xy);
+    let uv = in.tex_coord;
+    let step = vec2<f32>(uniforms.blur_step_x, uniforms.blur_step_y);
 
+    // FROST-BLUR (VULKAN-VERIFY): one leg of a separable Gaussian (13 taps,
+    // sigma ~2 in tap space, weights normalized to sum 1). appendBackdropBlur
+    // runs this twice — a horizontal pass then a vertical pass — over the
+    // downsampled backdrop; the Go side sizes `step` so ±6 taps span the blur
+    // radius. This is a real blur KERNEL (matches the CPU box-blur look), not a
+    // mip-pyramid upscale. It runs ONLY for the frost composite: `step` is a
+    // uniform, so the branch never diverges within a draw, and normal draws
+    // (step == 0) skip straight to the single sample below — zero behavior change
+    // for them. The cost is that these taps compile into the shared image shader;
+    // if a constrained backend (Intel Vulkan register pressure — see the header)
+    // regresses, hoist this into a dedicated blur pipeline. The Go side keeps the
+    // passes isolated (their own render targets) so that move is mechanical.
+    var texel: vec4<f32>;
+    if (step.x != 0.0 || step.y != 0.0) {
+        var acc = textureSample(image_texture, image_sampler, uv) * 0.199676;
+        acc = acc + (textureSample(image_texture, image_sampler, uv + step)
+                   + textureSample(image_texture, image_sampler, uv - step)) * 0.176216;
+        acc = acc + (textureSample(image_texture, image_sampler, uv + step * 2.0)
+                   + textureSample(image_texture, image_sampler, uv - step * 2.0)) * 0.121110;
+        acc = acc + (textureSample(image_texture, image_sampler, uv + step * 3.0)
+                   + textureSample(image_texture, image_sampler, uv - step * 3.0)) * 0.064824;
+        acc = acc + (textureSample(image_texture, image_sampler, uv + step * 4.0)
+                   + textureSample(image_texture, image_sampler, uv - step * 4.0)) * 0.027024;
+        acc = acc + (textureSample(image_texture, image_sampler, uv + step * 5.0)
+                   + textureSample(image_texture, image_sampler, uv - step * 5.0)) * 0.008773;
+        acc = acc + (textureSample(image_texture, image_sampler, uv + step * 6.0)
+                   + textureSample(image_texture, image_sampler, uv - step * 6.0)) * 0.002218;
+        texel = acc;
+    } else {
+        texel = textureSample(image_texture, image_sampler, uv);
+    }
+
+    // FROST-BLUR (VULKAN-VERIFY): saturation boost for the glass "vibrancy" — the
+    // blurred backdrop otherwise reads grey/muted. Work in straight-alpha space
+    // (un-premultiply, adjust, re-premultiply) so alpha is untouched; sat == 0
+    // (all normal draws) skips it entirely. Over-range results are clamped by the
+    // render target on write, so no clamp() (a naga-problematic builtin) is used.
+    let sat = uniforms.saturation;
+    if (sat > 0.0) {
+        var a = texel.a;
+        var rgb = texel.rgb;
+        if (a > 0.0) { rgb = rgb / a; }
+        let luma = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        rgb = vec3<f32>(luma) + (rgb - vec3<f32>(luma)) * sat;
+        texel = vec4<f32>(rgb * a, a);
+    }
+
+    let clip_cov = rrect_clip_coverage(in.position.xy);
     // Apply opacity to premultiplied texel (scale all channels uniformly).
     let opacity = uniforms.opacity * clip_cov;
     return texel * opacity;

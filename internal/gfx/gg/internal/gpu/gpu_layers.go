@@ -212,6 +212,20 @@ func layerCompositeCommand(view gpucontext.TextureView, opacity float32, w, h ui
 	}
 }
 
+// blurComposite is layerCompositeCommand (opacity 1) carrying the frosted-glass
+// extras: a per-tap Gaussian step (one axis at a time) and/or a saturation
+// boost. FROST-BLUR (VULKAN-VERIFY) — only appendBackdropBlur uses it; every
+// other composite goes through layerCompositeCommand with these left at 0.
+func blurComposite(view gpucontext.TextureView, w, h uint32, stepX, stepY, saturation float32) drawCommand {
+	dc := layerCompositeCommand(view, 1, w, h)
+	tc := dc.gpuTexCmd.(GPUTextureDrawCommand)
+	tc.BlurStepX = stepX
+	tc.BlurStepY = stepY
+	tc.Saturation = saturation
+	dc.gpuTexCmd = tc
+	return dc
+}
+
 // layerDims returns the physical pixel dimensions for full-surface layer
 // targets, matching how the session sizes the parent frame
 // (effectiveDimensions): the per-pass view size when rendering to a view,
@@ -226,36 +240,44 @@ func (rc *GPURenderContext) layerDims(target gg.GPURenderTarget) (uint32, uint32
 	return 0, 0
 }
 
+// backdropSaturation is the saturation multiplier applied to the frosted
+// backdrop as it composites back. A wide blur averages colors toward grey; Apple
+// (and every "vibrancy" material since) pushes saturation back up so the color
+// behind the glass still glows through. ~1.5 is the sweet spot — enough to read
+// as vivid, short of the neon look >1.8 gives. See textured_quad.wgsl.
+const backdropSaturation = 1.5
+
 // appendBackdropBlur frosts the backdrop drawn so far (the commands already in
 // out) within cmd's clip. It renders that backdrop to a full-size offscreen,
-// halves it twice (bilinear averaging — the blur), then composites the reduced
-// texture back at full size (bilinear upscale), clipped to the panel's rounded
-// rect. It reuses the opacity-layer offscreen machinery, so everything
-// composites in the main pass — no mid-pass swapchain readback. If an offscreen
-// can't be made it degrades to no frost (the panel's translucent tint stands in).
+// downsamples it (cheaper + keeps the fixed-tap kernel dense), runs a real
+// separable Gaussian — a horizontal then a vertical weighted-tap pass — and
+// composites the result back at full size with a saturation boost, clipped to
+// the panel's rounded rect. It reuses the opacity-layer offscreen machinery, so
+// everything composites in the main pass — no mid-pass swapchain readback. If an
+// offscreen can't be made it degrades to no frost (the panel's tint stands in).
+//
+// This replaced an earlier mip-pyramid (downsample then bilinear upscale): a
+// pyramid only APPROXIMATES a blur and its power-of-two reconstruction never
+// matched the CPU path's true box blur — visibly softer/faceted. A Gaussian
+// kernel at the actual radius matches it. The kernel lives in textured_quad.wgsl
+// (FROST-BLUR, VULKAN-VERIFY); this function just drives the passes.
 func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawCommand, w, h uint32, releases *[]func()) []drawCommand {
 	if len(out) == 0 || w < 8 || h < 8 {
 		return out // nothing behind, or too small to reduce
 	}
-	// Render the backdrop so far to a full-size offscreen, then halve it
-	// repeatedly (bilinear averaging). Each halving roughly doubles the blur
-	// width, so scale the count with the radius — ~one halving per doubling —
-	// capped so the smallest mip stays usable.
 	src, release := rc.renderLayerToTexture(out, w, h)
 	if src.IsNil() {
 		return out
 	}
 	*releases = append(*releases, release)
-	halvings := 1
-	for r := cmd.backdropRadius; r >= 8 && halvings < 5; r /= 2 {
-		halvings++
-	}
-	// Down pyramid: halve repeatedly (each level bilinear-averages the last),
-	// remembering each level's dimensions so we can retrace them on the way up.
-	type dims struct{ w, h uint32 }
-	levels := []dims{{w, h}}
+
+	// Downsample first: the shader uses a fixed 13 taps, so shrinking the
+	// backdrop keeps those taps dense relative to the content for wide radii (and
+	// halves work each level). The UV blur step below is invariant to how far we
+	// downsample — ±6 taps always span the radius — so this only trades quality
+	// for speed, never the amount of blur.
 	cw, ch := w, h
-	for i := 0; i < halvings && cw >= 8 && ch >= 8; i++ {
+	for r := cmd.backdropRadius; r > 12 && cw >= 32 && ch >= 32; r /= 2 {
 		cw, ch = cw/2, ch/2
 		down, rel := rc.resampleTexture(src, cw, ch)
 		if down.IsNil() {
@@ -263,25 +285,28 @@ func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawComman
 		}
 		*releases = append(*releases, rel)
 		src = down
-		levels = append(levels, dims{cw, ch})
 	}
-	// Up pyramid: walk back to half resolution one ×2 bilinear step at a time
-	// (the final composite does the last ×2 to full size). This is what keeps
-	// the blur smooth — a single big upscale from the smallest mip reconstructs
-	// piecewise-linearly and shows facets ("jagged" edges); doubling a level at
-	// a time blends each into the next for a near-Gaussian falloff, the same
-	// idea as a dual-filter / Kawase pyramid.
-	for i := len(levels) - 2; i >= 1; i-- {
-		up, rel := rc.resampleTexture(src, levels[i].w, levels[i].h)
-		if up.IsNil() {
-			break
-		}
+
+	// Separable Gaussian: one horizontal pass, then one vertical, each into its
+	// own reduced-size target. step is the per-tap UV offset that puts the ±6
+	// taps exactly across backdropRadius device pixels (independent of the
+	// downsample level, as derived above): radius/(6·fullDim).
+	stepX := cmd.backdropRadius / (6 * float32(w))
+	stepY := cmd.backdropRadius / (6 * float32(h))
+	hp := blurComposite(src, cw, ch, stepX, 0, 0)
+	if hv, rel := rc.renderLayerToTexture([]drawCommand{hp}, cw, ch); !hv.IsNil() {
 		*releases = append(*releases, rel)
-		src = up
+		src = hv
 	}
-	// Composite back at full size, clipped to the panel's rounded rect so only
-	// it frosts.
-	comp := layerCompositeCommand(src, 1, w, h)
+	vp := blurComposite(src, cw, ch, 0, stepY, 0)
+	if vv, rel := rc.renderLayerToTexture([]drawCommand{vp}, cw, ch); !vv.IsNil() {
+		*releases = append(*releases, rel)
+		src = vv
+	}
+
+	// Composite back at full size with the vibrancy boost, clipped to the panel's
+	// rounded rect so only it frosts.
+	comp := blurComposite(src, w, h, 0, 0, backdropSaturation)
 	comp.clipRect = cmd.clipRect
 	comp.clipRRect = cmd.clipRRect
 	comp.clipPath = cmd.clipPath
@@ -289,8 +314,8 @@ func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawComman
 }
 
 // resampleTexture renders src into a fresh w×h offscreen with bilinear
-// sampling — one step of the blur pyramid, used for both the downsample
-// (target smaller) and upsample (target larger) legs.
+// sampling — the downsample step feeding the Gaussian passes in
+// appendBackdropBlur.
 func (rc *GPURenderContext) resampleTexture(src gpucontext.TextureView, w, h uint32) (gpucontext.TextureView, func()) {
 	shrink := layerCompositeCommand(src, 1, w, h)
 	return rc.renderLayerToTexture([]drawCommand{shrink}, w, h)

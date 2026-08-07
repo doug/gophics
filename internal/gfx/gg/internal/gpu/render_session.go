@@ -2072,7 +2072,9 @@ func (s *GPURenderSession) buildGPUTextureResources(cmds []GPUTextureDrawCommand
 			s.gpuTexBindGroups = append(s.gpuTexBindGroups, nil)
 		}
 
-		uniformData := makeImageUniform(w, h, cmd.Opacity)
+		// FROST-BLUR (VULKAN-VERIFY): Saturation/BlurStepX/BlurStepY are 0 for all
+		// normal GPU-texture composites; only the frosted-glass passes set them.
+		uniformData := makeImageUniformFrost(w, h, cmd.Opacity, cmd.Saturation, cmd.BlurStepX, cmd.BlurStepY)
 		if err := s.queue.WriteBuffer(s.gpuTexUniformBufs[i], 0, uniformData); err != nil {
 			continue
 		}

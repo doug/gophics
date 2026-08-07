@@ -18,6 +18,13 @@ type GPUTextureDrawCommand struct {
 	Opacity        float32
 	ViewportWidth  uint32
 	ViewportHeight uint32
+	// FROST-BLUR (VULKAN-VERIFY): the frosted-glass backdrop blur reuses this
+	// composite draw (no separate pipeline) via the textured-quad shader. Both
+	// are 0 for every normal image/sprite/layer draw, which then takes the
+	// shader's plain single-sample path unchanged. See appendBackdropBlur and
+	// textured_quad.wgsl.
+	Saturation           float32 // >0 boosts saturation of the sampled color (glass vibrancy); 0 = leave as-is
+	BlurStepX, BlurStepY float32 // per-tap UV offset for a separable Gaussian pass; 0/0 = no blur
 }
 
 // extractConvexPolygon checks if a path is a single closed contour made entirely
