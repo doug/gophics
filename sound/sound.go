@@ -196,11 +196,21 @@ func (v *Voice) setEnvRate(x float32) { v.envRate.Store(math.Float32bits(x)) }
 func (v *Voice) envTarget() float32   { return math.Float32frombits(v.envTgt.Load()) }
 func (v *Voice) envStep() float32     { return math.Float32frombits(v.envRate.Load()) }
 
-// SetVolume sets the linear gain (live).
-func (v *Voice) SetVolume(x float64) { v.vol.Store(math.Float32bits(float32(x))) }
+// SetVolume sets the linear gain (live). Nil-safe: Play returns a nil *Voice
+// for an empty sample, and every Voice method tolerates that, so callers never
+// have to nil-check the handle.
+func (v *Voice) SetVolume(x float64) {
+	if v == nil {
+		return
+	}
+	v.vol.Store(math.Float32bits(float32(x)))
+}
 
-// SetPan sets the stereo pan in [-1,1] (live).
+// SetPan sets the stereo pan in [-1,1] (live). Nil-safe; see SetVolume.
 func (v *Voice) SetPan(x float64) {
+	if v == nil {
+		return
+	}
 	if x < -1 {
 		x = -1
 	} else if x > 1 {

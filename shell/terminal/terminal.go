@@ -251,10 +251,10 @@ func (ts *termState) applySize(tty TTY) {
 	cs := contentScaleFor(pw)
 	long := float32(max(pw, ph))
 	logicalLong := long / cs
-	full := clampScale(min32(long, float32(maxImageLong()))/logicalLong, 1, 8)
+	full := clampScale(min(long, float32(maxImageLong()))/logicalLong, 1, 8)
 	// Motion frames render at ~half the long edge (¼ the pixels) — the
 	// low-detail "inter frame"; the keyframe restores full when motion settles.
-	motion := clampScale(min32(long, float32(maxImageLong())/2)/logicalLong, 0.5, 8)
+	motion := clampScale(min(long, float32(maxImageLong())/2)/logicalLong, 0.5, 8)
 
 	ts.mu.Lock()
 	ts.pw, ts.ph, ts.cols, ts.rows = pw, ph, cols, rows
@@ -283,13 +283,6 @@ func clampScale(v, lo, hi float32) float32 {
 		return hi
 	}
 	return v
-}
-
-func min32(a, b float32) float32 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func (ts *termState) logicalSize() geom.Size {

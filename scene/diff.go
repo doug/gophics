@@ -108,8 +108,8 @@ func opBounds(o op, m Measurer) geom.Rect {
 		return inflate(o.r, o.width)
 	case lineOp:
 		r := geom.Rect{
-			Min: geom.Pt{X: min32(o.a.X, o.b.X), Y: min32(o.a.Y, o.b.Y)},
-			Max: geom.Pt{X: max32(o.a.X, o.b.X), Y: max32(o.a.Y, o.b.Y)},
+			Min: geom.Pt{X: min(o.a.X, o.b.X), Y: min(o.a.Y, o.b.Y)},
+			Max: geom.Pt{X: max(o.a.X, o.b.X), Y: max(o.a.Y, o.b.Y)},
 		}
 		return inflate(r, o.width)
 	case imageOp:
@@ -138,18 +138,4 @@ func inflate(r geom.Rect, strokeWidth float32) geom.Rect {
 		Min: geom.Pt{X: r.Min.X - g, Y: r.Min.Y - g},
 		Max: geom.Pt{X: r.Max.X + g, Y: r.Max.Y + g},
 	}
-}
-
-func min32(a, b float32) float32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max32(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
 }

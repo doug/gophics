@@ -44,7 +44,7 @@ func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.P
 	lineL, lineV := mL.Ascent+mL.Descent, mV.Ascent+mV.Descent
 	padX, padY, gap := float32(11), float32(9), float32(3)
 
-	tw := maxf(p.MeasureWidth(label, ls), p.MeasureWidth(value, vs)) + padX*2
+	tw := max(p.MeasureWidth(label, ls), p.MeasureWidth(value, vs)) + padX*2
 	th := padY*2 + lineL + gap + lineV
 
 	tx, ty := anchor.X+14, anchor.Y-th-14
@@ -62,11 +62,4 @@ func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.P
 	c.FillRRect(box, 9, tipBG)
 	c.Text(label, geom.Pt{X: tx + padX, Y: ty + padY + mL.Ascent}, ls, tipSub)
 	c.Text(value, geom.Pt{X: tx + padX, Y: ty + padY + lineL + gap + mV.Ascent}, vs, tipInk)
-}
-
-func maxf(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
 }

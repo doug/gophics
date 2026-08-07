@@ -6,18 +6,25 @@ package anim
 
 import "time"
 
-// Curve maps linear progress t in [0,1] to eased progress.
+// Curve maps linear progress t in [0,1] to eased progress. A curve must satisfy
+// f(0)=0 and f(1)=1 (start and end pinned); only the shape in between differs.
 type Curve func(t float32) float32
 
+// Linear returns t unchanged — constant speed, no easing.
 func Linear(t float32) float32 { return t }
 
+// EaseIn accelerates from rest: a slow start ramping to full speed (cubic).
 func EaseIn(t float32) float32 { return t * t * t }
 
+// EaseOut decelerates to rest: full speed settling into a soft stop (cubic) —
+// the usual choice for UI that enters and stays.
 func EaseOut(t float32) float32 {
 	u := 1 - t
 	return 1 - u*u*u
 }
 
+// EaseInOut accelerates then decelerates: a symmetric cubic S-curve, and the
+// Controller default.
 func EaseInOut(t float32) float32 {
 	if t < 0.5 {
 		return 4 * t * t * t
@@ -62,14 +69,18 @@ func (c *Controller) Value() float32 {
 // Running reports whether the controller is animating.
 func (c *Controller) Running() bool { return c.dir != 0 }
 
-// Forward animates toward 1.
+// Forward animates toward 1. It only sets direction — unlike Jump it does not
+// call OnChange, so if the frame loop is idle the caller must kick it (the same
+// SetState/Invalidate that reacts to the gesture is enough). Once a frame runs,
+// Tick self-sustains the animation until it completes.
 func (c *Controller) Forward() {
 	if c.progress < 1 {
 		c.dir = 1
 	}
 }
 
-// Reverse animates toward 0.
+// Reverse animates toward 0. Like Forward it only sets direction; see Forward
+// for the frame-loop note.
 func (c *Controller) Reverse() {
 	if c.progress > 0 {
 		c.dir = -1

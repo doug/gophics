@@ -84,10 +84,10 @@ func (r Rect) Contains(p Pt) bool {
 // Intersect returns the largest rectangle contained by both r and s.
 // If they do not overlap, the result is an empty Rect.
 func (r Rect) Intersect(s Rect) Rect {
-	r.Min.X = max32(r.Min.X, s.Min.X)
-	r.Min.Y = max32(r.Min.Y, s.Min.Y)
-	r.Max.X = min32(r.Max.X, s.Max.X)
-	r.Max.Y = min32(r.Max.Y, s.Max.Y)
+	r.Min.X = max(r.Min.X, s.Min.X)
+	r.Min.Y = max(r.Min.Y, s.Min.Y)
+	r.Max.X = min(r.Max.X, s.Max.X)
+	r.Max.Y = min(r.Max.Y, s.Max.Y)
 	if r.IsEmpty() {
 		return Rect{}
 	}
@@ -104,8 +104,8 @@ func (r Rect) Union(s Rect) Rect {
 		return r
 	}
 	return Rect{
-		Min: Pt{min32(r.Min.X, s.Min.X), min32(r.Min.Y, s.Min.Y)},
-		Max: Pt{max32(r.Max.X, s.Max.X), max32(r.Max.Y, s.Max.Y)},
+		Min: Pt{min(r.Min.X, s.Min.X), min(r.Min.Y, s.Min.Y)},
+		Max: Pt{max(r.Max.X, s.Max.X), max(r.Max.Y, s.Max.Y)},
 	}
 }
 
@@ -232,18 +232,4 @@ func (m Affine) Invert() (Affine, bool) {
 		Tx: (m.C*m.Ty - m.D*m.Tx) * inv,
 		Ty: (m.B*m.Tx - m.A*m.Ty) * inv,
 	}, true
-}
-
-func min32(a, b float32) float32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max32(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
 }
