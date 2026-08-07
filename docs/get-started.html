@@ -90,7 +90,7 @@ gophics doctor                              # check the toolchain per platform</
   <pre class="code">func TestCounter(t *testing.T) {
 	h, _ := app.NewHeadless(Counter{}, app.Config{Size: geom.Size{W: 320, H: 200}}, 1)
 	h.Tap(geom.Pt{X: 60, Y: 140}) // "increment"
-	img := h.Render()             // *image.RGBA — diff it against a golden
+	img := h.Render()             // image.Image — diff it against a golden
 	// ... assert on img, or write it out for a golden-image test.
 }</pre>
   <p>The same offscreen path means a server can render a widget tree to a PNG or a report with no display at all.</p>

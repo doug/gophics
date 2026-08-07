@@ -34,8 +34,8 @@
 
   <h3>The layers</h3>
   <p>Each concern is a small Go package; dependencies point downward. You build apps against the top; everything below is the engine.</p>
-  <pre class="code"><b>widget</b>   Widget/Element trees, State (StateBase[W]), keys, focus, the reconciler
-<b>gesture</b>  hit-testing, pointer routing, the gesture arena      <b>anim</b>  tickers, curves, controllers
+  <pre class="code"><b>widget</b>   Widget/Element trees, State (StateBase[W]), keys, focus, reconciler, gestures (Handler)
+<b>theme</b>    design tokens &amp; styled components (opt-in)          <b>anim</b>  tickers, curves, controllers
 ──────────────────────────────────────────────────────────────────────────────────────────
 <b>layout</b>   the box protocol — BoxConstraints down, sizes up; flex, stack, padding, viewports
 ──────────────────────────────────────────────────────────────────────────────────────────

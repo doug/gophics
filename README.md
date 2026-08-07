@@ -6,9 +6,9 @@
 
 **Cross-platform native UI, written in pure Go.**
 
-One static binary on desktop and the WebGPU web — and the only app UI you can test headlessly with `go test`.
+One static binary on desktop and the WebGPU web — and a UI you test headlessly with `go test`, golden images and all.
 
-The rendering pipeline behind the best cross-platform UIs — immutable widgets → element reconciliation → constraint layout → GPU layer compositing — reimagined with idiomatic Go APIs, on a **zero-CGo** WebGPU stack. It draws every pixel itself, so one codebase renders **pixel-identically on desktop, web, iOS, and Android — and even in a terminal**. No platform forks, no Dart, no JavaScript, no webview, no SDK.
+The rendering pipeline behind the best cross-platform UIs — immutable widgets → element reconciliation → constraint layout → GPU layer compositing — reimagined with idiomatic Go APIs, on a **zero-CGo** WebGPU stack. It draws every pixel itself, so one codebase renders the same UI — from the same renderer — on desktop, web, iOS, and Android, and even in a terminal. No platform forks, no Dart, no JavaScript, no webview, no SDK.
 
 [Quick start](#quick-start) · [Why Gophics](#why-gophics) · [A taste](#a-taste-of-the-api) · [Examples](#examples) · [Architecture](PLAN.md) · [Design notes](design/)
 
@@ -20,7 +20,7 @@ The rendering pipeline behind the best cross-platform UIs — immutable widgets 
 
 Gophics borrows the *architecture* behind the best cross-platform UIs — not their APIs — and leans into what Go does that Dart and JavaScript can't:
 
-- **`go build` is the whole story.** `CGO_ENABLED=0` everywhere. One static binary per platform, cross-compiled from any OS. No SDK, no toolchain doctor, no engine artifacts to install.
+- **`go build` is the whole story.** `CGO_ENABLED=0` on desktop and web (mobile binds the same Go into a thin native host). One static binary per platform, cross-compiled from any OS. No SDK, no toolchain doctor, no engine artifacts to install.
 - **A library, not an app framework.** Gophics is a `go.mod` line. Pop a window from a CLI, embed a live UI inside a server, or render a widget tree straight to a PNG — headless, no display.
 - **It draws every pixel itself.** A pure-Go WebGPU renderer (vendored in-tree, zero CGo) composites the UI, so it looks identical on every platform — including GPU opacity/blend layers, gradients, shadows, and real text shaping.
 - **Real concurrency.** Goroutines plus a single UI thread. Streaming data into a live UI — a chore in most UI stacks — is the easy case here.
@@ -123,7 +123,7 @@ Every example runs on the desktop, most compile to the browser, and all are test
 
 ## Platforms — one widget tree, everywhere
 
-Because Gophics draws every pixel itself, the *same* widget tree renders the *same* on every target — pixel-identical on the four GPU platforms, and it even runs in a terminal. No per-platform forks, no native-widget quirks, one design language.
+Because Gophics draws every pixel itself, the *same* widget tree renders the *same* on every target — the CPU rasterizer is the pixel-exact reference the GPU backends are held to — and it even runs in a terminal. No per-platform forks, no native-widget quirks, one design language.
 
 | Target | How | Status |
 | --- | --- | --- |

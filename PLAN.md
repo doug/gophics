@@ -4,7 +4,12 @@ This is the planning document for gophics: an idiomatic-Go reimagining of
 Flutter — its architecture, not its API surface — built on a pure-Go GPU stack
 with zero CGo, targeting desktop, web (WASM), and eventually mobile.
 
-Status: **planning**. Nothing here is built yet.
+Status: **implemented.** This began as the planning document and is kept as the
+architecture rationale — the "why" behind the pipeline. The framework it
+describes is built and working across desktop, web (WASM), iOS, and Android; the
+M0–M9 roadmap and §9 layout below are the original plan, now largely realized
+(see the git history and `docs/rsc-readiness-review.md` for current state). Read
+it for the design reasoning, not as a to-do list.
 
 ## 1. Vision & principles
 
