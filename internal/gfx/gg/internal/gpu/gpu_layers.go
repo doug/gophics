@@ -250,18 +250,37 @@ func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawComman
 	for r := cmd.backdropRadius; r >= 8 && halvings < 5; r /= 2 {
 		halvings++
 	}
+	// Down pyramid: halve repeatedly (each level bilinear-averages the last),
+	// remembering each level's dimensions so we can retrace them on the way up.
+	type dims struct{ w, h uint32 }
+	levels := []dims{{w, h}}
 	cw, ch := w, h
 	for i := 0; i < halvings && cw >= 8 && ch >= 8; i++ {
 		cw, ch = cw/2, ch/2
-		down, rel := rc.downsampleTexture(src, cw, ch)
+		down, rel := rc.resampleTexture(src, cw, ch)
 		if down.IsNil() {
 			break
 		}
 		*releases = append(*releases, rel)
 		src = down
+		levels = append(levels, dims{cw, ch})
 	}
-	// Composite the reduced mip back at full size (bilinear upscale = the blur),
-	// clipped to the panel's rounded rect so only it frosts.
+	// Up pyramid: walk back to half resolution one ×2 bilinear step at a time
+	// (the final composite does the last ×2 to full size). This is what keeps
+	// the blur smooth — a single big upscale from the smallest mip reconstructs
+	// piecewise-linearly and shows facets ("jagged" edges); doubling a level at
+	// a time blends each into the next for a near-Gaussian falloff, the same
+	// idea as a dual-filter / Kawase pyramid.
+	for i := len(levels) - 2; i >= 1; i-- {
+		up, rel := rc.resampleTexture(src, levels[i].w, levels[i].h)
+		if up.IsNil() {
+			break
+		}
+		*releases = append(*releases, rel)
+		src = up
+	}
+	// Composite back at full size, clipped to the panel's rounded rect so only
+	// it frosts.
 	comp := layerCompositeCommand(src, 1, w, h)
 	comp.clipRect = cmd.clipRect
 	comp.clipRRect = cmd.clipRRect
@@ -269,9 +288,10 @@ func (rc *GPURenderContext) appendBackdropBlur(out []drawCommand, cmd drawComman
 	return append(out, comp)
 }
 
-// downsampleTexture renders src into a fresh w×h offscreen (bilinear), halving
-// resolution to average it — one blur step.
-func (rc *GPURenderContext) downsampleTexture(src gpucontext.TextureView, w, h uint32) (gpucontext.TextureView, func()) {
+// resampleTexture renders src into a fresh w×h offscreen with bilinear
+// sampling — one step of the blur pyramid, used for both the downsample
+// (target smaller) and upsample (target larger) legs.
+func (rc *GPURenderContext) resampleTexture(src gpucontext.TextureView, w, h uint32) (gpucontext.TextureView, func()) {
 	shrink := layerCompositeCommand(src, 1, w, h)
 	return rc.renderLayerToTexture([]drawCommand{shrink}, w, h)
 }
