@@ -178,9 +178,16 @@ func (s *Shaper) Primary() *Font {
 	return s.fonts[0]
 }
 
-// ResolveFace implements shaping.Fontmap: first explicit font with a glyph
-// for r, then the system font map (if enabled), else the primary.
-func (s *Shaper) ResolveFace(r rune) *font.Face {
+// fontmap adapts a Shaper to shaping.Fontmap. It exists so the dependency's
+// ResolveFace(rune) *font.Face lives on an unexported adapter, not on Shaper's
+// public API — the Shaper never leaks *font.Face to gophics callers.
+type fontmap struct{ s *Shaper }
+
+func (f fontmap) ResolveFace(r rune) *font.Face { return f.s.resolveFace(r) }
+
+// resolveFace picks a face for r: first explicit font with a glyph for it, then
+// the system font map (if enabled), else the primary.
+func (s *Shaper) resolveFace(r rune) *font.Face {
 	for _, f := range s.fonts {
 		if f.HasGlyph(r) {
 			return f.face
@@ -204,7 +211,7 @@ func (s *Shaper) shapeRuns(runes []rune, size float32) []shaping.Output {
 		RunEnd:    len(runes),
 		Size:      fx(size),
 		Direction: di.DirectionLTR,
-	}, s)
+	}, fontmap{s})
 	outs := make([]shaping.Output, len(inputs))
 	for i, in := range inputs {
 		outs[i] = s.hb.Shape(in)
