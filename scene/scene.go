@@ -75,17 +75,23 @@ type lineOp struct {
 // fillPathOp holds a retained path by pointer plus the generation captured at
 // record time, so opEqual (a == b) compares identity + gen + color — safe
 // because a *paint.Path pointer is comparable where the path's slices are not.
+// bounds is the path's extent at record time: a retained path is mutated in
+// place across frames, so reading p.Bounds() live during Diff would report the
+// new extent for the old op too, and the region the path vacated would never
+// enter the damage rect (stale pixels). Capturing it here keeps Diff honest.
 type fillPathOp struct {
-	p   *paint.Path
-	gen uint64
-	col paint.Color
+	p      *paint.Path
+	gen    uint64
+	bounds geom.Rect
+	col    paint.Color
 }
 
 type strokePathOp struct {
-	p     *paint.Path
-	gen   uint64
-	width float32
-	col   paint.Color
+	p      *paint.Path
+	gen    uint64
+	bounds geom.Rect
+	width  float32
+	col    paint.Color
 }
 
 type textOp struct {
@@ -180,14 +186,14 @@ func (r recorder) FillPath(p *paint.Path, col paint.Color) {
 	if p == nil || p.Empty() {
 		return
 	}
-	r.l.ops = append(r.l.ops, fillPathOp{p, p.Gen(), col})
+	r.l.ops = append(r.l.ops, fillPathOp{p, p.Gen(), p.Bounds(), col})
 }
 
 func (r recorder) StrokePath(p *paint.Path, width float32, col paint.Color) {
 	if p == nil || p.Empty() {
 		return
 	}
-	r.l.ops = append(r.l.ops, strokePathOp{p, p.Gen(), width, col})
+	r.l.ops = append(r.l.ops, strokePathOp{p, p.Gen(), p.Bounds(), width, col})
 }
 
 func (r recorder) Text(s string, pos geom.Pt, size float32, col paint.Color) {

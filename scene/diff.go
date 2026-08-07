@@ -117,9 +117,9 @@ func opBounds(o op, m Measurer) geom.Rect {
 	case drawSpriteOp:
 		return o.s.Dst
 	case fillPathOp:
-		return inflate(o.p.Bounds(), 1) // +1px for fill AA
+		return inflate(o.bounds, 1) // record-time bounds; +1px for fill AA
 	case strokePathOp:
-		return inflate(o.p.Bounds(), o.width) // half-width + AA on each side
+		return inflate(o.bounds, o.width) // record-time bounds; half-width + AA
 	case textOp:
 		w := m.MeasureWidthIn(o.font, o.s, o.size)
 		mt := m.MetricsIn(o.font, o.size)
