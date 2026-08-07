@@ -15,13 +15,30 @@ import (
 type List struct {
 	ops       []op
 	hasLayers bool // an opacity group was recorded (partial replay unsafe)
+	// clipStack/xformDepth back Recorder().ClipBounds() so containers can cull
+	// off-screen children during the record pass. clipStack holds the running
+	// clip intersection; xformDepth counts active transforms (culling is disabled
+	// while any is active). See ClipBounds in recorder.
+	clipStack  []geom.Rect
+	xformDepth int
 }
 
 // Recorder returns a paint.Canvas that appends into the list.
 func (l *List) Recorder() paint.Canvas { return recorder{l} }
 
 // Reset clears the list for re-recording, keeping capacity.
-func (l *List) Reset() { l.ops, l.hasLayers = l.ops[:0], false }
+func (l *List) Reset() {
+	l.ops, l.hasLayers = l.ops[:0], false
+	l.clipStack, l.xformDepth = l.clipStack[:0], 0
+}
+
+func (l *List) pushClip(r geom.Rect) {
+	cur := geom.Unbounded
+	if n := len(l.clipStack); n > 0 {
+		cur = l.clipStack[n-1]
+	}
+	l.clipStack = append(l.clipStack, cur.Intersect(r))
+}
 
 // HasLayers reports whether the frame recorded anything that forces a full
 // repaint instead of damage-culled partial replay: an opacity group or a
@@ -212,11 +229,29 @@ func (r recorder) DrawSprite(atlas image.Image, s paint.Sprite) {
 	r.l.ops = append(r.l.ops, drawSpriteOp{atlas, s})
 }
 
-func (r recorder) PushClip(rect geom.Rect) { r.l.ops = append(r.l.ops, pushClipOp{rect}) }
+// ClipBounds implements paint.Canvas: the current clip intersection in canvas
+// coordinates, or geom.Unbounded when unclipped or while any transform is active.
+func (r recorder) ClipBounds() geom.Rect {
+	if r.l.xformDepth > 0 || len(r.l.clipStack) == 0 {
+		return geom.Unbounded
+	}
+	return r.l.clipStack[len(r.l.clipStack)-1]
+}
+
+func (r recorder) PushClip(rect geom.Rect) {
+	r.l.ops = append(r.l.ops, pushClipOp{rect})
+	r.l.pushClip(rect)
+}
 func (r recorder) PushClipRRect(rect geom.Rect, radius float32) {
 	r.l.ops = append(r.l.ops, pushClipRRectOp{rect, radius})
+	r.l.pushClip(rect)
 }
-func (r recorder) PopClip() { r.l.ops = append(r.l.ops, popClipOp{}) }
+func (r recorder) PopClip() {
+	r.l.ops = append(r.l.ops, popClipOp{})
+	if n := len(r.l.clipStack); n > 0 {
+		r.l.clipStack = r.l.clipStack[:n-1]
+	}
+}
 
 func (r recorder) PushOpacity(alpha float32) {
 	r.l.hasLayers = true
@@ -230,8 +265,14 @@ func (r recorder) PushTransform(t paint.Transform) {
 	// full-surface repaint for the frame (as with opacity groups).
 	r.l.hasLayers = true
 	r.l.ops = append(r.l.ops, pushTransformOp{t})
+	r.l.xformDepth++
 }
-func (r recorder) PopTransform() { r.l.ops = append(r.l.ops, popTransformOp{}) }
+func (r recorder) PopTransform() {
+	r.l.ops = append(r.l.ops, popTransformOp{})
+	if r.l.xformDepth > 0 {
+		r.l.xformDepth--
+	}
+}
 
 func (r recorder) BackdropBlur(rect geom.Rect, radius float32) {
 	r.l.ops = append(r.l.ops, backdropBlurOp{rect, radius})

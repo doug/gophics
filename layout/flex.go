@@ -188,11 +188,22 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 }
 
 func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
+	// Viewport culling: skip children lying entirely outside the current clip.
+	// This makes scrolling a long list O(visible) instead of O(total) in the
+	// record pass — e.g. a scrolled Column only records its on-screen rows.
+	// ClipBounds is geom.Unbounded when unclipped or under a transform, so
+	// unclipped/transformed content still paints in full (nothing is dropped).
+	clip := c.ClipBounds()
 	for i, ch := range f.Children {
 		if i >= len(f.offsets) {
 			break // children changed since last layout; skip until relaid
 		}
-		ch.Box.Paint(c, at.Add(f.offsets[i]))
+		pos := at.Add(f.offsets[i])
+		box := geom.Rect{Min: pos, Max: pos.Add(ch.Box.Size().Pt())}
+		if !box.Overlaps(clip) {
+			continue
+		}
+		ch.Box.Paint(c, pos)
 	}
 }
 

@@ -8,6 +8,8 @@ type pathVerb uint8
 const (
 	verbMove pathVerb = iota
 	verbLine
+	verbQuad
+	verbCubic
 	verbClose
 )
 
@@ -46,6 +48,36 @@ func (p *Path) LineTo(pt geom.Pt) *Path {
 	}
 	p.verbs = append(p.verbs, verbLine)
 	p.pts = append(p.pts, pt)
+	p.grow(pt)
+	p.gen++
+	return p
+}
+
+// QuadTo adds a quadratic Bézier curve to pt with a single control point ctrl
+// (starting a subpath at ctrl if none is open). Used for smooth freehand strokes
+// (midpoint-quadratic) and rounded shapes.
+func (p *Path) QuadTo(ctrl, pt geom.Pt) *Path {
+	if len(p.verbs) == 0 {
+		p.MoveTo(ctrl)
+	}
+	p.verbs = append(p.verbs, verbQuad)
+	p.pts = append(p.pts, ctrl, pt)
+	p.grow(ctrl)
+	p.grow(pt)
+	p.gen++
+	return p
+}
+
+// CubeTo adds a cubic Bézier curve to pt with control points c1, c2 (starting a
+// subpath at c1 if none is open).
+func (p *Path) CubeTo(c1, c2, pt geom.Pt) *Path {
+	if len(p.verbs) == 0 {
+		p.MoveTo(c1)
+	}
+	p.verbs = append(p.verbs, verbCubic)
+	p.pts = append(p.pts, c1, c2, pt)
+	p.grow(c1)
+	p.grow(c2)
 	p.grow(pt)
 	p.gen++
 	return p

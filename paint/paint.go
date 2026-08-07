@@ -143,6 +143,13 @@ type Canvas interface {
 	// avatar); also balanced with PopClip.
 	PushClipRRect(r geom.Rect, radius float32)
 	PopClip()
+	// ClipBounds returns the bounds of the current clip in canvas coordinates —
+	// the intersection of all pushed clips, or geom.Unbounded when nothing is
+	// clipped. Containers use it to skip painting children entirely outside the
+	// visible area (viewport culling). It returns geom.Unbounded whenever a
+	// transform is active, so callers only cull in plain translated space and
+	// never drop rotated/scaled content.
+	ClipBounds() geom.Rect
 	// PushOpacity begins a group composited at alpha [0,1] — everything
 	// until the matching PopOpacity fades as one (not per-shape). Balance
 	// every PushOpacity with PopOpacity.
@@ -585,6 +592,33 @@ func asRGBA(img image.Image) *image.RGBA {
 type ggCanvas struct {
 	p  *Painter
 	dc *gg.Context
+	// clipStack/xformDepth back ClipBounds for viewport culling: each PushClip
+	// pushes the running intersection, PushTransform bumps the depth. Balanced
+	// push/pop keeps them consistent across a frame. See ClipBounds.
+	clipStack  []geom.Rect
+	xformDepth int
+}
+
+// ClipBounds implements Canvas.
+func (c *ggCanvas) ClipBounds() geom.Rect {
+	if c.xformDepth > 0 || len(c.clipStack) == 0 {
+		return geom.Unbounded
+	}
+	return c.clipStack[len(c.clipStack)-1]
+}
+
+func (c *ggCanvas) pushClipBounds(r geom.Rect) {
+	cur := geom.Unbounded
+	if len(c.clipStack) > 0 {
+		cur = c.clipStack[len(c.clipStack)-1]
+	}
+	c.clipStack = append(c.clipStack, cur.Intersect(r))
+}
+
+func (c *ggCanvas) popClipBounds() {
+	if len(c.clipStack) > 0 {
+		c.clipStack = c.clipStack[:len(c.clipStack)-1]
+	}
 }
 
 // GPUCanvas wraps an externally-owned gg.Context (e.g. a GPU-accelerated one
@@ -695,6 +729,15 @@ func (c *ggCanvas) FillPath(p *Path, col Color) {
 		case verbLine:
 			c.dc.LineTo(float64(p.pts[j].X), float64(p.pts[j].Y))
 			j++
+		case verbQuad:
+			c.dc.QuadraticTo(float64(p.pts[j].X), float64(p.pts[j].Y),
+				float64(p.pts[j+1].X), float64(p.pts[j+1].Y))
+			j += 2
+		case verbCubic:
+			c.dc.CubicTo(float64(p.pts[j].X), float64(p.pts[j].Y),
+				float64(p.pts[j+1].X), float64(p.pts[j+1].Y),
+				float64(p.pts[j+2].X), float64(p.pts[j+2].Y))
+			j += 3
 		case verbClose:
 			c.dc.ClosePath()
 		}
@@ -719,6 +762,15 @@ func (c *ggCanvas) StrokePath(p *Path, width float32, col Color) {
 		case verbLine:
 			c.dc.LineTo(float64(p.pts[j].X), float64(p.pts[j].Y))
 			j++
+		case verbQuad:
+			c.dc.QuadraticTo(float64(p.pts[j].X), float64(p.pts[j].Y),
+				float64(p.pts[j+1].X), float64(p.pts[j+1].Y))
+			j += 2
+		case verbCubic:
+			c.dc.CubicTo(float64(p.pts[j].X), float64(p.pts[j].Y),
+				float64(p.pts[j+1].X), float64(p.pts[j+1].Y),
+				float64(p.pts[j+2].X), float64(p.pts[j+2].Y))
+			j += 3
 		case verbClose:
 			c.dc.ClosePath()
 		}
@@ -960,14 +1012,19 @@ func (c *ggCanvas) Image(img image.Image, dst geom.Rect) {
 func (c *ggCanvas) PushClip(r geom.Rect) {
 	c.dc.Push()
 	c.dc.ClipRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
+	c.pushClipBounds(r)
 }
 
 func (c *ggCanvas) PushClipRRect(r geom.Rect, radius float32) {
 	c.dc.Push()
 	c.dc.ClipRoundRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
+	c.pushClipBounds(r)
 }
 
-func (c *ggCanvas) PopClip() { c.dc.Pop() }
+func (c *ggCanvas) PopClip() {
+	c.dc.Pop()
+	c.popClipBounds()
+}
 
 func (c *ggCanvas) PushOpacity(alpha float32) { c.dc.PushLayer(gg.BlendNormal, float64(alpha)) }
 func (c *ggCanvas) PopOpacity()               { c.dc.PopLayer() }
@@ -982,9 +1039,15 @@ func (c *ggCanvas) PushTransform(t Transform) {
 	}
 	c.dc.Scale(float64(t.sx()), float64(t.sy()))
 	c.dc.Translate(-px, -py)
+	c.xformDepth++
 }
 
-func (c *ggCanvas) PopTransform() { c.dc.Pop() }
+func (c *ggCanvas) PopTransform() {
+	c.dc.Pop()
+	if c.xformDepth > 0 {
+		c.xformDepth--
+	}
+}
 
 func (c *ggCanvas) BackdropBlur(r geom.Rect, radius float32) {
 	c.dc.BackdropBlur(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))

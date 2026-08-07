@@ -89,6 +89,17 @@ func (r Rect) Intersect(s Rect) Rect {
 	return r
 }
 
+// Overlaps reports whether r and s share any area (half-open, like Contains):
+// touching edges alone do not overlap.
+func (r Rect) Overlaps(s Rect) bool {
+	return r.Min.X < s.Max.X && s.Min.X < r.Max.X &&
+		r.Min.Y < s.Max.Y && s.Min.Y < r.Max.Y
+}
+
+// Unbounded is a rectangle large enough to contain any on-screen geometry — the
+// "no clip" sentinel Canvas.ClipBounds returns when nothing constrains drawing.
+var Unbounded = Rect{Min: Pt{-1e9, -1e9}, Max: Pt{1e9, 1e9}}
+
 // Union returns the smallest rectangle containing both r and s.
 // An empty rectangle does not contribute.
 func (r Rect) Union(s Rect) Rect {
