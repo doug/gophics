@@ -447,9 +447,9 @@ func (s *game) draw(c paint.Canvas, size geom.Size) {
 
 	// Score panel.
 	c.TextIn("bold", "MATCH 3", geom.Pt{X: b.x, Y: 40}, 30, th.Text)
-	c.Text(fmt.Sprintf("Score %d", s.score), geom.Pt{X: b.x, Y: 68}, 16, th.Muted)
+	c.TextIn("", fmt.Sprintf("Score %d", s.score), geom.Pt{X: b.x, Y: 68}, 16, th.Muted)
 	moves := fmt.Sprintf("Moves %d", s.moves)
-	c.Text(moves, geom.Pt{X: b.x + b.cell*cols - s.textW(moves, 16), Y: 68}, 16, th.Muted)
+	c.TextIn("", moves, geom.Pt{X: b.x + b.cell*cols - s.textW(moves, 16), Y: 68}, 16, th.Muted)
 	if s.chain > 1 && s.phase == phaseClear {
 		tag := fmt.Sprintf("x%d CHAIN!", s.chain+1)
 		c.TextIn("bold", tag, geom.Pt{X: b.x + b.cell*cols - s.textW(tag, 18), Y: 42}, 18, th.Primary)
@@ -510,8 +510,9 @@ func (s *game) draw(c paint.Canvas, size geom.Size) {
 		c.StrokeRRect(geom.RectXYWH(x+3, y+3, b.cell-6, b.cell-6), b.cell*0.28, 3, th.Primary)
 	}
 
-	c.Text("swipe a gem, or tap two neighbors, to swap",
+	c.TextIn("", "swipe a gem, or tap two neighbors, to swap",
 		geom.Pt{X: b.x, Y: b.y + b.cell*rows + 26}, 13, th.Muted)
+
 }
 
 func (s *game) lerpCenter(b box, from, to cell, p float32) (x, y float32) {

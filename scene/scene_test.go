@@ -24,7 +24,7 @@ func drawScene(c paint.Canvas) {
 		paint.RGB(0.2, 0.4, 1), paint.RGB(1, 0.4, 0.2), false)
 	c.StrokeRRect(geom.RectXYWH(20, 120, 80, 40), 6, 2, paint.RGB(1, 1, 1))
 	c.Line(geom.Pt{X: 5, Y: 5}, geom.Pt{X: 195, Y: 155}, 1.5, paint.RGB(1, 1, 0))
-	c.Text("scene", geom.Pt{X: 20, Y: 30}, 14, paint.RGB(1, 1, 1))
+	c.TextIn("", "scene", geom.Pt{X: 20, Y: 30}, 14, paint.RGB(1, 1, 1))
 	c.PushClip(geom.RectXYWH(100, 100, 60, 60))
 	c.FillRect(geom.RectXYWH(0, 0, 200, 160), paint.Color{R: 0.5, G: 0, B: 0.5, A: 0.5})
 	c.PopClip()
@@ -79,7 +79,7 @@ func drawTransformed(c paint.Canvas) {
 	c.Clear(paint.RGB(0.1, 0.1, 0.12))
 	c.PushTransform(paint.MapRect(geom.RectXYWH(0, 0, 40, 20), geom.RectXYWH(60, 60, 80, 40)))
 	c.FillRRect(geom.RectXYWH(0, 0, 40, 20), 4, paint.RGB(0.9, 0.5, 0.2))
-	c.Text("hi", geom.Pt{X: 4, Y: 15}, 12, paint.RGB(1, 1, 1))
+	c.TextIn("", "hi", geom.Pt{X: 4, Y: 15}, 12, paint.RGB(1, 1, 1))
 	c.PopTransform()
 }
 

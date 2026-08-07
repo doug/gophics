@@ -85,9 +85,8 @@ type Canvas interface {
 	// StrokePath strokes a retained path with round caps and joins.
 	StrokePath(p *Path, width float32, c Color)
 	Line(a, b geom.Pt, width float32, c Color)
-	// Text draws s with its baseline-left at pos, in the default family.
-	Text(s string, pos geom.Pt, size float32, c Color)
-	// TextIn draws s in a named font family ("" = default).
+	// TextIn draws s with its baseline-left at pos, in the named font family
+	// ("" = the default family).
 	TextIn(font, s string, pos geom.Pt, size float32, c Color)
 	// Image draws img scaled into dst (bilinear). Pass the same image
 	// value across frames — scene diffing compares by identity.
@@ -697,14 +696,10 @@ func (c *ggCanvas) Line(a, b geom.Pt, width float32, col Color) {
 	c.dc.Stroke()
 }
 
-// Text shapes s (bidi, fallback, positional forms — see the text package)
+// TextIn shapes s (bidi, fallback, positional forms — see the text package)
 // and blits its cached device-resolution image (the run cache), which is
 // rasterized once by filling the glyph outlines — correct scripts,
 // measurement/rendering parity, gg's analytic AA quality.
-func (c *ggCanvas) Text(s string, pos geom.Pt, size float32, col Color) {
-	c.TextIn("", s, pos, size, col)
-}
-
 func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) {
 	if c.gpuActive() {
 		// GPU path: fill the shaped glyph outlines directly into the frame's

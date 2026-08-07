@@ -173,8 +173,8 @@ func (s *demoState) Build(widget.Ctx) widget.Widget {
 			if moved {
 				c.FillRRect(geom.RectXYWH(ptr.X-9, ptr.Y-9, 18, 18), 9, colText)
 			}
-			c.Text("gophics over ssh", geom.Pt{X: 28, Y: 50}, 30, colText)
-			c.Text("move the mouse · Ctrl-Q to quit", geom.Pt{X: 28, Y: 76}, 14, colDim)
+			c.TextIn("", "gophics over ssh", geom.Pt{X: 28, Y: 50}, 30, colText)
+			c.TextIn("", "move the mouse · Ctrl-Q to quit", geom.Pt{X: 28, Y: 76}, 14, colDim)
 		}},
 	}
 }

@@ -218,8 +218,8 @@ func (s *drum) Build(_ widget.Ctx) widget.Widget {
 func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 	c.Clear(bg)
 	const pad = 22
-	c.Text("Drum Machine", geom.Pt{X: pad, Y: 44}, 26, titleCol)
-	c.Text(fmt.Sprintf("%.0f BPM", s.bpm), geom.Pt{X: sz.W - pad - 74, Y: 44}, 18, subCol)
+	c.TextIn("", "Drum Machine", geom.Pt{X: pad, Y: 44}, 26, titleCol)
+	c.TextIn("", fmt.Sprintf("%.0f BPM", s.bpm), geom.Pt{X: sz.W - pad - 74, Y: 44}, 18, subCol)
 
 	const (
 		labelW  = 84
@@ -255,7 +255,7 @@ func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 	}
 
 	for v := 0; v < numVoices; v++ {
-		c.Text(s.voices[v].name, geom.Pt{X: pad, Y: yOf(v) + cellH*0.72}, 14, labelCol)
+		c.TextIn("", s.voices[v].name, geom.Pt{X: pad, Y: yOf(v) + cellH*0.72}, 14, labelCol)
 		for st := 0; st < steps; st++ {
 			r := geom.RectXYWH(xOf(st), yOf(v), cellW, cellH)
 			s.cell[v][st] = r
@@ -287,7 +287,7 @@ func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 	s.tempoUp = geom.RectXYWH(gridLeft+214, ty, 40, bh)
 	s.button(c, s.tempoDn, "–", btnBg, btnFg)
 	s.button(c, s.tempoUp, "+", btnBg, btnFg)
-	c.Text("tempo", geom.Pt{X: gridLeft + 160, Y: ty + bh/2 + 5}, 14, subCol)
+	c.TextIn("", "tempo", geom.Pt{X: gridLeft + 160, Y: ty + bh/2 + 5}, 14, subCol)
 
 	s.clrBtn = geom.RectXYWH(gridRight-96, ty, 96, bh)
 	s.button(c, s.clrBtn, "Clear", btnBg, btnFg)
@@ -296,7 +296,7 @@ func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 func (s *drum) button(c paint.Canvas, r geom.Rect, label string, bgc, fg paint.Color) {
 	c.FillRRect(r, 8, bgc)
 	w := s.ctx.Painter().MeasureWidth(label, 15)
-	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 15, fg)
+	c.TextIn("", label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 15, fg)
 }
 
 func lighten(c paint.Color, amt float32) paint.Color {

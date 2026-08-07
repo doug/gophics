@@ -523,9 +523,9 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 
 	if len(display) == 0 && f.Placeholder != "" {
-		c.Text(f.Placeholder, geom.Pt{X: origin.X, Y: baseline}, sz, phC)
+		c.TextIn("", f.Placeholder, geom.Pt{X: origin.X, Y: baseline}, sz, phC)
 	} else {
-		c.Text(display, geom.Pt{X: origin.X, Y: baseline}, sz, txC)
+		c.TextIn("", display, geom.Pt{X: origin.X, Y: baseline}, sz, txC)
 	}
 
 	if composing {
@@ -583,11 +583,11 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 		}
 
 		lineText := strings.TrimRight(string(runes[l.Start:l.End]), "\n")
-		c.Text(lineText, geom.Pt{X: at.X, Y: baseline}, sz, txC)
+		c.TextIn("", lineText, geom.Pt{X: at.X, Y: baseline}, sz, txC)
 	}
 
 	if len(runes) == 0 && f.Placeholder != "" {
-		c.Text(f.Placeholder, geom.Pt{X: at.X, Y: at.Y + m.Ascent}, sz, phC)
+		c.TextIn("", f.Placeholder, geom.Pt{X: at.X, Y: at.Y + m.Ascent}, sz, phC)
 	}
 
 	if b.state.caretVisible() && len(lines) > 0 {

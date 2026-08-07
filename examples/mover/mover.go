@@ -63,8 +63,9 @@ func (s *moverState) Build(ctx widget.Ctx) widget.Widget {
 		s.size = size
 		c.Clear(paint.RGB(0.08, 0.09, 0.12))
 		c.FillRRect(geom.RectXYWH(s.pos.X-18, s.pos.Y-18, 36, 36), 9, paint.RGB(0.42, 0.72, 0.96))
-		c.Text("WASD / arrows to move · hold Space to dash",
+		c.TextIn("", "WASD / arrows to move · hold Space to dash",
 			geom.Pt{X: 16, Y: 28}, 15, paint.RGB(0.7, 0.73, 0.8))
+
 	}}
 }
 

@@ -28,7 +28,7 @@ type Chart struct{ Values []float32 } // each value in [0,1]
 func (c Chart) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Canvas{Clip: true, Draw: func(cv paint.Canvas, size geom.Size) {
 		cv.Clear(bg)
-		cv.Text("weekly", geom.Pt{X: 20, Y: 32}, 18, ink)
+		cv.TextIn("", "weekly", geom.Pt{X: 20, Y: 32}, 18, ink)
 		n := len(c.Values)
 		if n == 0 {
 			return

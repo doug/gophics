@@ -370,7 +370,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 
 	// Header: title, score/best chips, New Game.
 	p := s.ctx.Painter()
-	c.Text("2048", geom.Pt{X: bx, Y: 56}, 42, th.Text)
+	c.TextIn("", "2048", geom.Pt{X: bx, Y: 56}, 42, th.Text)
 	drawChip(c, geom.RectXYWH(bx+board-158, 24, 74, 48), "SCORE", s.score, th, p)
 	drawChip(c, geom.RectXYWH(bx+board-78, 24, 78, 48), "BEST", s.best, th, p)
 	// Size the button to its label (+ padding) so the text never clips.
@@ -378,7 +378,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	lblW := p.MeasureWidth(btnLabel, btnSize)
 	s.newBtn = geom.RectXYWH(bx, 78, lblW+2*btnPadX, 32)
 	c.FillRRect(s.newBtn, 6, th.Primary)
-	c.Text(btnLabel, geom.Pt{X: s.newBtn.Min.X + btnPadX, Y: 78 + 16 + btnSize*0.35}, btnSize, th.OnPrimary)
+	c.TextIn("", btnLabel, geom.Pt{X: s.newBtn.Min.X + btnPadX, Y: 78 + 16 + btnSize*0.35}, btnSize, th.OnPrimary)
 
 	// Board + slots — neutral chrome that frames the tiles in both schemes:
 	// the frame (Border) sits darker than Bg on light and lighter on dark, and
@@ -411,7 +411,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 		txt := fmt.Sprintf("%d", v)
 		fs := tileFont(v, cell)
 		tw := p.MeasureWidth(txt, fs)
-		c.Text(txt, geom.Pt{X: cx - tw/2, Y: cy + fs*0.35}, fs, tileText(v))
+		c.TextIn("", txt, geom.Pt{X: cx - tw/2, Y: cy + fs*0.35}, fs, tileText(v))
 		if scale != 1 {
 			c.PopTransform()
 		}
@@ -450,7 +450,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 
 // center draws s horizontally centred on x at baseline y (measured, not guessed).
 func center(c paint.Canvas, p *paint.Painter, s string, x, y, size float32, col paint.Color) {
-	c.Text(s, geom.Pt{X: x - p.MeasureWidth(s, size)/2, Y: y}, size, col)
+	c.TextIn("", s, geom.Pt{X: x - p.MeasureWidth(s, size)/2, Y: y}, size, col)
 }
 
 // isMerge reports whether cell (r,c) is a destination that merged this move.

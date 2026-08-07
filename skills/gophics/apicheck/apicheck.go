@@ -70,7 +70,7 @@ type _canvasPrimitives interface {
 	FillRRectGradient(geom.Rect, float32, paint.Color, paint.Color, bool)
 	StrokeRRect(geom.Rect, float32, float32, paint.Color)
 	Line(geom.Pt, geom.Pt, float32, paint.Color)
-	Text(string, geom.Pt, float32, paint.Color)
+	TextIn(string, string, geom.Pt, float32, paint.Color)
 	PushClip(geom.Rect)
 	PopClip()
 	PushOpacity(float32)

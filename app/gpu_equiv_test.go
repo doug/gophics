@@ -66,8 +66,8 @@ func equivScene() widget.Widget {
 		c.DrawSprite(atlas, paint.Sprite{Src: image.Rect(0, 8, 8, 16), Dst: geom.RectXYWH(170, 300, 16, 16), FlipX: true})
 		c.DrawSprite(atlas, paint.Sprite{Src: image.Rect(8, 8, 16, 16), Dst: geom.RectXYWH(190, 300, 16, 16), Tint: paint.RGB(0.5, 0.5, 1)})
 		c.DrawSprite(atlas, paint.Sprite{Src: image.Rect(0, 0, 8, 8), Dst: geom.RectXYWH(210, 295, 20, 20), Rotation: 0.5})
-		c.Text("Equivalence", geom.Pt{X: 20, Y: 380}, 28, black)
-		c.Text("gpu == cpu?", geom.Pt{X: 20, Y: 412}, 16, paint.RGB(0.4, 0.4, 0.45))
+		c.TextIn("", "Equivalence", geom.Pt{X: 20, Y: 380}, 28, black)
+		c.TextIn("", "gpu == cpu?", geom.Pt{X: 20, Y: 412}, 16, paint.RGB(0.4, 0.4, 0.45))
 	}}
 }
 

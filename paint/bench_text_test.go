@@ -31,8 +31,8 @@ func BenchmarkRasterTextHeavy(b *testing.B) {
 		c.Clear(RGB(0.1, 0.1, 0.1))
 		y := float32(20)
 		for _, ln := range lines {
-			c.Text(ln, geom.Pt{X: 20, Y: y}, 15, RGB(0.9, 0.9, 0.9))
-			c.Text("example.com · 100 points · 40 comments", geom.Pt{X: 20, Y: y + 18}, 12, RGB(0.5, 0.5, 0.5))
+			c.TextIn("", ln, geom.Pt{X: 20, Y: y}, 15, RGB(0.9, 0.9, 0.9))
+			c.TextIn("", "example.com · 100 points · 40 comments", geom.Pt{X: 20, Y: y + 18}, 12, RGB(0.5, 0.5, 0.5))
 			y += 40
 		}
 		_ = p.Image()

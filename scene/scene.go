@@ -197,10 +197,6 @@ func (r recorder) StrokePath(p *paint.Path, width float32, col paint.Color) {
 	r.l.ops = append(r.l.ops, strokePathOp{p, p.Gen(), p.Bounds(), width, col})
 }
 
-func (r recorder) Text(s string, pos geom.Pt, size float32, col paint.Color) {
-	r.l.ops = append(r.l.ops, textOp{"", s, pos, size, col})
-}
-
 func (r recorder) TextIn(font, s string, pos geom.Pt, size float32, col paint.Color) {
 	r.l.ops = append(r.l.ops, textOp{font, s, pos, size, col})
 }

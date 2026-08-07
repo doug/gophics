@@ -86,9 +86,10 @@ func (s *fieldState) Build(widget.Ctx) widget.Widget {
 
 		// Title and a live readout, drawn into the same surface — this is the
 		// text path that renders correctly on the GPU build.
-		c.Text("gophics · canvas", geom.Pt{X: 28, Y: 50}, 30, colTxt)
-		c.Text(fmt.Sprintf("generative interference field — %.1fs — %s rasterizer", t, rasterizer()),
+		c.TextIn("", "gophics · canvas", geom.Pt{X: 28, Y: 50}, 30, colTxt)
+		c.TextIn("", fmt.Sprintf("generative interference field — %.1fs — %s rasterizer", t, rasterizer()),
 			geom.Pt{X: 28, Y: 76}, 14, colDim)
+
 	}}
 }
 

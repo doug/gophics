@@ -140,7 +140,7 @@ func pip(c paint.Canvas, glyph string, ax, ay, size float32, col paint.Color, fl
 // uses fixed fractions calibrated for goregular's near-square suit glyphs and
 // digits (baseline-left positioning; pos.Y is the baseline).
 func centerGlyph(c paint.Canvas, s string, ax, ay, size float32, col paint.Color) {
-	c.Text(s, geom.Pt{X: ax - size*0.30, Y: ay + size*0.36}, size, col)
+	c.TextIn("", s, geom.Pt{X: ax - size*0.30, Y: ay + size*0.36}, size, col)
 }
 
 const pi = 3.14159265

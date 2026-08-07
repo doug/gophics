@@ -104,7 +104,7 @@ func TestArabicShapingSpike(t *testing.T) {
 		}
 		c := p.BeginOffscreen(geom.Size{W: 420, H: 120}, 2)
 		c.Clear(RGB(1, 1, 1))
-		c.Text("السلام عليكم", geom.Pt{X: 20, Y: 60}, 32, RGB(0, 0, 0))
+		c.TextIn("", "السلام عليكم", geom.Pt{X: 20, Y: 60}, 32, RGB(0, 0, 0))
 		f, err := os.Create(out)
 		if err != nil {
 			t.Fatal(err)

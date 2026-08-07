@@ -46,7 +46,7 @@ func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th theme, p *p
 		c.Line(geom.Pt{X: area.Min.X, Y: y}, geom.Pt{X: area.Max.X, Y: y}, 1, th.grid)
 		lab := ax.label(t)
 		w := p.MeasureWidth(lab, labelSize)
-		c.Text(lab, geom.Pt{X: area.Min.X - 8 - w, Y: y + baseline}, labelSize, th.text)
+		c.TextIn("", lab, geom.Pt{X: area.Min.X - 8 - w, Y: y + baseline}, labelSize, th.text)
 	}
 }
 
@@ -63,7 +63,7 @@ func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th theme, p *p
 		}
 		lab := ax.label(t)
 		w := p.MeasureWidth(lab, labelSize)
-		c.Text(lab, geom.Pt{X: x - w/2, Y: area.Max.Y + met.Ascent + 6}, labelSize, th.text)
+		c.TextIn("", lab, geom.Pt{X: x - w/2, Y: area.Max.Y + met.Ascent + 6}, labelSize, th.text)
 	}
 	c.Line(geom.Pt{X: area.Min.X, Y: area.Max.Y}, geom.Pt{X: area.Max.X, Y: area.Max.Y}, 1, th.axis)
 }

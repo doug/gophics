@@ -78,7 +78,7 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	x, y := float32(20), float32(24)
 
 	c.TextIn("bold", "GPU CHECK", geom.Pt{X: x, Y: y + 8}, 30, ink)
-	c.Text(fmt.Sprintf("frames %d   taps %d", s.frames, s.taps), geom.Pt{X: x, Y: y + 36}, 15, dim)
+	c.TextIn("", fmt.Sprintf("frames %d   taps %d", s.frames, s.taps), geom.Pt{X: x, Y: y + 36}, 15, dim)
 	y += 64
 
 	// Color swatches — fills + color correctness.
@@ -96,8 +96,8 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	y += 46
 
 	// Text at three sizes — glyph compositing.
-	c.Text("The quick brown fox 0123", geom.Pt{X: x, Y: y + 12}, 12, ink)
-	c.Text("The quick brown fox", geom.Pt{X: x, Y: y + 34}, 18, ink)
+	c.TextIn("", "The quick brown fox 0123", geom.Pt{X: x, Y: y + 12}, 12, ink)
+	c.TextIn("", "The quick brown fox", geom.Pt{X: x, Y: y + 34}, 18, ink)
 	c.TextIn("bold", "Sharp?", geom.Pt{X: x, Y: y + 64}, 26, ink)
 	y += 84
 
@@ -106,7 +106,7 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	c.DrawSprite(s.atlas, paint.Sprite{Src: q, Dst: geom.RectXYWH(x, y, 48, 48), Nearest: true})
 	c.DrawSprite(s.atlas, paint.Sprite{Src: q, Dst: geom.RectXYWH(x+64, y, 48, 48), Nearest: true, Tint: paint.RGB(1, 0.5, 0.2)})
 	c.DrawSprite(s.atlas, paint.Sprite{Src: q, Dst: geom.RectXYWH(x+128, y, 48, 48), Nearest: true, Rotation: float32(s.t)})
-	c.Text("sprite · tint · rotate", geom.Pt{X: x, Y: y + 62}, 13, dim)
+	c.TextIn("", "sprite · tint · rotate", geom.Pt{X: x, Y: y + 62}, 13, dim)
 	y += 84
 
 	// Filled path (triangle) + a spinning square — animation + paths.
@@ -125,7 +125,7 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 		}
 	}
 	c.FillPath(spin.Close(), paint.RGB(0.95, 0.72, 0.30))
-	c.Text("path fill · spinning = frames advancing", geom.Pt{X: x + 170, Y: y + 28}, 13, dim)
+	c.TextIn("", "path fill · spinning = frames advancing", geom.Pt{X: x + 170, Y: y + 28}, 13, dim)
 	y += 76
 
 	// Opacity groups (GPU saveLayer). The green base must SURVIVE under the
@@ -133,7 +133,7 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	// ~50% (over green → blend, over dark bg → muted), and the nested blue must
 	// be ~25% (a 0.5 group inside a 0.5 group). If the base vanishes or the
 	// overlay is fully opaque, GPU layer compositing is broken.
-	c.Text("opacity: base survives · overlay 50% · nested 25%", geom.Pt{X: x, Y: y}, 13, dim)
+	c.TextIn("", "opacity: base survives · overlay 50% · nested 25%", geom.Pt{X: x, Y: y}, 13, dim)
 	oy := y + 12
 	c.FillRRect(geom.RectXYWH(x, oy, 120, 58), 8, good) // opaque green base
 	c.PushOpacity(0.5)
@@ -148,7 +148,7 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	// On the GPU path this exercises the offscreen downsample + composite; the
 	// left half stays sharp for an A/B. If the right half isn't blurred, the GPU
 	// backdrop path is falling back to a plain tint.
-	c.Text("backdrop blur (glass): right half frosted", geom.Pt{X: x, Y: y}, 13, dim)
+	c.TextIn("", "backdrop blur (glass): right half frosted", geom.Pt{X: x, Y: y}, 13, dim)
 	by := y + 10
 	c.FillRRectGradient(geom.RectXYWH(x, by, 280, 60), 10,
 		paint.RGB(0.95, 0.42, 0.36), paint.RGB(0.28, 0.52, 0.95), true)
@@ -165,8 +165,9 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 	if s.taps > 0 {
 		c.FillRRect(geom.RectXYWH(s.lastTap.X-10, s.lastTap.Y-10, 20, 20), 10, paint.RGB(1, 0.9, 0.3))
 	}
-	c.Text("tap anywhere → marker + tap count (touch input)",
+	c.TextIn("", "tap anywhere → marker + tap count (touch input)",
 		geom.Pt{X: 20, Y: size.H - 20}, 13, dim)
+
 }
 
 // buildAtlas is a tiny 16×16 atlas with four solid color quadrants.

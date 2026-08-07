@@ -90,8 +90,9 @@ func InspectOverlay(root Box, p geom.Pt, c paint.Canvas, painter *paint.Painter)
 	}
 	chip := geom.RectXYWH(rect.Min.X, y, chipW, chipH)
 	c.FillRRect(chip, 3, paint.Color{R: 0.09, G: 0.11, B: 0.15, A: 0.96})
-	c.Text(label, geom.Pt{X: chip.Min.X + 4, Y: chip.Min.Y + fs}, fs,
+	c.TextIn("", label, geom.Pt{X: chip.Min.X + 4, Y: chip.Min.Y + fs}, fs,
 		paint.Color{R: 0.9, G: 0.93, B: 0.96, A: 1})
+
 }
 
 // DebugPaint strokes every box's bounds over the frame (Flutter's

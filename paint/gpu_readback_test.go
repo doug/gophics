@@ -105,8 +105,8 @@ func TestGPUReadback(t *testing.T) {
 		canvas := p.GPUCanvas(cc)
 		canvas.Clear(white)
 		canvas.FillRect(geom.Rect{Min: geom.Pt{X: 20, Y: 20}, Max: geom.Pt{X: 120, Y: 80}}, blue)
-		canvas.Text(short, geom.Pt{X: 20, Y: 140}, 40, black)
-		canvas.Text(long, geom.Pt{X: 20, Y: 220}, 28, black)
+		canvas.TextIn("", short, geom.Pt{X: 20, Y: 140}, 40, black)
+		canvas.TextIn("", long, geom.Pt{X: 20, Y: 220}, 28, black)
 	})
 	writePNG(t, "gpu_readback.png", img)
 

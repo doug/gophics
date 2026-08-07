@@ -246,15 +246,15 @@ func (s *gameState) drawHUD(c paint.Canvas, size geom.Size) {
 		frac = 0
 	}
 	c.FillRRect(geom.RectXYWH(bx, by, bw*frac, 14), 7, colHP)
-	c.Text(fmt.Sprintf("HP %d/%d", g.player.HP, g.player.MaxHP), geom.Pt{X: bx + bw + 12, Y: by + 12}, 14, colInk)
-	c.Text(fmt.Sprintf("Depth %d", g.depth), geom.Pt{X: bx + bw + 130, Y: by + 12}, 14, colInk)
-	c.Text(fmt.Sprintf("Gold %d", g.gold), geom.Pt{X: bx + bw + 220, Y: by + 12}, 14, colCoin)
-	c.Text(fmt.Sprintf("Amulet · depth %d", maxDepth), geom.Pt{X: size.W - 170, Y: by + 12}, 14, colDim)
+	c.TextIn("", fmt.Sprintf("HP %d/%d", g.player.HP, g.player.MaxHP), geom.Pt{X: bx + bw + 12, Y: by + 12}, 14, colInk)
+	c.TextIn("", fmt.Sprintf("Depth %d", g.depth), geom.Pt{X: bx + bw + 130, Y: by + 12}, 14, colInk)
+	c.TextIn("", fmt.Sprintf("Gold %d", g.gold), geom.Pt{X: bx + bw + 220, Y: by + 12}, 14, colCoin)
+	c.TextIn("", fmt.Sprintf("Amulet · depth %d", maxDepth), geom.Pt{X: size.W - 170, Y: by + 12}, 14, colDim)
 
 	// Last few log lines.
 	ly := size.H - h + 40
 	for _, line := range g.log {
-		c.Text(line, geom.Pt{X: bx, Y: ly}, 13, colDim)
+		c.TextIn("", line, geom.Pt{X: bx, Y: ly}, 13, colDim)
 		ly += 16
 	}
 }

@@ -261,7 +261,7 @@ func (s *board) draw(c paint.Canvas, sz geom.Size) {
 	}
 	c.FillRRect(erect, r, paper)
 	c.StrokeRRect(erect, r, 1.5, eraserFg)
-	c.Text("E", geom.Pt{X: x + r - 4, Y: cy + 5}, 14, eraserFg)
+	c.TextIn("", "E", geom.Pt{X: x + r - 4, Y: cy + 5}, 14, eraserFg)
 	x += 2*r + 20
 
 	// Width options: three dots sized by their stroke width.
@@ -295,7 +295,7 @@ func (s *board) textBtn(c paint.Canvas, r geom.Rect, label string, enabled bool)
 		fg = paint.RGB(0.75, 0.77, 0.80)
 	}
 	w := s.ctx.Painter().MeasureWidth(label, 14)
-	c.Text(label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 14, fg)
+	c.TextIn("", label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 14, fg)
 }
 
 // sampleStrokes seeds the board with a little sketch so a fresh canvas (and the

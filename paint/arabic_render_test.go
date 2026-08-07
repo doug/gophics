@@ -38,8 +38,8 @@ func TestShapedPipelineRender(t *testing.T) {
 	if out := os.Getenv("GOPHICS_RENDER_OUT"); out != "" {
 		c := p.BeginOffscreen(geom.Size{W: 480, H: 120}, 2)
 		c.Clear(RGB(1, 1, 1))
-		c.Text("السلام عليكم", geom.Pt{X: 20, Y: 50}, 30, RGB(0, 0, 0))
-		c.Text(mixed, geom.Pt{X: 20, Y: 95}, 20, RGB(0.2, 0.2, 0.2))
+		c.TextIn("", "السلام عليكم", geom.Pt{X: 20, Y: 50}, 30, RGB(0, 0, 0))
+		c.TextIn("", mixed, geom.Pt{X: 20, Y: 95}, 20, RGB(0.2, 0.2, 0.2))
 		f, err := os.Create(out)
 		if err != nil {
 			t.Fatal(err)

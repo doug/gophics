@@ -271,10 +271,10 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	p := s.pal
 	c.Clear(p.bg)
 	const pad = 16
-	c.Text("Sudoku", geom.Pt{X: pad, Y: 34}, 24, p.ink)
+	c.TextIn("", "Sudoku", geom.Pt{X: pad, Y: 34}, 24, p.ink)
 	if status, col := s.status(); status != "" {
 		w := s.ctx.Painter().MeasureWidth(status, 16)
-		c.Text(status, geom.Pt{X: sz.W - pad - w, Y: 34}, 16, col)
+		c.TextIn("", status, geom.Pt{X: sz.W - pad - w, Y: 34}, 16, col)
 	}
 
 	const belowH = 118 // number pad + control row
@@ -337,7 +337,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 				col = p.badFg
 			}
 			fs := cell * 0.62
-			c.Text(digit(v), geom.Pt{X: x + cell/2 - fs*0.28, Y: y + cell/2 + fs*0.35}, fs, col)
+			c.TextIn("", digit(v), geom.Pt{X: x + cell/2 - fs*0.28, Y: y + cell/2 + fs*0.35}, fs, col)
 		} else if s.notes[i] != 0 {
 			ns := cell / 3
 			for v := 1; v <= 9; v++ {
@@ -345,7 +345,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 					nx := x + float32((v-1)%3)*ns
 					ny := y + float32((v-1)/3)*ns
 					fs := ns * 0.72
-					c.Text(digit(v), geom.Pt{X: nx + ns/2 - fs*0.28, Y: ny + ns/2 + fs*0.34}, fs, p.noteInk)
+					c.TextIn("", digit(v), geom.Pt{X: nx + ns/2 - fs*0.28, Y: ny + ns/2 + fs*0.34}, fs, p.noteInk)
 				}
 			}
 		}
@@ -364,7 +364,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 			fg = p.disabled
 		}
 		fs := padH * 0.5
-		c.Text(digit(v), geom.Pt{X: rect.Min.X + rect.Dx()/2 - fs*0.28, Y: rect.Min.Y + rect.Dy()/2 + fs*0.35}, fs, fg)
+		c.TextIn("", digit(v), geom.Pt{X: rect.Min.X + rect.Dx()/2 - fs*0.28, Y: rect.Min.Y + rect.Dy()/2 + fs*0.35}, fs, fg)
 	}
 
 	// Controls.
@@ -397,7 +397,7 @@ func (s *game) button(c paint.Canvas, rect geom.Rect, label string, active bool)
 	}
 	c.FillRRect(rect, 8, bgc)
 	w := s.ctx.Painter().MeasureWidth(label, 14.5)
-	c.Text(label, geom.Pt{X: rect.Min.X + (rect.Dx()-w)/2, Y: rect.Min.Y + rect.Dy()/2 + 5}, 14.5, fg)
+	c.TextIn("", label, geom.Pt{X: rect.Min.X + (rect.Dx()-w)/2, Y: rect.Min.Y + rect.Dy()/2 + 5}, 14.5, fg)
 }
 
 func (s *game) digitCounts() [10]int {

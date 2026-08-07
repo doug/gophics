@@ -54,8 +54,8 @@ func TestDiffLocalizedChange(t *testing.T) {
 func TestDiffTextChangeUsesMeasuredBounds(t *testing.T) {
 	m := measurer(t)
 	var a, b scene.List
-	a.Recorder().Text("old", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
-	b.Recorder().Text("new longer text", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
+	a.Recorder().TextIn("", "old", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
+	b.Recorder().TextIn("", "new longer text", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
 
 	damage, changed := b.Diff(&a, m)
 	if !changed {

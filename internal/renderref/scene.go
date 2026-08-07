@@ -79,8 +79,8 @@ func draw(c paint.Canvas, sz geom.Size) {
 	c.PopTransform()
 
 	// --- Text at three sizes ---
-	c.Text("The quick brown fox 0123", geom.Pt{X: 12, Y: 274}, 12, ink)
-	c.Text("Render matrix", geom.Pt{X: 12, Y: 296}, 18, ink)
+	c.TextIn("", "The quick brown fox 0123", geom.Pt{X: 12, Y: 274}, 12, ink)
+	c.TextIn("", "Render matrix", geom.Pt{X: 12, Y: 296}, 18, ink)
 	c.TextIn("bold", "Sharp?", geom.Pt{X: 12, Y: 322}, 24, ink)
 
 	// --- Opacity tiles covering the whole bottom band, INCLUDING the

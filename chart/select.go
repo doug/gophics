@@ -60,6 +60,6 @@ func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.P
 	box := geom.RectXYWH(tx, ty, tw, th)
 	paint.DropShadow(c, box, 9, geom.Pt{Y: 2}, 10, paint.Color{A: 0.22})
 	c.FillRRect(box, 9, tipBG)
-	c.Text(label, geom.Pt{X: tx + padX, Y: ty + padY + mL.Ascent}, ls, tipSub)
-	c.Text(value, geom.Pt{X: tx + padX, Y: ty + padY + lineL + gap + mV.Ascent}, vs, tipInk)
+	c.TextIn("", label, geom.Pt{X: tx + padX, Y: ty + padY + mL.Ascent}, ls, tipSub)
+	c.TextIn("", value, geom.Pt{X: tx + padX, Y: ty + padY + lineL + gap + mV.Ascent}, vs, tipInk)
 }

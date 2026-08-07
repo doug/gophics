@@ -62,7 +62,7 @@ func drawLegend(c paint.Canvas, area geom.Rect, entries []legendEntry, th theme,
 		}
 		y := legendTopPad + float32(row)*lineGap + met.Ascent
 		c.FillRRect(geom.RectXYWH(x, y-met.Ascent*0.72, sw, sw), 3, e.color)
-		c.Text(e.label, geom.Pt{X: x + sw + legendSwatchGap, Y: y}, legendSize, th.text)
+		c.TextIn("", e.label, geom.Pt{X: x + sw + legendSwatchGap, Y: y}, legendSize, th.text)
 		x += iw + legendItemGap
 	}
 }
