@@ -1,4 +1,4 @@
-package sound
+package procedural
 
 import (
 	"os"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/sound"
 )
 
 func clip16(v float32) int16 {
@@ -25,12 +26,12 @@ func TestRenderPreviewWAV(t *testing.T) {
 	if out == "" {
 		t.Skip("set SOUND_WAV=<path> to render a preview")
 	}
-	m := NewMixer()
-	music := m.PlaySource(DungeonMusic(1), PlayOptions{Volume: 0.5, FadeIn: 2 * time.Second})
+	m := sound.NewMixer()
+	music := m.PlaySource(DungeonMusic(1), sound.PlayOptions{Volume: 0.5, FadeIn: 2 * time.Second})
 
 	events := []struct {
 		at  float64
-		s   *Sample
+		s   *sound.Sample
 		pan float64
 	}{
 		{1.0, Coin(), -0.7}, {2.2, Hit(), 0.6}, {3.4, Coin(), 0.8},
@@ -39,7 +40,7 @@ func TestRenderPreviewWAV(t *testing.T) {
 	}
 
 	const secs = 12.0
-	total := int(secs * SampleRate)
+	total := int(secs * sound.SampleRate)
 	pcm := make([]int16, total)
 	const block = 2048
 	buf := make([]float32, block*2)
@@ -50,11 +51,11 @@ func TestRenderPreviewWAV(t *testing.T) {
 		if frame+n > total {
 			n = total - frame
 		}
-		for ei < len(events) && float64(frame)/SampleRate >= events[ei].at {
-			m.Play(events[ei].s, PlayOptions{Volume: 0.7, Pan: events[ei].pan})
+		for ei < len(events) && float64(frame)/sound.SampleRate >= events[ei].at {
+			m.Play(events[ei].s, sound.PlayOptions{Volume: 0.7, Pan: events[ei].pan})
 			ei++
 		}
-		if float64(frame)/SampleRate >= secs-2 && !faded {
+		if float64(frame)/sound.SampleRate >= secs-2 && !faded {
 			music.FadeOut(2 * time.Second) // fade the bed out at the end
 			faded = true
 		}
@@ -65,7 +66,7 @@ func TestRenderPreviewWAV(t *testing.T) {
 		}
 		frame += n
 	}
-	if err := os.WriteFile(out, shell.EncodeWAV(pcm, SampleRate), 0o644); err != nil {
+	if err := os.WriteFile(out, shell.EncodeWAV(pcm, sound.SampleRate), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

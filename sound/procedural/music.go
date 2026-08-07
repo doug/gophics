@@ -1,8 +1,10 @@
-package sound
+package procedural
 
 import (
 	"math"
 	"math/rand"
+
+	"github.com/doug/gophics/sound"
 )
 
 // This file synthesizes ambient music in Go — no audio files, matching the
@@ -11,18 +13,18 @@ import (
 // drone is a continuous dark pad: a detuned root triad with a slow breathing
 // tremolo. It never finishes.
 type drone struct {
-	oscs    []*Osc
+	oscs    []*sound.Osc
 	scratch []float32
 	lfo     float64
 	lfoHz   float64
 }
 
 // Drone returns an ambient pad centered on root (Hz).
-func Drone(root float64) Source {
+func Drone(root float64) sound.Source {
 	d := &drone{lfoHz: 0.07}
 	// Root, fifth, octave, plus slight detunes for a chorused beat.
 	for _, f := range []float64{root, root * 1.5, root * 2, root * 1.004, root * 1.5 * 0.996} {
-		d.oscs = append(d.oscs, &Osc{Wave: Triangle, Freq: f, Amp: 0.11})
+		d.oscs = append(d.oscs, &sound.Osc{Wave: sound.Triangle, Freq: f, Amp: 0.11})
 	}
 	return d
 }
@@ -43,7 +45,7 @@ func (d *drone) Process(out []float32) bool {
 	}
 	for i := range out {
 		out[i] *= float32(0.55 + 0.45*math.Sin(2*math.Pi*d.lfo))
-		if d.lfo += d.lfoHz / SampleRate; d.lfo >= 1 {
+		if d.lfo += d.lfoHz / sound.SampleRate; d.lfo >= 1 {
 			d.lfo -= 1
 		}
 	}
@@ -52,12 +54,12 @@ func (d *drone) Process(out []float32) bool {
 
 // pluck is a soft sine note with an exponential decay (a distant bell).
 type pluck struct {
-	osc        Osc
+	osc        sound.Osc
 	pos, total int
 }
 
 func newPluck(freq float64) *pluck {
-	return &pluck{osc: Osc{Wave: Sine, Freq: freq, Amp: 0.18}, total: int(1.4 * SampleRate)}
+	return &pluck{osc: sound.Osc{Wave: sound.Sine, Freq: freq, Amp: 0.18}, total: int(1.4 * sound.SampleRate)}
 }
 
 func (p *pluck) Process(out []float32) bool {
@@ -81,7 +83,7 @@ func (p *pluck) Process(out []float32) bool {
 // music layers a drone with sparse notes drawn from a minor-pentatonic scale on
 // a slow, randomized schedule — evolving dungeon ambience.
 type music struct {
-	drone   Source
+	drone   sound.Source
 	scale   []float64
 	plucks  []*pluck
 	next    int
@@ -90,7 +92,7 @@ type music struct {
 }
 
 // DungeonMusic returns a continuous ambient source seeded by seed.
-func DungeonMusic(seed int64) Source {
+func DungeonMusic(seed int64) sound.Source {
 	base := 220.0 // A3
 	var scale []float64
 	for _, semi := range []float64{0, 3, 5, 7, 10, 12, 15} { // minor pentatonic + octave
@@ -100,14 +102,14 @@ func DungeonMusic(seed int64) Source {
 		drone: Drone(110),
 		scale: scale,
 		rng:   rand.New(rand.NewSource(seed)),
-		next:  SampleRate,
+		next:  sound.SampleRate,
 	}
 }
 
 func (m *music) Process(out []float32) bool {
 	m.drone.Process(out) // fills out
 	if m.next -= len(out); m.next <= 0 {
-		m.next = int((1.5 + m.rng.Float64()*3) * SampleRate) // a note every 1.5–4.5s
+		m.next = int((1.5 + m.rng.Float64()*3) * sound.SampleRate) // a note every 1.5–4.5s
 		m.plucks = append(m.plucks, newPluck(m.scale[m.rng.Intn(len(m.scale))]))
 	}
 	if cap(m.scratch) < len(out) {

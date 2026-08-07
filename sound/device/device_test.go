@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/sound/procedural"
 )
 
 // TestPlayTone opens the real audio device and plays a short tone.
@@ -20,7 +21,7 @@ func TestPlayTone(t *testing.T) {
 		t.Fatalf("open audio device: %v", err)
 	}
 	defer c.Close()
-	m.Play(sound.Coin(), sound.PlayOptions{Volume: 0.6})
-	m.Play(sound.Blip(440, 0.5), sound.PlayOptions{Volume: 0.5})
+	m.Play(procedural.Coin(), sound.PlayOptions{Volume: 0.6})
+	m.Play(procedural.Blip(440, 0.5), sound.PlayOptions{Volume: 0.5})
 	time.Sleep(700 * time.Millisecond)
 }

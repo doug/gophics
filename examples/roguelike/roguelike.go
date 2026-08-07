@@ -11,6 +11,7 @@ import (
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/sound/procedural"
 	"github.com/doug/gophics/widget"
 )
 
@@ -61,14 +62,14 @@ func (s *gameState) Init(ctx widget.Ctx) {
 	s.snd = s.W().Sound
 	if s.snd != nil {
 		s.samples = map[SoundID]*sound.Sample{
-			SndHit:     sound.Hit(),
-			SndCoin:    sound.Coin(),
-			SndPotion:  sound.Blip(720, 0.14),
-			SndDescend: sound.Thud(),
-			SndDie:     sound.Blip(140, 0.4),
-			SndWin:     sound.Coin(),
+			SndHit:     procedural.Hit(),
+			SndCoin:    procedural.Coin(),
+			SndPotion:  procedural.Blip(720, 0.14),
+			SndDescend: procedural.Thud(),
+			SndDie:     procedural.Blip(140, 0.4),
+			SndWin:     procedural.Coin(),
 		}
-		s.music = s.snd.PlaySource(sound.DungeonMusic(1),
+		s.music = s.snd.PlaySource(procedural.DungeonMusic(1),
 			sound.PlayOptions{Volume: 0.30, FadeIn: 2 * time.Second}) // ambient loop, fades in
 	}
 	s.g = newGame(s.W().Seed)

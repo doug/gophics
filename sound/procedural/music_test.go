@@ -1,6 +1,10 @@
-package sound
+package procedural
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/doug/gophics/sound"
+)
 
 func TestDroneContinuous(t *testing.T) {
 	d := Drone(110)
@@ -18,7 +22,7 @@ func TestDungeonMusicBoundedAndAudible(t *testing.T) {
 	block := make([]float32, 1024)
 	var max float32
 	// ~6 seconds — long enough for the note scheduler to fire.
-	for i := 0; i < int(6*SampleRate)/len(block); i++ {
+	for i := 0; i < int(6*sound.SampleRate)/len(block); i++ {
 		if !src.Process(block) {
 			t.Fatal("music should be continuous")
 		}

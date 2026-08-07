@@ -3,7 +3,7 @@
 // device dependency, so mixing is deterministic and unit-testable with no audio
 // hardware; a driver (shell side) pulls interleaved frames via ReadFloat32s.
 //
-// The DSP core (Source/Osc/Tone/Gain/Mixer) is adapted from the author's
+// The DSP core (Source/Osc/Tone/Mixer) is adapted from the author's
 // github.com/doug/gophics/audio; sample playback and the pull adapter are added
 // here for game audio.
 package sound
@@ -115,20 +115,6 @@ func (t *tone) Process(out []float32) bool {
 		t.pos++
 	}
 	return t.pos < t.total
-}
-
-// Gain scales another source by Level.
-type Gain struct {
-	Src   Source
-	Level float64
-}
-
-func (g *Gain) Process(out []float32) bool {
-	cont := g.Src.Process(out)
-	for i := range out {
-		out[i] *= float32(g.Level)
-	}
-	return cont
 }
 
 // PlayOptions configure a voice. Zero values mean natural (Volume 1, Pan center,
@@ -335,11 +321,4 @@ func (m *Mixer) ReadFloat32s(buf []float32) (int, error) {
 		}
 	}
 	return len(buf), nil
-}
-
-// Render pulls n mono samples from src (for tests and offline rendering).
-func Render(src Source, n int) []float32 {
-	out := make([]float32, n)
-	src.Process(out)
-	return out
 }

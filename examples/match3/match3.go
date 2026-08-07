@@ -10,6 +10,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/sound"
+	"github.com/doug/gophics/sound/procedural"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -115,10 +116,10 @@ func (s *game) Init(ctx widget.Ctx) {
 	s.snd = s.W().Sound
 	s.sel = noCell
 	s.pool = map[string]*sound.Sample{
-		"swap":    sound.Blip(520, 0.05),
-		"bad":     sound.Thud(),
-		"clear":   sound.Coin(),
-		"cascade": sound.Blip(880, 0.06),
+		"swap":    procedural.Blip(520, 0.05),
+		"bad":     procedural.Thud(),
+		"clear":   procedural.Coin(),
+		"cascade": procedural.Blip(880, 0.06),
 	}
 	s.ctrl = &anim.Controller{Curve: anim.EaseInOut, OnChange: func() {
 		s.SetState(nil)

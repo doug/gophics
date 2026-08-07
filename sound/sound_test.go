@@ -50,7 +50,7 @@ func TestMixerPlaysAndDrops(t *testing.T) {
 	if m.Len() != 0 {
 		t.Fatalf("new mixer len = %d", m.Len())
 	}
-	clip := Blip(440, 0.05) // ~2205 samples
+	clip := testTone(440, 0.05) // ~2205 samples
 	m.Play(clip, PlayOptions{})
 	if m.Len() != 1 {
 		t.Fatalf("after Play len = %d, want 1", m.Len())
@@ -68,7 +68,7 @@ func TestMixerPlaysAndDrops(t *testing.T) {
 
 func TestCenterPanEqualLR(t *testing.T) {
 	m := NewMixer()
-	m.Play(Blip(440, 0.02), PlayOptions{})
+	m.Play(testTone(440, 0.02), PlayOptions{})
 	buf := make([]float32, 16)
 	if n, _ := m.ReadFloat32s(buf); n != len(buf) {
 		t.Fatalf("ReadFloat32s returned %d, want %d", n, len(buf))
@@ -82,7 +82,7 @@ func TestCenterPanEqualLR(t *testing.T) {
 
 func TestPanFavorsOneSide(t *testing.T) {
 	m := NewMixer()
-	m.Play(Blip(440, 0.05), PlayOptions{Pan: 1}) // hard right
+	m.Play(testTone(440, 0.05), PlayOptions{Pan: 1}) // hard right
 	buf := make([]float32, 512)
 	m.ReadFloat32s(buf)
 	var l, r float32
@@ -105,7 +105,7 @@ func TestToneFinishes(t *testing.T) {
 
 func TestLoopStops(t *testing.T) {
 	m := NewMixer()
-	v := m.Play(Blip(220, 0.01), PlayOptions{Loop: true})
+	v := m.Play(testTone(220, 0.01), PlayOptions{Loop: true})
 	m.ReadFloat32s(make([]float32, 64))
 	if m.Len() != 1 {
 		t.Fatal("loop should keep playing")
@@ -132,4 +132,13 @@ func TestFromInterleavedResample(t *testing.T) {
 	if len(s.Data) < 11 || len(s.Data) > 13 {
 		t.Fatalf("resampled len = %d, want ~12", len(s.Data))
 	}
+}
+
+// testTone renders a short sine to a Sample — a local stand-in for the
+// procedural Blip helper (which lives in sound/procedural and can't be imported
+// here without a cycle).
+func testTone(freq, secs float64) *Sample {
+	d := make([]float32, int(secs*SampleRate))
+	Tone(freq, secs, 0.5).Process(d)
+	return &Sample{Data: d}
 }
