@@ -182,8 +182,8 @@ func TestLayoutSkipCache(t *testing.T) {
 	}
 
 	// Dirtying one child re-lays it; the flex re-runs, the sibling skips.
-	a.MarkLayoutDirty()
-	col.MarkLayoutDirty()
+	a.MarkDirty()
+	col.MarkDirty()
 	col.Layout(cs)
 	if a.layouts != 2 {
 		t.Fatalf("dirty child not relaid: %d", a.layouts)

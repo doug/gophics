@@ -106,7 +106,7 @@ func HitTest(b Box, p geom.Pt) []Hit {
 // Base provides size storage and the layout skip-cache for Box
 // implementations: a clean box relayed the same constraints returns its
 // cached size without recursing (the lightweight version of Flutter's
-// relayout boundaries). Configuration changes must call MarkLayoutDirty —
+// relayout boundaries). Configuration changes must call MarkDirty —
 // the widget layer does this for every updated box and its ancestors.
 type Base struct {
 	size   geom.Size
@@ -116,8 +116,14 @@ type Base struct {
 
 func (b *Base) Size() geom.Size { return b.size }
 
-// Skip reports whether layout can be skipped for cs, returning the cached
-// size. Boxes call it at the top of Layout.
+// Skip and Done are the layout-cache protocol, called ONLY by a box from
+// inside its own Layout — Skip at the top (return the cached size early on a
+// hit), Done at the end (record the result). They are exported so box
+// implementations in other packages can embed Base and drive the cache; calling
+// them from anywhere else (e.g. Done with a size the box did not lay out to)
+// corrupts the cache and is a bug.
+
+// Skip reports whether layout can be skipped for cs, returning the cached size.
 func (b *Base) Skip(cs Constraints) (geom.Size, bool) {
 	if b.clean && cs == b.lastCS {
 		return b.size, true
@@ -131,14 +137,14 @@ func (b *Base) Done(cs Constraints, s geom.Size) geom.Size {
 	return s
 }
 
-// MarkLayoutDirty invalidates the skip-cache.
-func (b *Base) MarkLayoutDirty() { b.clean = false }
+// MarkDirty invalidates the skip-cache.
+func (b *Base) MarkDirty() { b.clean = false }
 
 // MarkDirty invalidates b's layout cache if it has one. Boxes without a
 // cache always re-lay out, so this is safely a no-op for them.
 func MarkDirty(b Box) {
-	if d, ok := b.(interface{ MarkLayoutDirty() }); ok {
-		d.MarkLayoutDirty()
+	if d, ok := b.(interface{ MarkDirty() }); ok {
+		d.MarkDirty()
 	}
 }
 

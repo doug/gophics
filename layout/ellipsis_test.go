@@ -35,7 +35,7 @@ func TestSingleLineEllipsis(t *testing.T) {
 	}
 	// Fits: no ellipsis.
 	tb2 := &TextBox{Painter: p, Text: "short", TextSize: 14, Ellipsis: true}
-	tb2.MarkLayoutDirty()
+	tb2.MarkDirty()
 	tb2.Layout(Loose(geom.Size{W: 120, H: 100}))
 	if strings.HasSuffix(tb2.lines[0], "…") {
 		t.Fatalf("short text should not ellipsize: %q", tb2.lines[0])
