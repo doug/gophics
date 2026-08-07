@@ -121,13 +121,17 @@ func (d *coreAudioDriver) SetSource(src ReadFloat32er) { d.src = src }
 // buffer (zero-padding any shortfall so a full buffer is always emitted) and
 // sets its byte size.
 func (d *coreAudioDriver) fill(buf uintptr) {
-	capacity := *(*uint32)(unsafe.Pointer(buf))     // mAudioDataBytesCapacity @ 0
-	dataPtr := *(*uintptr)(unsafe.Pointer(buf + 8)) // mAudioData @ 8
+	// buf is a CoreAudio-owned AudioQueueBuffer* — native memory the Go GC never
+	// moves — so the uintptr+offset field reads below are safe FFI, not the
+	// moving-object hazard go vet's "possible misuse of unsafe.Pointer" guards
+	// against. (//nolint documents intent; it does not affect `go vet`.)
+	capacity := *(*uint32)(unsafe.Pointer(buf))     //nolint:govet // native AudioQueueBuffer field @ 0
+	dataPtr := *(*uintptr)(unsafe.Pointer(buf + 8)) //nolint:govet // native AudioQueueBuffer field @ 8
 	n := int(capacity) / 4
 	if dataPtr == 0 || n <= 0 {
 		return
 	}
-	out := unsafe.Slice((*float32)(unsafe.Pointer(dataPtr)), n)
+	out := unsafe.Slice((*float32)(unsafe.Pointer(dataPtr)), n) //nolint:govet // native audio data buffer
 	got := 0
 	if d.src != nil {
 		got, _ = d.src.ReadFloat32s(out)
@@ -135,7 +139,7 @@ func (d *coreAudioDriver) fill(buf uintptr) {
 	for i := got; i < n; i++ {
 		out[i] = 0 // silence for the remainder
 	}
-	*(*uint32)(unsafe.Pointer(buf + 16)) = capacity // mAudioDataByteSize @ 16 (full buffer)
+	*(*uint32)(unsafe.Pointer(buf + 16)) = capacity //nolint:govet // native AudioQueueBuffer field @ 16 (full buffer)
 }
 
 // callback is the AudioQueueOutputCallback, invoked on a CoreAudio thread when a
