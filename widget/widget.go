@@ -125,6 +125,10 @@ func (c Ctx) Haptic() shell.Haptic { return c.el.owner.Haptic }
 // shell/filepicker.go.
 func (c Ctx) FilePicker() shell.FilePicker { return c.el.owner.FilePicker }
 
+// Share returns the platform share-sheet capability, or nil when unsupported.
+// Call from a user gesture (a tap). See shell/share.go.
+func (c Ctx) Share() shell.Share { return c.el.owner.Share }
+
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }
 

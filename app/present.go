@@ -22,6 +22,9 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 	if fw, ok := w.(shell.FilePickerWindow); ok {
 		h.core.Owner.FilePicker = fw.FilePicker()
 	}
+	if sw, ok := w.(shell.ShareWindow); ok {
+		h.core.Owner.Share = sw.Share()
+	}
 }
 
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs

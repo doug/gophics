@@ -63,6 +63,9 @@ type Owner struct {
 	// FilePicker is the optional file open/save capability, set by the app runner
 	// from the platform window (nil when unsupported). See shell/filepicker.go.
 	FilePicker shell.FilePicker
+	// Share is the optional share-sheet capability, set by the app runner from
+	// the platform window (nil when unsupported). See shell/share.go.
+	Share shell.Share
 	// Input is per-frame poll-style input state for games (held keys, pointer),
 	// fed by the app runner and read via Ctx.Input().
 	Input *input.State
