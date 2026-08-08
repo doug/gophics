@@ -66,6 +66,14 @@ type Owner struct {
 	// Share is the optional share-sheet capability, set by the app runner from
 	// the platform window (nil when unsupported). See shell/share.go.
 	Share shell.Share
+	// Notifier posts local notifications (nil when unsupported). shell/notify.go.
+	Notifier shell.Notifier
+	// SecureStorage is a small persistent key-value store (nil when unsupported).
+	// shell/storage.go.
+	SecureStorage shell.SecureStorage
+	// Permissions queries/requests runtime permissions (nil when unsupported).
+	// shell/permission.go.
+	Permissions shell.Permissions
 	// Input is per-frame poll-style input state for games (held keys, pointer),
 	// fed by the app runner and read via Ctx.Input().
 	Input *input.State

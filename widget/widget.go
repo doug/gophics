@@ -129,6 +129,18 @@ func (c Ctx) FilePicker() shell.FilePicker { return c.el.owner.FilePicker }
 // Call from a user gesture (a tap). See shell/share.go.
 func (c Ctx) Share() shell.Share { return c.el.owner.Share }
 
+// Notifier returns the platform local-notification capability, or nil when
+// unsupported. See shell/notify.go.
+func (c Ctx) Notifier() shell.Notifier { return c.el.owner.Notifier }
+
+// SecureStorage returns the platform key-value store, or nil when unsupported.
+// See shell/storage.go.
+func (c Ctx) SecureStorage() shell.SecureStorage { return c.el.owner.SecureStorage }
+
+// Permissions returns the platform permission query/request capability, or nil
+// when unsupported. See shell/permission.go.
+func (c Ctx) Permissions() shell.Permissions { return c.el.owner.Permissions }
+
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }
 

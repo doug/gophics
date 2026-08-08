@@ -25,6 +25,15 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 	if sw, ok := w.(shell.ShareWindow); ok {
 		h.core.Owner.Share = sw.Share()
 	}
+	if nw, ok := w.(shell.NotifyWindow); ok {
+		h.core.Owner.Notifier = nw.Notifier()
+	}
+	if stw, ok := w.(shell.StorageWindow); ok {
+		h.core.Owner.SecureStorage = stw.SecureStorage()
+	}
+	if pw, ok := w.(shell.PermissionWindow); ok {
+		h.core.Owner.Permissions = pw.Permissions()
+	}
 }
 
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs
