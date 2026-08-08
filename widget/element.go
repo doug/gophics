@@ -60,6 +60,9 @@ type Owner struct {
 	// Haptic is the optional tactile-feedback capability, set by the app runner
 	// from the platform window (nil when unsupported). See shell/haptic.go.
 	Haptic shell.Haptic
+	// FilePicker is the optional file open/save capability, set by the app runner
+	// from the platform window (nil when unsupported). See shell/filepicker.go.
+	FilePicker shell.FilePicker
 	// Input is per-frame poll-style input state for games (held keys, pointer),
 	// fed by the app runner and read via Ctx.Input().
 	Input *input.State

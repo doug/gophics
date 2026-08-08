@@ -120,6 +120,11 @@ func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
 // Ctx.Haptic().Play only after a check; see shell/haptic.go.
 func (c Ctx) Haptic() shell.Haptic { return c.el.owner.Haptic }
 
+// FilePicker returns the platform file open/save capability, or nil when the
+// running platform can't provide one. Call from a user gesture (a tap). See
+// shell/filepicker.go.
+func (c Ctx) FilePicker() shell.FilePicker { return c.el.owner.FilePicker }
+
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }
 
