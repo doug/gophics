@@ -53,16 +53,56 @@ func (s *dialogsState) showMenu(ctx widget.Ctx) {
 	})
 }
 
+func (s *dialogsState) showSheet(ctx widget.Ctx) {
+	th := theme.Of(ctx)
+	var dismiss func()
+	content := widget.Column(
+		widget.Text{S: "Share to…", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Sized{H: 8},
+		widget.Text{S: "A rounded surface that slides up from the bottom edge — drag it down or tap the scrim to dismiss.",
+			Size: th.Type.Body, Color: th.Muted, Wrap: true},
+		widget.Sized{H: 18},
+		theme.Button{Label: "Done", Primary: true, OnTap: func() { dismiss(); s.set("Sheet closed") }},
+	)
+	content.CrossAlign = layout.CrossStart
+	dismiss = theme.ShowBottomSheet(ctx, content)
+}
+
+func (s *dialogsState) showSnackbar(ctx widget.Ctx) {
+	theme.ShowSnackbar(ctx, "Saved")
+}
+
+func (s *dialogsState) showSnackbarAction(ctx widget.Ctx) {
+	theme.ShowSnackbar(ctx, "Message archived",
+		theme.WithAction("Undo", func() { s.set("Undo archive") }))
+}
+
 func (s *dialogsState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	return sectionColumn(
-		groupLabel("Dialog"),
+		groupLabel("Dialog & menu"),
 		theme.Body("A centered modal over a dimming scrim; tap the scrim or press Escape to dismiss."),
 		widget.Sized{H: 10},
 		widget.Wrap{Spacing: 10, RunSpacing: 10, Children: []widget.Widget{
 			theme.Button{Label: "Show dialog", Primary: true, OnTap: func() { s.showDialog(ctx) }},
 			theme.Button{Label: "Show menu", OnTap: func() { s.showMenu(ctx) }},
 		}},
+
+		groupLabel("Bottom sheet"),
+		theme.Body("A full-width surface that slides up from the bottom edge over a scrim."),
+		widget.Sized{H: 10},
+		widget.Wrap{Spacing: 10, RunSpacing: 10, Children: []widget.Widget{
+			theme.Button{Label: "Show sheet", OnTap: func() { s.showSheet(ctx) }},
+		}},
+
+		groupLabel("Snackbar"),
+		theme.Body("A transient, non-modal toast near the bottom — optionally with an action."),
+		widget.Sized{H: 10},
+		widget.Wrap{Spacing: 10, RunSpacing: 10, Children: []widget.Widget{
+			theme.Button{Label: "Show snackbar", OnTap: func() { s.showSnackbar(ctx) }},
+			theme.Button{Label: "Snackbar + Undo", OnTap: func() { s.showSnackbarAction(ctx) }},
+		}},
+
 		widget.Sized{H: 16},
 		theme.Card{Child: widget.Text{
 			S:     "Last action: " + orDash(s.result),

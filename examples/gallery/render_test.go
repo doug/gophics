@@ -108,6 +108,20 @@ func TestHomeThemeSwitch(t *testing.T) {
 // every section builds and lays out without panicking.
 func TestSectionsSmoke(t *testing.T) {
 	h, nav, _ := startHome(t)
+
+	// Guard that the catalog still carries the newer sections (Selection,
+	// Pickers) alongside the originals, so a registry regression is caught here
+	// rather than silently shrinking the tour.
+	have := map[string]bool{}
+	for _, sec := range sections() {
+		have[sec.title] = true
+	}
+	for _, want := range []string{"Selection", "Pickers", "Dialogs & menus"} {
+		if !have[want] {
+			t.Fatalf("catalog is missing the %q section", want)
+		}
+	}
+
 	for i, sec := range sections() {
 		nav.Push(sec.page())
 		settle(h)
