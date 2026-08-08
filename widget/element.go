@@ -11,7 +11,6 @@ import (
 	"github.com/doug/gophics/input"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/shell"
 )
 
 // renderWidget is the internal bridge from widgets to layout boxes.
@@ -53,27 +52,13 @@ type Owner struct {
 	// on-screen keyboards) in logical pixels, set by the runner; apps pad
 	// content by them (Ctx.SafeInsets).
 	SafeInsets geom.Insets
-	// Camera and Audio are optional media-capture capabilities, set by the app
-	// runner from the platform window (nil when unsupported). See shell/media.go.
-	Camera shell.Camera
-	Audio  shell.Audio
-	// Haptic is the optional tactile-feedback capability, set by the app runner
-	// from the platform window (nil when unsupported). See shell/haptic.go.
-	Haptic shell.Haptic
-	// FilePicker is the optional file open/save capability, set by the app runner
-	// from the platform window (nil when unsupported). See shell/filepicker.go.
-	FilePicker shell.FilePicker
-	// Share is the optional share-sheet capability, set by the app runner from
-	// the platform window (nil when unsupported). See shell/share.go.
-	Share shell.Share
-	// Notifier posts local notifications (nil when unsupported). shell/notify.go.
-	Notifier shell.Notifier
-	// SecureStorage is a small persistent key-value store (nil when unsupported).
-	// shell/storage.go.
-	SecureStorage shell.SecureStorage
-	// Permissions queries/requests runtime permissions (nil when unsupported).
-	// shell/permission.go.
-	Permissions shell.Permissions
+	// Capabilities are the optional platform capabilities (Camera, Haptic,
+	// FilePicker, …) a Window may expose. The app runner publishes each one the
+	// window implements via wireCapabilities. Fields are promoted, so Ctx.<Cap>()
+	// reads owner.<Cap>. This struct and the accessors are GENERATED from the
+	// shell.<X>Window interfaces — see capabilities_gen.go, gen.go, and
+	// docs/design-capabilities.md. Do not add capability fields here by hand.
+	Capabilities
 	// Input is per-frame poll-style input state for games (held keys, pointer),
 	// fed by the app runner and read via Ctx.Input().
 	Input *input.State

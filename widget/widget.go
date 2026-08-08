@@ -107,39 +107,9 @@ type Clipboard interface {
 // provides one.
 func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
 
-// Camera returns the platform still-capture capability, or nil when the running
-// platform can't provide one (e.g. desktop today, or an unsupported browser).
-func (c Ctx) Camera() shell.Camera { return c.el.owner.Camera }
-
-// Audio returns the platform audio record/playback capability, or nil when
-// unavailable. See shell/media.go.
-func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
-
-// Haptic returns the platform tactile-feedback capability, or nil when the
-// running platform can't provide it (e.g. desktop). Guard the nil, or use
-// Ctx.Haptic().Play only after a check; see shell/haptic.go.
-func (c Ctx) Haptic() shell.Haptic { return c.el.owner.Haptic }
-
-// FilePicker returns the platform file open/save capability, or nil when the
-// running platform can't provide one. Call from a user gesture (a tap). See
-// shell/filepicker.go.
-func (c Ctx) FilePicker() shell.FilePicker { return c.el.owner.FilePicker }
-
-// Share returns the platform share-sheet capability, or nil when unsupported.
-// Call from a user gesture (a tap). See shell/share.go.
-func (c Ctx) Share() shell.Share { return c.el.owner.Share }
-
-// Notifier returns the platform local-notification capability, or nil when
-// unsupported. See shell/notify.go.
-func (c Ctx) Notifier() shell.Notifier { return c.el.owner.Notifier }
-
-// SecureStorage returns the platform key-value store, or nil when unsupported.
-// See shell/storage.go.
-func (c Ctx) SecureStorage() shell.SecureStorage { return c.el.owner.SecureStorage }
-
-// Permissions returns the platform permission query/request capability, or nil
-// when unsupported. See shell/permission.go.
-func (c Ctx) Permissions() shell.Permissions { return c.el.owner.Permissions }
+// The platform capability accessors — Ctx.Camera(), Ctx.Haptic(),
+// Ctx.FilePicker(), etc. — are generated from the shell.<X>Window interfaces
+// into capabilities_gen.go. See gen.go / docs/design-capabilities.md.
 
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }
