@@ -20,6 +20,7 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -80,22 +81,33 @@ type libraryState struct {
 	loadErr bool
 }
 
-// open pops the platform's EPUB picker (a file dialog on web; the EPUB_PATH file
-// on desktop — see open_web.go / open_other.go) and, on success, swaps in the
-// loaded book and rebuilds. The bundled sample stays put on cancel or a parse
-// error, so the demo is never left empty.
-func (s *libraryState) open() {
-	openEPUB(func(data []byte) {
-		b, err := parseEPUB(data)
-		if err != nil {
-			s.SetState(func() { s.loadErr = true })
-			return
-		}
-		s.SetState(func() {
-			book = b
-			s.loadErr = false
+// open pops the platform's file picker (ctx.FilePicker — a file dialog on web,
+// native panels on desktop, the document picker on mobile) and, on success,
+// swaps in the loaded book and rebuilds. The bundled sample stays put on cancel
+// or a parse error, so the demo is never left empty.
+func (s *libraryState) open(fp shell.FilePicker) {
+	if fp == nil {
+		return
+	}
+	fp.Open(shell.OpenOptions{Accept: []string{".epub", "application/epub+zip"}},
+		func(files []shell.PickedFile, err error) {
+			if err != nil {
+				s.SetState(func() { s.loadErr = true })
+				return
+			}
+			if len(files) == 0 {
+				return // cancelled
+			}
+			b, perr := parseEPUB(files[0].Data)
+			if perr != nil {
+				s.SetState(func() { s.loadErr = true })
+				return
+			}
+			s.SetState(func() {
+				book = b
+				s.loadErr = false
+			})
 		})
-	})
 }
 
 func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
@@ -104,7 +116,10 @@ func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 	kids := []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{S: book.Title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text, Wrap: true}},
 		widget.Padding{Insets: geom.Insets{Bottom: 20}, Child: widget.Text{S: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
-		widget.Row(theme.Button{Label: "Open EPUB…", OnTap: s.open}, widget.Spacer()),
+	}
+	// Only offer "Open EPUB…" where the platform actually has a file picker.
+	if fp := ctx.FilePicker(); fp != nil {
+		kids = append(kids, widget.Row(theme.Button{Label: "Open EPUB…", OnTap: func() { s.open(fp) }}, widget.Spacer()))
 	}
 	if s.loadErr {
 		kids = append(kids, widget.Padding{Insets: geom.Insets{Top: 8}, Child: widget.Text{S: "Couldn't read that file as an EPUB.", Size: th.Type.Label, Color: th.Muted}})
