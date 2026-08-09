@@ -91,8 +91,27 @@ func (s *navState) top() Widget {
 	return s.W().Home
 }
 
+// settle synchronously completes an in-flight transition, applying the stack
+// mutation its completion handler would have applied (a pop's truncation).
+// push/pop call it before starting a new transition so a navigation landing
+// mid-animation proceeds from a consistent stack — without it, a push during a
+// pop would replace s.trans and the pop's truncation would silently never run
+// (the popped page stayed retained). Call only from inside SetState.
+func (s *navState) settle() {
+	if s.trans == nil {
+		return
+	}
+	if s.trans.popping {
+		s.stack = s.stack[:len(s.stack)-1]
+	}
+	s.trans = nil
+	s.underReg, s.overReg = nil, nil
+	s.animating = false
+}
+
 func (s *navState) push(w Widget) {
 	s.SetState(func() {
+		s.settle()
 		under := s.top()
 		s.stack = append(s.stack, w)
 		s.trans = &transition{under: under, over: w}
@@ -105,10 +124,14 @@ func (s *navState) push(w Widget) {
 }
 
 func (s *navState) pop() {
-	if len(s.stack) == 0 || s.trans != nil {
+	if len(s.stack) == 0 && s.trans == nil {
 		return
 	}
 	s.SetState(func() {
+		s.settle()
+		if len(s.stack) == 0 {
+			return // settling an in-flight pop emptied the stack
+		}
 		over := s.top()
 		under := s.W().Home
 		if len(s.stack) > 1 {
@@ -138,33 +161,33 @@ func (s *navState) Build(Ctx) Widget {
 		}
 	}
 	for i, p := range pages {
-		// Every page is wrapped in the same Provide[*heroRegistry] shape
-		// (nil outside its transition role) so a page keeps its element — and
-		// its state (scroll, loaded data) — as it moves between roles; a
-		// wrapper that appeared only during a transition would remount it.
-		var reg *heroRegistry
+		// Every page is wrapped in the same keyed pageW shape — one wrapper
+		// type whatever the page's role (offstage, resting, transitioning),
+		// with the role expressed as fields. A page therefore keeps its
+		// element — and its state (scroll, loaded data) — as it moves between
+		// roles; a wrapper type that changed with the role would remount it.
+		var provReg *heroRegistry // hero registry provided to the page's subtree
+		var slideReg *heroRegistry
+		var frac float32
 		if s.trans != nil {
 			switch i {
 			case len(pages) - 1:
-				reg = s.overReg
+				provReg, slideReg = s.overReg, s.overReg
+				t := s.slide.Value()
+				frac = 1 - t // push: sliding in from the right
+				if s.trans.popping {
+					frac = t // pop: sliding out to the right
+				}
 			case visibleFrom:
-				reg = s.underReg
+				provReg = s.underReg
 			}
 		}
-		page := Provide[*heroRegistry]{Value: reg, Child: WithKey{Key: i, Child: p}}
-		switch {
-		case i < visibleFrom:
-			children = append(children, offstageW{Child: page})
-		case s.trans != nil && i == len(pages)-1:
-			t := s.slide.Value()
-			frac := 1 - t // push: sliding in from the right
-			if s.trans.popping {
-				frac = t // pop: sliding out to the right
-			}
-			children = append(children, heroPageW{fracX: frac, reg: s.overReg, child: page})
-		default:
-			children = append(children, page)
-		}
+		children = append(children, WithKey{Key: i, Child: pageW{
+			offstage: i < visibleFrom,
+			fracX:    frac,
+			reg:      slideReg,
+			child:    Provide[*heroRegistry]{Value: provReg, Child: p},
+		}})
 	}
 	// Hero flight overlay: a LayoutBuilder gives the surface width needed to
 	// undo page slides when recovering at-rest hero rects.
@@ -244,34 +267,75 @@ func (w stackW) attach(b layout.Box, kids []layout.Box) {
 	st.Children = append(st.Children[:0], kids...)
 }
 
-// offstageW keeps its child mounted and laid out without painting or
-// hit-testing it.
-type offstageW struct{ Child Widget }
-
-func (w offstageW) createBox(Ctx) layout.Box  { return &offstageBox{} }
-func (w offstageW) updateBox(Ctx, layout.Box) {}
-func (w offstageW) childWidgets() []Widget    { return []Widget{w.Child} }
-func (w offstageW) attach(b layout.Box, kids []layout.Box) {
-	b.(*offstageBox).Child = first(kids)
+// pageW is the uniform wrapper around every page in the stack. All roles run
+// through the one type: offstage pages stay mounted and laid out but neither
+// paint nor hit-test; the transitioning top page is translated by fracX and
+// records the applied fraction into its hero registry during paint (so
+// restRect can recover its heroes' at-rest rects without frame lag).
+type pageW struct {
+	offstage bool
+	fracX    float32
+	reg      *heroRegistry // non-nil only for the transitioning top page
+	child    Widget
 }
 
-type offstageBox struct {
+func (w pageW) createBox(Ctx) layout.Box { return &pageBox{} }
+func (w pageW) updateBox(_ Ctx, b layout.Box) {
+	pb := b.(*pageBox)
+	pb.offstage, pb.fracX, pb.reg = w.offstage, w.fracX, w.reg
+}
+func (w pageW) childWidgets() []Widget { return []Widget{w.child} }
+func (w pageW) attach(b layout.Box, kids []layout.Box) {
+	b.(*pageBox).child = first(kids)
+}
+
+type pageBox struct {
 	layout.Base
-	Child layout.Box
+	offstage bool
+	fracX    float32
+	reg      *heroRegistry
+	child    layout.Box
 }
 
-func (b *offstageBox) Layout(cs layout.Constraints) geom.Size {
+func (b *pageBox) offset() geom.Pt { return geom.Pt{X: b.fracX * b.Size().W} }
+
+func (b *pageBox) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
-	if b.Child != nil {
-		return b.Done(cs, b.Child.Layout(cs))
+	if b.child != nil {
+		return b.Done(cs, b.child.Layout(cs))
 	}
 	return b.Done(cs, cs.Constrain(geom.Size{}))
 }
 
-func (b *offstageBox) Paint(paint.Canvas, geom.Pt)    {}
-func (b *offstageBox) AddHits(geom.Pt, *[]layout.Hit) {}
+func (b *pageBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.offstage {
+		return
+	}
+	if b.reg != nil {
+		b.reg.frac = b.fracX // matches the rects captured below this paint
+	}
+	if b.child != nil {
+		b.child.Paint(c, at.Add(b.offset()))
+	}
+}
+
+func (b *pageBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
+	if b.offstage {
+		return
+	}
+	if b.child != nil {
+		b.child.AddHits(p.Sub(b.offset()), hits)
+	}
+}
+
+func (b *pageBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
+	if b.offstage || b.child == nil {
+		return
+	}
+	visit(b.child, b.offset())
+}
 
 type translatedW struct {
 	FracX float32

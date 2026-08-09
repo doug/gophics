@@ -7,6 +7,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -97,12 +98,23 @@ func (s *netImgState) start(url string) {
 
 // imgLoad is the process-wide image loader: a single-flight cache keyed by
 // URL. The first request for a URL fetches; concurrent requests wait; the
-// result is cached.
+// result is cached. Fetch+decode work is bounded by a semaphore so a fast
+// scroll through a long feed doesn't spawn hundreds of goroutines each holding
+// a connection and a decode buffer.
 type imgLoader struct {
 	mu       sync.Mutex
-	cache    map[string]loadResult
+	cache    map[string]*imgCacheEntry
 	inflight map[string]chan struct{}
 	client   http.Client
+	gen      uint64        // bumped on every cache touch; entries remember their last touch
+	sem      chan struct{} // bounds concurrent fetch+decode work
+}
+
+// imgCacheEntry pairs a result with the generation of its last cache hit, so
+// eviction can drop the least-recently-used half instead of the whole map.
+type imgCacheEntry struct {
+	res loadResult
+	gen uint64
 }
 
 type loadResult struct {
@@ -111,24 +123,33 @@ type loadResult struct {
 }
 
 var imgLoad = &imgLoader{
-	cache:    map[string]loadResult{},
+	cache:    map[string]*imgCacheEntry{},
 	inflight: map[string]chan struct{}{},
 	client:   http.Client{Timeout: 20 * time.Second},
+	sem:      make(chan struct{}, imgFetchConcurrency),
 }
 
-const imgCacheLimit = 512
+const (
+	imgCacheLimit       = 512
+	imgFetchConcurrency = 8
+)
 
 func (l *imgLoader) fetch(url string) loadResult {
 	l.mu.Lock()
-	if r, ok := l.cache[url]; ok {
+	if e, ok := l.cache[url]; ok {
+		l.gen++
+		e.gen = l.gen
 		l.mu.Unlock()
-		return r
+		return e.res
 	}
 	if ch, ok := l.inflight[url]; ok {
 		l.mu.Unlock()
 		<-ch
 		l.mu.Lock()
-		r := l.cache[url]
+		var r loadResult
+		if e, ok := l.cache[url]; ok {
+			r = e.res
+		}
 		l.mu.Unlock()
 		return r
 	}
@@ -136,17 +157,37 @@ func (l *imgLoader) fetch(url string) loadResult {
 	l.inflight[url] = ch
 	l.mu.Unlock()
 
+	l.sem <- struct{}{}
 	r := l.do(url)
+	<-l.sem
 
 	l.mu.Lock()
 	if len(l.cache) >= imgCacheLimit {
-		clear(l.cache)
+		l.evictOldHalf()
 	}
-	l.cache[url] = r
+	l.gen++
+	l.cache[url] = &imgCacheEntry{res: r, gen: l.gen}
 	delete(l.inflight, url)
 	close(ch)
 	l.mu.Unlock()
 	return r
+}
+
+// evictOldHalf drops the least-recently-touched half of the cache (by last-hit
+// generation), keeping the working set warm — a wholesale clear made a scroll
+// back through a feed refetch every image. Called with l.mu held.
+func (l *imgLoader) evictOldHalf() {
+	gens := make([]uint64, 0, len(l.cache))
+	for _, e := range l.cache {
+		gens = append(gens, e.gen)
+	}
+	slices.Sort(gens)
+	cut := gens[len(gens)/2] // generations are unique, so this removes len/2
+	for k, e := range l.cache {
+		if e.gen < cut {
+			delete(l.cache, k)
+		}
+	}
 }
 
 func (l *imgLoader) do(url string) loadResult {

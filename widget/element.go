@@ -351,6 +351,25 @@ func (el *element) reattachHost() {
 	}
 }
 
+// dupKeyWarned tracks reconciliation keys already reported as duplicated, so
+// the diagnostic fires once per key value instead of every frame. UI-goroutine
+// only, like the rest of reconciliation.
+var dupKeyWarned = map[any]bool{}
+
+// warnDuplicateKey reports two siblings sharing a reconciliation key — a data
+// bug in the app (e.g. list items keyed by a non-unique field). The tree stays
+// alive (the duplicate is mounted fresh instead of reusing the same element
+// twice), but state cannot be preserved for the duplicate.
+func warnDuplicateKey(key any) {
+	if dupKeyWarned[key] {
+		return
+	}
+	dupKeyWarned[key] = true
+	log.Printf("widget: duplicate reconciliation key %#v: two children in the same list share this key; "+
+		"the duplicate is mounted as a fresh element and its state is not preserved. "+
+		"Give each sibling a unique key.", key)
+}
+
 // reconcileRenderChildren matches new child widgets against old elements:
 // keyed children match by (type, key) anywhere in the old list; unkeyed
 // children match by position when types agree. A simplification of
@@ -367,15 +386,28 @@ func (el *element) reconcileRenderChildren(w renderWidget) {
 
 	used := map[*element]bool{}
 	newKids := make([]*element, 0, len(widgets))
-	pos := 0 // position cursor over old unkeyed matching
+	var seenKeys map[any]bool // keys already claimed by an earlier new child
+	pos := 0                  // position cursor over old unkeyed matching
 	for _, cw := range widgets {
 		if cw == nil {
 			continue
 		}
 		var match *element
 		if k := keyOf(cw); k != nil {
-			if old, ok := byKey[k]; ok && canUpdate(old.widget, cw) {
-				match = old
+			if seenKeys[k] {
+				// A sibling earlier in this list carries the same key. Reusing
+				// the same *element twice would double-paint it and corrupt
+				// unmount, so the duplicate gets a fresh element (state is not
+				// preserved for it) and we say so loudly, once per key.
+				warnDuplicateKey(k)
+			} else {
+				if seenKeys == nil {
+					seenKeys = map[any]bool{}
+				}
+				seenKeys[k] = true
+				if old, ok := byKey[k]; ok && canUpdate(old.widget, cw) && !used[old] {
+					match = old
+				}
 			}
 		} else {
 			// advance cursor past keyed/used elements

@@ -98,68 +98,6 @@ func (b *heroBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	}
 }
 
-// heroPageW translates a transitioning page horizontally (like translatedW)
-// and records the applied fraction into its hero registry during paint — so
-// the fraction always matches the rects the page's heroes captured that same
-// paint, letting restRect recover their at-rest positions without frame lag.
-type heroPageW struct {
-	fracX float32
-	reg   *heroRegistry
-	child Widget
-}
-
-func (w heroPageW) createBox(Ctx) layout.Box { return &heroPageBox{} }
-func (w heroPageW) updateBox(_ Ctx, b layout.Box) {
-	hb := b.(*heroPageBox)
-	hb.fracX, hb.reg = w.fracX, w.reg
-}
-func (w heroPageW) childWidgets() []Widget { return []Widget{w.child} }
-func (w heroPageW) attach(b layout.Box, kids []layout.Box) {
-	b.(*heroPageBox).child = first(kids)
-}
-
-type heroPageBox struct {
-	layout.Base
-	fracX float32
-	reg   *heroRegistry
-	child layout.Box
-	size  geom.Size
-}
-
-func (b *heroPageBox) offset() geom.Pt { return geom.Pt{X: b.fracX * b.size.W} }
-
-func (b *heroPageBox) Layout(cs layout.Constraints) geom.Size {
-	if b.child != nil {
-		b.size = b.child.Layout(cs)
-	} else {
-		b.size = cs.Constrain(geom.Size{})
-	}
-	return b.size
-}
-
-func (b *heroPageBox) Size() geom.Size { return b.size }
-
-func (b *heroPageBox) Paint(c paint.Canvas, at geom.Pt) {
-	if b.reg != nil {
-		b.reg.frac = b.fracX // matches the rects captured below this paint
-	}
-	if b.child != nil {
-		b.child.Paint(c, at.Add(b.offset()))
-	}
-}
-
-func (b *heroPageBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
-	if b.child != nil {
-		b.child.AddHits(p.Sub(b.offset()), hits)
-	}
-}
-
-func (b *heroPageBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
-	if b.child != nil {
-		visit(b.child, b.offset())
-	}
-}
-
 func lerpRect(a, b geom.Rect, t float32) geom.Rect {
 	lf := geom.LerpFloat
 	return geom.Rect{
