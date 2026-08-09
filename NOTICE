@@ -1,0 +1,10 @@
+Gophics
+Copyright 2026 Doug Fritz
+
+This product includes software developed as part of the Gophics project
+(https://github.com/doug/gophics), licensed under the Apache License 2.0.
+
+The vendored rendering/audio substrate under internal/ contains code derived
+from third-party MIT-licensed projects; each vendored tree retains its original
+LICENSE and change record. See THIRD_PARTY.md for the full inventory and
+attributions.

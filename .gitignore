@@ -1,31 +1,52 @@
 .claude/settings.local.json
-examples/*/web/*.wasm
-examples/*/web/wasm_exec.js
-examples/hn/android/app/libs/*.aar
-examples/hn/android/.gradle/
-examples/hn/android/app/build/
-examples/hn/android/local.properties
-
-# stray example binaries built at repo root
-/gallery
-examples/hn/ios/build/
+.DS_Store
 
 # gophics CLI build output
 /build/
+examples/build/
 
-# iOS Simulator build output (autonomous test loop)
-examples/hn/ios/build-sim/
+# Example web/app build artifacts
+examples/*/web/*.wasm
+examples/*/web/wasm_exec.js
+
+# Android build trees (any example)
+examples/*/android/app/libs/*.aar
+examples/*/android/.gradle/
+examples/*/android/app/build/
+examples/*/android/local.properties
+
+# iOS build trees (any example)
+examples/*/ios/build/
+examples/*/ios/build-sim/
 
 # Generated docs-site artifacts (rebuilt by .github/workflows/pages.yml)
 docs/demos/
 docs/source/
 
-# stray example binaries from `go build ./examples/<x>` without -o
-/flocking
-/particles
-/flowfield
-/hello
+# Stray example binaries from `go build ./examples/<x>` without -o.
+# One entry per example (regenerate with: ls examples/ | grep -v build).
+# CI's tracked-binary guard catches any that slip through.
+/2048
 /canvas
-/todo
+/drummachine
+/epub
+/flocking
+/flowfield
+/gallery
+/glass
+/gpucheck
+/health
+/hello
 /hn
+/journal
+/ledger
+/match3
+/mover
 /notes
+/particles
+/roguelike
+/solitaire
+/ssh
+/sudoku
+/todo
+/whiteboard
