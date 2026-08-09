@@ -6,6 +6,8 @@ on:
   pull_request:
 
 # Test scoping (see design/substrate-consolidation.md):
+#   - lint:           fast gates — gofmt, go vet (framework scope), generated-code
+#                     freshness, and a tracked-binary size guard.
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
 #   - test-framework: gophics's own packages (CPU/headless, deterministic) — the gate.
 #   - test-substrate: the vendored internal/gfx + internal/audio. Their
@@ -14,6 +16,50 @@ on:
 #                     best-effort (does not block merges).
 
 jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt needed on:"
+            echo "$out"
+            exit 1
+          fi
+      # Vet only the framework packages — the vendored internal/gfx +
+      # internal/audio have known benign unsafe.Pointer vet warnings.
+      - name: go vet (framework scope)
+        run: go vet $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
+      # A stale capabilities_gen.go (widget/, app/, and any shell/ *_gen.go)
+      # must not pass silently: regenerate and require a clean tree.
+      - name: generated code is fresh
+        run: |
+          go generate ./widget
+          git diff --exit-code
+      # Repo hygiene: no tracked binaries >1MB outside testdata/asset dirs
+      # (and known large-but-legit asset extensions).
+      - name: no oversized tracked files
+        run: |
+          bad=$(git ls-files | while read -r f; do
+            size=$(stat -c%s "$f" 2>/dev/null || echo 0)
+            if [ "$size" -gt 1048576 ]; then
+              case "$f" in
+                */testdata/*|*/assets/*|*.png|*.jpg|*.wasm.br) ;;
+                *) echo "oversized tracked file: $f ($size bytes)" ;;
+              esac
+            fi
+          done)
+          if [ -n "$bad" ]; then
+            echo "$bad"
+            exit 1
+          fi
+
   build:
     name: build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ${{ matrix.runner }}
@@ -55,9 +101,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
       - name: framework tests (CPU/headless)
-        run: go test -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
+        run: go test -race -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
 
   test-substrate:
     name: test (substrate, best-effort)
