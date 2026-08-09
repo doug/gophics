@@ -150,6 +150,11 @@ func (s *sliderState) Build(ctx widget.Ctx) widget.Widget {
 
 // Radio is one option in a single-select group. Selected shows a filled
 // dot; tapping requests selection via OnSelect.
+//
+// The callback is OnSelect, not OnChange, deliberately: a Radio is one item,
+// not the group — it has no value that changes, it only reports "this option
+// was chosen" (like Tappable.OnTap). The group's value lives with the caller,
+// which sets Selected on each option.
 type Radio struct {
 	Selected bool
 	Label    string

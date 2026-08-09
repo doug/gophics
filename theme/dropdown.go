@@ -11,17 +11,18 @@ import (
 // Dropdown is a themed select: a bordered surface button showing the current
 // selection (or a placeholder) and a chevron. Tapping opens an anchored popup
 // listing the options with the current one highlighted; picking one fires
-// OnSelect and closes the popup.
+// OnChange and closes the popup.
 //
 // Controlled: Selected is the source of truth — an index into Options, or any
-// out-of-range value (e.g. -1) to show the Placeholder — and OnSelect reports
-// the requested new index. Requires an OverlayHost in scope for the popup
-// (app.NewCore installs one). Themed via theme.Of.
+// out-of-range value (e.g. -1) to show the Placeholder — and OnChange reports
+// the requested new index (matching Tabs and Segmented). Requires an
+// OverlayHost in scope for the popup (app.NewCore installs one). Themed via
+// theme.Of.
 type Dropdown struct {
 	Options     []string
 	Selected    int
 	Placeholder string
-	OnSelect    func(int)
+	OnChange    func(int)
 }
 
 func (d Dropdown) CreateState() widget.State { return &dropdownState{} }
@@ -60,7 +61,7 @@ func (s *dropdownState) toggle(ctx widget.Ctx) {
 	}
 	s.SetState(func() { s.open = true })
 	s.dismiss = showSelect(ctx, s.anchor, w, d.Options, d.Selected, func(i int) {
-		if f := s.W().OnSelect; f != nil {
+		if f := s.W().OnChange; f != nil {
 			f(i)
 		}
 	}, func() { // onClose: the popup dismissed for any reason

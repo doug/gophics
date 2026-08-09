@@ -19,7 +19,7 @@ type SectorMark struct {
 func (SectorMark) xDomain() (lo, hi float64, c []string) { return math.Inf(1), math.Inf(-1), nil }
 func (SectorMark) yDomain() (lo, hi float64)             { return math.Inf(1), math.Inf(-1) }
 
-func (s SectorMark) sliceColor(i int, th theme) paint.Color {
+func (s SectorMark) sliceColor(i int, th chartTheme) paint.Color {
 	if i < len(s.Colors) && s.Colors[i].A > 0 {
 		return s.Colors[i]
 	}
@@ -51,7 +51,7 @@ func (s SectorMark) draw(p plot) {
 }
 
 // legendEntries makes each slice its own legend row (label + slice color).
-func (s SectorMark) legendEntries(th theme) []legendEntry {
+func (s SectorMark) legendEntries(th chartTheme) []legendEntry {
 	out := make([]legendEntry, 0, len(s.Data))
 	for i, d := range s.Data {
 		label := d.Label

@@ -2,9 +2,10 @@ package chart
 
 import "github.com/doug/gophics/paint"
 
-// theme is the resolved set of chrome colors + the series palette for a given
-// light/dark mode.
-type theme struct {
+// chartTheme is the resolved set of chrome colors + the series palette for a
+// given light/dark mode. (Named chartTheme, not theme, so it can't be mistaken
+// for the app-level theme package's Theme.)
+type chartTheme struct {
 	text   paint.Color // tick labels, axis titles
 	axis   paint.Color // axis baselines
 	grid   paint.Color // gridlines
@@ -37,16 +38,16 @@ var darkSeries = []paint.Color{
 	paint.RGB(0.78, 0.84, 0.42),
 }
 
-func themeFor(dark bool) theme {
+func themeFor(dark bool) chartTheme {
 	if dark {
-		return theme{
+		return chartTheme{
 			text:   gray(0.86, 1),
 			axis:   gray(1, 0.34),
 			grid:   gray(1, 0.10),
 			series: darkSeries,
 		}
 	}
-	return theme{
+	return chartTheme{
 		text:   gray(0.16, 1),
 		axis:   gray(0, 0.45),
 		grid:   gray(0, 0.09),
@@ -56,7 +57,7 @@ func themeFor(dark bool) theme {
 
 // color returns the series color at index i (wrapping), unless override has a
 // non-zero alpha, in which case override wins.
-func (t theme) color(i int, override paint.Color) paint.Color {
+func (t chartTheme) color(i int, override paint.Color) paint.Color {
 	if override.A > 0 {
 		return override
 	}

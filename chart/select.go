@@ -7,7 +7,7 @@ import (
 
 // drawSelection highlights the selected datum with a crosshair, an emphasized
 // marker, and a floating value tooltip.
-func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col paint.Color, yaxis Axis, th theme, p *paint.Painter) {
+func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col paint.Color, yaxis Axis, th chartTheme, p *paint.Painter) {
 	x := area.Min.X + xs.Map(d.X)*area.Dx()
 	y := area.Max.Y - ys.Map(d.Y)*area.Dy()
 
@@ -23,7 +23,7 @@ func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col pa
 }
 
 // halo is the marker ring color: near-white on light charts, near-black on dark.
-func halo(th theme) paint.Color {
+func halo(th chartTheme) paint.Color {
 	if th.text.R > 0.5 { // light text ⇒ dark mode
 		return gray(0.12, 1)
 	}
@@ -38,7 +38,7 @@ var (
 )
 
 // drawTooltip renders a two-line value card near anchor, clamped inside area.
-func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.Pt, label, value string, _ theme) {
+func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.Pt, label, value string, _ chartTheme) {
 	const ls, vs = float32(12), float32(15)
 	mL, mV := p.Metrics(ls), p.Metrics(vs)
 	lineL, lineV := mL.Ascent+mL.Descent, mV.Ascent+mV.Descent

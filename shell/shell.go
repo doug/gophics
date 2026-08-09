@@ -1,18 +1,27 @@
-// Package shell defines the platform interface gophics runs on: a window (or
-// surface) that delivers input events and vsync-paced frames to a Handler.
+// Package shell defines the platform interface gophics runs on: a Window (or
+// surface) that delivers input Events and vsync-paced Frames to a Handler,
+// with each Frame exposing a presentation Target (GPU texture view or pixel
+// sink) that the framework renders into.
 //
 // Platform implementations live in subpackages (shell/desktop, shell/web,
-// later shell/android, shell/ios). The framework never imports those —
+// shell/mobile, shell/terminal). The framework never imports those —
 // applications pick one in main(). Everything above shell is platform-agnostic.
 //
-// Design notes (to be ratified as ADRs during M0):
+// The contract:
 //   - Sizes and positions are in logical pixels; Frame.Scale converts to
 //     physical device pixels.
 //   - Rendering is on-demand: a frame is delivered only after Invalidate (or a
 //     platform-initiated reason such as resize/expose). Continuous animation
 //     re-requests inside Frame.
-//   - Frame.Clear is an M0 placeholder. It will be replaced by handing the
-//     shell a composited scene (scene.Scene) once the paint/scene layers exist.
+//   - All Handler calls happen on the UI goroutine.
+//
+// Beyond the core window/frame/event contract, optional platform integration
+// (file pickers, share sheets, haptics, notifications, storage, ...) follows
+// the capability pattern (see docs/design-capabilities.md): each capability is
+// a small interface in this package plus a <X>Window opt-in interface a
+// platform Window implements when it can provide it; callers reach
+// capabilities through the widget layer, which returns nil where the running
+// platform has no support.
 package shell
 
 import (
@@ -182,9 +191,10 @@ const (
 	KeyRelease
 )
 
-// KeyCode identifies a physical key, independent of layout. The full key
-// model is a pending M0 ADR; until then only the codes the framework itself
-// needs are named, and unlisted keys arrive as KeyUnknown.
+// KeyCode identifies a physical key, independent of layout. Only the codes
+// the framework and its examples need are named; unlisted keys arrive as
+// KeyUnknown. New codes are appended as needs arise (see the append-only
+// note below).
 type KeyCode uint32
 
 const (
@@ -249,9 +259,8 @@ const (
 // (Cmd on macOS/web-mac, Ctrl elsewhere). Shells set the platform bit.
 func (m Mods) Command() bool { return m&(ModCtrl|ModSuper) != 0 }
 
-// Key is a physical key event. Text input arrives separately via Text
-// (and, later, IME composition events — the shell interface reserves that
-// path from the start; see PLAN.md §6.1).
+// Key is a physical key event. Text input arrives separately: committed text
+// via Text, and in-progress IME preedit via Composition.
 type Key struct {
 	Kind KeyKind
 	Code KeyCode

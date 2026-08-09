@@ -35,7 +35,7 @@ func (a Axis) label(t Tick) string {
 }
 
 // drawYAxis draws horizontal gridlines and right-aligned value labels.
-func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th theme, p *paint.Painter) {
+func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th chartTheme, p *paint.Painter) {
 	if ax.Hide {
 		return
 	}
@@ -51,7 +51,7 @@ func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th theme, p *p
 }
 
 // drawXAxis draws the baseline, optional vertical gridlines, and centered labels.
-func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th theme, p *paint.Painter) {
+func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th chartTheme, p *paint.Painter) {
 	if ax.Hide {
 		return
 	}

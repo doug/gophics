@@ -11,6 +11,12 @@ import (
 // TimePicker is a minimal hour/minute chooser: two stepper columns (an up and
 // down chevron around a two-digit value) that wrap at their bounds. Every
 // change reports the new time via OnPick.
+//
+// OnPick reports (hour, min) ints rather than a time.Time, diverging from
+// DatePicker on purpose: a time-of-day has no honest time.Time representation
+// — building one would require inventing a fake date (and location), which the
+// caller would then have to know to ignore. DatePicker picks a real calendar
+// day, so time.Time is honest there.
 type TimePicker struct {
 	Hour, Min int // initial values (Hour 0-23, Min 0-59)
 	OnPick    func(hour, min int)

@@ -35,7 +35,7 @@ type Chart struct {
 
 // chrome applies any non-zero color overrides on top of the scheme-resolved
 // theme, so callers can theme a chart's axes, labels, and series palette.
-func (w Chart) chrome(t theme) theme {
+func (w Chart) chrome(t chartTheme) chartTheme {
 	if w.LabelColor.A > 0 {
 		t.text = w.LabelColor
 	}

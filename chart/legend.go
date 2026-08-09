@@ -9,12 +9,12 @@ const legendSize = float32(13)
 
 // legender marks contribute one or more legend rows (e.g. a pie's slices).
 type legender interface {
-	legendEntries(th theme) []legendEntry
+	legendEntries(th chartTheme) []legendEntry
 }
 
 // markColor resolves a mark's legend swatch color: its override, else the series
 // color for its position.
-func markColor(mk Mark, th theme, i int) paint.Color {
+func markColor(mk Mark, th chartTheme, i int) paint.Color {
 	if sc, ok := mk.(selectable); ok {
 		return th.color(i, sc.baseColor())
 	}
@@ -48,7 +48,7 @@ func legendRows(entries []legendEntry, p *paint.Painter) int {
 
 // drawLegend lays the color key out left-to-right above the plot, wrapping to a
 // new row when an item would overflow the plot width.
-func drawLegend(c paint.Canvas, area geom.Rect, entries []legendEntry, th theme, p *paint.Painter) {
+func drawLegend(c paint.Canvas, area geom.Rect, entries []legendEntry, th chartTheme, p *paint.Painter) {
 	met := p.Metrics(legendSize)
 	sw := legendSize * 0.85
 	lineGap := met.LineHeight()

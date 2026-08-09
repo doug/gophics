@@ -34,9 +34,15 @@ func (chartsSection) Build(ctx widget.Ctx) widget.Widget {
 		},
 	})
 
+	// chart.Pairs is the typed constructor (chart.Values is the same as
+	// variadic prototyping sugar).
 	bars := chrome(chart.Chart{
 		Marks: []chart.Mark{
-			chart.BarMark{Data: chart.Values("Mon", 5, "Tue", 8, "Wed", 6, "Thu", 9, "Fri", 12, "Sat", 4, "Sun", 3)},
+			chart.BarMark{Data: chart.Pairs([]chart.Pair{
+				{Label: "Mon", Value: 5}, {Label: "Tue", Value: 8}, {Label: "Wed", Value: 6},
+				{Label: "Thu", Value: 9}, {Label: "Fri", Value: 12}, {Label: "Sat", Value: 4},
+				{Label: "Sun", Value: 3},
+			})},
 		},
 	})
 

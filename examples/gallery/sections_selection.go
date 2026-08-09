@@ -60,7 +60,7 @@ func (s *selectionState) Build(ctx widget.Ctx) widget.Widget {
 			Options:     fruitNames,
 			Selected:    s.fruit,
 			Placeholder: "Pick a fruit…",
-			OnSelect:    func(i int) { s.SetState(func() { s.fruit = i }) },
+			OnChange:    func(i int) { s.SetState(func() { s.fruit = i }) },
 		},
 		widget.Sized{H: 8},
 		widget.Text{S: "Selected: " + fruitEcho, Size: th.Type.Label, Color: th.Muted},

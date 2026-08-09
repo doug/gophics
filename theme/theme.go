@@ -9,6 +9,19 @@
 //	theme.Button{Label: "Save", OnTap: save}
 //
 // Themes are plain structs: customize by struct literal, derive by copy.
+//
+// # Callback naming
+//
+// Controls follow one naming convention:
+//
+//   - OnChange(value) — a controlled value changed. The control renders the
+//     value the caller passed in and requests a new one through OnChange
+//     (Switch, Checkbox, Slider, Segmented, Tabs, Dropdown).
+//   - OnTap / OnSelect — an event on a specific item, not a value change on
+//     the control itself (Tappable.OnTap; Radio.OnSelect, which fires per
+//     option — the group's value lives with the caller, not the Radio).
+//   - OnPick — a picker's terminal choice (DatePicker, TimePicker): the user
+//     committed a selection, typically dismissing the picker.
 package theme
 
 import (

@@ -98,6 +98,7 @@ func (r Rect) Overlaps(s Rect) bool {
 
 // Unbounded is a rectangle large enough to contain any on-screen geometry — the
 // "no clip" sentinel Canvas.ClipBounds returns when nothing constrains drawing.
+// It is a var only because Go has no constant structs. Do not mutate.
 var Unbounded = Rect{Min: Pt{-1e9, -1e9}, Max: Pt{1e9, 1e9}}
 
 // Union returns the smallest rectangle containing both r and s.

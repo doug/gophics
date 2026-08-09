@@ -23,7 +23,7 @@ type ddState struct {
 	widget.StateBase[ddApp]
 	hook     func(*ddState)
 	selected int
-	picked   int // count of OnSelect calls
+	picked   int // count of OnChange calls
 }
 
 func (s *ddState) Init(widget.Ctx) { s.hook(s); s.selected = -1 }
@@ -35,7 +35,7 @@ func (s *ddState) Build(widget.Ctx) widget.Widget {
 			Options:     []string{"Small", "Medium", "Large"},
 			Selected:    s.selected,
 			Placeholder: "Pick a size",
-			OnSelect: func(i int) {
+			OnChange: func(i int) {
 				s.SetState(func() { s.selected = i; s.picked++ })
 			},
 		}}}},
@@ -91,7 +91,7 @@ func TestDropdownConstruct(t *testing.T) {
 }
 
 // TestDropdownOpensAndSelects drives the full flow: tapping the closed control
-// opens the popup (options become visible), picking one fires OnSelect, closes
+// opens the popup (options become visible), picking one fires OnChange, closes
 // the popup, and the control now shows the chosen value.
 func TestDropdownOpensAndSelects(t *testing.T) {
 	h, st := ddHarness(t)
@@ -110,7 +110,7 @@ func TestDropdownOpensAndSelects(t *testing.T) {
 	h.Render()
 
 	if st.picked != 1 {
-		t.Fatalf("OnSelect fired %d times, want 1", st.picked)
+		t.Fatalf("OnChange fired %d times, want 1", st.picked)
 	}
 	if st.selected != 1 {
 		t.Fatalf("selected index = %d, want 1 (Medium)", st.selected)
@@ -125,7 +125,7 @@ func TestDropdownOpensAndSelects(t *testing.T) {
 }
 
 // TestDropdownOutsideTapDismisses opens the popup then taps the scrim (a corner
-// clear of the menu); the popup closes without firing OnSelect.
+// clear of the menu); the popup closes without firing OnChange.
 func TestDropdownOutsideTapDismisses(t *testing.T) {
 	h, st := ddHarness(t)
 	if !tapLabel(h, "Pick a size") {
@@ -142,6 +142,6 @@ func TestDropdownOutsideTapDismisses(t *testing.T) {
 		t.Fatal("outside tap did not dismiss the popup")
 	}
 	if st.picked != 0 {
-		t.Fatalf("OnSelect should not fire on dismiss; fired %d", st.picked)
+		t.Fatalf("OnChange should not fire on dismiss; fired %d", st.picked)
 	}
 }

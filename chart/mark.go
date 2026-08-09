@@ -2,6 +2,8 @@ package chart
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 )
@@ -15,17 +17,41 @@ type Datum struct {
 	Color paint.Color
 }
 
+// Pair is one categorical label/value pair, the typed input to Pairs.
+type Pair struct {
+	Label string
+	Value float64
+}
+
+// Pairs builds categorical data from typed label/value pairs — the
+// compile-time-checked counterpart to Values:
+//
+//	chart.Pairs([]chart.Pair{{"Mon", 3}, {"Tue", 5}, {"Wed", 2}})
+//
+// Each label becomes a band; X is the band index.
+func Pairs(pairs []Pair) []Datum {
+	out := make([]Datum, len(pairs))
+	for i, p := range pairs {
+		out[i] = Datum{X: float64(i), Y: p.Value, Label: p.Label}
+	}
+	return out
+}
+
 // Values builds categorical data from alternating label, number pairs:
 //
 //	chart.Values("Mon", 3, "Tue", 5, "Wed", 2)
 //
 // Each label becomes a band; X is the band index; the value may be any int/uint/
-// float type. It panics on an odd argument count, a non-string label, or a
-// non-numeric value — all programming errors in a literal-args helper (like a
-// bad fmt verb), surfaced immediately rather than silently dropped.
+// float type. It is prototyping sugar — the variadic ...any means the compiler
+// cannot check the arguments; use Pairs for the typed, compile-time-checked
+// path. A trailing odd argument is ignored with a logged warning; a non-string
+// label or non-numeric value still panics (a programming error in a
+// literal-args helper, like a bad fmt verb, surfaced immediately rather than
+// silently dropped).
 func Values(pairs ...any) []Datum {
 	if len(pairs)%2 != 0 {
-		panic("chart.Values: odd argument count (want label, value pairs)")
+		log.Printf("chart.Values: odd argument count (want label, value pairs); ignoring trailing %T", pairs[len(pairs)-1])
+		pairs = pairs[:len(pairs)-1]
 	}
 	out := make([]Datum, 0, len(pairs)/2)
 	for i := 0; i < len(pairs); i += 2 {
@@ -104,7 +130,7 @@ type plot struct {
 	Area   geom.Rect
 	X, Y   Scale
 	Canvas paint.Canvas
-	th     theme
+	th     chartTheme
 	series int     // this mark's series index (for the default color)
 	group  int     // this bar series' index among grouped bars
 	groups int     // total grouped bar series (1 = ungrouped)

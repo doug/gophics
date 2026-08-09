@@ -91,8 +91,20 @@ func AnimateFloat(value float32, d time.Duration, build func(float32) Widget) Wi
 
 // AnimatedScale smoothly scales child toward scale (about its center) whenever
 // scale changes — the tap-to-grow / pop affordance. Duration 0 means 150ms.
+//
+// The interpolated scale's magnitude is clamped to a small epsilon (1e-3):
+// paint.Transform treats SX==0 as "unset" (identity), so a tween to or through
+// exactly 0 would flash the child at full size for a frame. Animating toward 0
+// therefore settles at a visually-invisible near-zero scale rather than
+// exactly 0 (negative scales keep their sign, so mirror tweens still work).
 func AnimatedScale(scale float32, d time.Duration, child Widget) Widget {
 	return AnimateFloat(scale, d, func(s float32) Widget {
+		const eps = 1e-3
+		if s >= 0 && s < eps {
+			s = eps
+		} else if s < 0 && s > -eps {
+			s = -eps
+		}
 		return Transform{T: paint.Transform{SX: s, SY: s}, Center: true, Child: child}
 	})
 }
