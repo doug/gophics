@@ -9,26 +9,29 @@ import (
 
 // wireCapabilities publishes each capability the Window opts into (by
 // implementing the matching shell.<X>Window) to the widget Owner. A window that
-// doesn't implement a given interface leaves that capability nil.
+// doesn't implement a given interface leaves that capability nil. Callback-
+// carrying capabilities are wrapped in their shell.Posted<Cap> adapter so every
+// callback is delivered on the UI goroutine via Owner.Post, regardless of which
+// goroutine the platform implementation completes on.
 func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.FilePickerWindow); ok {
-		o.FilePicker = x.FilePicker()
+		o.FilePicker = shell.PostedFilePicker(x.FilePicker(), o.Post)
 	}
 	if x, ok := w.(shell.HapticWindow); ok {
 		o.Haptic = x.Haptic()
 	}
 	if x, ok := w.(shell.MediaWindow); ok {
-		o.Audio = x.Audio()
-		o.Camera = x.Camera()
+		o.Audio = shell.PostedAudio(x.Audio(), o.Post)
+		o.Camera = shell.PostedCamera(x.Camera(), o.Post)
 	}
 	if x, ok := w.(shell.NotifyWindow); ok {
-		o.Notifier = x.Notifier()
+		o.Notifier = shell.PostedNotifier(x.Notifier(), o.Post)
 	}
 	if x, ok := w.(shell.PermissionWindow); ok {
-		o.Permissions = x.Permissions()
+		o.Permissions = shell.PostedPermissions(x.Permissions(), o.Post)
 	}
 	if x, ok := w.(shell.ShareWindow); ok {
-		o.Share = x.Share()
+		o.Share = shell.PostedShare(x.Share(), o.Post)
 	}
 	if x, ok := w.(shell.StorageWindow); ok {
 		o.SecureStorage = x.SecureStorage()

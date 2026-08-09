@@ -57,7 +57,17 @@ URIs expose no stable filesystem path, so bytes are the one portable currency.
   `Owner`, so its fields are promoted) plus a `Ctx.<Cap>()` accessor per
   capability.
 - **`app/capabilities_gen.go`** — `wireCapabilities(owner, window)`: one
-  `if x, ok := w.(shell.<X>Window); ok { owner.<Cap> = x.<Cap>() }` per window.
+  `if x, ok := w.(shell.<X>Window); ok { owner.<Cap> = … }` per window.
+- **`shell/posted_gen.go`** — `Posted<Cap>` adapters that deliver every callback
+  through a `post func(func())`. The wiring wraps each callback-carrying
+  capability with `Owner.Post`, so the documented **"all callbacks fire on the
+  UI goroutine"** contract is enforced *centrally* — platform implementations
+  may invoke callbacks from any goroutine (a JS promise resolution, a native
+  completion handler) without each one hand-marshaling. The wrappers are
+  recursive: an interface handed out through a callback or result (e.g. the
+  `Recorder` from `Audio.Record`) is wrapped too, so its own callbacks also
+  post. Interfaces with no callbacks (SecureStorage, Playback) pass through
+  unwrapped, and synchronous methods (`Recorder.Level`) forward directly.
 
 `widget.Owner` embeds the generated struct:
 
