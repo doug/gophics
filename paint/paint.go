@@ -127,14 +127,17 @@ type Canvas interface {
 	// TextIn draws s with its baseline-left at pos, in the named font family
 	// ("" = the default family).
 	TextIn(font, s string, pos geom.Pt, size float32, c Color)
-	// Image draws img scaled into dst (bilinear). Pass the same image value
-	// across frames — scene diffing compares by identity. img must be
-	// comparable (a pointer, as every standard-library image is): the recorded
-	// op is compared with ==, which panics on a non-comparable dynamic type.
+	// Image draws img scaled into dst (bilinear). Scene diffing compares
+	// images by identity, not content: for pointer-typed images (every
+	// standard-library image, e.g. *image.RGBA) the pointer is the identity,
+	// so pass the same image value across frames to avoid spurious repaints —
+	// and pass a NEW image value after mutating pixels in place, or the
+	// change will not be detected. Non-pointer (struct-typed) images are safe
+	// (no panic) but always diff as changed, forcing a repaint each frame.
 	Image(img image.Image, dst geom.Rect)
 	// DrawSprite blits a source region of atlas into Dst (see Sprite). Pass the
-	// same atlas value across calls to share one cached texture; like Image, the
-	// atlas must be comparable.
+	// same atlas value across calls to share one cached texture; scene diffing
+	// uses the same identity semantics as Image.
 	DrawSprite(atlas image.Image, s Sprite)
 	// PushClip clips subsequent drawing to r; balance with PopClip.
 	// Nested clips intersect.
@@ -267,6 +270,12 @@ type Painter struct {
 	imgBufs  map[image.Image]*gg.ImageBuf
 	tintBufs map[tintKey]*gg.ImageBuf // per (atlas, src rect, quantized tint)
 
+	// shapeGen counts shaping-affecting changes (font/fallback/system-font
+	// loads). Callers that memoize measured or shaped text outside the
+	// Painter (e.g. layout.TextBox/RichBox) key on it so their caches cannot
+	// outlive a font swap; the Painter's own caches are cleared directly.
+	shapeGen uint64
+
 	// Rendering glyph outlines is ~80% of raster cost, so each distinct
 	// text run (font, string, size, color, scale) is rasterized once into a
 	// device-resolution image and blitted thereafter. Scrolling repeats the
@@ -348,6 +357,7 @@ func (p *Painter) rebuildShapers() {
 	clear(p.shapes)
 	clear(p.runs)
 	clear(p.metrics)
+	p.shapeGen++
 }
 
 func (p *Painter) shaperFor(font string) *text.Shaper {
@@ -454,6 +464,11 @@ func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
 	p.shapes[k] = l
 	return l
 }
+
+// ShapeGen identifies the current shaping configuration; it increments
+// whenever loaded fonts, fallbacks, or system fonts change. Callers caching
+// measured/shaped text outside the Painter include it in their cache key.
+func (p *Painter) ShapeGen() uint64 { return p.shapeGen }
 
 // MeasureWidth returns the shaped advance width of s at the given size,
 // without needing an active frame. Used by layout.
@@ -1063,5 +1078,6 @@ func (p *Painter) LoadSystemFonts() error {
 	}
 	clear(p.shapes)
 	clear(p.runs)
+	p.shapeGen++
 	return nil
 }

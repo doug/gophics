@@ -1227,6 +1227,16 @@ func (b *canvasBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 }
 
+// InkBounds implements layout.InkBounder: an unclipped Canvas may draw
+// anywhere (Draw is arbitrary user code), so containers must never cull it;
+// with Clip set, painting is bounded to the surface rect.
+func (b *canvasBox) InkBounds() geom.Rect {
+	if b.clip {
+		return geom.RectFromSize(b.size)
+	}
+	return geom.Unbounded
+}
+
 func (b *canvasBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if p.X >= 0 && p.Y >= 0 && p.X < b.size.W && p.Y < b.size.H {
 		*hits = append(*hits, layout.Hit{Box: b, Pos: p})

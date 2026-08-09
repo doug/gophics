@@ -1,6 +1,9 @@
 package layout
 
 import (
+	"strings"
+	"unicode/utf8"
+
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 )
@@ -29,7 +32,27 @@ type RichBox struct {
 	segs     []richSeg
 	baseline float32
 	lineH    float32
+	spanEnds []int // cumulative rune-end index per span, rebuilt each layout
+	memo     richMemo
 }
+
+// richMemo caches the last layout's shaping-relevant inputs so a re-layout
+// with the same text at the same width (e.g. a height-only window resize,
+// where the constraints — and thus the Base skip-cache key — change) reuses
+// the computed segs instead of re-shaping the whole paragraph.
+type richMemo struct {
+	valid bool
+	gen   uint64 // Painter.ShapeGen: font changes invalidate
+	size  float32
+	maxW  float32
+	spans []memoSpan
+	w, h  float32 // natural (pre-Constrain) size of the laid-out paragraph
+}
+
+// memoSpan is the geometry-affecting part of a RichSpan (Color/Underline/
+// Link change paint only — Paint reads the live Spans — so they don't
+// invalidate the memo).
+type memoSpan struct{ text, font string }
 
 type richSeg struct {
 	text string
@@ -39,23 +62,52 @@ type richSeg struct {
 }
 
 func (b *RichBox) fullText() string {
-	var s string
+	var sb strings.Builder
+	n := 0
 	for _, sp := range b.Spans {
-		s += sp.Text
+		n += len(sp.Text)
 	}
-	return s
+	sb.Grow(n)
+	for _, sp := range b.Spans {
+		sb.WriteString(sp.Text)
+	}
+	return sb.String()
 }
 
-// spanAt maps a rune index of the full text to its span index.
+// spanAt maps a rune index of the full text to its span index, using the
+// cumulative rune counts hoisted into spanEnds by Layout.
 func (b *RichBox) spanAt(idx int) int {
-	n := 0
-	for i, sp := range b.Spans {
-		n += len([]rune(sp.Text))
-		if idx < n {
+	for i, end := range b.spanEnds {
+		if idx < end {
 			return i
 		}
 	}
 	return len(b.Spans) - 1
+}
+
+// memoHit reports whether the cached segs from the last layout are still
+// valid for the given wrap width.
+func (b *RichBox) memoHit(maxW float32) bool {
+	m := &b.memo
+	if !m.valid || m.gen != b.Painter.ShapeGen() || m.size != b.TextSize ||
+		m.maxW != maxW || len(m.spans) != len(b.Spans) {
+		return false
+	}
+	for i, sp := range b.Spans {
+		if m.spans[i].text != sp.Text || m.spans[i].font != sp.Font {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *RichBox) memoStore(maxW, w, h float32) {
+	m := &b.memo
+	m.valid, m.gen, m.size, m.maxW, m.w, m.h = true, b.Painter.ShapeGen(), b.TextSize, maxW, w, h
+	m.spans = m.spans[:0]
+	for _, sp := range b.Spans {
+		m.spans = append(m.spans, memoSpan{sp.Text, sp.Font})
+	}
 }
 
 func (b *RichBox) Layout(cs Constraints) geom.Size {
@@ -64,10 +116,25 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 	}
 	m := b.Painter.Metrics(b.TextSize)
 	b.baseline, b.lineH = m.Ascent, m.LineHeight()
+
+	maxW := cs.Max.W
+	if b.memoHit(maxW) {
+		// Same text, fonts, size, and wrap width as last layout (only the
+		// height constraint changed, say): b.segs are still valid.
+		return b.Done(cs, cs.Constrain(geom.Size{W: b.memo.w, H: b.memo.h}))
+	}
 	full := b.fullText()
 	runes := []rune(full)
 
-	maxW := cs.Max.W
+	// Hoist per-span rune counts once: spanAt and the segment splitter below
+	// previously re-converted []rune(sp.Text) on every lookup.
+	b.spanEnds = b.spanEnds[:0]
+	n := 0
+	for _, sp := range b.Spans {
+		n += utf8.RuneCountInString(sp.Text)
+		b.spanEnds = append(b.spanEnds, n)
+	}
+
 	lines := b.Painter.Paragraph(full, b.TextSize, maxW)
 
 	b.segs = b.segs[:0]
@@ -81,12 +148,8 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 		for a < line.End {
 			span := b.spanAt(a)
 			end := line.End
-			// find where this span ends within the line
-			spanEnd := 0
-			for i := 0; i <= span; i++ {
-				spanEnd += len([]rune(b.Spans[i].Text))
-			}
-			if spanEnd < end {
+			// clip the segment to where this span ends
+			if spanEnd := b.spanEnds[span]; spanEnd < end {
 				end = spanEnd
 			}
 			segText := string(runes[a:end])
@@ -103,6 +166,7 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 	if n := len(lines); n > 1 {
 		h += float32(n-1) * b.lineH
 	}
+	b.memoStore(maxW, width, h)
 	return b.Done(cs, cs.Constrain(geom.Size{W: width, H: h}))
 }
 

@@ -229,10 +229,20 @@ func (b *Grid) Layout(cs Constraints) geom.Size {
 }
 
 func (b *Grid) Paint(c paint.Canvas, at geom.Pt) {
+	// Viewport culling, as in Flex.Paint: skip children whose ink lies
+	// entirely outside the current clip, so a scrolled grid records only its
+	// on-screen cells. ClipBounds is geom.Unbounded when unclipped or under a
+	// transform, so nothing is dropped there.
+	clip := c.ClipBounds()
 	for i, ch := range b.Children {
-		if i < len(b.offsets) {
-			ch.Paint(c, at.Add(b.offsets[i]))
+		if i >= len(b.offsets) {
+			break // children changed since last layout; skip until relaid
 		}
+		pos := at.Add(b.offsets[i])
+		if !InkBounds(ch).Translate(pos).Overlaps(clip) {
+			continue
+		}
+		ch.Paint(c, pos)
 	}
 }
 
@@ -303,10 +313,19 @@ func (b *Wrap) Layout(cs Constraints) geom.Size {
 }
 
 func (b *Wrap) Paint(c paint.Canvas, at geom.Pt) {
+	// Viewport culling, as in Flex.Paint: skip children whose ink lies
+	// entirely outside the current clip. ClipBounds is geom.Unbounded when
+	// unclipped or under a transform, so nothing is dropped there.
+	clip := c.ClipBounds()
 	for i, ch := range b.Children {
-		if i < len(b.offsets) {
-			ch.Paint(c, at.Add(b.offsets[i]))
+		if i >= len(b.offsets) {
+			break // children changed since last layout; skip until relaid
 		}
+		pos := at.Add(b.offsets[i])
+		if !InkBounds(ch).Translate(pos).Overlaps(clip) {
+			continue
+		}
+		ch.Paint(c, pos)
 	}
 }
 

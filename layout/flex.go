@@ -191,7 +191,10 @@ func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
 	// Viewport culling: skip children lying entirely outside the current clip.
 	// This makes scrolling a long list O(visible) instead of O(total) in the
 	// record pass — e.g. a scrolled Column only records its on-screen rows.
-	// ClipBounds is geom.Unbounded when unclipped or under a transform, so
+	// The test uses ink bounds, not the layout rect, so children that paint
+	// outside their layout box (Translated, Transformed, Stack, unclipped
+	// Canvas — see InkBounder) are never wrongly dropped. ClipBounds is
+	// geom.Unbounded when unclipped or under a transform, so
 	// unclipped/transformed content still paints in full (nothing is dropped).
 	clip := c.ClipBounds()
 	for i, ch := range f.Children {
@@ -199,8 +202,7 @@ func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
 			break // children changed since last layout; skip until relaid
 		}
 		pos := at.Add(f.offsets[i])
-		box := geom.Rect{Min: pos, Max: pos.Add(ch.Box.Size().Pt())}
-		if !box.Overlaps(clip) {
+		if !InkBounds(ch.Box).Translate(pos).Overlaps(clip) {
 			continue
 		}
 		ch.Box.Paint(c, pos)

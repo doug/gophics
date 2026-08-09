@@ -68,3 +68,49 @@ func TestDecorationsPaintLines(t *testing.T) {
 		t.Fatalf("ops = %d, want 3 per wrapped line (≥2 lines)", list.Len())
 	}
 }
+
+// TestTextMemoAcrossConstraintChanges pins the measure memo (M12): a
+// re-layout with the same text at the same width but a different height
+// constraint (the Base skip-cache misses) must produce the identical result,
+// and a text change after a memo hit must recompute.
+func TestTextMemoAcrossConstraintChanges(t *testing.T) {
+	p := textPainter(t)
+	tb := &TextBox{Painter: p, Text: "the quick brown fox jumps over the lazy dog", TextSize: 14, Wrap: true}
+
+	s1 := tb.Layout(Loose(geom.Size{W: 120, H: 1000}))
+	tb.MarkDirty()                                    // force a real re-layout (not the Base skip-cache)
+	s2 := tb.Layout(Loose(geom.Size{W: 120, H: 500})) // memo hit: same width
+	if s1 != s2 {
+		t.Fatalf("height-only constraint change altered size: %v vs %v", s1, s2)
+	}
+
+	tb.Text = "tiny"
+	tb.MarkDirty()
+	s3 := tb.Layout(Loose(geom.Size{W: 120, H: 500}))
+	if s3.W >= s1.W || s3.H >= s1.H {
+		t.Fatalf("text change after memo hit not recomputed: %v (was %v)", s3, s1)
+	}
+}
+
+// TestRichMemoAcrossConstraintChanges is the RichBox analog.
+func TestRichMemoAcrossConstraintChanges(t *testing.T) {
+	p := textPainter(t)
+	rb := &RichBox{Painter: p, TextSize: 14, Spans: []RichSpan{
+		{Text: "the quick brown "}, {Text: "fox jumps over the lazy dog"},
+	}}
+
+	s1 := rb.Layout(Loose(geom.Size{W: 120, H: 1000}))
+	segs := len(rb.segs)
+	rb.MarkDirty()
+	s2 := rb.Layout(Loose(geom.Size{W: 120, H: 500})) // memo hit: same width
+	if s1 != s2 || len(rb.segs) != segs {
+		t.Fatalf("height-only constraint change altered rich layout: %v/%d vs %v/%d", s1, segs, s2, len(rb.segs))
+	}
+
+	rb.Spans = []RichSpan{{Text: "tiny"}}
+	rb.MarkDirty()
+	s3 := rb.Layout(Loose(geom.Size{W: 120, H: 500}))
+	if s3.W >= s1.W || s3.H >= s1.H {
+		t.Fatalf("span change after memo hit not recomputed: %v (was %v)", s3, s1)
+	}
+}

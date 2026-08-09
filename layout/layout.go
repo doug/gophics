@@ -17,7 +17,8 @@ import (
 	"github.com/doug/gophics/paint"
 )
 
-// Inf is the unbounded constraint value.
+// Inf is the unbounded constraint value. It is a var only because Go has no
+// way to write an untyped float32 +Inf constant. Do not mutate.
 var Inf = float32(math.Inf(1))
 
 // Constraints are immutable min/max bounds handed down during layout.
@@ -88,6 +89,27 @@ type Box interface {
 	// AddHits appends boxes containing p (in this box's local coordinates)
 	// to hits, deepest (visually front-most) first.
 	AddHits(p geom.Pt, hits *[]Hit)
+}
+
+// InkBounder is an optional Box interface for boxes whose painting can
+// extend beyond their layout rect ({0,0}–Size): Translated paints its child
+// at an offset, Transformed scales/rotates it, Stack children can exceed the
+// constrained size, and an unclipped widget.Canvas can draw anywhere.
+// InkBounds returns the box's ink (paint) extent in its own coordinate
+// space. Containers use it instead of the layout rect when viewport-culling,
+// so such content is never wrongly dropped; return geom.Unbounded to opt out
+// of culling entirely.
+type InkBounder interface {
+	InkBounds() geom.Rect
+}
+
+// InkBounds returns b's ink extent in its own coordinate space: the box's
+// InkBounds if it implements InkBounder, else its layout rect.
+func InkBounds(b Box) geom.Rect {
+	if ib, ok := b.(InkBounder); ok {
+		return ib.InkBounds()
+	}
+	return geom.RectFromSize(b.Size())
 }
 
 // Hit is one box on a hit path, with p in that box's local coordinates.
@@ -323,6 +345,16 @@ func (b *Translated) AddHits(p geom.Pt, hits *[]Hit) {
 	}
 }
 
+// InkBounds implements InkBounder: the child's ink shifted by the
+// translation offset — where the child actually paints, not where it was
+// laid out.
+func (b *Translated) InkBounds() geom.Rect {
+	if b.Child == nil {
+		return geom.Rect{}
+	}
+	return InkBounds(b.Child).Translate(b.offsetPt())
+}
+
 func (b *Translated) VisitChildren(visit func(Box, geom.Pt)) {
 	if b.Child != nil {
 		visit(b.Child, b.offsetPt())
@@ -399,6 +431,42 @@ func (b *Transformed) AddHits(p geom.Pt, hits *[]Hit) {
 	b.Child.AddHits(local, hits)
 }
 
+// InkBounds implements InkBounder: the AABB of the child's ink mapped
+// through the transform, in this box's coordinate space. The mapping mirrors
+// the renderer (paint.Canvas.PushTransform): translate by (TX, TY), then
+// scale and rotate about the pivot.
+func (b *Transformed) InkBounds() geom.Rect {
+	if b.Child == nil {
+		return geom.Rect{}
+	}
+	ink := InkBounds(b.Child)
+	t := b.pivotFor(geom.Pt{}) // pivot in this box's local space (resolves Center)
+	sx, sy := t.SX, t.SY
+	if sx == 0 {
+		sx = 1
+	}
+	if sy == 0 {
+		sy = 1
+	}
+	sin64, cos64 := math.Sincos(float64(t.Rotation))
+	sin, cos := float32(sin64), float32(cos64)
+	mapPt := func(p geom.Pt) geom.Pt {
+		x, y := (p.X-t.PivotX)*sx, (p.Y-t.PivotY)*sy
+		return geom.Pt{
+			X: t.PivotX + t.TX + x*cos - y*sin,
+			Y: t.PivotY + t.TY + x*sin + y*cos,
+		}
+	}
+	c0 := mapPt(ink.Min)
+	c1 := mapPt(geom.Pt{X: ink.Max.X, Y: ink.Min.Y})
+	c2 := mapPt(geom.Pt{X: ink.Min.X, Y: ink.Max.Y})
+	c3 := mapPt(ink.Max)
+	return geom.Rect{
+		Min: geom.Pt{X: min(c0.X, c1.X, c2.X, c3.X), Y: min(c0.Y, c1.Y, c2.Y, c3.Y)},
+		Max: geom.Pt{X: max(c0.X, c1.X, c2.X, c3.X), Y: max(c0.Y, c1.Y, c2.Y, c3.Y)},
+	}
+}
+
 func (b *Transformed) VisitChildren(visit func(Box, geom.Pt)) {
 	if b.Child != nil {
 		visit(b.Child, geom.Pt{X: b.T.TX, Y: b.T.TY}) // best-effort (ignores scale)
@@ -410,6 +478,7 @@ func (b *Transformed) VisitChildren(visit func(Box, geom.Pt)) {
 type Stack struct {
 	Base
 	Children []Box
+	ink      geom.Rect // union of the children's ink, computed during Layout
 }
 
 func (b *Stack) Layout(cs Constraints) geom.Size {
@@ -417,6 +486,7 @@ func (b *Stack) Layout(cs Constraints) geom.Size {
 		return sz
 	}
 	var size geom.Size
+	b.ink = geom.Rect{}
 	for _, ch := range b.Children {
 		s := ch.Layout(cs.Loosen())
 		if s.W > size.W {
@@ -425,12 +495,26 @@ func (b *Stack) Layout(cs Constraints) geom.Size {
 		if s.H > size.H {
 			size.H = s.H
 		}
+		b.ink = b.ink.Union(InkBounds(ch))
 	}
 	return b.Done(cs, cs.Constrain(size))
 }
 
+// InkBounds implements InkBounder: the union of the children's ink as of the
+// last Layout. Stack does not clip, and children may exceed its constrained
+// size (over-constraint) or paint at offsets (Translated), so the union —
+// not the layout rect — is what a culling ancestor must test.
+func (b *Stack) InkBounds() geom.Rect { return b.ink }
+
 func (b *Stack) Paint(c paint.Canvas, at geom.Pt) {
+	// Viewport culling, as in Flex.Paint: skip children whose ink lies
+	// entirely outside the current clip. ClipBounds is geom.Unbounded when
+	// unclipped or under a transform, so nothing is dropped there.
+	clip := c.ClipBounds()
 	for _, ch := range b.Children {
+		if !InkBounds(ch).Translate(at).Overlaps(clip) {
+			continue
+		}
 		ch.Paint(c, at)
 	}
 }

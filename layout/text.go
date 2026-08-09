@@ -38,6 +38,24 @@ type TextBox struct {
 	baseline float32 // first-line baseline
 	lineH    float32 // baseline-to-baseline advance
 	descent  float32
+	memo     textMemo
+}
+
+// textMemo caches the last layout's shaping-relevant inputs so a re-layout
+// with the same text at the same effective width (e.g. a height-only window
+// resize, where the constraints — and thus the Base skip-cache key — change)
+// reuses the wrapped lines and measured width instead of re-shaping.
+type textMemo struct {
+	valid    bool
+	gen      uint64 // Painter.ShapeGen: font changes invalidate
+	text     string
+	font     string
+	size     float32
+	maxW     float32 // effective wrap/ellipsis width (Inf when line content is width-independent)
+	wrap     bool
+	maxLines int
+	ellipsis bool
+	w        float32 // natural (pre-Constrain) width of the widest line
 }
 
 // ellipsize trims line until it plus "…" fits maxW; force adds the ellipsis
@@ -57,6 +75,15 @@ func (b *TextBox) ellipsize(line string, maxW float32, force bool) string {
 	return "…"
 }
 
+// memoHit reports whether the cached lines from the last layout are still
+// valid for the given effective width.
+func (b *TextBox) memoHit(maxW float32) bool {
+	m := &b.memo
+	return m.valid && m.gen == b.Painter.ShapeGen() && m.text == b.Text &&
+		m.font == b.Font && m.size == b.TextSize && m.maxW == maxW &&
+		m.wrap == b.Wrap && m.maxLines == b.MaxLines && m.ellipsis == b.Ellipsis
+}
+
 func (b *TextBox) Layout(cs Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
@@ -66,31 +93,45 @@ func (b *TextBox) Layout(cs Constraints) geom.Size {
 	b.lineH = m.LineHeight()
 	b.descent = m.Descent
 
-	if b.Wrap && cs.BoundedW() {
-		b.lines = b.Painter.WrapTextIn(b.Font, b.Text, b.TextSize, cs.Max.W)
-		if b.MaxLines > 0 && len(b.lines) > b.MaxLines {
-			dropped := b.lines[:b.MaxLines]
-			if b.Ellipsis && len(dropped) > 0 {
-				last := len(dropped) - 1
-				dropped[last] = b.ellipsize(dropped[last], cs.Max.W, true)
-			}
-			b.lines = dropped
-		}
-	} else {
-		line := b.Text
-		if b.Ellipsis && cs.BoundedW() {
-			line = b.ellipsize(line, cs.Max.W, false)
-		}
-		b.lines = append(b.lines[:0], line)
+	// Effective width: line content depends on cs.Max.W only when wrapping
+	// or ellipsizing against a bounded width; otherwise it is a single
+	// untruncated line regardless of constraints.
+	maxW := Inf
+	if cs.BoundedW() && (b.Wrap || b.Ellipsis) {
+		maxW = cs.Max.W
 	}
-	var w float32
-	for _, ln := range b.lines {
-		if lw := b.Painter.MeasureWidthIn(b.Font, ln, b.TextSize); lw > w {
-			w = lw
+	if !b.memoHit(maxW) {
+		if b.Wrap && cs.BoundedW() {
+			b.lines = b.Painter.WrapTextIn(b.Font, b.Text, b.TextSize, cs.Max.W)
+			if b.MaxLines > 0 && len(b.lines) > b.MaxLines {
+				dropped := b.lines[:b.MaxLines]
+				if b.Ellipsis && len(dropped) > 0 {
+					last := len(dropped) - 1
+					dropped[last] = b.ellipsize(dropped[last], cs.Max.W, true)
+				}
+				b.lines = dropped
+			}
+		} else {
+			line := b.Text
+			if b.Ellipsis && cs.BoundedW() {
+				line = b.ellipsize(line, cs.Max.W, false)
+			}
+			b.lines = append(b.lines[:0], line)
+		}
+		var w float32
+		for _, ln := range b.lines {
+			if lw := b.Painter.MeasureWidthIn(b.Font, ln, b.TextSize); lw > w {
+				w = lw
+			}
+		}
+		b.memo = textMemo{
+			valid: true, gen: b.Painter.ShapeGen(),
+			text: b.Text, font: b.Font, size: b.TextSize, maxW: maxW,
+			wrap: b.Wrap, maxLines: b.MaxLines, ellipsis: b.Ellipsis, w: w,
 		}
 	}
 	h := m.Ascent + m.Descent + float32(len(b.lines)-1)*b.lineH
-	return b.Done(cs, cs.Constrain(geom.Size{W: w, H: h}))
+	return b.Done(cs, cs.Constrain(geom.Size{W: b.memo.w, H: h}))
 }
 
 func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {
