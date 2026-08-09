@@ -14,7 +14,8 @@ import (
 )
 
 // renderWidget is the internal bridge from widgets to layout boxes.
-// v1: implemented only by widgets in this package (see package doc).
+// Intentionally unexported: only this package defines render widgets —
+// see the extension policy in the package doc (doc.go).
 type renderWidget interface {
 	createBox(ctx Ctx) layout.Box
 	updateBox(ctx Ctx, box layout.Box)

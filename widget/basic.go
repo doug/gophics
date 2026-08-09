@@ -1268,12 +1268,18 @@ func (iw Interactive) attach(b layout.Box, kids []layout.Box) {
 }
 
 // InteractiveBox is the render object behind Interactive. The app runner
-// type-switches on it in hit paths to dispatch pointer events.
+// dispatches pointer events to it through the sealed GestureTarget interface.
 type InteractiveBox struct {
 	Handler Handler
 	Child   layout.Box
 	size    geom.Size
 }
+
+// GestureHandler implements GestureTarget: the app runner reaches this box's
+// interaction callbacks through it.
+func (b *InteractiveBox) GestureHandler() *Handler { return &b.Handler }
+
+func (b *InteractiveBox) sealedGestureTarget() {}
 
 func (b *InteractiveBox) Layout(cs layout.Constraints) geom.Size {
 	if b.Child != nil {

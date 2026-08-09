@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] (gophics local)
 
+### Removed
+
+- **`sound/` package** (915 LOC) — platform audio delegation layer. Unreachable from gophics: nothing imports `gogpu/sound`; gophics has its own vendored audio stack (`internal/audio`).
+- **`assets/`** (9.5 MB: `logo.png`, `dev_to_cover.png`, `gh_org.png`) — README/branding images; nothing embeds them (`go:embed` audit clean). README logo reference dropped.
+- **`internal/doc.go`** — doc-only `internal` package, unreachable.
+- **DX12 backend registration** (`gpu/backend/native/hal_windows.go`) — the DX12 HAL (`wgpu/hal/dx12`) and naga DXIL/HLSL emitters were removed from the gophics tree (Windows renders via Vulkan). `BackendInfo` no longer imports/registers dx12; a `GraphicsAPIDX12` request falls through to Auto (Vulkan preferred, GLES fallback). The `GraphicsAPIDX12` enum and config parsing remain for compatibility.
+
+Reachability audit note (2026-08): the rest of the fork is load-bearing for gophics' desktop shell — `shell/desktop` rides the full `App` frame loop (`NewApp`/`OnDraw`/`Run`, `Context.PresentTexture`/`SkipFrame`, `Renderer.NewTextureFromImage`, headless `RenderToImage`). `menu.go`, `window_manager.go`, `window_header.go`, `gesture.go`, `animation.go` are all referenced by the kept `app.go`/`event_source.go` hub and stay.
+
 ### Added
 
 - **`Context.SkipFrame()` — intentional no-work frames** — marks the current frame as deliberately producing no GPU work (caller's content unchanged; last presented frame stays on screen). The frame loop previously could not distinguish this from a failed `beginFrame` and scheduled a recovery `RequestRedraw()`, which would spin the render loop at vsync for a demand-driven app that skips unchanged frames. `intentionalSkip` is per-surface, reset in `prepareLazyAcquire`/`resetLazyState`. Used by gophics' damage-aware GPU present (app/present.go).

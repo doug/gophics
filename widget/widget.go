@@ -1,20 +1,7 @@
-// Package widget implements gophics's declarative layer: immutable widget
-// values describing the UI, reconciled into a retained element tree that owns
-// layout boxes. It is Flutter's widgets/ analog (PLAN.md M3, §4).
-//
-// The three widget kinds (mirroring Flutter, expressed as Go interfaces):
-//
-//   - Stateless: Build(ctx) describes content from configuration alone.
-//   - Stateful: CreateState() yields mutable State whose Build runs on
-//     SetState; state survives reconciliation while the widget type and key
-//     match.
-//   - render widgets (Text, Padding, Row, ...): bridge to layout.Box render
-//     objects. In v1 these are defined only inside this package; the public
-//     extension API for custom render widgets comes with the M3 ADRs.
-//
-// Widgets are compared by concrete type and key during reconciliation.
-// Attach a key with WithKey to preserve element/state identity across list
-// reorders.
+// Widget kinds, State plumbing, Ctx accessors, and the interaction Handler
+// contract. Package documentation — including the reconciler-core vs
+// widget-catalog layering and the sealed extension policy — is in doc.go.
+
 package widget
 
 import (
@@ -230,6 +217,25 @@ type Handler struct {
 }
 
 func (h *Handler) focusable() bool { return h.OnText != nil || h.OnKey != nil }
+
+// GestureTarget is the handle through which the app runner dispatches pointer
+// gestures (tap, press, drag, hover, scroll, focus). It is sealed: the
+// unexported marker method means only types in this package can implement it,
+// so the set of gesture-receiving render objects is a closed, versioned
+// contract rather than an open type-assertion on concrete types.
+// *InteractiveBox is the sole implementation.
+//
+// A GestureTarget's identity is the render object's: two GestureTarget values
+// compare equal exactly when they wrap the same box, so the runner may use ==
+// and slice membership to track a gesture across events.
+type GestureTarget interface {
+	// GestureHandler returns the target's Handler. The returned pointer is
+	// stable for the life of the render object (keyboard focus retains it),
+	// and reflects the most recent reconciliation.
+	GestureHandler() *Handler
+	// sealedGestureTarget restricts implementations to this package.
+	sealedGestureTarget()
+}
 
 // DragAxis constrains the direction a drag handler claims (see Handler.DragAxis).
 type DragAxis uint8

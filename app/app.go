@@ -90,13 +90,13 @@ type core struct {
 	// double-buffers against hovered so enter/exit diffing never compares a
 	// slice to itself.
 	hits         []hitInteractive
-	hoverScratch []*widget.InteractiveBox
+	hoverScratch []widget.GestureTarget
 
-	hovered        []*widget.InteractiveBox
-	pressed        *widget.InteractiveBox
-	pressBoxes     []*widget.InteractiveBox // boxes that got OnPress this gesture, awaiting OnPressEnd
-	longPress      *widget.InteractiveBox   // box eligible for long-press
-	dragging       *widget.InteractiveBox
+	hovered        []widget.GestureTarget
+	pressed        widget.GestureTarget
+	pressBoxes     []widget.GestureTarget // boxes that got OnPress this gesture, awaiting OnPressEnd
+	longPress      widget.GestureTarget   // box eligible for long-press
+	dragging       widget.GestureTarget
 	dragCandidates []hitInteractive // OnDrag boxes awaiting directional commit
 	dragOrigin     geom.Pt          // window origin of the dragging box at press time
 	lastPos        geom.Pt
@@ -105,8 +105,8 @@ type core struct {
 	moved          bool
 	pressHeld      float64 // seconds the current press has been held, unmoved
 	longFired      bool
-	pendingTap     *widget.InteractiveBox // deferred single-tap awaiting a possible double
-	pendingTapPos  geom.Pt                // where the deferred tap landed (double must be nearby)
+	pendingTap     widget.GestureTarget // deferred single-tap awaiting a possible double
+	pendingTapPos  geom.Pt              // where the deferred tap landed (double must be nearby)
 	tapElapsed     float64
 
 	a11y *a11yTree
@@ -141,8 +141,8 @@ func (c *core) TickGestures(dt float64) {
 		if c.pressHeld >= longPressSeconds {
 			c.longFired = true
 			c.pressed = nil // long-press consumes the gesture; no tap
-			if c.longPress.Handler.OnLongPress != nil {
-				c.longPress.Handler.OnLongPress()
+			if h := c.longPress.GestureHandler(); h.OnLongPress != nil {
+				h.OnLongPress()
 			}
 		}
 	}
@@ -151,8 +151,8 @@ func (c *core) TickGestures(dt float64) {
 		if c.tapElapsed >= doubleTapWindow {
 			tap := c.pendingTap
 			c.pendingTap = nil
-			if tap.Handler.OnTap != nil {
-				tap.Handler.OnTap()
+			if h := tap.GestureHandler(); h.OnTap != nil {
+				h.OnTap()
 			}
 		}
 	}
@@ -166,23 +166,26 @@ const doubleTapSlop = 8
 // fireTap handles a completed tap on box at pos: immediate for a plain tap; for
 // a double-tap-capable box, completes a double only if the second tap is near
 // the first, else defers the single.
-func (c *core) fireTap(box *widget.InteractiveBox, pos geom.Pt) {
-	if box.Handler.OnDoubleTap == nil {
-		if box.Handler.OnTap != nil {
-			box.Handler.OnTap()
+func (c *core) fireTap(box widget.GestureTarget, pos geom.Pt) {
+	h := box.GestureHandler()
+	if h.OnDoubleTap == nil {
+		if h.OnTap != nil {
+			h.OnTap()
 		}
 		return
 	}
 	if c.pendingTap == box && near(pos, c.pendingTapPos, doubleTapSlop) {
 		c.pendingTap = nil // second tap in window and place: it's a double
-		box.Handler.OnDoubleTap()
+		h.OnDoubleTap()
 		return
 	}
 	// A new first-tap that isn't completing the pending one as a double (a
 	// different box, or the same box too far away): flush the still-pending tap's
 	// OnTap now so it isn't silently dropped when we overwrite it below.
-	if c.pendingTap != nil && c.pendingTap.Handler.OnTap != nil {
-		c.pendingTap.Handler.OnTap()
+	if c.pendingTap != nil {
+		if ph := c.pendingTap.GestureHandler(); ph.OnTap != nil {
+			ph.OnTap()
+		}
 	}
 	c.pendingTap, c.pendingTapPos, c.tapElapsed = box, pos, 0 // first tap: defer OnTap
 }
@@ -425,10 +428,10 @@ func (c *core) ReplayScene(canvas paint.Canvas) {
 	c.prev.Replay(canvas)
 }
 
-// hitInteractive pairs an InteractiveBox with the hit position in its
+// hitInteractive pairs a gesture target with the hit position in its
 // local coordinates.
 type hitInteractive struct {
-	box   *widget.InteractiveBox
+	box   widget.GestureTarget
 	local geom.Pt
 }
 
@@ -442,7 +445,7 @@ func (c *core) Semantics() []layout.SemNode {
 	return layout.CollectSemantics(box)
 }
 
-// interactivesAt returns the InteractiveBoxes under p, topmost first.
+// interactivesAt returns the gesture targets under p, topmost first.
 // Pending rebuilds are flushed AND laid out first: hit geometry (child
 // offsets, sizes) is only valid after layout, and events can arrive
 // between a state change and its frame. When nothing is pending and the
@@ -461,8 +464,8 @@ func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
 	}
 	c.hits = c.hits[:0]
 	for _, h := range layout.HitTest(box, p) {
-		if ib, ok := h.Box.(*widget.InteractiveBox); ok {
-			c.hits = append(c.hits, hitInteractive{ib, h.Pos})
+		if gt, ok := h.Box.(widget.GestureTarget); ok {
+			c.hits = append(c.hits, hitInteractive{gt, h.Pos})
 		}
 	}
 	return c.hits
@@ -496,7 +499,7 @@ func (c *core) Pointer(e shell.Pointer) {
 				// unconstrained one always matches), so nested
 				// horizontal/vertical drags disambiguate.
 				for _, h := range c.dragCandidates {
-					if h.box.Handler.DragPriority != nil && h.box.Handler.DragPriority(c.downTouch) {
+					if dp := h.box.GestureHandler().DragPriority; dp != nil && dp(c.downTouch) {
 						c.dragging = h.box
 						c.dragOrigin = c.downPos.Sub(h.local)
 						break
@@ -504,7 +507,7 @@ func (c *core) Pointer(e shell.Pointer) {
 				}
 				if c.dragging == nil {
 					for _, h := range c.dragCandidates {
-						if h.box.Handler.DragAxis.Accepts(d.X, d.Y) {
+						if h.box.GestureHandler().DragAxis.Accepts(d.X, d.Y) {
 							c.dragging = h.box
 							// h.local is the box-local point at press, so the box
 							// origin comes from downPos (not the current move pos).
@@ -517,10 +520,12 @@ func (c *core) Pointer(e shell.Pointer) {
 				c.firePressEnd() // the press became a drag/scroll: end any highlight
 			}
 		}
-		if c.moved && c.dragging != nil && c.dragging.Handler.OnDrag != nil {
-			// Local position via the press-time origin: drags keep
-			// delivering even when the pointer leaves the box.
-			c.dragging.Handler.OnDrag(e.Pos.Sub(c.dragOrigin), delta)
+		if c.moved && c.dragging != nil {
+			if h := c.dragging.GestureHandler(); h.OnDrag != nil {
+				// Local position via the press-time origin: drags keep
+				// delivering even when the pointer leaves the box.
+				h.OnDrag(e.Pos.Sub(c.dragOrigin), delta)
+			}
 		}
 		// Build the new hover set in the scratch buffer (never aliasing
 		// c.hovered — the two swap each event), diff, then swap.
@@ -529,21 +534,21 @@ func (c *core) Pointer(e shell.Pointer) {
 			now = append(now, h.box)
 		}
 		for _, b := range c.hovered {
-			if !slices.Contains(now, b) && b.Handler.OnExit != nil {
-				b.Handler.OnExit()
+			if h := b.GestureHandler(); !slices.Contains(now, b) && h.OnExit != nil {
+				h.OnExit()
 			}
 		}
 		for _, b := range now {
-			if !slices.Contains(c.hovered, b) && b.Handler.OnEnter != nil {
-				b.Handler.OnEnter()
+			if h := b.GestureHandler(); !slices.Contains(c.hovered, b) && h.OnEnter != nil {
+				h.OnEnter()
 			}
 		}
 		c.hovered, c.hoverScratch = now, c.hovered
 
 	case shell.PointerScroll:
 		for _, h := range c.interactivesAt(c.lastPos) {
-			if h.box.Handler.OnScroll != nil {
-				h.box.Handler.OnScroll(e.Scroll)
+			if hd := h.box.GestureHandler(); hd.OnScroll != nil {
+				hd.OnScroll(e.Scroll)
 				return
 			}
 		}
@@ -560,22 +565,23 @@ func (c *core) Pointer(e shell.Pointer) {
 		c.pressHeld, c.longFired = 0, false
 		hits := c.interactivesAt(e.Pos)
 		for _, h := range hits {
-			if h.box.Handler.OnPress != nil {
-				h.box.Handler.OnPress(h.local)
+			hd := h.box.GestureHandler()
+			if hd.OnPress != nil {
+				hd.OnPress(h.local)
 			}
-			if h.box.Handler.OnPressEnd != nil {
+			if hd.OnPressEnd != nil {
 				c.pressBoxes = append(c.pressBoxes, h.box)
 			}
-			if c.pressed == nil && (h.box.Handler.OnTap != nil || h.box.Handler.OnDoubleTap != nil) {
+			if c.pressed == nil && (hd.OnTap != nil || hd.OnDoubleTap != nil) {
 				c.pressed = h.box
 			}
-			if c.longPress == nil && h.box.Handler.OnLongPress != nil {
+			if c.longPress == nil && hd.OnLongPress != nil {
 				c.longPress = h.box
 			}
 			// Defer drag commitment: collect every candidate (deepest first)
 			// and pick one by direction on the first slop-crossing move, so a
 			// horizontal Dismissible and a vertical Scroll can nest.
-			if h.box.Handler.OnDrag != nil {
+			if hd.OnDrag != nil {
 				c.dragCandidates = append(c.dragCandidates, h)
 			}
 		}
@@ -588,8 +594,10 @@ func (c *core) Pointer(e shell.Pointer) {
 		pressed, dragging := c.pressed, c.dragging
 		c.pressed, c.dragging, c.longPress = nil, nil, nil
 		c.dragCandidates = c.dragCandidates[:0]
-		if dragging != nil && dragging.Handler.OnRelease != nil {
-			dragging.Handler.OnRelease()
+		if dragging != nil {
+			if h := dragging.GestureHandler(); h.OnRelease != nil {
+				h.OnRelease()
+			}
 		}
 		if pressed != nil {
 			for _, h := range c.interactivesAt(e.Pos) {
@@ -608,8 +616,8 @@ func (c *core) Pointer(e shell.Pointer) {
 // is idempotent: the second call in a gesture finds an empty list.
 func (c *core) firePressEnd() {
 	for _, b := range c.pressBoxes {
-		if b.Handler.OnPressEnd != nil {
-			b.Handler.OnPressEnd()
+		if h := b.GestureHandler(); h.OnPressEnd != nil {
+			h.OnPressEnd()
 		}
 	}
 	c.pressBoxes = c.pressBoxes[:0]
@@ -619,7 +627,7 @@ func (c *core) firePressEnd() {
 // A press on nothing focusable leaves focus where it is.
 func (c *core) focusFrom(hits []hitInteractive) {
 	for _, hit := range hits {
-		h := &hit.box.Handler
+		h := hit.box.GestureHandler()
 		if h.OnText == nil && h.OnKey == nil {
 			continue
 		}

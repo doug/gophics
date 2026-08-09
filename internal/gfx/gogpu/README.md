@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/logo.png" alt="GoGPU Logo" width="180" />
-</p>
-
 <h1 align="center">GoGPU</h1>
 
 <p align="center">
