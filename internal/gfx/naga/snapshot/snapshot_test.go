@@ -1,8 +1,8 @@
 // Package snapshot_test provides golden snapshot tests for all naga backends.
 //
 // For each WGSL input shader in testdata/in/, the test compiles through all
-// four backends (SPIR-V, GLSL, HLSL, MSL) and compares output to golden files
-// stored in testdata/golden/{spv,glsl,hlsl,msl}/.
+// three backends (SPIR-V, GLSL, MSL) and compares output to golden files
+// stored in testdata/golden/{spv,glsl,msl}/.
 //
 // To regenerate golden files after intentional changes:
 //
@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/internal/gfx/naga/glsl"
-	"github.com/doug/gophics/internal/gfx/naga/hlsl"
 	"github.com/doug/gophics/internal/gfx/naga/ir"
 	"github.com/doug/gophics/internal/gfx/naga/msl"
 	"github.com/doug/gophics/internal/gfx/naga/spirv"
@@ -69,22 +68,20 @@ func TestSnapshots(t *testing.T) {
 				compareGolden(t, filepath.Join("testdata", "golden", "glsl", shader.name+".glsl"), code)
 			})
 
-			t.Run("hlsl", func(t *testing.T) {
-				hlslModule := module
-				hlslPipelineConstants := readSPVPipelineConstants(shader.name)
-				if len(hlslPipelineConstants) > 0 {
-					hlslModule = ir.CloneModuleForOverrides(module)
-					if err := ir.ProcessOverrides(hlslModule, hlslPipelineConstants); err != nil {
-						t.Errorf("ProcessOverrides failed: %v", err)
-						return
+			t.Run("msl", func(t *testing.T) {
+				// Process pipeline overrides on a clone, like the spv/glsl
+				// subtests. (Historically the hlsl subtest ran first and its
+				// override processing leaked into the shared module through the
+				// shallow clone; the overrides-* goldens encode the processed
+				// output, so process explicitly now that hlsl is gone.)
+				mslModule := module
+				if pc := readSPVPipelineConstants(shader.name); len(pc) > 0 {
+					mslModule = ir.CloneModuleForOverrides(module)
+					if err := ir.ProcessOverrides(mslModule, pc); err != nil {
+						t.Fatalf("ProcessOverrides failed: %v", err)
 					}
 				}
-				code := compileHLSL(t, hlslModule, shader.name)
-				compareGolden(t, filepath.Join("testdata", "golden", "hlsl", shader.name+".hlsl"), code)
-			})
-
-			t.Run("msl", func(t *testing.T) {
-				code, compileErr := compileMSL(t, module)
+				code, compileErr := compileMSL(t, mslModule)
 				if compileErr != nil {
 					target, configErr := rustTargetForShader(shader.name, "METAL")
 					if configErr != nil {
@@ -103,7 +100,7 @@ func TestSnapshots(t *testing.T) {
 
 // referenceAllowList contains shaders with known intentional divergences from Rust naga.
 // These are logged but not counted as failures. Each entry maps shader name to a reason.
-// Applies to ALL backends (SPIR-V, MSL, HLSL, GLSL).
+// Applies to ALL backends (SPIR-V, MSL, GLSL).
 //
 // Reasons:
 //   - "workgroup-layout-free": we generate layout-free types for Workgroup address space
@@ -140,7 +137,7 @@ var referenceAllowList = map[string]string{
 // This is the AUTHORITATIVE test — Rust naga output is the ground truth.
 // Our output for the same .wgsl input MUST match Rust's output (structurally).
 //
-// Rust reference files: testdata/reference/{spv,msl,hlsl}/wgsl-{name}.{ext}
+// Rust reference files: testdata/reference/{spv,msl}/wgsl-{name}.{ext}
 // GLSL has per-entry-point files: testdata/reference/glsl/wgsl-{name}.{entry}.{Stage}.glsl
 func TestRustReference(t *testing.T) {
 	shaders := loadInputShaders(t, "testdata/in")
@@ -150,7 +147,6 @@ func TestRustReference(t *testing.T) {
 
 	var spvPass, spvFail, spvSkip, spvAllow int
 	var mslPass, mslFail, mslSkip, mslAllow int
-	var hlslPass, hlslFail, hlslSkip, hlslAllow int
 	var glslPass, glslFail, glslSkip, glslAllow int
 	var lowerFail int
 
@@ -158,7 +154,6 @@ func TestRustReference(t *testing.T) {
 		shader := &shaders[i]
 		rustSPV := filepath.Join("testdata", "reference", "spv", "wgsl-"+shader.name+".spvasm")
 		rustMSL := filepath.Join("testdata", "reference", "msl", "wgsl-"+shader.name+".msl")
-		rustHLSL := filepath.Join("testdata", "reference", "hlsl", "wgsl-"+shader.name+".hlsl")
 
 		t.Run(shader.name, func(t *testing.T) {
 			module := compileToIR(t, shader.name, shader.source)
@@ -261,44 +256,6 @@ func TestRustReference(t *testing.T) {
 					}
 				} else {
 					mslPass++
-				}
-			})
-
-			// HLSL vs Rust reference
-			t.Run("hlsl_vs_rust", func(t *testing.T) {
-				if _, err := os.Stat(rustHLSL); os.IsNotExist(err) {
-					hlslSkip++
-					t.Skipf("no Rust reference: %s", rustHLSL)
-				}
-				// Process pipeline overrides before HLSL compilation
-				// (Rust test driver calls process_overrides for all backends)
-				hlslModule := module
-				hlslPipelineConstants := readSPVPipelineConstants(shader.name)
-				if len(hlslPipelineConstants) > 0 {
-					hlslModule = ir.CloneModuleForOverrides(module)
-					if err := ir.ProcessOverrides(hlslModule, hlslPipelineConstants); err != nil {
-						hlslFail++
-						t.Errorf("ProcessOverrides failed: %v", err)
-						return
-					}
-				}
-				code := compileHLSL(t, hlslModule, shader.name)
-				rustExpected, err := os.ReadFile(rustHLSL)
-				if err != nil {
-					t.Fatalf("read Rust reference: %v", err)
-				}
-				expected := strings.ReplaceAll(string(rustExpected), "\r\n", "\n")
-				actual := strings.ReplaceAll(code, "\r\n", "\n")
-				if expected != actual {
-					if reason, ok := referenceAllowList[shader.name]; ok {
-						hlslAllow++
-						t.Logf("HLSL allow-listed (%s)", reason)
-					} else {
-						hlslFail++
-						t.Errorf("HLSL differs from Rust reference %s", rustHLSL)
-					}
-				} else {
-					hlslPass++
 				}
 			})
 
@@ -422,7 +379,6 @@ func TestRustReference(t *testing.T) {
 	}
 	t.Logf("SPIR-V: %d pass, %d allow-listed, %d fail, %d skip", spvPass, spvAllow, spvFail, spvSkip)
 	t.Logf("MSL:    %d pass, %d allow-listed, %d fail, %d skip", mslPass, mslAllow, mslFail, mslSkip)
-	t.Logf("HLSL:   %d pass, %d allow-listed, %d fail, %d skip", hlslPass, hlslAllow, hlslFail, hlslSkip)
 	t.Logf("GLSL:   %d pass, %d allow-listed, %d fail, %d skip", glslPass, glslAllow, glslFail, glslSkip)
 }
 
@@ -799,315 +755,6 @@ func compileGLSL(t *testing.T, module *ir.Module) string {
 	}
 
 	return strings.Join(parts, "\n")
-}
-
-// compileHLSL compiles the IR module to HLSL source.
-func compileHLSL(t *testing.T, module *ir.Module, shaderName string) string {
-	t.Helper()
-
-	opts := hlsl.DefaultOptions()
-	// Match Rust naga's default_for_testing() settings
-	opts.RestrictIndexing = true
-	opts.ForceLoopBounding = true
-
-	// Read HLSL-specific TOML settings
-	readHLSLConfig(opts, shaderName)
-
-	code, _, err := hlsl.Compile(module, opts)
-	if err != nil {
-		t.Skipf("HLSL compile failed (skipping): %v", err)
-	}
-
-	return code
-}
-
-// readHLSLConfig reads HLSL options from a Rust naga test TOML config file.
-func readHLSLConfig(opts *hlsl.Options, shaderName string) {
-	tomlPath := filepath.Join(rustTomlDir, shaderName+".toml")
-	data, err := os.ReadFile(tomlPath)
-	if err != nil {
-		return // No TOML file — use defaults
-	}
-	content := string(data)
-
-	// Parse [hlsl] section for special_constants_binding
-	// Handles both { register = N, space = N } and { space = N, register = N } orders
-	if strings.Contains(content, "special_constants_binding") {
-		// Try register-first order
-		re1 := regexp.MustCompile(`special_constants_binding\s*=\s*\{\s*register\s*=\s*(\d+)\s*,\s*space\s*=\s*(\d+)\s*\}`)
-		// Try space-first order
-		re2 := regexp.MustCompile(`special_constants_binding\s*=\s*\{\s*space\s*=\s*(\d+)\s*,\s*register\s*=\s*(\d+)\s*\}`)
-		if m := re1.FindStringSubmatch(content); m != nil {
-			var reg, space uint32
-			fmt.Sscanf(m[1], "%d", &reg)
-			fmt.Sscanf(m[2], "%d", &space)
-			opts.SpecialConstantsBinding = &hlsl.BindTarget{Register: reg, Space: uint8(space)}
-		} else if m := re2.FindStringSubmatch(content); m != nil {
-			var space, reg uint32
-			fmt.Sscanf(m[1], "%d", &space)
-			fmt.Sscanf(m[2], "%d", &reg)
-			opts.SpecialConstantsBinding = &hlsl.BindTarget{Register: reg, Space: uint8(space)}
-		}
-	}
-
-	// Parse fake_missing_bindings ONLY in [hlsl] section (not MSL or other sections)
-	{
-		hlslSection := extractHLSLSection(content)
-		if hlslSection != "" {
-			re := regexp.MustCompile(`(?m)^\s*fake_missing_bindings\s*=\s*(true|false)`)
-			if m := re.FindStringSubmatch(hlslSection); m != nil {
-				opts.FakeMissingBindings = m[1] == "true"
-			}
-		}
-	}
-
-	// Parse shader_model in [hlsl] section
-	{
-		hlslSection := extractHLSLSection(content)
-		if hlslSection != "" {
-			re := regexp.MustCompile(`(?m)^\s*shader_model\s*=\s*"([^"]+)"`)
-			if m := re.FindStringSubmatch(hlslSection); m != nil {
-				switch m[1] {
-				case "V5_0":
-					opts.ShaderModel = hlsl.ShaderModel5_0
-				case "V5_1":
-					opts.ShaderModel = hlsl.ShaderModel5_1
-				case "V6_0":
-					opts.ShaderModel = hlsl.ShaderModel6_0
-				case "V6_1":
-					opts.ShaderModel = hlsl.ShaderModel6_1
-				case "V6_2":
-					opts.ShaderModel = hlsl.ShaderModel6_2
-				case "V6_3":
-					opts.ShaderModel = hlsl.ShaderModel6_3
-				case "V6_4":
-					opts.ShaderModel = hlsl.ShaderModel6_4
-				case "V6_5":
-					opts.ShaderModel = hlsl.ShaderModel6_5
-				case "V6_6":
-					opts.ShaderModel = hlsl.ShaderModel6_6
-				}
-			}
-		}
-	}
-
-	// Parse [[hlsl.binding_map]] entries
-	// Only parse within the [hlsl] section to avoid matching MSL entries.
-	{
-		hlslSection := extractHLSLSection(content)
-		if hlslSection != "" {
-			// Match binding_map entries in various TOML formats:
-			// [[hlsl.binding_map]]
-			// resource_binding = { group = G, binding = B }
-			// bind_target = { register = R, space = S }
-			// OR inline: { resource_binding = { group = G, binding = B }, bind_target = { register = R, space = S } }
-			re := regexp.MustCompile(`resource_binding\s*=\s*\{\s*group\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\}[\s,]*bind_target\s*=\s*\{([^}]+)\}`)
-			re2 := regexp.MustCompile(`bind_target\s*=\s*\{([^}]+)\}[\s,]*resource_binding\s*=\s*\{\s*group\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\}`)
-			for _, m := range re.FindAllStringSubmatch(hlslSection, -1) {
-				group, _ := strconv.ParseUint(m[1], 10, 32)
-				binding, _ := strconv.ParseUint(m[2], 10, 32)
-				btContent := m[3]
-				opts.BindingMap[hlsl.ResourceBinding{Group: uint32(group), Binding: uint32(binding)}] = parseBindTargetFull(btContent)
-			}
-			// Also try reversed order (bind_target before resource_binding)
-			for _, m := range re2.FindAllStringSubmatch(hlslSection, -1) {
-				btContent := m[1]
-				group, _ := strconv.ParseUint(m[2], 10, 32)
-				binding, _ := strconv.ParseUint(m[3], 10, 32)
-				opts.BindingMap[hlsl.ResourceBinding{Group: uint32(group), Binding: uint32(binding)}] = parseBindTargetFull(btContent)
-			}
-		}
-	}
-
-	// Parse dynamic_storage_buffer_offsets_targets in [hlsl] section
-	// Format: dynamic_storage_buffer_offsets_targets = [
-	//     { index = 0, bind_target = { register = 1, size = 2, space = 0 } },
-	//     ...
-	// ]
-	if strings.Contains(content, "dynamic_storage_buffer_offsets_targets") {
-		re := regexp.MustCompile(`\{\s*index\s*=\s*(\d+)\s*,\s*bind_target\s*=\s*\{\s*register\s*=\s*(\d+)\s*,\s*size\s*=\s*(\d+)\s*,\s*space\s*=\s*(\d+)\s*\}\s*\}`)
-		for _, m := range re.FindAllStringSubmatch(content, -1) {
-			idx, _ := strconv.ParseUint(m[1], 10, 32)
-			reg, _ := strconv.ParseUint(m[2], 10, 32)
-			size, _ := strconv.ParseUint(m[3], 10, 32)
-			space, _ := strconv.ParseUint(m[4], 10, 32)
-			if opts.DynamicStorageBufferOffsetsTargets == nil {
-				opts.DynamicStorageBufferOffsetsTargets = make(map[uint32]hlsl.OffsetsBindTarget)
-			}
-			opts.DynamicStorageBufferOffsetsTargets[uint32(idx)] = hlsl.OffsetsBindTarget{
-				Register: uint32(reg),
-				Size:     uint32(size),
-				Space:    uint8(space),
-			}
-		}
-	}
-
-	// Parse sampler_buffer_binding_map in [hlsl] section
-	if strings.Contains(content, "sampler_buffer_binding_map") {
-		re := regexp.MustCompile(`\{\s*group\s*=\s*(\d+)\s*,\s*bind_target\s*=\s*\{\s*register\s*=\s*(\d+)\s*,\s*space\s*=\s*(\d+)\s*\}\s*\}`)
-		for _, m := range re.FindAllStringSubmatch(content, -1) {
-			group, _ := strconv.ParseUint(m[1], 10, 32)
-			reg, _ := strconv.ParseUint(m[2], 10, 32)
-			space, _ := strconv.ParseUint(m[3], 10, 32)
-			if opts.SamplerBufferBindingMap == nil {
-				opts.SamplerBufferBindingMap = make(map[uint32]hlsl.BindTarget)
-			}
-			opts.SamplerBufferBindingMap[uint32(group)] = hlsl.BindTarget{
-				Register: uint32(reg),
-				Space:    uint8(space),
-			}
-		}
-	}
-
-	// Parse [[hlsl.external_texture_binding_map]] entries
-	if strings.Contains(content, "external_texture_binding_map") {
-		hlslSection := extractHLSLSection(content)
-		if hlslSection != "" {
-			// Parse each external_texture_binding_map entry
-			rbRe := regexp.MustCompile(`resource_binding\s*=\s*\{\s*group\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\}`)
-			planesRe := regexp.MustCompile(`bind_target\.planes\s*=\s*\[\s*\{[^]]*\}\s*,\s*\{[^]]*\}\s*,\s*\{[^]]*\}\s*,?\s*\]`)
-			planeRe := regexp.MustCompile(`\{\s*space\s*=\s*(\d+)\s*,\s*register\s*=\s*(\d+)\s*\}`)
-			paramsRe := regexp.MustCompile(`bind_target\.params\s*=\s*\{\s*space\s*=\s*(\d+)\s*,\s*register\s*=\s*(\d+)\s*\}`)
-
-			// Split by [[hlsl.external_texture_binding_map]]
-			parts := strings.Split(hlslSection, "[[hlsl.external_texture_binding_map]]")
-			for _, part := range parts[1:] { // skip before first match
-				rbMatch := rbRe.FindStringSubmatch(part)
-				planesMatch := planesRe.FindString(part)
-				paramsMatch := paramsRe.FindStringSubmatch(part)
-				if rbMatch == nil || planesMatch == "" || paramsMatch == nil {
-					continue
-				}
-				group, _ := strconv.ParseUint(rbMatch[1], 10, 32)
-				binding, _ := strconv.ParseUint(rbMatch[2], 10, 32)
-				planeMatches := planeRe.FindAllStringSubmatch(planesMatch, -1)
-				if len(planeMatches) < 3 {
-					continue
-				}
-
-				var target hlsl.ExternalTextureBindTarget
-				for i := 0; i < 3; i++ {
-					sp, _ := strconv.ParseUint(planeMatches[i][1], 10, 8)
-					reg, _ := strconv.ParseUint(planeMatches[i][2], 10, 32)
-					target.Planes[i] = hlsl.BindTarget{Space: uint8(sp), Register: uint32(reg)}
-				}
-				pSpace, _ := strconv.ParseUint(paramsMatch[1], 10, 8)
-				pReg, _ := strconv.ParseUint(paramsMatch[2], 10, 32)
-				target.Params = hlsl.BindTarget{Space: uint8(pSpace), Register: uint32(pReg)}
-
-				if opts.ExternalTextureBindingMap == nil {
-					opts.ExternalTextureBindingMap = make(hlsl.ExternalTextureBindingMap)
-				}
-				opts.ExternalTextureBindingMap[hlsl.ResourceBinding{Group: uint32(group), Binding: uint32(binding)}] = target
-			}
-		}
-	}
-
-	// Parse fragment_module = { entry_point = "...", path = "..." }
-	// This provides a fragment entry point to filter vertex outputs.
-	if strings.Contains(content, "fragment_module") {
-		re := regexp.MustCompile(`fragment_module\s*=\s*\{\s*entry_point\s*=\s*"([^"]+)"\s*,\s*path\s*=\s*"([^"]+)"\s*\}`)
-		if m := re.FindStringSubmatch(content); m != nil {
-			epName := m[1]
-			fragPath := m[2]
-			// Load the fragment shader from the same directory as other test inputs
-			fragWGSL, err := os.ReadFile(filepath.Join("testdata", "in", fragPath))
-			if err != nil {
-				return
-			}
-			fragSource := string(fragWGSL)
-			fragLexer := wgsl.NewLexer(fragSource)
-			fragTokens, err := fragLexer.Tokenize()
-			if err != nil {
-				return
-			}
-			fragParser := wgsl.NewParser(fragTokens)
-			fragAST, err := fragParser.Parse()
-			if err != nil {
-				return
-			}
-			fragModule, err := wgsl.LowerWithSource(fragAST, fragSource)
-			if err != nil {
-				return
-			}
-			// Find the fragment entry point function
-			for i := range fragModule.EntryPoints {
-				ep := &fragModule.EntryPoints[i]
-				if ep.Name == epName && ep.Stage == ir.StageFragment {
-					opts.FragmentEntryPoint = &hlsl.FragmentEntryPoint{
-						Module:   fragModule,
-						Function: &ep.Function,
-					}
-					break
-				}
-			}
-		}
-	}
-}
-
-// extractHLSLSection extracts the [hlsl] section and [[hlsl.*]] entries from TOML content.
-// Returns the combined HLSL-related content, or empty string if no HLSL config exists.
-func extractHLSLSection(content string) string {
-	var lines []string
-	inHLSLBlock := false
-
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-
-		// Check if this is a section header
-		if strings.HasPrefix(trimmed, "[") {
-			if strings.HasPrefix(trimmed, "[hlsl]") ||
-				strings.HasPrefix(trimmed, "[[hlsl.") ||
-				strings.HasPrefix(trimmed, "[hlsl.") {
-				inHLSLBlock = true
-			} else {
-				inHLSLBlock = false
-			}
-		}
-
-		if inHLSLBlock {
-			lines = append(lines, line)
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-// parseRegisterSpace extracts register and space values from a bind_target content string.
-func parseRegisterSpace(btContent string) (uint32, uint32) {
-	var reg, space uint32
-	reReg := regexp.MustCompile(`register\s*=\s*(\d+)`)
-	if rm := reReg.FindStringSubmatch(btContent); rm != nil {
-		fmt.Sscanf(rm[1], "%d", &reg)
-	}
-	reSp := regexp.MustCompile(`space\s*=\s*(\d+)`)
-	if sm := reSp.FindStringSubmatch(btContent); sm != nil {
-		fmt.Sscanf(sm[1], "%d", &space)
-	}
-	return reg, space
-}
-
-// parseBindTargetFull parses a bind_target content string and returns a full BindTarget,
-// including optional dynamic_storage_buffer_offsets_index and restrict_indexing fields.
-func parseBindTargetFull(btContent string) hlsl.BindTarget {
-	reg, space := parseRegisterSpace(btContent)
-	bt := hlsl.BindTarget{
-		Register: reg,
-		Space:    uint8(space),
-	}
-	// Parse dynamic_storage_buffer_offsets_index
-	reDyn := regexp.MustCompile(`dynamic_storage_buffer_offsets_index\s*=\s*(\d+)`)
-	if dm := reDyn.FindStringSubmatch(btContent); dm != nil {
-		var idx uint32
-		fmt.Sscanf(dm[1], "%d", &idx)
-		bt.DynamicStorageBufferOffsetsIndex = &idx
-	}
-	// Parse restrict_indexing
-	reRestrict := regexp.MustCompile(`restrict_indexing\s*=\s*(true|false)`)
-	if rm := reRestrict.FindStringSubmatch(btContent); rm != nil {
-		bt.RestrictIndexing = rm[1] == "true"
-	}
-	return bt
 }
 
 // ---------------------------------------------------------------------------

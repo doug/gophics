@@ -20,12 +20,10 @@ package backend
 // arbitrary (non-SV_*) semantics; the backends choose one and every
 // consumer must agree.
 //
-// Current consumers (must match this value):
-//   - naga/hlsl/types.go              — HLSL source emission
-//   - naga/dxil/dxil.go               — PSV signature element name
-//   - naga/dxil/internal/emit         — !dx.entryPoints signature name
-//   - naga/dxil/internal/container    — ISG1/OSG1 SemanticMapping
-//   - wgpu/hal/dx12/pipeline.go       — D3D12_INPUT_ELEMENT_DESC.SemanticName
+// Historical consumers were the HLSL/DXIL backends and wgpu/hal/dx12
+// (removed 2026-08 with the DirectX chain — Windows renders via Vulkan);
+// the constant stays as the naga ecosystem convention for any future
+// signature-emitting backend.
 //
 // A mismatch between the DXIL input signature and the D3D12 input layout
 // causes CreateGraphicsPipelineState to return E_INVALIDARG. IDxcValidator

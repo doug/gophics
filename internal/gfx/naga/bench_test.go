@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/internal/gfx/naga/glsl"
-	"github.com/doug/gophics/internal/gfx/naga/hlsl"
 	"github.com/doug/gophics/internal/gfx/naga/msl"
 	"github.com/doug/gophics/internal/gfx/naga/spirv"
 )
@@ -335,22 +334,6 @@ func BenchmarkCompileAllBackends(b *testing.B) {
 		runtime.KeepAlive(result)
 	})
 
-	b.Run("HLSL", func(b *testing.B) {
-		b.ReportAllocs()
-		b.SetBytes(int64(len(source)))
-		b.ResetTimer()
-
-		var result string
-		for i := 0; i < b.N; i++ {
-			var hlslErr error
-			result, _, hlslErr = hlsl.Compile(module, hlsl.DefaultOptions())
-			if hlslErr != nil {
-				b.Fatalf("hlsl compile failed: %v", hlslErr)
-			}
-		}
-		runtime.KeepAlive(result)
-	})
-
 	b.Run("MSL", func(b *testing.B) {
 		b.ReportAllocs()
 		b.SetBytes(int64(len(source)))
@@ -415,30 +398,6 @@ func BenchmarkFullPipeline(b *testing.B) {
 			result, _, glslErr = glsl.Compile(module, glsl.DefaultOptions())
 			if glslErr != nil {
 				b.Fatalf("glsl pipeline failed: %v", glslErr)
-			}
-		}
-		runtime.KeepAlive(result)
-	})
-
-	b.Run("HLSL", func(b *testing.B) {
-		b.ReportAllocs()
-		b.SetBytes(int64(len(source)))
-		b.ResetTimer()
-
-		var result string
-		for i := 0; i < b.N; i++ {
-			ast, err := Parse(source)
-			if err != nil {
-				b.Fatalf("parse failed: %v", err)
-			}
-			module, err := Lower(ast)
-			if err != nil {
-				b.Fatalf("lower failed: %v", err)
-			}
-			var hlslErr error
-			result, _, hlslErr = hlsl.Compile(module, hlsl.DefaultOptions())
-			if hlslErr != nil {
-				b.Fatalf("hlsl pipeline failed: %v", hlslErr)
 			}
 		}
 		runtime.KeepAlive(result)
