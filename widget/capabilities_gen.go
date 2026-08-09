@@ -9,31 +9,70 @@ import "github.com/doug/gophics/shell"
 // the Ctx accessors below read owner.<Cap> and apps read them via Ctx.<Cap>().
 // Regenerate with: go generate ./...
 type Capabilities struct {
+	Accessibility shell.Accessibility
 	Audio         shell.Audio
+	Battery       shell.Battery
 	Camera        shell.Camera
+	Connectivity  shell.Connectivity
 	FilePicker    shell.FilePicker
+	Gamepads      shell.Gamepads
+	Geolocation   shell.Geolocation
 	Haptic        shell.Haptic
+	Lifecycle     shell.Lifecycle
+	Links         shell.Links
 	Notifier      shell.Notifier
 	Permissions   shell.Permissions
 	SecureStorage shell.SecureStorage
 	Share         shell.Share
+	Socket        shell.Socket
+	TextInput     shell.TextInput
+	WebView       shell.WebView
+	WindowControl shell.WindowControl
 }
+
+// Accessibility returns the platform Accessibility capability (shell.Accessibility), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Accessibility() shell.Accessibility { return c.el.owner.Accessibility }
 
 // Audio returns the platform Audio capability (shell.Audio), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
 
+// Battery returns the platform Battery capability (shell.Battery), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Battery() shell.Battery { return c.el.owner.Battery }
+
 // Camera returns the platform Camera capability (shell.Camera), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Camera() shell.Camera { return c.el.owner.Camera }
+
+// Connectivity returns the platform Connectivity capability (shell.Connectivity), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Connectivity() shell.Connectivity { return c.el.owner.Connectivity }
 
 // FilePicker returns the platform FilePicker capability (shell.FilePicker), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) FilePicker() shell.FilePicker { return c.el.owner.FilePicker }
 
+// Gamepads returns the platform Gamepads capability (shell.Gamepads), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Gamepads() shell.Gamepads { return c.el.owner.Gamepads }
+
+// Geolocation returns the platform Geolocation capability (shell.Geolocation), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Geolocation() shell.Geolocation { return c.el.owner.Geolocation }
+
 // Haptic returns the platform Haptic capability (shell.Haptic), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Haptic() shell.Haptic { return c.el.owner.Haptic }
+
+// Lifecycle returns the platform Lifecycle capability (shell.Lifecycle), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Lifecycle() shell.Lifecycle { return c.el.owner.Lifecycle }
+
+// Links returns the platform Links capability (shell.Links), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Links() shell.Links { return c.el.owner.Links }
 
 // Notifier returns the platform Notifier capability (shell.Notifier), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
@@ -50,3 +89,19 @@ func (c Ctx) SecureStorage() shell.SecureStorage { return c.el.owner.SecureStora
 // Share returns the platform Share capability (shell.Share), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Share() shell.Share { return c.el.owner.Share }
+
+// Socket returns the platform Socket capability (shell.Socket), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Socket() shell.Socket { return c.el.owner.Socket }
+
+// TextInput returns the platform TextInput capability (shell.TextInput), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) TextInput() shell.TextInput { return c.el.owner.TextInput }
+
+// WebView returns the platform WebView capability (shell.WebView), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) WebView() shell.WebView { return c.el.owner.WebView }
+
+// WindowControl returns the platform WindowControl capability (shell.WindowControl), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) WindowControl() shell.WindowControl { return c.el.owner.WindowControl }

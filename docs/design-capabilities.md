@@ -154,3 +154,44 @@ stub) — so a new capability starts life buildable on every target and you fill
 the native bodies incrementally. A `capabilities_test.go` can assert every
 capability is implemented on at least one platform, so nothing ships as a silent
 no-op everywhere.
+
+---
+
+## Capability status (2026-08-09)
+
+Every capability follows the same three-layer pattern; "✅" = implemented and
+built (web = browser-verifiable; desktop/mobile = compile-verified on the targets
+noted, not device-run), "~" = partial/best-effort, "stub" = interface + compile-
+checked `TODO(platform)` (no native code written that can't be verified here),
+"—" = not applicable.
+
+| Capability | Web | Desktop | Mobile | Notes |
+|---|---|---|---|---|
+| Clipboard, OpenURL, SafeInsets, Input, DarkMode | ✅ | ✅ | ✅ | pre-existing core |
+| Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge |
+| FilePicker, Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native panels/keychain/intents TODO |
+| **Socket** (WebSocket) | ✅ | ✅ | ✅ | pure-Go RFC 6455 client (`!js`), tested |
+| **Lifecycle** (fg/bg) | ✅ | ✅ | stub | desktop via focus routing |
+| **Links** (deep links) | ✅ | ~ | stub | desktop = os.Args; OnLink no-op |
+| **WindowControl** (title/fullscreen) | ✅ | ✅ | — | rides gogpu; tray/native-menus deliberately excluded |
+| **Connectivity** | ✅ | ~ | — | desktop best-effort (online=true) |
+| **Battery** | ✅ | stub | stub | |
+| **Gamepad** | ✅ | stub | stub | poll-style; empty without hardware |
+| **Geolocation** | ✅ | stub | stub | |
+| **TextInput** (IME) | ✅ | — | stub | hidden-input keyboard; mobile composition routing TODO |
+| **Accessibility** | ~ | stub | stub | Announce (aria-live) ✅; SetTree (AT-tree) TODO |
+| **WebView** | ✅ | stub | stub | iframe overlay; native subview TODO |
+
+**Honesty note.** The web implementations are code-complete and compile for wasm,
+following the same pattern as the browser-verified FilePicker/Share; they have NOT
+each been live-exercised in a browser because no example wires them yet. The
+desktop implementations compile on macOS/linux/windows but can't be run-verified
+from this environment. The native leaf calls (macOS objc, Linux portals/GTK,
+Windows COM, Android Kotlin, iOS Swift) are marked `TODO(platform)` — not written
+speculatively — because they can't be compiled or run on the current host; each
+is a small fill-in on the shared FFI/bridge helpers when a device is available.
+
+**Not yet declared** (roadmap, need the WebView-class subview decision or deep
+native work): Video playback, Biometrics (Face/Touch ID), Sensors, Push
+notifications, System tray, native menu bar, global hotkeys, and the full
+accessibility AT-tree (Accessibility.SetTree) + mobile IME composition.

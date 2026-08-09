@@ -14,11 +14,32 @@ import (
 // callback is delivered on the UI goroutine via Owner.Post, regardless of which
 // goroutine the platform implementation completes on.
 func wireCapabilities(o *widget.Owner, w shell.Window) {
+	if x, ok := w.(shell.AccessibilityWindow); ok {
+		o.Accessibility = x.Accessibility()
+	}
+	if x, ok := w.(shell.BatteryWindow); ok {
+		o.Battery = shell.PostedBattery(x.Battery(), o.Post)
+	}
+	if x, ok := w.(shell.ConnectivityWindow); ok {
+		o.Connectivity = shell.PostedConnectivity(x.Connectivity(), o.Post)
+	}
 	if x, ok := w.(shell.FilePickerWindow); ok {
 		o.FilePicker = shell.PostedFilePicker(x.FilePicker(), o.Post)
 	}
+	if x, ok := w.(shell.GamepadWindow); ok {
+		o.Gamepads = x.Gamepads()
+	}
+	if x, ok := w.(shell.GeolocationWindow); ok {
+		o.Geolocation = shell.PostedGeolocation(x.Geolocation(), o.Post)
+	}
 	if x, ok := w.(shell.HapticWindow); ok {
 		o.Haptic = x.Haptic()
+	}
+	if x, ok := w.(shell.LifecycleWindow); ok {
+		o.Lifecycle = shell.PostedLifecycle(x.Lifecycle(), o.Post)
+	}
+	if x, ok := w.(shell.LinksWindow); ok {
+		o.Links = shell.PostedLinks(x.Links(), o.Post)
 	}
 	if x, ok := w.(shell.MediaWindow); ok {
 		o.Audio = shell.PostedAudio(x.Audio(), o.Post)
@@ -33,7 +54,19 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.ShareWindow); ok {
 		o.Share = shell.PostedShare(x.Share(), o.Post)
 	}
+	if x, ok := w.(shell.SocketWindow); ok {
+		o.Socket = shell.PostedSocket(x.Socket(), o.Post)
+	}
 	if x, ok := w.(shell.StorageWindow); ok {
 		o.SecureStorage = x.SecureStorage()
+	}
+	if x, ok := w.(shell.TextInputWindow); ok {
+		o.TextInput = shell.PostedTextInput(x.TextInput(), o.Post)
+	}
+	if x, ok := w.(shell.WebViewWindow); ok {
+		o.WebView = x.WebView()
+	}
+	if x, ok := w.(shell.WindowControlWindow); ok {
+		o.WindowControl = x.WindowControl()
 	}
 }

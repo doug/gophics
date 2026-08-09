@@ -51,6 +51,40 @@ func (p postedAudio) Play(a0 Clip, a1 func(Playback, error)) {
 	p.inner.Play(a0, w1)
 }
 
+// PostedBattery wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedBattery(inner Battery, post func(func())) Battery {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedBattery{inner, post}
+}
+
+type postedBattery struct {
+	inner Battery
+	post  func(func())
+}
+
+func (p postedBattery) Level() float32 {
+	return p.inner.Level()
+}
+
+func (p postedBattery) Charging() bool {
+	return p.inner.Charging()
+}
+
+func (p postedBattery) OnChange(a0 func()) {
+	f0 := a0
+	var w0 func()
+	if f0 != nil {
+		w0 = func() { p.post(func() { f0() }) }
+	}
+	p.inner.OnChange(w0)
+}
+
 // PostedCamera wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -86,6 +120,36 @@ func (p postedCamera) Capture(a0 CaptureOptions, a1 func(img image.Image, err er
 	p.inner.Capture(a0, w1)
 }
 
+// PostedConnectivity wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedConnectivity(inner Connectivity, post func(func())) Connectivity {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedConnectivity{inner, post}
+}
+
+type postedConnectivity struct {
+	inner Connectivity
+	post  func(func())
+}
+
+func (p postedConnectivity) Online() bool {
+	return p.inner.Online()
+}
+
+func (p postedConnectivity) OnChange(a0 func(online bool)) {
+	f0 := a0
+	var w0 func(online bool)
+	if f0 != nil {
+		w0 = func(c0 bool) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.OnChange(w0)
+}
+
 // PostedFilePicker wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -119,6 +183,101 @@ func (p postedFilePicker) Save(a0 SaveOptions, a1 []byte, a2 func(err error)) {
 		w2 = func(c0 error) { p.post(func() { f2(c0) }) }
 	}
 	p.inner.Save(a0, a1, w2)
+}
+
+// PostedGeolocation wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedGeolocation(inner Geolocation, post func(func())) Geolocation {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedGeolocation{inner, post}
+}
+
+type postedGeolocation struct {
+	inner Geolocation
+	post  func(func())
+}
+
+func (p postedGeolocation) Current(a0 func(lat, lon, accuracy float64, err error)) {
+	f0 := a0
+	var w0 func(lat, lon, accuracy float64, err error)
+	if f0 != nil {
+		w0 = func(c0 float64, c1 float64, c2 float64, c3 error) { p.post(func() { f0(c0, c1, c2, c3) }) }
+	}
+	p.inner.Current(w0)
+}
+
+func (p postedGeolocation) Watch(a0 func(lat, lon, accuracy float64)) func() {
+	f0 := a0
+	var w0 func(lat, lon, accuracy float64)
+	if f0 != nil {
+		w0 = func(c0 float64, c1 float64, c2 float64) { p.post(func() { f0(c0, c1, c2) }) }
+	}
+	return p.inner.Watch(w0)
+}
+
+// PostedLifecycle wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedLifecycle(inner Lifecycle, post func(func())) Lifecycle {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedLifecycle{inner, post}
+}
+
+type postedLifecycle struct {
+	inner Lifecycle
+	post  func(func())
+}
+
+func (p postedLifecycle) State() AppState {
+	return p.inner.State()
+}
+
+func (p postedLifecycle) OnChange(a0 func(AppState)) {
+	f0 := a0
+	var w0 func(AppState)
+	if f0 != nil {
+		w0 = func(c0 AppState) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.OnChange(w0)
+}
+
+// PostedLinks wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedLinks(inner Links, post func(func())) Links {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedLinks{inner, post}
+}
+
+type postedLinks struct {
+	inner Links
+	post  func(func())
+}
+
+func (p postedLinks) Initial() string {
+	return p.inner.Initial()
+}
+
+func (p postedLinks) OnLink(a0 func(url string)) {
+	f0 := a0
+	var w0 func(url string)
+	if f0 != nil {
+		w0 = func(c0 string) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.OnLink(w0)
 }
 
 // PostedNotifier wraps inner so every callback it (or anything it hands out)
@@ -243,4 +402,86 @@ func (p postedShare) Share(a0 ShareItem, a1 func(err error)) {
 		w1 = func(c0 error) { p.post(func() { f1(c0) }) }
 	}
 	p.inner.Share(a0, w1)
+}
+
+// PostedSocket wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedSocket(inner Socket, post func(func())) Socket {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedSocket{inner, post}
+}
+
+type postedSocket struct {
+	inner Socket
+	post  func(func())
+}
+
+func (p postedSocket) Dial(a0 string, a1 SocketHandlers) {
+	s1 := a1
+	w1 := s1
+	if s1.OnOpen != nil {
+		g := s1.OnOpen
+		w1.OnOpen = func(c0 SocketConn) { p.post(func() { g(c0) }) }
+	}
+	if s1.OnMessage != nil {
+		g := s1.OnMessage
+		w1.OnMessage = func(c0 []byte) { p.post(func() { g(c0) }) }
+	}
+	if s1.OnText != nil {
+		g := s1.OnText
+		w1.OnText = func(c0 string) { p.post(func() { g(c0) }) }
+	}
+	if s1.OnClose != nil {
+		g := s1.OnClose
+		w1.OnClose = func(c0 error) { p.post(func() { g(c0) }) }
+	}
+	p.inner.Dial(a0, w1)
+}
+
+// PostedTextInput wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedTextInput(inner TextInput, post func(func())) TextInput {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedTextInput{inner, post}
+}
+
+type postedTextInput struct {
+	inner TextInput
+	post  func(func())
+}
+
+func (p postedTextInput) Show(a0 TextInputOptions, a1 TextInputHandler) {
+	s1 := a1
+	w1 := s1
+	if s1.OnText != nil {
+		g := s1.OnText
+		w1.OnText = func(c0 string) { p.post(func() { g(c0) }) }
+	}
+	if s1.OnComposing != nil {
+		g := s1.OnComposing
+		w1.OnComposing = func(c0 string) { p.post(func() { g(c0) }) }
+	}
+	if s1.OnEditKey != nil {
+		g := s1.OnEditKey
+		w1.OnEditKey = func(c0 EditKey) { p.post(func() { g(c0) }) }
+	}
+	p.inner.Show(a0, w1)
+}
+
+func (p postedTextInput) Hide() {
+	p.inner.Hide()
+}
+
+func (p postedTextInput) SetText(a0 string, a1 int, a2 int) {
+	p.inner.SetText(a0, a1, a2)
 }

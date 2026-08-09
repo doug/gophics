@@ -62,6 +62,43 @@ func TestPostedFilePickerMarshalsCallbacks(t *testing.T) {
 	}
 }
 
+// fakeSocket fires OnMessage/OnClose synchronously from Dial — standing in for
+// a native client that would fire them from a background read goroutine. The
+// callbacks live in a struct (SocketHandlers), which the generated PostedSocket
+// must still marshal through post (the struct-of-callbacks case).
+type fakeSocket struct{}
+
+func (fakeSocket) Dial(_ string, h SocketHandlers) {
+	if h.OnMessage != nil {
+		h.OnMessage([]byte("hi"))
+	}
+	if h.OnClose != nil {
+		h.OnClose(nil)
+	}
+}
+
+func TestPostedSocketMarshalsStructCallbacks(t *testing.T) {
+	d := &deferredPost{}
+	s := PostedSocket(fakeSocket{}, d.post)
+
+	var got []byte
+	closed := false
+	s.Dial("ws://x", SocketHandlers{
+		OnMessage: func(b []byte) { got = b },
+		OnClose:   func(error) { closed = true },
+	})
+	if got != nil || closed {
+		t.Fatal("socket callbacks fired inline; struct-of-callbacks not marshaled through post")
+	}
+	if len(d.q) != 2 {
+		t.Fatalf("expected 2 queued posts (message + close), got %d", len(d.q))
+	}
+	d.drain()
+	if string(got) != "hi" || !closed {
+		t.Fatalf("callbacks not delivered: got=%q closed=%v", got, closed)
+	}
+}
+
 func TestPostedNilSafety(t *testing.T) {
 	if PostedFilePicker(nil, func(fn func()) {}) != nil {
 		t.Error("nil inner must stay nil")

@@ -58,14 +58,27 @@ type ifaceInfo struct {
 	imports map[string]string // local name → import path
 }
 
+// structInfo is one struct type declared in package shell — the "handlers"
+// shape (a struct whose fields are callbacks), e.g. SocketHandlers.
+type structInfo struct {
+	name    string
+	st      *ast.StructType
+	imports map[string]string
+}
+
 type gen struct {
 	fset    *token.FileSet
 	ifaces  map[string]*ifaceInfo
+	structs map[string]*structInfo
 	windows []capWindow
 	caps    []capability
-	// wrappers is the set of interfaces that need a Posted wrapper: reachable
+	// wrappers is the set of interfaces that need a Posted<T> wrapper: reachable
 	// from a capability and (transitively) carrying callbacks.
 	wrappers map[string]bool
+	// callbackStructs is the set of struct types that carry callbacks (a func
+	// field, or a field that is itself wrappable) and so must be rebuilt with
+	// each callback field posted when passed as a parameter.
+	callbackStructs map[string]bool
 }
 
 func main() {
@@ -73,7 +86,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	g := &gen{fset: token.NewFileSet(), ifaces: map[string]*ifaceInfo{}}
+	g := &gen{fset: token.NewFileSet(), ifaces: map[string]*ifaceInfo{}, structs: map[string]*structInfo{}}
 	g.parseShell(filepath.Join(root, "shell"))
 	if len(g.caps) == 0 {
 		fail(fmt.Errorf("no capability windows found under shell/"))
@@ -138,6 +151,10 @@ func (g *gen) parseShell(dir string) {
 				if !ok {
 					continue
 				}
+				if st, ok := ts.Type.(*ast.StructType); ok {
+					g.structs[ts.Name.Name] = &structInfo{name: ts.Name.Name, st: st, imports: imports}
+					continue
+				}
 				it, ok := ts.Type.(*ast.InterfaceType)
 				if !ok {
 					continue
@@ -195,34 +212,40 @@ func capsOf(name string, it *ast.InterfaceType) (capWindow, bool) {
 	return w, true
 }
 
-// computeWrappers finds every shell interface reachable from a capability whose
-// method set (transitively) carries a callback, via fixed-point iteration:
-// wrappable(T) if a method of T has a func-typed param, or names a wrappable
-// interface in a param, callback arg, or result.
+// computeWrappers finds every shell interface or handler-struct reachable from a
+// capability that (transitively) carries a callback, via fixed-point iteration.
+// An interface is wrappable if a method has a func-typed param or names a
+// wrappable interface / callback-struct; a struct is a callback-struct if a
+// field is func-typed or names a wrappable interface / callback-struct. The two
+// sets are mutually recursive (an interface whose method takes a handler struct;
+// a handler struct with a field that is a wrappable interface), so they're
+// computed together and then split into wrappers (interfaces) and callbackStructs.
 func (g *gen) computeWrappers() {
-	// Reachable: capability types plus interfaces named anywhere in their
-	// method signatures, transitively.
+	// Reachable: capability types plus every shell type named in their
+	// signatures / fields, transitively (interfaces and structs both).
 	reachable := map[string]bool{}
 	var reach func(name string)
 	reach = func(name string) {
 		if reachable[name] {
 			return
 		}
-		info, ok := g.ifaces[name]
-		if !ok {
-			return
+		var nodes []ast.Node
+		if info, ok := g.ifaces[name]; ok {
+			for _, m := range info.it.Methods.List {
+				nodes = append(nodes, m.Type)
+			}
+		} else if s, ok := g.structs[name]; ok {
+			for _, f := range s.st.Fields.List {
+				nodes = append(nodes, f.Type)
+			}
+		} else {
+			return // builtin / external type
 		}
 		reachable[name] = true
-		for _, m := range info.it.Methods.List {
-			ft, ok := m.Type.(*ast.FuncType)
-			if !ok {
-				continue
-			}
-			ast.Inspect(ft, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok {
-					if _, isIface := g.ifaces[id.Name]; isIface {
-						reach(id.Name)
-					}
+		for _, n := range nodes {
+			ast.Inspect(n, func(nn ast.Node) bool {
+				if id, ok := nn.(*ast.Ident); ok {
+					reach(id.Name)
 				}
 				return true
 			})
@@ -232,47 +255,107 @@ func (g *gen) computeWrappers() {
 		reach(c.Type)
 	}
 
-	// Wrappable: fixed point.
-	wrappable := map[string]bool{}
+	// wrap holds both wrappable interfaces and callback structs; fixed point.
+	wrap := map[string]bool{}
 	for changed := true; changed; {
 		changed = false
 		for name := range reachable {
-			if wrappable[name] {
+			if wrap[name] {
 				continue
 			}
-			info := g.ifaces[name]
 			need := false
-			for _, m := range info.it.Methods.List {
-				ft, ok := m.Type.(*ast.FuncType)
-				if !ok {
-					continue
-				}
-				ast.Inspect(ft, func(n ast.Node) bool {
-					switch x := n.(type) {
-					case *ast.FuncType:
-						if x != ft {
-							need = true // a callback parameter
+			if info, ok := g.ifaces[name]; ok {
+				for _, m := range info.it.Methods.List {
+					ft, ok := m.Type.(*ast.FuncType)
+					if !ok {
+						continue
+					}
+					ast.Inspect(ft, func(n ast.Node) bool {
+						switch x := n.(type) {
+						case *ast.FuncType:
+							if x != ft {
+								need = true // a callback parameter
+							}
+						case *ast.Ident:
+							if wrap[x.Name] {
+								need = true
+							}
 						}
+						return true
+					})
+				}
+			} else if s, ok := g.structs[name]; ok {
+				for _, f := range s.st.Fields.List {
+					switch t := f.Type.(type) {
+					case *ast.FuncType:
+						need = true
 					case *ast.Ident:
-						if wrappable[x.Name] {
+						if wrap[t.Name] {
 							need = true
 						}
 					}
-					return true
-				})
+				}
 			}
 			if need {
-				wrappable[name] = true
+				wrap[name] = true
 				changed = true
 			}
 		}
 	}
 	g.wrappers = map[string]bool{}
+	g.callbackStructs = map[string]bool{}
 	for name := range reachable {
-		if wrappable[name] {
+		if !wrap[name] {
+			continue
+		}
+		if g.ifaces[name] != nil {
 			g.wrappers[name] = true
+		} else if g.structs[name] != nil {
+			g.callbackStructs[name] = true
 		}
 	}
+}
+
+// funcFields returns the (name, type) of each func-typed field of a struct, in
+// source order — the callbacks that a Posted wrapper must re-post.
+func (g *gen) funcFields(name string) [][2]interface{} {
+	var out [][2]interface{}
+	s := g.structs[name]
+	if s == nil {
+		return out
+	}
+	for _, f := range s.st.Fields.List {
+		ft, ok := f.Type.(*ast.FuncType)
+		if !ok {
+			continue
+		}
+		for _, n := range f.Names {
+			out = append(out, [2]interface{}{n.Name, ft})
+		}
+	}
+	return out
+}
+
+// postedClosure returns a closure literal that posts a call to origExpr — the
+// building block reused by both direct callback params and struct callback
+// fields. A callback argument that is itself a wrappable shell interface is
+// wrapped through Posted<T> before the app sees it.
+func (g *gen) postedClosure(origExpr string, cft *ast.FuncType) string {
+	if len(fieldTypes(cft.Results)) != 0 {
+		fail(fmt.Errorf("capgen: callback with results (%s) not supported", g.exprStr(cft)))
+	}
+	cparams := fieldTypes(cft.Params)
+	var csig, cargs []string
+	for j, cp := range cparams {
+		csig = append(csig, fmt.Sprintf("c%d %s", j, g.exprStr(cp)))
+		arg := fmt.Sprintf("c%d", j)
+		if id, ok := cp.(*ast.Ident); ok && g.wrappers[id.Name] {
+			arg = fmt.Sprintf("Posted%s(c%d, p.post)", id.Name, j)
+		}
+		cargs = append(cargs, arg)
+	}
+	return fmt.Sprintf("func(%s) { p.post(func() { %s(%s) }) }",
+		strings.Join(csig, ", "), origExpr, strings.Join(cargs, ", "))
 }
 
 func (g *gen) exprStr(e ast.Expr) string {
@@ -361,21 +444,32 @@ func (g *gen) writePosted(root string) {
 	}
 	sort.Strings(names)
 
-	// Collect external imports used by the wrapped method signatures.
+	// Collect external imports used by the wrapped method signatures — and by
+	// the fields of any callback-struct they pass (a handler field may name a
+	// qualified type like time.Duration).
 	importPaths := map[string]bool{}
+	collect := func(node ast.Node, imports map[string]string) {
+		ast.Inspect(node, func(nn ast.Node) bool {
+			if sel, ok := nn.(*ast.SelectorExpr); ok {
+				if x, ok := sel.X.(*ast.Ident); ok {
+					if path, ok := imports[x.Name]; ok {
+						importPaths[path] = true
+					}
+				}
+			}
+			return true
+		})
+	}
 	for _, n := range names {
 		info := g.ifaces[n]
 		for _, m := range info.it.Methods.List {
-			ast.Inspect(m.Type, func(node ast.Node) bool {
-				if sel, ok := node.(*ast.SelectorExpr); ok {
-					if x, ok := sel.X.(*ast.Ident); ok {
-						if path, ok := info.imports[x.Name]; ok {
-							importPaths[path] = true
-						}
-					}
-				}
-				return true
-			})
+			collect(m.Type, info.imports)
+		}
+	}
+	for name := range g.callbackStructs {
+		s := g.structs[name]
+		for _, f := range s.st.Fields.List {
+			collect(f.Type, s.imports)
 		}
 	}
 	paths := make([]string, 0, len(importPaths))
@@ -442,36 +536,35 @@ func (g *gen) writeMethod(b *bytes.Buffer, recv, mname string, ft *ast.FuncType)
 	}
 	b.WriteString(" {\n")
 
-	// Wrap func-typed params.
+	// Wrap callback-carrying params: a direct func param, or a handler-struct
+	// param (its func fields are re-posted via a rebuilt copy).
 	callArgs := make([]string, len(params))
 	for i, p := range params {
 		callArgs[i] = fmt.Sprintf("a%d", i)
-		cft, ok := p.(*ast.FuncType)
-		if !ok {
-			continue
-		}
-		if len(fieldTypes(cft.Results)) != 0 {
-			fail(fmt.Errorf("capgen: callback with results in %s.%s not supported", recv, mname))
-		}
-		cparams := fieldTypes(cft.Params)
-		var csig, cargs []string
-		for j, cp := range cparams {
-			csig = append(csig, fmt.Sprintf("c%d %s", j, g.exprStr(cp)))
-			arg := fmt.Sprintf("c%d", j)
-			// A callback argument that is itself a callback-carrying shell
-			// interface (e.g. Recorder) is wrapped before the app sees it.
-			if id, ok := cp.(*ast.Ident); ok && g.wrappers[id.Name] {
-				arg = fmt.Sprintf("Posted%s(c%d, p.post)", id.Name, j)
+		switch pt := p.(type) {
+		case *ast.FuncType:
+			fmt.Fprintf(b, "\tf%d := a%d\n", i, i)
+			fmt.Fprintf(b, "\tvar w%d %s\n", i, g.exprStr(pt))
+			fmt.Fprintf(b, "\tif f%d != nil {\n\t\tw%d = %s\n\t}\n",
+				i, i, g.postedClosure(fmt.Sprintf("f%d", i), pt))
+			callArgs[i] = fmt.Sprintf("w%d", i)
+		case *ast.Ident:
+			if !g.callbackStructs[pt.Name] {
+				continue
 			}
-			cargs = append(cargs, arg)
+			// Rebuild the struct with every callback field posted (non-func
+			// fields carry over via the copy).
+			fmt.Fprintf(b, "\ts%d := a%d\n", i, i)
+			fmt.Fprintf(b, "\tw%d := s%d\n", i, i)
+			for _, ff := range g.funcFields(pt.Name) {
+				fname := ff[0].(string)
+				cft := ff[1].(*ast.FuncType)
+				src := fmt.Sprintf("s%d.%s", i, fname)
+				fmt.Fprintf(b, "\tif %s != nil {\n\t\tg := %s\n\t\tw%d.%s = %s\n\t}\n",
+					src, src, i, fname, g.postedClosure("g", cft))
+			}
+			callArgs[i] = fmt.Sprintf("w%d", i)
 		}
-		fmt.Fprintf(b, "\tf%d := a%d\n", i, i)
-		fmt.Fprintf(b, "\tvar w%d %s\n", i, g.exprStr(cft))
-		fmt.Fprintf(b, "\tif f%d != nil {\n", i)
-		fmt.Fprintf(b, "\t\tw%d = func(%s) { p.post(func() { f%d(%s) }) }\n",
-			i, strings.Join(csig, ", "), i, strings.Join(cargs, ", "))
-		b.WriteString("\t}\n")
-		callArgs[i] = fmt.Sprintf("w%d", i)
 	}
 
 	// Call + wrap interface-typed results.
