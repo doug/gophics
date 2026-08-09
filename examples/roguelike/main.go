@@ -3,6 +3,8 @@
 // from one procedurally-generated atlas texture (no binary assets). Turn-based,
 // with a minimal d20 combat core. Arrow keys or tap to move; bump to attack;
 // reach the stairs to descend.
+//
+//	go run ./examples/roguelike
 package main
 
 import (

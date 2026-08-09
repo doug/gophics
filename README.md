@@ -72,7 +72,7 @@ import (
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
-	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
@@ -86,20 +86,22 @@ type counterState struct {
 }
 
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
-	return widget.Column(
-		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
-		widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
-			Child:   widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.36, 0.62, 0.98)},
-		},
-	)
+	th := theme.Auto(ctx) // follows the platform light/dark scheme
+	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Center(widget.Column(
+			theme.Title(fmt.Sprintf("count: %d", s.n)),
+			widget.Sized{H: 12},
+			theme.Button{Label: "increment", Primary: true,
+				OnTap: func() { s.SetState(func() { s.n++ }) }},
+		)),
+	}}
 }
 
 func main() {
 	if err := app.Run(Counter{}, app.Config{
 		Title:      "gophics counter",
 		Size:       geom.Size{W: 320, H: 200},
-		Background: paint.RGB(0.07, 0.08, 0.11),
+		Background: theme.Light().Bg,
 		Font:       goregular.TTF,
 	}); err != nil {
 		log.Fatal(err)
@@ -157,6 +159,7 @@ Gophics is young and moving fast — so, the real caveats up front:
 - **The web binary is big.** Go compiles the whole renderer into WASM, so a demo is ~5 MB gzipped. Desktop ships a lean native binary; the web is one *option* of a single codebase, and shrinking the web payload is a top roadmap item.
 - **No hot reload.** Go can't match the Dart VM here — the answer is fast rebuilds plus an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second, but close.
 - **The widget catalog compounds, not complete.** You compose primitives rather than assemble hundreds of pre-built widgets; the catalog grows every release.
+- **The API is pre-1.0.** Expect breaking changes between v0.x releases while the surface settles; nothing is frozen yet, and renames land eagerly while the cost is low.
 
 The hard part — own-rendering pipeline, constraint layout, GPU compositing, real text shaping, four live platforms, headless golden tests — is done.
 
@@ -170,6 +173,12 @@ Gophics vendors its rendering substrate in-tree (so the whole stack is one repo 
 - **[go-text/typesetting](https://github.com/go-text/typesetting)** — HarfBuzz-class shaping, bidi, and line-breaking; plus **[go-mp3](https://github.com/hajimehoshi/go-mp3)** / **[oggvorbis](https://github.com/jfreymuth/oggvorbis)** for audio.
 
 Every vendored tree keeps its MIT license — see **[THIRD_PARTY.md](THIRD_PARTY.md)** for the full list and attributions.
+
+## License
+
+Gophics is licensed under the **[Apache License 2.0](LICENSE)**. The vendored
+substrate under `internal/` retains its original MIT licenses ([NOTICE](NOTICE),
+[THIRD_PARTY.md](THIRD_PARTY.md)).
 
 ## Learn more
 

@@ -54,7 +54,7 @@ irreplaceable half (shaders, 3D, feedback) is exactly what a card game and a
 side-scroller don't need.
 
 Critically, **option A is cheap because the backend already does the work.** The
-`gg` fork at `../third_party/gg` already implements every missing primitive —
+`gg` fork at `../internal/gfx/gg` already implements every missing primitive —
 `gg.DrawImageOptions` has `SrcRect`, `Opacity`, `BlendMode`, `Interpolation`; there
 are path fills, ellipses, arcs, radial/sweep gradients, blend modes and masks.
 gophics simply doesn't expose them through `paint.Canvas`.
@@ -120,7 +120,7 @@ becoming physical-only.
 
 `shell.KeyCode` today has 16 values and no Space, no WASD, no digits, no function
 keys. Widening it is **a pure mapping-function edit on desktop with zero upstream
-work**: `gpucontext.Key` (`../third_party/gpucontext/events.go:124-240`) already
+work**: `gpucontext.Key` (`../internal/gfx/gpucontext/events.go:124-240`) already
 defines ~110 contiguous codes and all three desktop backends already populate them.
 `shell/desktop/desktop.go:112` is just a 16-case switch that throws the rest away.
 
@@ -252,7 +252,7 @@ doesn't know about it, and two of them change the *design* of solitaire.
 
 ### Gamepad — Stage 4, deliberately last
 
-Nothing exists (`../third_party/gogpu/input/input.go:11` says "Gamepads will be added
+Nothing exists (`../internal/gfx/gogpu/input/input.go:11` says "Gamepads will be added
 later"). Keyboard + touch is a complete shippable control scheme on all four targets,
 so gamepad is pure upside — and macOS, the primary dev platform, is the hardest
 backend (GameController.framework needs a run loop and block/KVO callbacks through
@@ -618,7 +618,7 @@ the dirty sub-rect, composing directly with the `Damage` hint above.
 **Good news: the surface plumbing already exists in the fork.** This is integration
 work, not new-backend work — `wgpu.SurfaceTargetFromAndroidNativeWindow` and
 `SurfaceTargetFromMetalLayer` are in the pure-Go path
-(`../third_party/wgpu/surface_native.go:66,185`), `hal/vulkan` has an Android backend,
+(`../internal/gfx/wgpu/surface_native.go:66,185`), `hal/vulkan` has an Android backend,
 and `hal/metal` builds under `darwin` which `GOOS=ios` satisfies. As shipped,
 `shell/mobile` gained `SetSurface(displayHandle, windowHandle int64, widthPx, heightPx
 int, scale float32)` (`int64`, not `uintptr` — gomobile rejects `uintptr` in exported
@@ -1025,7 +1025,7 @@ Ordered by threat to the plan.
    CONFIRMED on device (2026-08-03).** In the gpucheck scene the plain and tinted
    sprites draw and the **rotated one is simply absent**, while a rotated *path* in
    the same frame draws correctly — so it is specific to the image tier, not to
-   transforms. Mechanism is exactly as predicted: `third_party/gg/context_image.go:374`
+   transforms. Mechanism is exactly as predicted: `internal/gfx/gg/context_image.go:374`
    bails out of the tier-3 GPU image path with `return false` for any non-axis-aligned
    quad, and the fallback is the `DrawImage` bitmap path that `paint/paint.go:702`
    calls "fatal on the direct-surface path" because it forces a mid-frame accelerator

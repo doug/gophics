@@ -137,20 +137,23 @@ bind/unbind on the surface-lifecycle callbacks; if the surface is corrupt from t
 start on Android, the Vulkan preview backend needs upstream work (re-scope the
 mobile action tier, per the games-plan risk register).
 
-## Device results — Pixel 10 Pro, 2026-08-03
+## Device results — Pixel 10 Pro, 2026-08-03 (initial run; all failures since fixed)
 
 First real-hardware run of the GPU path. Compared against
 `GPUCHECK_SHOT=... go test -run TestGPUCheckRenders ./examples/gpucheck`.
+**This table records the *initial* run; both FAILs were root-caused, fixed, and
+re-verified on-device — see "Open GPU-backend bugs" below for the fixes. The
+current on-device status is all-pass.**
 
-| # | Check | Result |
-|---|---|---|
-| 1 | Surface renders | **pass** — scene visible, not black |
-| 2 | Text crisp | **FAIL** — every string renders as blurred solid blocks, fully illegible |
-| 3 | Colors correct | **pass** — swatches and cyan→pink gradient match the reference |
-| 4 | Sprites render | **FAIL** — plain + tint draw; the **rotated sprite is missing** |
-| 5 | Animation runs | **pass** — spinning path animates, frame timings advance |
-| 6 | Fills screen at right scale | **pass** — layout matches the reference proportionally at 2.625x |
-| 7 | Touch works | **pass** — tap marker appears at the touch point |
+| # | Check | Initial result (2026-08-03) | Now |
+|---|---|---|---|
+| 1 | Surface renders | **pass** — scene visible, not black | pass |
+| 2 | Text crisp | **FAIL** — every string rendered as blurred solid blocks | **fixed + re-verified** (mip-LOD + stale-atlas fix) |
+| 3 | Colors correct | **pass** — swatches and cyan→pink gradient match the reference | pass |
+| 4 | Sprites render | **FAIL** — the rotated sprite was missing | **fixed + re-verified** |
+| 5 | Animation runs | **pass** — spinning path animates, frame timings advance | pass |
+| 6 | Fills screen at right scale | **pass** — layout matches the reference proportionally at 2.625x | pass |
+| 7 | Touch works | **pass** — tap marker appears at the touch point | pass |
 
 Checks 8–10 (rotation, background/foreground, stability) are **not yet run on the
 GPU path** — the earlier lifecycle exercise happened while the app was on the CPU
@@ -176,7 +179,7 @@ square. No CPU blit. Getting there took four Metal fixes (all committed):
 
 - **wgpu, GOOS=ios surface target.** `runtime.GOOS` is `"ios"`, not `"darwin"`;
   the legacy-handle path fell through to an unknown surface target kind. (Fixed
-  in `third_party/wgpu/surface_native.go`.)
+  in `internal/gfx/wgpu/surface_native.go`.)
 - **wgpu, macOS-only MTLDevice selectors.** `isLowPower` / `isHeadless` /
   `isRemovable` / `recommendedMaxWorkingSetSize` /
   `isDepth24Stencil8PixelFormatSupported` are macOS-only. On iOS the concrete
@@ -230,7 +233,7 @@ validation layer. It is **benign and self-recovering**, not a shader defect:
 
 ### Possible future fix: lazy Vello-compute init (deferred — not done)
 
-`GPUShared.initVelloAccelerator` (`third_party/gg/internal/gpu/gpu_shared.go`,
+`GPUShared.initVelloAccelerator` (`internal/gfx/gg/internal/gpu/gpu_shared.go`,
 called unconditionally at GPU init) eagerly compiles ~9 Vello compute shaders
 (`pathtag_reduce`/`pathtag_scan`, `draw_reduce`/`draw_leaf`, `coarse`,
 `backdrop`, `path_count`, `path_tiling`, `fine`) "for compute routing". On the
