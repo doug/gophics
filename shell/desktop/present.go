@@ -47,11 +47,18 @@ func (w *window) onFrameStart(dc *gogpu.Context) {
 
 // Target returns this frame's presentation target: a GPU target when the GPU
 // canvas is ready, otherwise a CPU PixelTarget (the initial frames before the
-// GPU canvas exists, and every frame under the CPU renderer).
+// GPU canvas exists, and every frame under the CPU renderer). The GPU target
+// is a per-window singleton rebound to the current frame's context — the app
+// layer uses its identity to recognize "same surface as the frame I last
+// rendered" when deciding whether an unchanged scene can skip the GPU replay.
 func (f *frame) Target() shell.Target {
 	if f.w.renderer != shell.RendererCPU {
 		if c, ok := f.w.ggc.(*ggcanvas.Canvas); ok {
-			return gpuTarget{ggc: c, dc: f.dc}
+			if f.w.gpuT == nil || f.w.gpuT.ggc != c {
+				f.w.gpuT = &gpuTarget{ggc: c}
+			}
+			f.w.gpuT.dc = f.dc
+			return f.w.gpuT
 		}
 		// GPU canvas not ready yet; fall through to the CPU blit for now.
 	}
@@ -73,8 +80,10 @@ func (f *frame) Target() shell.Target {
 	}}
 }
 
-// gpuTarget carries the GPU canvas and swapchain target for one frame; the app
-// layer type-asserts it (app.gpuCanvasTarget) and drives the scene replay.
+// gpuTarget carries the GPU canvas and this frame's swapchain context; the app
+// layer type-asserts it (app.gpuCanvasTarget) and drives the scene replay. One
+// instance lives per window (identity-stable across frames — see Target); dc is
+// rebound to the live gogpu.Context each frame.
 type gpuTarget struct {
 	ggc *ggcanvas.Canvas
 	dc  *gogpu.Context
@@ -82,9 +91,16 @@ type gpuTarget struct {
 
 // RenderGPU runs the scene replay against the GPU-backed gg.Context, then
 // composites the result to the swapchain.
-func (t gpuTarget) RenderGPU(replay func(*gg.Context)) {
+func (t *gpuTarget) RenderGPU(replay func(*gg.Context)) {
 	_ = t.ggc.Draw(func(cc *gg.Context) { replay(cc) })
 	if err := t.ggc.Render(t.dc.RenderTarget()); err != nil {
 		log.Printf("gophics/desktop: gpu render: %v", err)
 	}
 }
+
+// SkipRenderGPU (app.gpuSkipTarget) marks this frame as deliberately rendering
+// nothing: the scene is unchanged, so the last presented frame stays on screen.
+// gogpu's lazy swapchain acquire means no draw call → no acquire and no
+// present; without this marker it would treat the workless frame as a failed
+// begin and schedule a recovery redraw, spinning the app at vsync while idle.
+func (t *gpuTarget) SkipRenderGPU() { t.dc.SkipFrame() }

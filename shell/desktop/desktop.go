@@ -206,6 +206,7 @@ type window struct {
 	app      *gogpu.App
 	renderer shell.RendererMode // resolved backend for this run
 	ggc      any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
+	gpuT     *gpuTarget         // identity-stable GPU target, rebound per frame (present.go)
 }
 
 func (w *window) Invalidate()           { w.app.RequestRedraw() }

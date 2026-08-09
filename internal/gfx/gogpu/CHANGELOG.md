@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (gophics local)
+
+### Added
+
+- **`Context.SkipFrame()` — intentional no-work frames** — marks the current frame as deliberately producing no GPU work (caller's content unchanged; last presented frame stays on screen). The frame loop previously could not distinguish this from a failed `beginFrame` and scheduled a recovery `RequestRedraw()`, which would spin the render loop at vsync for a demand-driven app that skips unchanged frames. `intentionalSkip` is per-surface, reset in `prepareLazyAcquire`/`resetLazyState`. Used by gophics' damage-aware GPU present (app/present.go).
+
 ## [0.44.10] - 2026-07-20
 
 ### Fixed

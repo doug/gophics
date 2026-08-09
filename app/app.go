@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"runtime/debug"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -73,8 +74,23 @@ type core struct {
 	cur, prev     *scene.List
 	lastPaintSize geom.Size
 	lastScale     float32
+	// lastLayout is the size the tree was last laid out at; pointer-event hit
+	// testing re-lays-out only when it differs or a rebuild is pending.
+	lastLayout geom.Size
+
+	// framePanics counts recovered layout/paint panics (each drops its frame);
+	// lastPanicLog rate-limits their logging.
+	framePanics  int
+	lastPanicLog time.Time
 
 	posted chan func()
+
+	// hits and hoverScratch are reused across pointer events: hits backs
+	// interactivesAt's result (transient — no caller retains it), hoverScratch
+	// double-buffers against hovered so enter/exit diffing never compares a
+	// slice to itself.
+	hits         []hitInteractive
+	hoverScratch []*widget.InteractiveBox
 
 	hovered        []*widget.InteractiveBox
 	pressed        *widget.InteractiveBox
@@ -253,6 +269,7 @@ func (c *core) Layout(size geom.Size) layout.Box {
 		box = c.Owner.RootBox() // FlushBuilds picks up the LayoutBuilder rebuild
 		box.Layout(layout.Tight(size))
 	}
+	c.lastLayout = size
 	return box
 }
 
@@ -307,6 +324,28 @@ func (c *core) recordFrameTime(ms float32) {
 // and the (surface-clamped) damage rect. A size or scale change forces full
 // damage, since the painter's retained surface is reallocated.
 func (c *core) RecordScene(size geom.Size, scale float32) (changed bool, damage geom.Rect) {
+	return c.recordScene(size, scale, false)
+}
+
+// RecordSceneGPU records and change-detects a frame the presenter will replay
+// on the GPU. Change detection still runs (an unchanged scene lets the GPU
+// present skip its full re-raster), but the damage rect a CPU present would
+// need is not computed: text ops aren't measured for bounds (the expensive part
+// of Diff), and the layered-scene full-damage rule doesn't apply — both exist
+// only for CPU partial replay.
+func (c *core) RecordSceneGPU(size geom.Size, scale float32) (changed bool) {
+	changed, _ = c.recordScene(size, scale, true)
+	return changed
+}
+
+// nullMeasurer satisfies scene.Measurer with zero extents — used when Diff runs
+// only for its changed bool and the damage bounds are discarded (GPU present).
+type nullMeasurer struct{}
+
+func (nullMeasurer) MeasureWidthIn(string, string, float32) float32 { return 0 }
+func (nullMeasurer) MetricsIn(string, float32) paint.TextMetrics    { return paint.TextMetrics{} }
+
+func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed bool, damage geom.Rect) {
 	c.cur.Reset()
 	rec := c.cur.Recorder()
 	surface := geom.RectFromSize(size)
@@ -327,16 +366,25 @@ func (c *core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 		}
 	}
 
-	damage, changed = c.cur.Diff(c.prev, c.Painter)
+	var m scene.Measurer = c.Painter
+	if gpu {
+		m = nullMeasurer{} // damage bounds are discarded; skip text measurement
+	}
+	damage, changed = c.cur.Diff(c.prev, m)
 	if debugNoDamage && changed {
 		damage = surface // debug: force full repaint to isolate damage bugs
 	}
 	if size != c.lastPaintSize || scale != c.lastScale {
 		changed, damage = true, surface
 	}
-	if c.cur.HasLayers() {
-		// Opacity groups can't be partially replayed (a culled layer
-		// composites wrong), so repaint the whole surface this frame.
+	if !gpu && c.cur.HasLayers() {
+		// Transform groups can't be partially replayed: their ops are recorded
+		// in a transformed coordinate space, so their bounds can't feed the
+		// surface-space damage rect — repaint the whole surface this frame.
+		// (Opacity groups no longer set HasLayers: they record in surface
+		// coordinates and Diff computes tight damage for them.) The GPU present
+		// replays the whole scene anyway, so layers don't force it to treat an
+		// unchanged frame as changed.
 		changed, damage = true, surface
 	}
 	c.lastPaintSize, c.lastScale = size, scale
@@ -345,6 +393,15 @@ func (c *core) RecordScene(size geom.Size, scale float32) (changed bool, damage 
 		// Changed ops with degenerate bounds: repaint everything rather
 		// than nothing.
 		damage = surface
+	}
+	if gpu {
+		// The GPU path re-rasters the full surface when anything changed;
+		// report that honestly in the damage stats.
+		if changed {
+			damage = surface
+		} else {
+			damage = geom.Rect{}
+		}
 	}
 	c.cur, c.prev = c.prev, c.cur // prev now holds the current scene
 	c.LastDamage, c.Skipped = damage, !changed
@@ -388,30 +445,27 @@ func (c *core) Semantics() []layout.SemNode {
 // interactivesAt returns the InteractiveBoxes under p, topmost first.
 // Pending rebuilds are flushed AND laid out first: hit geometry (child
 // offsets, sizes) is only valid after layout, and events can arrive
-// between a state change and its frame.
+// between a state change and its frame. When nothing is pending and the
+// size is unchanged the layout pass is skipped outright — a pointer move
+// over a clean tree costs a hit test, not a layout walk. The returned
+// slice is scratch reused across calls; callers must not retain it.
 func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
+	needsLayout := c.Owner.NeedsBuild() // check before RootBox flushes builds
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
 	}
-	if !c.size.IsEmpty() {
+	if !c.size.IsEmpty() && (needsLayout || c.size != c.lastLayout) {
 		box.Layout(layout.Tight(c.size))
+		c.lastLayout = c.size
 	}
-	var out []hitInteractive
+	c.hits = c.hits[:0]
 	for _, h := range layout.HitTest(box, p) {
 		if ib, ok := h.Box.(*widget.InteractiveBox); ok {
-			out = append(out, hitInteractive{ib, h.Pos})
+			c.hits = append(c.hits, hitInteractive{ib, h.Pos})
 		}
 	}
-	return out
-}
-
-func boxes(hits []hitInteractive) []*widget.InteractiveBox {
-	out := make([]*widget.InteractiveBox, len(hits))
-	for i, h := range hits {
-		out[i] = h.box
-	}
-	return out
+	return c.hits
 }
 
 // Pointer dispatches a pointer event: hover enter/exit, drag, scroll,
@@ -468,7 +522,12 @@ func (c *core) Pointer(e shell.Pointer) {
 			// delivering even when the pointer leaves the box.
 			c.dragging.Handler.OnDrag(e.Pos.Sub(c.dragOrigin), delta)
 		}
-		now := boxes(c.interactivesAt(e.Pos))
+		// Build the new hover set in the scratch buffer (never aliasing
+		// c.hovered — the two swap each event), diff, then swap.
+		now := c.hoverScratch[:0]
+		for _, h := range c.interactivesAt(e.Pos) {
+			now = append(now, h.box)
+		}
 		for _, b := range c.hovered {
 			if !slices.Contains(now, b) && b.Handler.OnExit != nil {
 				b.Handler.OnExit()
@@ -479,7 +538,7 @@ func (c *core) Pointer(e shell.Pointer) {
 				b.Handler.OnEnter()
 			}
 		}
-		c.hovered = now
+		c.hovered, c.hoverScratch = now, c.hovered
 
 	case shell.PointerScroll:
 		for _, h := range c.interactivesAt(c.lastPos) {
@@ -532,8 +591,13 @@ func (c *core) Pointer(e shell.Pointer) {
 		if dragging != nil && dragging.Handler.OnRelease != nil {
 			dragging.Handler.OnRelease()
 		}
-		if pressed != nil && slices.Contains(boxes(c.interactivesAt(e.Pos)), pressed) {
-			c.fireTap(pressed, e.Pos)
+		if pressed != nil {
+			for _, h := range c.interactivesAt(e.Pos) {
+				if h.box == pressed {
+					c.fireTap(pressed, e.Pos)
+					break
+				}
+			}
 		}
 		c.firePressEnd() // end any press highlight, tapped or not
 	}
@@ -655,6 +719,14 @@ func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
 type shellHandler struct {
 	core   *core
 	window shell.Window
+	// wired is the window whose hooks/capabilities are currently published to
+	// the Owner; wireWindow re-wires only when the shell hands us another one.
+	wired shell.Window
+	// lastGPU is the GPU target the previous frame rendered to (nil when the
+	// previous frame took the CPU path). present() skips the GPU replay only
+	// for an unchanged scene on the same target — a target it has never
+	// rendered to has never presented this scene (see present.go).
+	lastGPU gpuCanvasTarget
 
 	// Dev-mode state-preserving hot-restart (set only under `gophics dev` via
 	// setupDevState; zero/no-op in a shipped binary). On a restart signal the
@@ -708,9 +780,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		w.Close()
 		return
 	}
-	h.core.Owner.Clipboard = w
-	h.core.Owner.OpenURL = w.OpenURL
-	h.wireMedia(w)
+	h.wireWindow(w)
 	if dark := w.DarkMode(); dark != h.core.Owner.DarkMode {
 		h.core.Owner.DarkMode = dark
 		h.core.Owner.RebuildAll()
@@ -723,11 +793,24 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		w.Invalidate() // animations or a held long-press: keep frames coming
 	}
 	t0 := time.Now()
-	h.core.Layout(f.Size())
-	changed, damage := h.core.RecordScene(f.Size(), f.Scale())
+	// Resolve the presentation target up front: a GPU target replays the whole
+	// scene, so the damage rect (and its per-text-op measurement) is never
+	// computed for it — see RecordSceneGPU.
+	tgt := f.Target()
+	changed, damage, ok := h.recordFrame(f, tgt)
+	if !ok {
+		// Layout or paint panicked: drop this frame, keep the previous one on
+		// screen, and keep the app alive (mirrors safeBuild's isolation policy
+		// for Build panics — widget/element.go).
+		h.presentDropped(f, tgt)
+		if in := h.core.Owner.Input; in != nil {
+			in.NewFrame()
+		}
+		return
+	}
 	// Present via the GPU rasterizer or the CPU rasterizer, chosen per frame
 	// from the frame's Target (see present.go).
-	h.present(f, changed, damage)
+	h.present(f, tgt, changed, damage)
 	if in := h.core.Owner.Input; in != nil {
 		in.NewFrame() // clear per-frame key/pointer edges after the frame read them
 	}
@@ -743,10 +826,40 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	}
 }
 
+// recordFrame runs the layout+record phase for one frame, recovering any panic
+// from user Layout/Paint code: ok=false means the frame was dropped (logged,
+// rate-limited) and nothing was recorded. Build panics are already isolated per
+// subtree by safeBuild; this is the same policy for the phases that run bare.
+func (h *shellHandler) recordFrame(f shell.Frame, tgt shell.Target) (changed bool, damage geom.Rect, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			h.core.framePanic(r)
+			changed, damage, ok = false, geom.Rect{}, false
+		}
+	}()
+	h.core.Layout(f.Size())
+	if _, gpu := tgt.(gpuCanvasTarget); gpu {
+		return h.core.RecordSceneGPU(f.Size(), f.Scale()), geom.Rect{}, true
+	}
+	changed, damage = h.core.RecordScene(f.Size(), f.Scale())
+	return changed, damage, true
+}
+
+// framePanic logs a recovered layout/paint panic with its stack, rate-limited:
+// the first occurrence always logs; repeats log at most every few seconds so a
+// panic on every frame doesn't produce 60 stacks a second.
+func (c *core) framePanic(r any) {
+	c.framePanics++
+	if c.framePanics == 1 || time.Since(c.lastPanicLog) >= 5*time.Second {
+		c.lastPanicLog = time.Now()
+		log.Printf("gophics: panic in layout/paint (frame dropped, %d so far, app continues): %v\n%s",
+			c.framePanics, r, debug.Stack())
+	}
+}
+
 func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 	h.window = w
-	h.core.Owner.Clipboard = w
-	h.wireMedia(w)
+	h.wireWindow(w)
 	switch e := e.(type) {
 	case shell.Pointer:
 		h.core.Pointer(e)

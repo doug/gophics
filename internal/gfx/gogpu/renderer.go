@@ -94,6 +94,12 @@ type RenderTarget struct {
 	// If OnDraw produces no GPU work, beginFrame is never called → no
 	// swapchain acquire/present → zero GPU overhead.
 	frameStarted bool
+
+	// intentionalSkip is set by Context.SkipFrame(): OnDraw deliberately
+	// produced no GPU work (content unchanged), so the frame loop must not
+	// treat the missing beginFrame as a failure and schedule a recovery
+	// redraw. Reset at frame boundaries.
+	intentionalSkip bool
 }
 
 // lockDisplay acquires the platform display lock if the window supports it.
@@ -633,6 +639,7 @@ func (ws *RenderTarget) prepareLazyAcquire() {
 	ws.frameStarted = false
 	ws.hasGPUWork = false
 	ws.pixelPresented = false
+	ws.intentionalSkip = false
 }
 
 // ensureFrameStarted calls beginFrame on first draw call (lazy acquire pattern).
@@ -664,6 +671,7 @@ func (ws *RenderTarget) resetLazyState() {
 	ws.frameStarted = false
 	ws.hasGPUWork = false
 	ws.pixelPresented = false
+	ws.intentionalSkip = false
 }
 
 // releaseFrame releases per-frame resources after presentation.

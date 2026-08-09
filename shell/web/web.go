@@ -41,6 +41,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 
 	w := &window{canvas: canvas, doc: doc, handler: h, renderer: cfg.Renderer}
 	w.resize()
+	w.watchDarkMode()
 	w.pres = newPresenter(w)
 
 	listen := func(target js.Value, event string, fn func(e js.Value)) {
@@ -207,6 +208,25 @@ type window struct {
 	rafPending bool
 	rafFunc    js.Func
 	lastNow    float64
+	dark       bool // cached prefers-color-scheme, kept fresh by watchDarkMode
+}
+
+// watchDarkMode caches the platform color-scheme preference and subscribes to
+// its MediaQueryList change event. The app runner polls DarkMode() every frame,
+// and a matchMedia call per frame is a needless JS-bridge round trip — with the
+// listener it is a plain field read, and a live preference flip still lands on
+// the next frame (the listener invalidates).
+func (w *window) watchDarkMode() {
+	mq := js.Global().Call("matchMedia", "(prefers-color-scheme: dark)")
+	if !mq.Truthy() {
+		return
+	}
+	w.dark = mq.Get("matches").Bool()
+	mq.Call("addEventListener", "change", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		w.dark = args[0].Get("matches").Bool()
+		w.Invalidate() // repaint so the theme change takes effect now, not on the next input
+		return nil
+	}))
 }
 
 func (w *window) resize() {
@@ -260,10 +280,9 @@ func (w *window) OpenURL(url string) error {
 	return nil
 }
 
-func (w *window) DarkMode() bool {
-	m := js.Global().Call("matchMedia", "(prefers-color-scheme: dark)")
-	return m.Truthy() && m.Get("matches").Bool()
-}
+// DarkMode reports the cached prefers-color-scheme value (see watchDarkMode);
+// it is called every frame, so it must not cross the JS bridge.
+func (w *window) DarkMode() bool { return w.dark }
 
 type frame struct {
 	w *window

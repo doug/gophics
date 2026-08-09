@@ -57,6 +57,17 @@ func (c *Context) activeSurface() *RenderTarget {
 	return c.renderer.primary
 }
 
+// SkipFrame marks this frame as intentionally producing no GPU work: the
+// caller's content is unchanged and the previously presented frame should stay
+// on screen. With lazy swapchain acquire, an OnDraw that issues no draw calls
+// acquires and presents nothing — but the frame loop cannot tell a deliberate
+// skip from a failed beginFrame, and schedules a recovery redraw for the
+// latter. SkipFrame suppresses that redraw so a deliberately idle frame does
+// not spin the render loop.
+func (c *Context) SkipFrame() {
+	c.activeSurface().intentionalSkip = true
+}
+
 // SetDamageRects specifies which regions of the surface changed this frame.
 // Rects are in physical pixels with top-left origin (image.Rectangle).
 // The rects are passed to the platform compositor at present time, allowing it

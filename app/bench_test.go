@@ -7,6 +7,7 @@ import (
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -92,6 +93,22 @@ func BenchmarkFrameFullRepaint(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		h.core.prev.Reset() // empty previous scene: everything is damage
 		hoverAndRender(h, st, i%2)
+	}
+}
+
+// BenchmarkPointerMoveClean measures pointer-move dispatch over a clean tree:
+// hit test + hover diff with reused scratch slices and no layout pass (the
+// tree is clean and the size unchanged, so interactivesAt skips box.Layout).
+func BenchmarkPointerMoveClean(b *testing.B) {
+	h, _ := benchApp(b)
+	h.Move(geom.Pt{X: 200, Y: 60}) // settle initial hover state
+	h.Render()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Wiggle within one row so hover doesn't change (no rebuilds): the
+		// steady-state cost of a pointer gliding across static content.
+		h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 200 + float32(i%3), Y: 60}})
 	}
 }
 

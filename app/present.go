@@ -18,6 +18,20 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 	wireCapabilities(h.core.Owner, w)
 }
 
+// wireWindow wires the window-backed Owner hooks (clipboard, OpenURL,
+// capabilities) once per window. The wiring is identity-stable — rebuilding the
+// Posted<Cap> adapters and closures every frame was pure per-frame garbage — so
+// it re-runs only when the shell hands us a different Window.
+func (h *shellHandler) wireWindow(w shell.Window) {
+	if h.wired == w {
+		return
+	}
+	h.wired = w
+	h.core.Owner.Clipboard = w
+	h.core.Owner.OpenURL = w.OpenURL
+	h.wireMedia(w)
+}
+
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs
 // the scene replay against a GPU-backed gg.Context, then composites the result
 // to the surface. A shell whose resolved renderer is GPU returns one once its
@@ -28,18 +42,50 @@ type gpuCanvasTarget interface {
 	RenderGPU(replay func(*gg.Context))
 }
 
+// gpuSkipTarget is optionally implemented by GPU targets that must be told when
+// a frame deliberately renders nothing. The desktop shell needs it: gogpu
+// treats an OnDraw that produced no GPU work as a failed frame-begin and
+// schedules a recovery redraw, which would turn every skipped frame into a
+// busy loop. Web and mobile acquire their swapchain texture inside RenderGPU
+// itself, so simply not calling it presents nothing and needs no signal.
+type gpuSkipTarget interface {
+	SkipRenderGPU()
+}
+
 // present rasterizes the recorded scene for one frame. When the frame offers a
-// GPU target the whole scene is replayed on the GPU each frame; otherwise the
-// CPU rasterizer paints the damaged region and hands finished pixels to the
-// shell.
-func (h *shellHandler) present(f shell.Frame, changed bool, damage geom.Rect) {
-	if gt, ok := f.Target().(gpuCanvasTarget); ok {
+// GPU target the whole scene is replayed on the GPU — but only when it changed:
+// an unchanged scene skips the replay entirely and the last presented frame
+// stays on screen. Otherwise the CPU rasterizer paints the damaged region and
+// hands finished pixels to the shell.
+//
+// The GPU skip is safe against the swapchain because every GPU shell (web,
+// desktop, mobile) acquires its swapchain frame lazily — web and mobile call
+// GetCurrentTexture inside RenderGPU, and gogpu on desktop defers the acquire
+// to the first draw call — so skipping the replay acquires nothing and leaves
+// no frame dangling. The one shell-side wrinkle is desktop's recovery redraw,
+// handled via gpuSkipTarget above.
+//
+// A target the handler has not presented to yet (the first GPU frame, the
+// web/mobile switchover from the pending/CPU path, a recreated device surface
+// after backgrounding) must render even when the scene is unchanged: its
+// swapchain has never shown this scene. Target identity tracks that — each
+// shell's GPU target value is stable per surface generation.
+func (h *shellHandler) present(f shell.Frame, tgt shell.Target, changed bool, damage geom.Rect) {
+	if gt, ok := tgt.(gpuCanvasTarget); ok {
+		if !changed && gt == h.lastGPU {
+			if st, ok := tgt.(gpuSkipTarget); ok {
+				st.SkipRenderGPU()
+			}
+			return
+		}
 		gt.RenderGPU(func(cc *gg.Context) {
 			// The GPU rasterizes the whole frame each time; replay in full.
 			h.core.ReplayScene(h.core.Painter.GPUCanvas(cc))
 		})
+		h.lastGPU = gt
 		return
 	}
+	h.lastGPU = nil
 	if changed {
 		canvas := h.core.Painter.Begin(f)
 		h.core.ReplayDamaged(canvas, damage)
@@ -49,4 +95,18 @@ func (h *shellHandler) present(f shell.Frame, changed bool, damage geom.Rect) {
 	if err := h.core.Painter.End(f); err != nil {
 		log.Printf("gophics: present: %v", err)
 	}
+}
+
+// presentDropped keeps the previous frame on screen after a layout/paint panic
+// dropped this one: a GPU target is deliberately skipped (nothing acquired,
+// desktop told not to re-request), a CPU target re-presents the painter's
+// retained surface (a no-op before the first frame has rasterized).
+func (h *shellHandler) presentDropped(f shell.Frame, tgt shell.Target) {
+	if _, ok := tgt.(gpuCanvasTarget); ok {
+		if st, ok := tgt.(gpuSkipTarget); ok {
+			st.SkipRenderGPU()
+		}
+		return
+	}
+	_ = h.core.Painter.End(f)
 }

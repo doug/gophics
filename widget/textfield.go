@@ -3,6 +3,7 @@ package widget
 import (
 	"math"
 	"strings"
+	"time"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
@@ -77,13 +78,18 @@ func (f TextField) CreateState() State { return &textFieldState{} }
 type textFieldState struct {
 	StateBase[TextField]
 	ed      text.Editor
-	ctx     Ctx // captured at Init, for ticker teardown
+	ctx     Ctx // captured at Init, for blink scheduling and teardown
 	focused bool
 	scrollX float32
 	// blink is seconds since the caret last moved or the field gained focus.
 	// The caret shows for the first half of each period, so it stays solid
-	// right after any activity, then blinks.
+	// right after any activity, then blinks. It is advanced by the flip timer
+	// (startBlink), which requests a frame only when visibility changes.
 	blink float64
+	// blinkTimer wakes the UI at the next caret flip (nil while not blinking);
+	// blinkGen invalidates fires from stopped or superseded timers.
+	blinkTimer *time.Timer
+	blinkGen   int
 	// lastWidth is the box width from the last layout, used by multiline
 	// caret navigation and hit testing.
 	lastWidth float32
@@ -128,33 +134,70 @@ func (s *textFieldState) change(ctx Ctx) {
 // desktop cadence).
 const caretPeriod = 1.06
 
-// caretBlink advances the blink clock while the field is focused and motion is
-// allowed, requesting its own repaints so the caret toggles. It reports
-// inactive (returns false) so it does NOT count as a settling animation — a
-// blinking caret must not make the app read as "perpetually animating" (that
-// would spin any settle loop forever). When unfocused or under reduce-motion it
-// stops requesting frames entirely and the caret is solid.
-type caretBlink struct{ s *textFieldState }
+// The caret blinks on a wall-clock timer, not a per-frame ticker: a frame is
+// requested only when the caret's visibility actually flips (~2/s), so a
+// focused-but-idle field no longer pins the app at the display rate. Each armed
+// timer wakes the UI goroutine (via Post) at the next half-period boundary,
+// advances the blink clock to it, invalidates once, and re-arms. When unfocused
+// the timer stops; under reduce-motion it stops too and the caret is solid
+// (caretVisible). Because the wakeups are one-shot invalidations — not a
+// registered animation — the app still reads as idle between flips and settle
+// loops never spin on a blinking caret.
 
-func (c caretBlink) Tick(dt float64) bool {
-	if !c.s.focused || c.s.ctx.ReduceMotion() {
-		return false
+// startBlink (re)arms the flip timer from the current blink phase, stopping any
+// pending one first. It arms only while the field is focused, motion is
+// allowed, and a runner Post hook exists (widget-only tests run without one;
+// the caret simply stays solid there).
+func (s *textFieldState) startBlink() {
+	s.stopBlink()
+	if !s.focused || s.ctx.ReduceMotion() {
+		return
 	}
-	c.s.blink += dt
-	c.s.ctx.Invalidate() // keep frames coming for the blink, without claiming to animate
-	return false
+	post := s.ctx.Post()
+	if post == nil {
+		return
+	}
+	gen := s.blinkGen
+	const half = caretPeriod / 2
+	delay := half - math.Mod(s.blink, half) // seconds to the next visibility flip
+	s.blinkTimer = time.AfterFunc(time.Duration(delay*float64(time.Second)), func() {
+		post(func() { s.blinkFlip(gen, delay) })
+	})
 }
 
-func (s *textFieldState) Init(ctx Ctx) {
-	s.ctx = ctx
-	ctx.AddTicker(caretBlink{s})
+// blinkFlip runs on the UI goroutine when the flip timer fires: it advances the
+// blink clock exactly to the boundary the timer was armed for, requests the one
+// repaint that shows the flip, and re-arms for the next half-period. A stale
+// generation (the timer was stopped or re-armed after this fire was scheduled)
+// is ignored.
+func (s *textFieldState) blinkFlip(gen int, advance float64) {
+	if gen != s.blinkGen || !s.focused {
+		return
+	}
+	s.blink += advance
+	s.ctx.Invalidate()
+	s.startBlink()
 }
 
-func (s *textFieldState) Dispose() { s.ctx.RemoveTicker(caretBlink{s}) }
+// stopBlink cancels any pending flip timer and invalidates in-flight fires.
+func (s *textFieldState) stopBlink() {
+	s.blinkGen++
+	if s.blinkTimer != nil {
+		s.blinkTimer.Stop()
+		s.blinkTimer = nil
+	}
+}
+
+func (s *textFieldState) Init(ctx Ctx) { s.ctx = ctx }
+
+func (s *textFieldState) Dispose() { s.stopBlink() }
 
 // activity resets the blink so the caret is solid right after typing or moving,
 // then resumes blinking after an idle half-period.
-func (s *textFieldState) activity() { s.blink = 0 }
+func (s *textFieldState) activity() {
+	s.blink = 0
+	s.startBlink()
+}
 
 // caretVisible reports whether to draw the caret this frame: only when focused
 // without a selection; solid under reduce-motion, else on for the first half of

@@ -1028,9 +1028,14 @@ func (a *App) renderFrameGPU(frames []windowFrame) {
 		frame.onDraw(ctx)
 
 		// beginFrame can fail (outdated / not yet configured). Demand-driven mode
-		// already consumed the invalidation — schedule another frame.
+		// already consumed the invalidation — schedule another frame. An
+		// intentional skip (Context.SkipFrame: content unchanged, keep the last
+		// presented frame) must NOT reschedule, or every skipped frame would
+		// trigger the next one and the loop would spin at vsync while idle.
 		if !ws.frameStarted {
-			a.RequestRedraw()
+			if !ws.intentionalSkip {
+				a.RequestRedraw()
+			}
 			ws.resetLazyState()
 			a.renderer.currentSurface = nil
 			continue
