@@ -32,7 +32,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	gcfg.VSync = true
 
 	app := gogpu.NewApp(gcfg)
-	w := &window{app: app, renderer: cfg.Renderer}
+	w := &window{app: app, renderer: cfg.Renderer, lc: newDesktopLifecycle()}
 
 	var dt float64
 	app.OnUpdate(func(d float64) { dt = d })
@@ -47,6 +47,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		})
 	})
 	app.OnFocus(func(focused bool) {
+		// Feed both the per-event Focus contract and the Lifecycle capability
+		// (shell/desktop/lifecycle.go) from the one focus/blur signal.
+		w.lc.setFocused(focused)
 		h.Event(w, shell.Focus{Focused: focused})
 	})
 	app.OnClose(func() {
@@ -207,6 +210,7 @@ type window struct {
 	renderer shell.RendererMode // resolved backend for this run
 	ggc      any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
 	gpuT     *gpuTarget         // identity-stable GPU target, rebound per frame (present.go)
+	lc       *desktopLifecycle  // run-state capability, fed by app.OnFocus (lifecycle.go)
 }
 
 func (w *window) Invalidate()           { w.app.RequestRedraw() }
