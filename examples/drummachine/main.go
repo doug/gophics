@@ -295,7 +295,7 @@ func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 
 func (s *drum) button(c paint.Canvas, r geom.Rect, label string, bgc, fg paint.Color) {
 	c.FillRRect(r, 8, bgc)
-	w := s.ctx.Painter().MeasureWidth(label, 15)
+	w := s.ctx.Painter().MeasureWidthIn("", label, 15)
 	c.TextIn("", label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 15, fg)
 }
 

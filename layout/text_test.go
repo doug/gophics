@@ -24,7 +24,7 @@ func TestTextWrapsWithinConstraint(t *testing.T) {
 	tb := &TextBox{Painter: p, Text: "the quick brown fox jumps over the lazy dog", TextSize: 14, Wrap: true}
 
 	wide := tb.Layout(Loose(geom.Size{W: 1000, H: 1000}))
-	if wide.H != p.Metrics(14).Ascent+p.Metrics(14).Descent {
+	if wide.H != p.MetricsIn("", 14).Ascent+p.MetricsIn("", 14).Descent {
 		t.Fatalf("wide layout should be single-line, H=%v", wide.H)
 	}
 
@@ -49,7 +49,7 @@ func TestTextWrapsWithinConstraint(t *testing.T) {
 
 func TestWrapRespectsNewlines(t *testing.T) {
 	p := textPainter(t)
-	lines := p.WrapText("a\nb\nc", 14, 1000)
+	lines := p.WrapTextIn("", "a\nb\nc", 14, 1000)
 	if len(lines) != 3 {
 		t.Fatalf("newline wrap = %v", lines)
 	}

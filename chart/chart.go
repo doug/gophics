@@ -128,7 +128,7 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	}
 	m := margins(p, w, ys)
 	if w.Legend && len(s.legend) > 0 {
-		m.Top += float32(legendRows(s.legend, p))*p.Metrics(legendSize).LineHeight() + 10
+		m.Top += float32(legendRows(s.legend, p))*p.MetricsIn("", legendSize).LineHeight() + 10
 	}
 
 	canvas := widget.Canvas{Clip: false, Draw: func(c paint.Canvas, size geom.Size) {
@@ -210,14 +210,14 @@ func margins(p *paint.Painter, w Chart, ys Scale) geom.Insets {
 	if !w.YAxis.Hide {
 		maxw := float32(0)
 		for _, t := range ys.Ticks(w.YAxis.tickCount(5)) {
-			if ww := p.MeasureWidth(w.YAxis.label(t), labelSize); ww > maxw {
+			if ww := p.MeasureWidthIn("", w.YAxis.label(t), labelSize); ww > maxw {
 				maxw = ww
 			}
 		}
 		in.Left = maxw + 14
 	}
 	if !w.XAxis.Hide {
-		in.Bottom = p.Metrics(labelSize).LineHeight() + 10
+		in.Bottom = p.MetricsIn("", labelSize).LineHeight() + 10
 	}
 	return in
 }

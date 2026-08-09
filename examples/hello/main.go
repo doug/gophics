@@ -22,10 +22,21 @@ type app struct {
 func (a *app) Frame(w shell.Window, f shell.Frame, dt float64) {
 	a.t += dt
 	p := float32(0.5 + 0.5*math.Sin(a.t*2))
-	c := a.painter.Begin(f)
+	c := a.painter.BeginOffscreen(f.Size(), f.Scale())
 	c.Clear(paint.Lerp(paint.RGB(0.07, 0.08, 0.16), paint.RGB(0.16, 0.10, 0.24), p))
-	if err := a.painter.End(f); err != nil {
-		log.Printf("paint: %v", err)
+	// Present the finished surface to the shell's frame target — the seam this
+	// example exists to show. The painter is platform-agnostic; the caller
+	// routes it to whichever target the frame offers (in real apps the app
+	// runtime does this dance for you — see app.present).
+	switch t := f.Target().(type) {
+	case shell.GPUTarget:
+		if err := a.painter.PresentGPU(t.View, t.W, t.H); err != nil {
+			log.Printf("paint: %v", err)
+		}
+	case shell.PixelTarget:
+		if s := a.painter.SurfaceRGBA(); s != nil {
+			t.Put(s)
+		}
 	}
 	w.Invalidate() // continuous animation: request the next frame
 }

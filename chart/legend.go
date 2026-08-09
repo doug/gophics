@@ -28,7 +28,7 @@ const (
 )
 
 func legendItemWidth(e legendEntry, sw float32, p *paint.Painter) float32 {
-	return sw + legendSwatchGap + p.MeasureWidth(e.label, legendSize)
+	return sw + legendSwatchGap + p.MeasureWidthIn("", e.label, legendSize)
 }
 
 // legendRows estimates how many rows the key needs (capped at 2), used to
@@ -49,7 +49,7 @@ func legendRows(entries []legendEntry, p *paint.Painter) int {
 // drawLegend lays the color key out left-to-right above the plot, wrapping to a
 // new row when an item would overflow the plot width.
 func drawLegend(c paint.Canvas, area geom.Rect, entries []legendEntry, th chartTheme, p *paint.Painter) {
-	met := p.Metrics(legendSize)
+	met := p.MetricsIn("", legendSize)
 	sw := legendSize * 0.85
 	lineGap := met.LineHeight()
 

@@ -440,7 +440,7 @@ func (s *board) textBtn(c paint.Canvas, r geom.Rect, label string, enabled bool)
 	if !enabled {
 		fg = paint.RGB(0.75, 0.77, 0.80)
 	}
-	w := s.ctx.Painter().MeasureWidth(label, 13)
+	w := s.ctx.Painter().MeasureWidthIn("", label, 13)
 	c.TextIn("", label, geom.Pt{X: r.Min.X + (r.Dx()-w)/2, Y: r.Min.Y + r.Dy()/2 + 5}, 13, fg)
 }
 

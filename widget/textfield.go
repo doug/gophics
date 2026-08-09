@@ -213,7 +213,7 @@ func (s *textFieldState) caretVisible() bool {
 }
 
 func (s *textFieldState) line(ctx Ctx) text.Line {
-	return ctx.Painter().Shape(s.ed.Text(), s.W().size())
+	return ctx.Painter().ShapeIn("", s.ed.Text(), s.W().size())
 }
 
 // paraLines returns the wrapped lines of the current content at the last
@@ -223,7 +223,7 @@ func (s *textFieldState) paraLines(ctx Ctx) []text.Line {
 	if w <= 0 {
 		w = 1e9
 	}
-	return ctx.Painter().Paragraph(s.ed.Text(), s.W().size(), w)
+	return ctx.Painter().ParagraphIn("", s.ed.Text(), s.W().size(), w)
 }
 
 // lineOf returns the index of the wrapped line containing rune index idx.
@@ -267,7 +267,7 @@ func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
 	if len(lines) == 0 {
 		return 0
 	}
-	m := ctx.Painter().Metrics(f.size())
+	m := ctx.Painter().MetricsIn("", f.size())
 	li := int(p.Y / m.LineHeight())
 	if li < 0 {
 		li = 0
@@ -482,9 +482,9 @@ type fieldBox struct {
 
 func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 	f := b.state.W()
-	m := b.painter.Metrics(f.size())
+	m := b.painter.MetricsIn("", f.size())
 	want := geom.Size{
-		W: b.painter.MeasureWidth(b.state.ed.Text(), f.size()),
+		W: b.painter.MeasureWidthIn("", b.state.ed.Text(), f.size()),
 		H: m.Ascent + m.Descent,
 	}
 	// A text field fills its available width (clicks in the empty area
@@ -493,7 +493,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 		want.W = cs.Max.W
 	}
 	if f.Multiline && cs.BoundedW() {
-		lines := b.painter.Paragraph(b.state.ed.Text(), f.size(), cs.Max.W)
+		lines := b.painter.ParagraphIn("", b.state.ed.Text(), f.size(), cs.Max.W)
 		if n := len(lines); n > 1 {
 			want.H += float32(n-1) * m.LineHeight()
 		}
@@ -506,7 +506,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 		return b.size
 	}
 	// Keep the caret visible: adjust scrollX so it lies within the box.
-	caretX := b.painter.Shape(b.state.ed.Text(), f.size()).CaretX(b.state.ed.Caret())
+	caretX := b.painter.ShapeIn("", b.state.ed.Text(), f.size()).CaretX(b.state.ed.Caret())
 	if caretX-b.state.scrollX > b.size.W-2 {
 		b.state.scrollX = caretX - b.size.W + 2
 	}
@@ -547,9 +547,9 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	f := b.state.W()
 	txC, caretC, selC, phC := f.resolvedColors()
 	sz := f.size()
-	m := b.painter.Metrics(sz)
+	m := b.painter.MetricsIn("", sz)
 	display, preStart, preEnd := b.state.display()
-	line := b.painter.Shape(display, sz)
+	line := b.painter.ShapeIn("", display, sz)
 	origin := geom.Pt{X: at.X - b.state.scrollX, Y: at.Y}
 	baseline := at.Y + m.Ascent
 	composing := preEnd > preStart
@@ -602,9 +602,9 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 	f := b.state.W()
 	txC, caretC, selC, phC := f.resolvedColors()
 	sz := f.size()
-	m := b.painter.Metrics(sz)
+	m := b.painter.MetricsIn("", sz)
 	txt := b.state.ed.Text()
-	lines := b.painter.Paragraph(txt, sz, b.size.W)
+	lines := b.painter.ParagraphIn("", txt, sz, b.size.W)
 	lineH := m.LineHeight()
 
 	c.PushClip(geom.Rect{Min: at, Max: at.Add(b.size.Pt())})

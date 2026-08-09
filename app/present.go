@@ -6,6 +6,7 @@ import (
 	"github.com/doug/gophics/internal/gfx/gg"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
 )
 
@@ -87,14 +88,32 @@ func (h *shellHandler) present(f shell.Frame, tgt shell.Target, changed bool, da
 	}
 	h.lastGPU = nil
 	if changed {
-		canvas := h.core.Painter.Begin(f)
+		canvas := h.core.Painter.BeginOffscreen(f.Size(), f.Scale())
 		h.core.ReplayDamaged(canvas, damage)
 	}
 	// Present even when skipped: the painter's surface is retained, and the
 	// swapchain still needs this frame's image.
-	if err := h.core.Painter.End(f); err != nil {
+	if err := presentSurface(h.core.Painter, tgt); err != nil {
 		log.Printf("gophics: present: %v", err)
 	}
+}
+
+// presentSurface hands the painter's finished CPU surface to the shell's
+// target. The target type-switch lives here — in the app runtime — so the
+// paint package stays platform-agnostic (it no longer imports shell).
+func presentSurface(p *paint.Painter, tgt shell.Target) error {
+	switch t := tgt.(type) {
+	case shell.GPUTarget:
+		// gg's GPU compositor path — usable when the gg/gpu accelerator is
+		// registered (the default; see paint/accel.go). Shells fall back to a
+		// PixelTarget (CPU-raster + blit) when the GPU is unavailable.
+		return p.PresentGPU(t.View, t.W, t.H)
+	case shell.PixelTarget:
+		if s := p.SurfaceRGBA(); s != nil {
+			t.Put(s)
+		}
+	}
+	return nil
 }
 
 // presentDropped keeps the previous frame on screen after a layout/paint panic
@@ -108,5 +127,5 @@ func (h *shellHandler) presentDropped(f shell.Frame, tgt shell.Target) {
 		}
 		return
 	}
-	_ = h.core.Painter.End(f)
+	_ = presentSurface(h.core.Painter, tgt)
 }

@@ -145,7 +145,7 @@ func TestFieldClickPlacesCaret(t *testing.T) {
 func TestFieldDragSelects(t *testing.T) {
 	h, st := fieldHarness(t)
 	h.Type("abcdef")
-	w := h.core.Painter.MeasureWidth("abcdef", 14)
+	w := h.core.Painter.MeasureWidthIn("", "abcdef", 14)
 	// Drag from before text start to past its end: selects everything.
 	h.DragTo(geom.Pt{X: 10, Y: 30}, geom.Pt{X: 12 + w, Y: 30})
 	h.Release(geom.Pt{X: 12 + w, Y: 30})

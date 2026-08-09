@@ -15,9 +15,9 @@ import (
 
 	"github.com/doug/gophics/internal/gfx/gg"
 	ggtext "github.com/doug/gophics/internal/gfx/gg/text"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
 
 	"github.com/doug/gophics/geom"
-	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/text"
 )
 
@@ -444,13 +444,6 @@ func (p *Painter) LoadFallbackFont(data []byte) error {
 	return nil
 }
 
-// Shape returns the shaped single line for s at size in the default
-// family (memoized): full shaping via the text package — bidi, fallback,
-// positional forms.
-func (p *Painter) Shape(s string, size float32) text.Line {
-	return p.ShapeIn("", s, size)
-}
-
 // ShapeIn is Shape in a named font family ("" = default).
 func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
 	k := shapeKey{font, s, size}
@@ -470,21 +463,9 @@ func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
 // measured/shaped text outside the Painter include it in their cache key.
 func (p *Painter) ShapeGen() uint64 { return p.shapeGen }
 
-// MeasureWidth returns the shaped advance width of s at the given size,
-// without needing an active frame. Used by layout.
-func (p *Painter) MeasureWidth(s string, size float32) float32 {
-	return p.Shape(s, size).Width
-}
-
 // MeasureWidthIn is MeasureWidth in a named font family.
 func (p *Painter) MeasureWidthIn(font, s string, size float32) float32 {
 	return p.ShapeIn(font, s, size).Width
-}
-
-// Metrics returns default-family font metrics at the given size, without
-// needing an active frame. Used by layout.
-func (p *Painter) Metrics(size float32) TextMetrics {
-	return p.MetricsIn("", size)
 }
 
 // MetricsIn is Metrics in a named font family.
@@ -503,22 +484,11 @@ func (p *Painter) MetricsIn(font string, size float32) TextMetrics {
 	return m
 }
 
-// Paragraph shapes and wraps s to maxWidth, returning positioned lines
-// with rune ranges (see text.Shaper.Paragraph). Used by rich text layout.
-func (p *Painter) Paragraph(s string, size, maxWidth float32) []text.Line {
-	return p.ParagraphIn("", s, size, maxWidth)
-}
-
-// ParagraphIn is Paragraph in a named font family.
+// ParagraphIn shapes and wraps s to maxWidth in a named font family ("" =
+// default), returning positioned lines with rune ranges (see
+// text.Shaper.Paragraph). Used by rich text layout.
 func (p *Painter) ParagraphIn(font, s string, size, maxWidth float32) []text.Line {
 	return p.shaperFor(font).Paragraph(s, size, maxWidth)
-}
-
-// WrapText splits s into lines that fit maxWidth at the given size, using
-// Unicode line-breaking (UAX #14) over shaped widths. Explicit newlines are
-// respected.
-func (p *Painter) WrapText(s string, size, maxWidth float32) []string {
-	return p.WrapTextIn("", s, size, maxWidth)
 }
 
 // WrapTextIn is WrapText in a named font family.
@@ -537,15 +507,12 @@ func (p *Painter) WrapTextIn(font, s string, size, maxWidth float32) []string {
 	return out
 }
 
-// Begin starts drawing a frame, (re)allocating the context if the surface
-// size or scale changed.
-func (p *Painter) Begin(f shell.Frame) Canvas {
-	return p.begin(f.Size(), f.Scale())
-}
-
-// BeginOffscreen starts drawing into an offscreen surface of the given
-// logical size and scale, with no shell frame. Retrieve the result with
-// Image. This is the headless path used by tests and golden images.
+// BeginOffscreen starts drawing into a surface of the given logical size and
+// scale, (re)allocating the context if either changed. Retrieve the result
+// with Image/SurfaceRGBA, or present it with PresentGPU. This is the only
+// entry point: the painter is platform-agnostic — the app runtime owns the
+// shell frame/target dance (app.present), keeping the paint→shell dependency
+// out of the drawing layer.
 func (p *Painter) BeginOffscreen(size geom.Size, scale float32) Canvas {
 	return p.begin(size, scale)
 }
@@ -574,23 +541,25 @@ func (p *Painter) Image() image.Image {
 	return p.dc.Image()
 }
 
-// End presents the frame to the shell's target. It is a no-op before the
-// first Begin (nothing has been rasterized yet).
-func (p *Painter) End(f shell.Frame) error {
+// PresentGPU composites the current surface to a GPU texture view of the given
+// physical size — gg's GPU compositor path, usable when the gg/gpu accelerator
+// is registered (the default; see paint/accel.go). A no-op before the first
+// Begin. The app runtime routes a shell.GPUTarget here (app.present).
+func (p *Painter) PresentGPU(view gpucontext.TextureView, w, h int) error {
 	if p.dc == nil {
 		return nil
 	}
-	switch t := f.Target().(type) {
-	case shell.GPUTarget:
-		// gg's GPU compositor path — usable when the gg/gpu accelerator is
-		// registered (the default; see paint/accel.go). Shells fall back to a
-		// PixelTarget (CPU-raster + blit) when the GPU is unavailable.
-		return p.dc.FlushGPUWithViewDamage(t.View, uint32(t.W), uint32(t.H), image.Rectangle{})
-	case shell.PixelTarget:
-		t.Put(asRGBA(p.dc.Image()))
+	return p.dc.FlushGPUWithViewDamage(view, uint32(w), uint32(h), image.Rectangle{})
+}
+
+// SurfaceRGBA returns the current surface as an *image.RGBA (physical pixels),
+// converting if the backing store has another format; nil before the first
+// Begin. The app runtime hands this to a shell.PixelTarget (app.present).
+func (p *Painter) SurfaceRGBA() *image.RGBA {
+	if p.dc == nil {
 		return nil
 	}
-	return nil
+	return asRGBA(p.dc.Image())
 }
 
 func asRGBA(img image.Image) *image.RGBA {

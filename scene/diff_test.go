@@ -66,7 +66,7 @@ func TestDiffTextChangeUsesMeasuredBounds(t *testing.T) {
 	if damage.Min.X != 20 || damage.Min.Y >= 50 || damage.Max.Y <= 50 {
 		t.Fatalf("text damage %v should span the baseline at y=50", damage)
 	}
-	wide := m.MeasureWidth("new longer text", 14)
+	wide := m.MeasureWidthIn("", "new longer text", 14)
 	if damage.Max.X < 20+wide {
 		t.Fatalf("damage %v narrower than new text width %v", damage, wide)
 	}

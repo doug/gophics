@@ -31,7 +31,7 @@ func TestShapedPipelineRender(t *testing.T) {
 	}
 
 	const mixed = "peace: السلام عليكم :end"
-	if l := p.Shape(mixed, 22); len(l.Glyphs) < 10 {
+	if l := p.ShapeIn("", mixed, 22); len(l.Glyphs) < 10 {
 		t.Fatalf("mixed line glyphs = %d", len(l.Glyphs))
 	}
 

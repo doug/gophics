@@ -39,13 +39,13 @@ func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th chartTheme,
 	if ax.Hide {
 		return
 	}
-	met := p.Metrics(labelSize)
+	met := p.MetricsIn("", labelSize)
 	baseline := (met.Ascent - met.Descent) / 2 // vertical-center offset onto the tick
 	for _, t := range ys.Ticks(ax.tickCount(5)) {
 		y := area.Max.Y - t.Pos*area.Dy()
 		c.Line(geom.Pt{X: area.Min.X, Y: y}, geom.Pt{X: area.Max.X, Y: y}, 1, th.grid)
 		lab := ax.label(t)
-		w := p.MeasureWidth(lab, labelSize)
+		w := p.MeasureWidthIn("", lab, labelSize)
 		c.TextIn("", lab, geom.Pt{X: area.Min.X - 8 - w, Y: y + baseline}, labelSize, th.text)
 	}
 }
@@ -55,14 +55,14 @@ func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th chartTheme,
 	if ax.Hide {
 		return
 	}
-	met := p.Metrics(labelSize)
+	met := p.MetricsIn("", labelSize)
 	for _, t := range xs.Ticks(ax.tickCount(6)) {
 		x := area.Min.X + t.Pos*area.Dx()
 		if ax.Grid {
 			c.Line(geom.Pt{X: x, Y: area.Min.Y}, geom.Pt{X: x, Y: area.Max.Y}, 1, th.grid)
 		}
 		lab := ax.label(t)
-		w := p.MeasureWidth(lab, labelSize)
+		w := p.MeasureWidthIn("", lab, labelSize)
 		c.TextIn("", lab, geom.Pt{X: x - w/2, Y: area.Max.Y + met.Ascent + 6}, labelSize, th.text)
 	}
 	c.Line(geom.Pt{X: area.Min.X, Y: area.Max.Y}, geom.Pt{X: area.Max.X, Y: area.Max.Y}, 1, th.axis)

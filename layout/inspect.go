@@ -82,7 +82,7 @@ func InspectOverlay(root Box, p geom.Pt, c paint.Canvas, painter *paint.Painter)
 
 	label := fmt.Sprintf("%s  %.0f×%.0f", boxTypeName(b), rect.Dx(), rect.Dy())
 	const fs float32 = 11
-	chipW := painter.MeasureWidth(label, fs) + 8
+	chipW := painter.MeasureWidthIn("", label, fs) + 8
 	chipH := fs + 6
 	y := rect.Min.Y - chipH // above the box, or inside if it would clip off-screen
 	if y < 0 {

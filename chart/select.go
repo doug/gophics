@@ -40,11 +40,11 @@ var (
 // drawTooltip renders a two-line value card near anchor, clamped inside area.
 func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.Pt, label, value string, _ chartTheme) {
 	const ls, vs = float32(12), float32(15)
-	mL, mV := p.Metrics(ls), p.Metrics(vs)
+	mL, mV := p.MetricsIn("", ls), p.MetricsIn("", vs)
 	lineL, lineV := mL.Ascent+mL.Descent, mV.Ascent+mV.Descent
 	padX, padY, gap := float32(11), float32(9), float32(3)
 
-	tw := max(p.MeasureWidth(label, ls), p.MeasureWidth(value, vs)) + padX*2
+	tw := max(p.MeasureWidthIn("", label, ls), p.MeasureWidthIn("", value, vs)) + padX*2
 	th := padY*2 + lineL + gap + lineV
 
 	tx, ty := anchor.X+14, anchor.Y-th-14

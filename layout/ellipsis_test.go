@@ -30,7 +30,7 @@ func TestSingleLineEllipsis(t *testing.T) {
 	if !strings.HasSuffix(tb.lines[0], "…") {
 		t.Fatalf("expected ellipsis, got %q", tb.lines[0])
 	}
-	if w := p.MeasureWidth(tb.lines[0], 14); w > 120 {
+	if w := p.MeasureWidthIn("", tb.lines[0], 14); w > 120 {
 		t.Fatalf("ellipsized width %v exceeds 120", w)
 	}
 	// Fits: no ellipsis.

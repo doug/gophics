@@ -383,7 +383,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	drawChip(c, geom.RectXYWH(bx+board-78, 24, 78, 48), "BEST", s.best, th, p)
 	// Size the button to its label (+ padding) so the text never clips.
 	const btnLabel, btnSize, btnPadX = "New Game", float32(14), float32(16)
-	lblW := p.MeasureWidth(btnLabel, btnSize)
+	lblW := p.MeasureWidthIn("", btnLabel, btnSize)
 	s.newBtn = geom.RectXYWH(bx, 78, lblW+2*btnPadX, 32)
 	c.FillRRect(s.newBtn, 6, th.Primary)
 	c.TextIn("", btnLabel, geom.Pt{X: s.newBtn.Min.X + btnPadX, Y: 78 + 16 + btnSize*0.35}, btnSize, th.OnPrimary)
@@ -418,7 +418,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 		c.FillRRect(geom.RectXYWH(x, y, cell, cell), 5, tileColor(v))
 		txt := fmt.Sprintf("%d", v)
 		fs := tileFont(v, cell)
-		tw := p.MeasureWidth(txt, fs)
+		tw := p.MeasureWidthIn("", txt, fs)
 		c.TextIn("", txt, geom.Pt{X: cx - tw/2, Y: cy + fs*0.35}, fs, tileText(v))
 		if scale != 1 {
 			c.PopTransform()
@@ -458,7 +458,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 
 // center draws s horizontally centred on x at baseline y (measured, not guessed).
 func center(c paint.Canvas, p *paint.Painter, s string, x, y, size float32, col paint.Color) {
-	c.TextIn("", s, geom.Pt{X: x - p.MeasureWidth(s, size)/2, Y: y}, size, col)
+	c.TextIn("", s, geom.Pt{X: x - p.MeasureWidthIn("", s, size)/2, Y: y}, size, col)
 }
 
 // isMerge reports whether cell (r,c) is a destination that merged this move.

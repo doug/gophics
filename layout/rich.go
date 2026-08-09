@@ -114,7 +114,7 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
-	m := b.Painter.Metrics(b.TextSize)
+	m := b.Painter.MetricsIn("", b.TextSize)
 	b.baseline, b.lineH = m.Ascent, m.LineHeight()
 
 	maxW := cs.Max.W
@@ -135,7 +135,7 @@ func (b *RichBox) Layout(cs Constraints) geom.Size {
 		b.spanEnds = append(b.spanEnds, n)
 	}
 
-	lines := b.Painter.Paragraph(full, b.TextSize, maxW)
+	lines := b.Painter.ParagraphIn("", full, b.TextSize, maxW)
 
 	b.segs = b.segs[:0]
 	var width float32

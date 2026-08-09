@@ -15,8 +15,8 @@ import (
 // lands on exact glyph boundaries.
 func selectRange(h *Headless, text string, from, to int, y float32) string {
 	p := h.core.Painter
-	x0 := p.MeasureWidth(text[:from], 14)
-	x1 := p.MeasureWidth(text[:to], 14)
+	x0 := p.MeasureWidthIn("", text[:from], 14)
+	x1 := p.MeasureWidthIn("", text[:to], 14)
 	h.DragTo(geom.Pt{X: x0, Y: y}, geom.Pt{X: x1, Y: y})
 	h.Release(geom.Pt{X: x1, Y: y})
 	h.KeyMod(shell.KeyC, shell.ModSuper)
@@ -55,7 +55,7 @@ func TestSelectableDoubleTapSelectsWord(t *testing.T) {
 
 	// Double-tap inside "World" → selects the whole word.
 	h := selHarness(t, s)
-	mid := h.core.Painter.MeasureWidth("Hello Wor", 14) // inside "World"
+	mid := h.core.Painter.MeasureWidthIn("", "Hello Wor", 14) // inside "World"
 	doubleTapAt(h, mid, 8)
 	h.KeyMod(shell.KeyC, shell.ModSuper)
 	if got := clip(h); got != "World" {
@@ -64,7 +64,7 @@ func TestSelectableDoubleTapSelectsWord(t *testing.T) {
 
 	// Double-tap inside "Hello" → selects "Hello".
 	h2 := selHarness(t, s)
-	doubleTapAt(h2, h2.core.Painter.MeasureWidth("He", 14), 8)
+	doubleTapAt(h2, h2.core.Painter.MeasureWidthIn("", "He", 14), 8)
 	h2.KeyMod(shell.KeyC, shell.ModSuper)
 	if got := clip(h2); got != "Hello" {
 		t.Fatalf("double-tap in Hello copied %q, want \"Hello\"", got)
@@ -76,7 +76,7 @@ func TestSelectableDoubleTapAtBoundarySelectsNearestWord(t *testing.T) {
 	h := selHarness(t, s)
 	// A tap at the single-space boundary rounds to an adjacent word offset,
 	// so double-tap grabs the nearest whole word (never crashes or empties).
-	x := (h.core.Painter.MeasureWidth("Hello", 14) + h.core.Painter.MeasureWidth("Hello ", 14)) / 2
+	x := (h.core.Painter.MeasureWidthIn("", "Hello", 14) + h.core.Painter.MeasureWidthIn("", "Hello ", 14)) / 2
 	doubleTapAt(h, x, 8)
 	h.KeyMod(shell.KeyC, shell.ModSuper)
 	if got := clip(h); got != "Hello" && got != "World" {
@@ -88,7 +88,7 @@ func TestSelectableDoubleTapInGapSelectsNothing(t *testing.T) {
 	const s = "Hi   there" // three spaces — a genuine whitespace run
 	h := selHarness(t, s)
 	// Middle of the gap: the offset lands on a space flanked by spaces.
-	x := (h.core.Painter.MeasureWidth("Hi ", 14) + h.core.Painter.MeasureWidth("Hi  ", 14)) / 2
+	x := (h.core.Painter.MeasureWidthIn("", "Hi ", 14) + h.core.Painter.MeasureWidthIn("", "Hi  ", 14)) / 2
 	doubleTapAt(h, x, 8)
 	h.core.Owner.Clipboard.(*MemClipboard).S = "SENTINEL"
 	h.KeyMod(shell.KeyC, shell.ModSuper)

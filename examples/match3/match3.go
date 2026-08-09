@@ -597,5 +597,5 @@ func abs2(x float32) float32 {
 
 // textW estimates a string's width for right-alignment (approx, monospace-ish).
 func (s *game) textW(str string, size float32) float32 {
-	return s.ctx.Painter().MeasureWidth(str, size)
+	return s.ctx.Painter().MeasureWidthIn("", str, size)
 }
