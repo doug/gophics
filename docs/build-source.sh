@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 
 # Keep in sync with build-demos.sh and the cards in gallery.html — every demo
 # with a source link must appear here or its "source" page 404s.
-demos=(hn gallery canvas flowfield flocking particles match3 solitaire roguelike todo notes health 2048 sudoku drummachine whiteboard glass epub)
+demos=(hn gallery canvas flowfield flocking particles match3 solitaire roguelike todo notes health 2048 sudoku drummachine whiteboard glass epub capabilities)
 
 nav='<nav class="top"><div class="wrap">
   <a class="brand" href="../index.html">gophics<span class="dot">.</span></a>
