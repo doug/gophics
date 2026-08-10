@@ -23,6 +23,12 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 // capabilities) once per window. The wiring is identity-stable — rebuilding the
 // Posted<Cap> adapters and closures every frame was pure per-frame garbage — so
 // it re-runs only when the shell hands us a different Window.
+//
+// The tree mounts (Init + first Build) inside newCore, before any shell exists,
+// so capabilities are nil then; they only become available here, on the first
+// frame. Marking the tree dirty when they first arrive lets Build re-read them
+// (and Init-time subscriptions re-run on the rebuild) — otherwise an app that
+// reads ctx.<Cap>() would see it nil until an unrelated state change.
 func (h *shellHandler) wireWindow(w shell.Window) {
 	if h.wired == w {
 		return
@@ -31,6 +37,7 @@ func (h *shellHandler) wireWindow(w shell.Window) {
 	h.core.Owner.Clipboard = w
 	h.core.Owner.OpenURL = w.OpenURL
 	h.wireMedia(w)
+	h.core.Owner.RebuildAll()
 }
 
 // gpuCanvasTarget is a frame Target that rasterizes on the GPU: RenderGPU runs
