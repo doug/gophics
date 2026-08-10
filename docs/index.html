@@ -37,7 +37,7 @@
   <p class="lead">It borrows the <em>architecture</em> behind the best cross-platform UIs, not their APIs — and leans into what Go does that Dart and JavaScript can't.</p>
   <div class="pillars">
     <div class="pillar"><h3><span class="em">One binary,</span> every screen</h3><p><code>CGO_ENABLED=0</code> everywhere. Same code, one static binary — desktop, web, iOS, Android, even a terminal — pixel-identical. <code>GOOS=windows go build</code> from a Mac. No runtime, no webview.</p></div>
-    <div class="pillar"><h3><span class="em">A library,</span> not a platform</h3><p>Gophics is a <code>go.mod</code> line. Pop a window from a CLI, embed a live UI in a server, add a viz pane to a pipeline — the programs an app-owning SDK can't serve.</p></div>
+    <div class="pillar"><h3><span class="em">A library,</span> not a platform</h3><p>Gophics is a <code>go.mod</code> line. Pop a window from a CLI, embed a live UI in a server, add a viz pane to a pipeline — the programs an app-owning SDK can't serve. And platform services — file picker, share, notifications, clipboard, secure storage, IME — are plain <code>ctx.&lt;Cap&gt;()</code> calls that degrade cleanly where a host doesn't offer them.</p></div>
     <div class="pillar"><h3><span class="em">Your UI is</span> <code>go test</code></h3><p>Golden-image tests, headless and deterministic. A server can render a widget tree straight to a PNG. No emulator, no device farm — assert on your UI like any other code.</p></div>
     <div class="pillar"><h3><span class="em">One language,</span> top to bottom</h3><p>Go end to end — no codegen, no context-switch. You inherit Go's infra, data, and networking ecosystem, which is exactly where these apps live.</p></div>
   </div>
@@ -89,6 +89,7 @@
     <div class="pillar"><h3>The web binary is big</h3><p>Go compiles the whole renderer into WASM (~5 MB gzipped per demo). Desktop ships lean; the web is one <em>option</em> of a single codebase, and shrinking the web payload is a top roadmap item.</p></div>
     <div class="pillar"><h3>No hot reload</h3><p>Go can't match the Dart VM — the answer is fast rebuild + an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second; close.</p></div>
     <div class="pillar"><h3>The catalog compounds</h3><p>You compose primitives rather than assemble hundreds of pre-built widgets. It grows every release, and app-specific widgets are cheap to write.</p></div>
+    <div class="pillar"><h3>Bridges are filling in</h3><p>The capability layer — clean Go interfaces, generated wiring, graceful degradation — ships and its web impls are browser-verified; the native desktop/mobile leaves (objc, portals, COM, Kotlin, Swift) land per release. Missing bridges read as <code>nil</code>, so the UI just hides the affordance.</p></div>
   </div>
 </div></section>
 

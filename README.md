@@ -22,6 +22,7 @@ Gophics borrows the *architecture* behind the best cross-platform UIs — not th
 
 - **`go build` is the whole story.** `CGO_ENABLED=0` on desktop and web (mobile binds the same Go into a thin native host). One static binary per platform, cross-compiled from any OS. No SDK, no toolchain doctor, no engine artifacts to install.
 - **A library, not an app framework.** Gophics is a `go.mod` line. Pop a window from a CLI, embed a live UI inside a server, or render a widget tree straight to a PNG — headless, no display.
+- **Platform services, one Go interface.** File pickers, share sheets, notifications, the clipboard, secure storage, deep links, connectivity, IME, and more are plain `ctx.<Cap>()` calls that light up whatever the host provides and degrade cleanly where it doesn't — no `#ifdef`, no plugin zoo. The web implementations ship and are browser-verified today; native desktop/mobile leaves fill in per release, all zero-CGo.
 - **It draws every pixel itself.** A pure-Go WebGPU renderer (vendored in-tree, zero CGo) composites the UI, so it looks identical on every platform — including GPU opacity/blend layers, gradients, shadows, and real text shaping.
 - **Real concurrency.** Goroutines plus a single UI thread. Streaming data into a live UI — a chore in most UI stacks — is the easy case here.
 - **Everything is `go test`.** Golden-image tests, fuzzing, benchmarks, pprof — ordinary Go tooling, no emulators or bespoke harnesses.
@@ -122,6 +123,7 @@ Every example runs on the desktop, most compile to the browser, and all are test
 | `canvas` | the custom-paint escape hatch — draw shapes/paths/text every frame |
 | `solitaire`, `match3`, `roguelike` | games — drag, sprites, sound, animation |
 | `gallery` | a tour of the widget catalog |
+| `capabilities` | a live inspector of every platform bridge — connectivity, battery, file picker, share, notifications, clipboard, secure storage, IME, web view… |
 
 ## Platforms — one widget tree, everywhere
 
@@ -159,9 +161,10 @@ Gophics is young and moving fast — so, the real caveats up front:
 - **The web binary is big.** Go compiles the whole renderer into WASM, so a demo is ~5 MB gzipped. Desktop ships a lean native binary; the web is one *option* of a single codebase, and shrinking the web payload is a top roadmap item.
 - **No hot reload.** Go can't match the Dart VM here — the answer is fast rebuilds plus an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second, but close.
 - **The widget catalog compounds, not complete.** You compose primitives rather than assemble hundreds of pre-built widgets; the catalog grows every release.
-- **The API is pre-1.0.** Expect breaking changes between v0.x releases while the surface settles; nothing is frozen yet, and renames land eagerly while the cost is low.
+- **Platform bridges are filling in.** The capability *layer* — clean Go interfaces, generated wiring, graceful degradation — ships, and the web implementations are browser-verified; the native desktop/mobile leaves (objc / portals / COM / Kotlin / Swift) land incrementally. Where a bridge isn't wired yet, `ctx.<Cap>()` is simply `nil` and your UI hides the affordance — no crash, no stub dialog.
+- **The API is pre-1.0.** Expect breaking changes between v0.x releases while the surface settles; nothing is frozen yet, and renames land eagerly while the cost is low. The first tagged release is **v0.1.0**.
 
-The hard part — own-rendering pipeline, constraint layout, GPU compositing, real text shaping, four live platforms, headless golden tests — is done.
+The hard part — own-rendering pipeline, constraint layout, GPU compositing, real text shaping, four live platforms, headless golden tests, and the zero-CGo capability layer — is done.
 
 ## Built on
 
