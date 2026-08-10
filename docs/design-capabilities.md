@@ -157,13 +157,13 @@ no-op everywhere.
 
 ---
 
-## Capability status (2026-08-09)
+## Capability status (2026-08-10)
 
 Every capability follows the same three-layer pattern; "✅" = implemented and
-built (web = browser-verifiable; desktop/mobile = compile-verified on the targets
-noted, not device-run), "~" = partial/best-effort, "stub" = interface + compile-
-checked `TODO(platform)` (no native code written that can't be verified here),
-"—" = not applicable.
+built (web = browser-verified or -verifiable — see the live-verification note
+below; desktop/mobile = compile-verified on the targets noted, not device-run),
+"~" = partial/best-effort, "stub" = interface + compile-checked `TODO(platform)`
+(no native code written that can't be verified here), "—" = not applicable.
 
 | Capability | Web | Desktop | Mobile | Notes |
 |---|---|---|---|---|
@@ -182,14 +182,36 @@ checked `TODO(platform)` (no native code written that can't be verified here),
 | **Accessibility** | ~ | stub | stub | Announce (aria-live) ✅; SetTree (AT-tree) TODO |
 | **WebView** | ✅ | stub | stub | iframe overlay; native subview TODO |
 
-**Honesty note.** The web implementations are code-complete and compile for wasm,
-following the same pattern as the browser-verified FilePicker/Share; they have NOT
-each been live-exercised in a browser because no example wires them yet. The
-desktop implementations compile on macOS/linux/windows but can't be run-verified
-from this environment. The native leaf calls (macOS objc, Linux portals/GTK,
-Windows COM, Android Kotlin, iOS Swift) are marked `TODO(platform)` — not written
-speculatively — because they can't be compiled or run on the current host; each
-is a small fill-in on the shared FFI/bridge helpers when a device is available.
+**Web live-verification (2026-08-10).** The `examples/capabilities` inspector now
+wires every capability, so the web implementations were exercised in a real
+browser (Chrome, Apple GPU, WebGPU active) rather than only compiled. Verified
+working end-to-end:
+
+- **Connectivity** — reads `online`; **Battery** — `100% (charging)`;
+  **Lifecycle** — reports `background` and updates on tab switch; **Links** —
+  surfaces the launch URL; **Gamepad** — polls (`no controller connected`).
+- **SecureStorage** — write round-trips to localStorage (`saved …`).
+- **Clipboard** — `writeText` invoked with the phrase (spied) + on-screen confirm.
+- **TextInput (IME)** — `Show()` creates and focuses the hidden `<input>`; an
+  `input` event delivers committed text to `OnText`, updating the app (`typed: …`).
+- **Accessibility** — `Announce` creates an `aria-live="polite"` region with the text.
+- **WebView** — an `<iframe src="https://example.com">` overlay renders over the canvas.
+- **WindowControl** — `SetTitle` changes `document.title`. (`requestFullscreen` is
+  issued but Chrome refuses it under a synthetic click; it works on a real user
+  gesture — an automation limitation, not a code defect.)
+
+Confirmed **wired and reachable but not scriptable here** (invoking them opens a
+native OS dialog or permission prompt that blocks headless browser automation —
+each needs a human click to complete): **FilePicker, Share, Notifier, Geolocation**.
+The backing web APIs (`<input type=file>`, `navigator.share`/`canShare`,
+`Notification`, `navigator.geolocation`) are all present in the browser.
+
+**Desktop / mobile / native.** The desktop implementations compile on
+macOS/linux/windows but can't be run-verified from this environment. The native
+leaf calls (macOS objc, Linux portals/GTK, Windows COM, Android Kotlin, iOS Swift)
+are marked `TODO(platform)` — not written speculatively — because they can't be
+compiled or run on the current host; each is a small fill-in on the shared
+FFI/bridge helpers when a device is available.
 
 **Not yet declared** (roadmap, need the WebView-class subview decision or deep
 native work): Video playback, Biometrics (Face/Touch ID), Sensors, Push
