@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/doug/gophics/internal/gfx/gogpu"
 	"github.com/doug/gophics/internal/gfx/gpucontext"
@@ -35,7 +36,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	w := &window{app: app, renderer: cfg.Renderer, lc: newDesktopLifecycle()}
 
 	var dt float64
-	app.OnUpdate(func(d float64) { dt = d })
+	// OnUpdate runs on the main thread (OnDraw does not), so it is where
+	// main-thread-bound platform work is drained. See mainthread.go.
+	app.OnUpdate(func(d float64) { dt = d; w.drainMain() })
 	app.OnDraw(func(dc *gogpu.Context) {
 		w.onFrameStart(dc) // GPU build lazily sets up the ggcanvas here
 		h.Frame(w, &frame{dc: dc, w: w}, dt)
@@ -207,6 +210,8 @@ func modBits(m gpucontext.Modifiers) shell.Mods {
 
 type window struct {
 	app      *gogpu.App
+	mainMu   sync.Mutex
+	mainQ    []func()           // tasks awaiting the main thread; see mainthread.go
 	renderer shell.RendererMode // resolved backend for this run
 	ggc      any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
 	gpuT     *gpuTarget         // identity-stable GPU target, rebound per frame (present.go)
