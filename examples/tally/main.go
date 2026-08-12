@@ -22,6 +22,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
@@ -105,7 +106,7 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 			Child:  s.balancesView(th),
 		}})
 	}
-	root := widget.Column(s.header(th), body)
+	root := widget.Column(s.header(th, ctx), body)
 	root.CrossAlign = layout.CrossStretch
 	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg, Child: root}}
 }
@@ -267,21 +268,76 @@ func (s *state) visibleEntries() []book.Entry {
 	return out
 }
 
-// header is the top bar: the app name and the loaded ledger's file name.
-func (s *state) header(th theme.Theme) widget.Widget {
+// header is the top bar: the app name, an Open button where the platform offers a
+// file picker, and the loaded ledger's name.
+func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
 	name := "no ledger"
 	if s.book != nil {
 		name = s.book.Path
 	}
+	row := []widget.Widget{
+		widget.Text{S: "Tally", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
+		widget.Expand(widget.Sized{W: 12}),
+	}
+	// The picker is nil on platforms without one (and the web build carries no
+	// filesystem path), so the affordance simply isn't offered there.
+	if ctx.FilePicker() != nil {
+		row = append(row,
+			theme.Button{Label: "Open ledger…", OnTap: func() { s.pick(ctx) }},
+			widget.Sized{W: 14},
+		)
+	}
+	row = append(row, widget.Text{S: name, Size: th.Type.Label, Color: th.Muted, Ellipsis: true, MaxLines: 1})
+
 	bar := widget.Padding{
 		Insets: geom.Insets{Left: 24, Right: 24, Top: 16, Bottom: 14},
-		Child: widget.Row(
-			widget.Text{S: "Tally", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
-			widget.Expand(widget.Sized{W: 12}),
-			widget.Text{S: name, Size: th.Type.Label, Color: th.Muted},
-		),
+		Child:  widget.Row(row...),
 	}
 	return widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}})
+}
+
+// pick opens the platform file panel and loads the chosen beancount file.
+func (s *state) pick(ctx widget.Ctx) {
+	fp := ctx.FilePicker()
+	if fp == nil {
+		return
+	}
+	fp.Open(shell.OpenOptions{Accept: []string{".beancount", ".bean", "text/plain"}},
+		func(files []shell.PickedFile, err error) {
+			if err != nil {
+				s.SetState(func() { s.err = err })
+				return
+			}
+			if len(files) == 0 {
+				return // cancelled
+			}
+			s.load(files[0])
+		})
+}
+
+// load replaces the open ledger with a picked file, preferring its real path (so
+// includes resolve relative to it) and falling back to its bytes on platforms
+// that don't expose one.
+func (s *state) load(f shell.PickedFile) {
+	var b *book.Book
+	var err error
+	if f.Path != "" {
+		b, err = book.Open(f.Path)
+	} else {
+		b, err = book.OpenBytes(f.Name, f.Data)
+	}
+	var tr *ledger.BalanceTree
+	if err == nil {
+		tr, err = b.Tree()
+	}
+	s.SetState(func() {
+		s.err = err
+		if err != nil {
+			return
+		}
+		s.book, s.tree = b, tr
+		s.account, s.entries, s.selected, s.filter = "", nil, -1, ""
+	})
 }
 
 func divider(th theme.Theme) widget.Widget {
