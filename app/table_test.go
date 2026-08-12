@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"image/png"
 	"os"
 	"testing"
@@ -30,6 +31,7 @@ type tableTestState struct {
 	selected  int
 	sortCol   int
 	sortDesc  bool
+	longText  bool // overflow regression: put an absurdly long string in col 2
 }
 
 func (s *tableTestState) Init(widget.Ctx) {
@@ -57,7 +59,11 @@ func (s *tableTestState) Build(ctx widget.Ctx) widget.Widget {
 			case 1:
 				return widget.Text{S: fmt.Sprintf("Payee number %d", r), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 			case 2:
-				return widget.Text{S: "Expenses:Food:Groceries", Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
+				acct := "Expenses:Food:Groceries"
+				if s.longText {
+					acct = "Assets:US:Vanguard:Cash, Income:US:Hoogle:Salary, Expenses:Taxes:US:Medicare, Expenses:Taxes:US:SocSec, Expenses:Taxes:US:Federal"
+				}
+				return widget.Text{S: acct, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
 			default:
 				return widget.Text{S: fmt.Sprintf("%.2f", float64(r%1000)+0.5), Font: "mono", Size: th.Type.Body, Color: th.Text}
 			}
@@ -133,6 +139,47 @@ func TestTableHeaderSort(t *testing.T) {
 	h.Tap(geom.Pt{X: hitX, Y: 20}) // same column again → toggle
 	if st.sortCol != col || !st.sortDesc {
 		t.Fatalf("re-tapping column %d should toggle to descending; got col=%d desc=%v", col, st.sortCol, st.sortDesc)
+	}
+}
+
+// TestTableCellDoesNotOverflowColumn is a regression test for cells bleeding into
+// the next column. A Flex hands non-flex children an unbounded main axis, so a
+// cell aligned with spacers gave its Text infinite width and Ellipsis never
+// truncated — long account names painted straight over the Amount column.
+//
+// It renders the same table twice, once with a short middle cell and once with an
+// absurdly long one, and asserts the right-hand region (the numeric columns) is
+// pixel-identical: whatever the middle column contains must stay inside it.
+func TestTableCellDoesNotOverflowColumn(t *testing.T) {
+	render := func(long bool) image.Image {
+		var st *tableTestState
+		h, err := NewHeadless(tableApp{hook: func(s *tableTestState) { st = s }}, Config{
+			Size: geom.Size{W: 560, H: 420}, Font: goregular.TTF,
+			FontFamilies: map[string][]byte{theme.FontBold: gobold.TTF, "mono": gomono.TTF},
+		}, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Render()
+		st.longText = long
+		h.core.Owner.RebuildAll()
+		return h.Render()
+	}
+
+	short, long := render(false), render(true)
+	b := short.Bounds()
+	// The Amount column is the right-most 110 logical px; at scale 2 that's 220
+	// device px. Compare a generous right-hand strip.
+	x0 := b.Max.X - 200
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := x0; x < b.Max.X; x++ {
+			r1, g1, b1, a1 := short.At(x, y).RGBA()
+			r2, g2, b2, a2 := long.At(x, y).RGBA()
+			if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+				t.Fatalf("long middle cell bled into the numeric columns at (%d,%d): %v vs %v",
+					x, y, [4]uint32{r1, g1, b1, a1}, [4]uint32{r2, g2, b2, a2})
+			}
+		}
 	}
 }
 

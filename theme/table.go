@@ -229,21 +229,26 @@ func cellsRow(cols []Col, gap float32, build func(c int) widget.Widget) widget.W
 	return row
 }
 
-// colCell sizes one cell to its column and aligns its content horizontally. It
-// aligns with spacers rather than a fill-and-position box so a cell never has to
-// resolve its height against the row — the outer row centers it vertically.
+// colCell sizes one cell to its column and aligns its content horizontally.
+//
+// Alignment uses an Align box, not spacers, and that choice is load-bearing: a
+// Flex lays out non-flex children with an unbounded main axis, so a cell aligned
+// by spacers would hand its content infinite width — and a Text with Ellipsis
+// set would never learn the column width to truncate against, overflowing into
+// the next column. Align takes the column's width and passes it down as the
+// child's max (Loosen keeps max, drops min), so long text ellipsizes exactly at
+// the column edge.
 func colCell(col Col, gap float32, content widget.Widget) widget.Widget {
 	padded := widget.Padding{Insets: geom.Insets{Left: gap / 2, Right: gap / 2}, Child: content}
 
-	var inner widget.Widget
+	alignX := float32(0) // AlignStart
 	switch col.Align {
 	case AlignEnd:
-		inner = widget.Row(widget.Spacer(), padded)
+		alignX = 1
 	case AlignCenter:
-		inner = widget.Row(widget.Spacer(), padded, widget.Spacer())
-	default:
-		inner = widget.Row(padded, widget.Spacer())
+		alignX = 0.5
 	}
+	inner := widget.Align{X: alignX, Y: 0.5, Child: padded}
 
 	if col.Width > 0 {
 		return widget.Sized{W: col.Width, Child: inner}
