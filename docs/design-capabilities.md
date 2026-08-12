@@ -169,7 +169,8 @@ below; desktop/mobile = compile-verified on the targets noted, not device-run),
 |---|---|---|---|---|
 | Clipboard, OpenURL, SafeInsets, Input, DarkMode | ✅ | ✅ | ✅ | pre-existing core |
 | Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge |
-| FilePicker, Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native panels/keychain/intents TODO |
+| **FilePicker** | ✅ | ✅ macOS / stub | stub | macOS = real NSOpenPanel/NSSavePanel via zero-CGo objc; linux/windows TODO |
+| Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native share sheet/notifications/keychain TODO |
 | **Socket** (WebSocket) | ✅ | ✅ | ✅ | pure-Go RFC 6455 client (`!js`), tested |
 | **Lifecycle** (fg/bg) | ✅ | ✅ | stub | desktop via focus routing |
 | **Links** (deep links) | ✅ | ~ | stub | desktop = os.Args; OnLink no-op |
@@ -206,7 +207,24 @@ each needs a human click to complete): **FilePicker, Share, Notifier, Geolocatio
 The backing web APIs (`<input type=file>`, `navigator.share`/`canShare`,
 `Notification`, `navigator.geolocation`) are all present in the browser.
 
-**Desktop / mobile / native.** The desktop implementations compile on
+**macOS FilePicker (2026-08-12) — device-verified.** The macOS file panels are
+implemented for real, on `internal/objc` (a small dlopen + `objc_msgSend` bridge
+over the pure-Go goffi FFI — still zero CGo), and verified by running a live app:
+a real `NSOpenPanel` becomes modal and its cancel path reports `files=0, err=nil`
+per the contract. The objc bridge itself has unit tests (NSString round-trip
+including unicode, `-length`, `-isEqualToString:`, NSArray bridging, nil-messaging
+safety, framework loading).
+
+Getting there uncovered a framework-wide constraint worth knowing: gogpu runs
+window/input events and `OnUpdate` on the **main thread** but `OnDraw` on a
+**render thread**, and gophics drives Build/layout/tickers from `OnDraw` — so
+framework code is *not* on the main thread by default, while AppKit aborts the
+process (not a catchable error) if an NSWindow is constructed anywhere else. The
+desktop shell now has a main-thread dispatch queue (`shell/desktop/mainthread.go`,
+drained in `OnUpdate`) that every main-thread-bound capability can use. This is the
+prerequisite for the remaining AppKit capabilities (share sheet, notifications).
+
+**Desktop / mobile / native.** The other desktop implementations compile on
 macOS/linux/windows but can't be run-verified from this environment. The native
 leaf calls (macOS objc, Linux portals/GTK, Windows COM, Android Kotlin, iOS Swift)
 are marked `TODO(platform)` — not written speculatively — because they can't be

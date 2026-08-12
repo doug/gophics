@@ -23,6 +23,12 @@ type FilePickerWindow interface {
 type PickedFile struct {
 	Name string
 	Data []byte
+	// Path is the file's filesystem path, where the platform has one — desktop
+	// panels do; the web File API and mobile content URIs do not, and leave it
+	// empty. It exists so a desktop app can reopen or write back to the same file
+	// (a document app remembering its last ledger). Never require it: fall back to
+	// Name/Data when it's empty.
+	Path string
 }
 
 // OpenOptions configures an open dialog.
