@@ -22,6 +22,7 @@ type Capabilities struct {
 	Links         shell.Links
 	Notifier      shell.Notifier
 	Permissions   shell.Permissions
+	Preferences   shell.Preferences
 	SecureStorage shell.SecureStorage
 	Share         shell.Share
 	Socket        shell.Socket
@@ -81,6 +82,10 @@ func (c Ctx) Notifier() shell.Notifier { return c.el.owner.Notifier }
 // Permissions returns the platform Permissions capability (shell.Permissions), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Permissions() shell.Permissions { return c.el.owner.Permissions }
+
+// Preferences returns the platform Preferences capability (shell.Preferences), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Preferences() shell.Preferences { return c.el.owner.Preferences }
 
 // SecureStorage returns the platform SecureStorage capability (shell.SecureStorage), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

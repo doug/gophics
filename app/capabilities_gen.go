@@ -51,6 +51,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.PermissionWindow); ok {
 		o.Permissions = shell.PostedPermissions(x.Permissions(), o.Post)
 	}
+	if x, ok := w.(shell.PreferencesWindow); ok {
+		o.Preferences = x.Preferences()
+	}
 	if x, ok := w.(shell.ShareWindow); ok {
 		o.Share = shell.PostedShare(x.Share(), o.Post)
 	}

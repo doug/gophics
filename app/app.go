@@ -25,7 +25,11 @@ import (
 
 // Config configures a gophics app.
 type Config struct {
-	Title      string
+	Title string
+	// AppID identifies the app for per-user storage (where ctx.Preferences()
+	// persists). A stable reverse-DNS name like "com.example.tally" is
+	// conventional; empty falls back to the executable's name.
+	AppID      string
 	Size       geom.Size // initial logical window size
 	Background paint.Color
 	Font       []byte // TTF/OTF data for the default font (required for text)
@@ -703,7 +707,7 @@ func Run(root widget.Widget, cfg Config) error {
 	if renderer == shell.RendererCPU {
 		paint.UseCPU()
 	}
-	return desktopRun(h, shell.Config{Title: cfg.Title, Size: cfg.Size, Resizable: true, Renderer: renderer})
+	return desktopRun(h, shell.Config{Title: cfg.Title, AppID: cfg.AppID, Size: cfg.Size, Resizable: true, Renderer: renderer})
 }
 
 // NewHandler builds the app's shell.Handler without attaching a shell —

@@ -33,7 +33,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	gcfg.VSync = true
 
 	app := gogpu.NewApp(gcfg)
-	w := &window{app: app, renderer: cfg.Renderer, lc: newDesktopLifecycle()}
+	w := &window{app: app, appID: cfg.AppID, renderer: cfg.Renderer, lc: newDesktopLifecycle()}
 
 	var dt float64
 	// OnUpdate runs on the main thread (OnDraw does not), so it is where
@@ -209,13 +209,16 @@ func modBits(m gpucontext.Modifiers) shell.Mods {
 }
 
 type window struct {
-	app      *gogpu.App
-	mainMu   sync.Mutex
-	mainQ    []func()           // tasks awaiting the main thread; see mainthread.go
-	renderer shell.RendererMode // resolved backend for this run
-	ggc      any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
-	gpuT     *gpuTarget         // identity-stable GPU target, rebound per frame (present.go)
-	lc       *desktopLifecycle  // run-state capability, fed by app.OnFocus (lifecycle.go)
+	app       *gogpu.App
+	appID     string
+	prefsOnce sync.Once
+	prefs     *filePrefs
+	mainMu    sync.Mutex
+	mainQ     []func()           // tasks awaiting the main thread; see mainthread.go
+	renderer  shell.RendererMode // resolved backend for this run
+	ggc       any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
+	gpuT      *gpuTarget         // identity-stable GPU target, rebound per frame (present.go)
+	lc        *desktopLifecycle  // run-state capability, fed by app.OnFocus (lifecycle.go)
 }
 
 func (w *window) Invalidate()           { w.app.RequestRedraw() }

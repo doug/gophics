@@ -70,6 +70,12 @@ func ResolveRenderer(requested RendererMode) RendererMode {
 // Config describes the initial window configuration.
 type Config struct {
 	Title string
+	// AppID identifies the application for per-user storage locations (the
+	// preferences file's directory). Use a stable, filesystem-safe name — a
+	// reverse-DNS string like "com.example.tally" is conventional. Empty falls
+	// back to the executable's name, which is stable for a shipped binary but
+	// changes if the binary is renamed.
+	AppID string
 	// Size is the initial logical size. Zero means a platform default.
 	Size      geom.Size
 	Resizable bool

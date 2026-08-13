@@ -170,6 +170,7 @@ below; desktop/mobile = compile-verified on the targets noted, not device-run),
 | Clipboard, OpenURL, SafeInsets, Input, DarkMode | ✅ | ✅ | ✅ | pre-existing core |
 | Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge |
 | **FilePicker** | ✅ | ✅ macOS / stub | stub | macOS = real NSOpenPanel/NSSavePanel via zero-CGo objc; linux/windows TODO |
+| **Preferences** (settings) | ✅ | ✅ all | stub | desktop = JSON under os.UserConfigDir; distinct from SecureStorage (never prompts) |
 | Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native share sheet/notifications/keychain TODO |
 | **Socket** (WebSocket) | ✅ | ✅ | ✅ | pure-Go RFC 6455 client (`!js`), tested |
 | **Lifecycle** (fg/bg) | ✅ | ✅ | stub | desktop via focus routing |
@@ -223,6 +224,23 @@ process (not a catchable error) if an NSWindow is constructed anywhere else. The
 desktop shell now has a main-thread dispatch queue (`shell/desktop/mainthread.go`,
 drained in `OnUpdate`) that every main-thread-bound capability can use. This is the
 prerequisite for the remaining AppKit capabilities (share sheet, notifications).
+
+**Preferences vs SecureStorage.** They look alike and are deliberately separate.
+`Preferences` is for ordinary settings (window state, last opened document, chosen
+theme): plain, always available, and it never prompts — desktop stores JSON under
+`os.UserConfigDir()`, web uses namespaced localStorage. `SecureStorage` means the
+OS keychain/keystore, which exists to guard secrets and *can* prompt the user;
+routing a file path or window size through it would be both wrong and
+user-hostile. Verified in a running desktop app: the capability wires, values
+round-trip, and the JSON lands on disk.
+
+**A trap worth knowing (bit both the capabilities example and Tally).** The widget
+tree mounts — `Init` and the first `Build` — *before* a window exists, so every
+`ctx.<Cap>()` is nil on that first pass; capabilities appear on the frame after the
+shell wires them (which triggers a rebuild). Any "do this once on first Build"
+initialization that consults a capability will therefore always miss it. Either
+gate the one-shot on the capability being non-nil, or do what Tally does: act
+immediately with a default and upgrade when the capability appears.
 
 **Desktop / mobile / native.** The other desktop implementations compile on
 macOS/linux/windows but can't be run-verified from this environment. The native
