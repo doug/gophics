@@ -35,7 +35,7 @@ func findNodeBalance(tr *bean.Tree, account, currency string) (decimal.Decimal, 
 // chronologically, in one currency, and the running balance is the accumulation
 // of the amounts.
 func TestRegisterRunningBalance(t *testing.T) {
-	b, err := Open("../testdata/example.beancount")
+	b, err := Open("../demo/example.beancount")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestRegisterRunningBalance(t *testing.T) {
 // multi-commodity totals seen in the UI come from the balance *tree* aggregating
 // children — parent accounts like Assets:US:ETrade carry no postings themselves.
 func TestCurrenciesForAccount(t *testing.T) {
-	b, err := Open("../testdata/example.beancount")
+	b, err := Open("../demo/example.beancount")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

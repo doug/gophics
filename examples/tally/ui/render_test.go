@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"image/png"
@@ -26,7 +26,7 @@ func harness(t *testing.T) (*app.Headless, *state) {
 	stateHook = func(s *state) { st = s }
 	defer func() { stateHook = nil }()
 
-	h, err := app.NewHeadless(Tally{}, app.Config{
+	h, err := app.NewHeadless(App{}, app.Config{
 		Size: geom.Size{W: 1040, H: 680}, Font: goregular.TTF,
 		FontFamilies: map[string][]byte{theme.FontBold: gobold.TTF, "mono": gomono.TTF},
 	}, 2)

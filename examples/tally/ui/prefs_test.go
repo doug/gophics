@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"path/filepath"
@@ -57,7 +57,7 @@ func TestLoadFallsBackToDemo(t *testing.T) {
 
 	// The frame after wiring: Preferences appears and the remembered ledger
 	// replaces the demo.
-	real := filepath.Join("testdata", "example.beancount")
+	real := filepath.Join("..", "demo", "example.beancount")
 	p := newFakePrefs(map[string]string{prefKeyLedger: real})
 	s.loadWith(p)
 	if !s.prefsChecked {
@@ -99,7 +99,7 @@ func TestLoadDropsStaleLedgerPath(t *testing.T) {
 // (Build runs every frame).
 func TestLoadIsIdempotent(t *testing.T) {
 	s := &state{selected: -1}
-	p := newFakePrefs(map[string]string{prefKeyLedger: filepath.Join("testdata", "example.beancount")})
+	p := newFakePrefs(map[string]string{prefKeyLedger: filepath.Join("..", "demo", "example.beancount")})
 
 	s.loadWith(p)
 	first := s.book

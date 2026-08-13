@@ -17,6 +17,13 @@ require (
 )
 
 require (
+	golang.org/x/mobile v0.0.0-20260812174124-2f419b2fb945 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
+)
+
+require (
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-webgpu/goffi v0.6.1 // indirect
 	github.com/shopspring/decimal v1.4.0
@@ -25,3 +32,5 @@ require (
 )
 
 replace github.com/doug/gophics => ../..
+
+tool golang.org/x/mobile/cmd/gobind

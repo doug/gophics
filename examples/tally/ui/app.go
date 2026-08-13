@@ -1,25 +1,14 @@
-// Command tally is a native, local-first personal-finance app. Your data is a
-// plain-text beancount file; the beango engine does the accounting; gophics draws
-// the UI — one Go codebase for desktop, web, and mobile, testable with `go test`.
-//
-// This is the P1b slice: a balance tree you can drill into, and a per-account
-// register rendered with the Tufte-styled theme.Table. Editing, charts, and
-// native file open follow.
-package main
+// Package ui is Tally's interface: the same widget tree the desktop binary, the
+// web build and the mobile hosts all render. Keeping it in a package rather than
+// in main is what lets the gomobile bind surface reuse it verbatim.
+package ui
 
 import (
-	_ "embed"
-	"log"
 	"strings"
 	"time"
 
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/gomono"
-	"golang.org/x/image/font/gofont/goregular"
-
 	"github.com/shopspring/decimal"
 
-	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/intl"
 	"github.com/doug/gophics/layout"
@@ -30,21 +19,16 @@ import (
 
 	"github.com/dougfritz/tally/bean"
 	"github.com/dougfritz/tally/book"
+	"github.com/dougfritz/tally/demo"
 )
 
-// demoLedger is a realistic ~6k-line beancount file, embedded so the app runs
-// self-contained on first launch (and in the browser, where there's no filesystem).
-//
-//go:embed testdata/example.beancount
-var demoLedger []byte
+// App is the root widget.
+type App struct{}
 
-// Tally is the root widget.
-type Tally struct{}
-
-func (Tally) CreateState() widget.State { return &state{} }
+func (App) CreateState() widget.State { return &state{} }
 
 type state struct {
-	widget.StateBase[Tally]
+	widget.StateBase[App]
 	book *book.Book
 	tree *bean.Tree
 	err  error
@@ -130,7 +114,7 @@ func (s *state) loadWith(p shell.Preferences) {
 		return
 	}
 	s.loaded = true
-	s.book, s.err = book.OpenBytes("example.beancount", demoLedger)
+	s.book, s.err = book.OpenBytes(demo.Name, demo.Ledger)
 	if s.err == nil {
 		s.tree, s.err = s.book.Tree()
 	}
@@ -178,7 +162,11 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 	}
 	root := widget.Column(s.header(th, ctx), body)
 	root.CrossAlign = layout.CrossStretch
-	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg, Child: root}}
+	// SafeArea keeps the header clear of a notch or Dynamic Island and the
+	// content off the home indicator; it costs nothing on desktop, where the
+	// platform reports no insets.
+	return widget.Provide[theme.Theme]{Value: th,
+		Child: widget.Fill{Color: th.Bg, Child: widget.SafeArea{Child: root}}}
 }
 
 // balancesView is the scrolling account balance tree.
@@ -362,18 +350,31 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
 			widget.Sized{W: 14},
 		)
 	}
-	if s.book != nil && s.book.CanEdit() {
-		row = append(row,
-			theme.Button{Label: "+ New transaction", Primary: true, OnTap: func() { s.toggleForm() }},
-			widget.Sized{W: 14},
-		)
-	}
-	row = append(row, widget.Text{S: name, Size: th.Type.Label, Color: th.Muted, Ellipsis: true, MaxLines: 1})
-
-	bar := widget.Padding{
-		Insets: geom.Insets{Left: 24, Right: 24, Top: 16, Bottom: 14},
-		Child:  widget.Row(row...),
-	}
+	newLabel := "+ New transaction"
+	// The ledger's name is the first thing to go when space is short: it is
+	// context, not navigation, and a phone header has room for neither.
+	bar := widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		cols := append([]widget.Widget{}, row...)
+		// A phone header has room for navigation and one action, nothing more:
+		// the button loses its noun first, then the ledger's name goes entirely.
+		if s.book != nil && s.book.CanEdit() {
+			label := newLabel
+			if cs.Max.W < 560 {
+				label = "+ New"
+			}
+			cols = append(cols,
+				theme.Button{Label: label, Primary: true, OnTap: func() { s.toggleForm() }},
+				widget.Sized{W: 12})
+		}
+		if cs.Max.W > 720 {
+			cols = append(cols,
+				widget.Text{S: name, Size: th.Type.Label, Color: th.Muted, Ellipsis: true, MaxLines: 1})
+		}
+		return widget.Padding{
+			Insets: geom.Insets{Left: 16, Right: 16, Top: 12, Bottom: 10},
+			Child:  widget.Row(cols...),
+		}
+	}}
 	head := widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}}, s.addPanel(th))
 	head.CrossAlign = layout.CrossStretch
 	return head
@@ -585,20 +586,4 @@ func atoiSafe(s string) int {
 		n = n*10 + int(s[i]-'0')
 	}
 	return n
-}
-
-func main() {
-	if err := app.Run(Tally{}, app.Config{
-		Title:      "Tally",
-		AppID:      "com.dougfritz.tally",
-		Size:       geom.Size{W: 1040, H: 680},
-		Background: theme.Light().Bg,
-		Font:       goregular.TTF,
-		FontFamilies: map[string][]byte{
-			theme.FontBold: gobold.TTF,
-			"mono":         gomono.TTF,
-		},
-	}); err != nil {
-		log.Fatal(err)
-	}
 }

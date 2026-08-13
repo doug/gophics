@@ -5,7 +5,7 @@ import "testing"
 // TestOpenExample loads the bundled realistic ledger (beango's example.beancount,
 // ~6k lines) and checks the accounting engine produced a sensible balance tree.
 func TestOpenExample(t *testing.T) {
-	b, err := Open("../testdata/example.beancount")
+	b, err := Open("../demo/example.beancount")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

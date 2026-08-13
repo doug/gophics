@@ -11,7 +11,7 @@ import (
 
 func testBook(t *testing.T) *Book {
 	t.Helper()
-	b, err := Open("../testdata/example.beancount")
+	b, err := Open("../demo/example.beancount")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

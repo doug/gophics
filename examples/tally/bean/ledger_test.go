@@ -339,7 +339,7 @@ func asBalanceError(err error, out **BalanceError) bool {
 // fractional-share purchases whose cost-scaled rounding is exactly where a naive
 // tolerance rule goes wrong.
 func TestRealLedgerSelfVerifies(t *testing.T) {
-	l, err := Load("../testdata/example.beancount")
+	l, err := Load("../demo/example.beancount")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

@@ -290,7 +290,7 @@ func TestSortedByDate(t *testing.T) {
 // it comes back whole: every line accounted for, no errors, and the directive mix
 // a real personal ledger has.
 func TestParseRealLedger(t *testing.T) {
-	src, err := os.ReadFile("../testdata/example.beancount")
+	src, err := os.ReadFile("../demo/example.beancount")
 	if err != nil {
 		t.Skipf("no sample ledger: %v", err)
 	}

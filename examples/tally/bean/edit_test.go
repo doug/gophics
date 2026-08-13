@@ -303,7 +303,7 @@ func TestDeleteRemovesOnlyItsEntry(t *testing.T) {
 // assertion failures on the account that was touched, each off by exactly the
 // inserted amount, and nothing else about the ledger broke.
 func TestEditRealLedgerInvalidatesDownstreamAssertions(t *testing.T) {
-	raw, err := os.ReadFile("../testdata/example.beancount")
+	raw, err := os.ReadFile("../demo/example.beancount")
 	if err != nil {
 		t.Skipf("no sample ledger: %v", err)
 	}
