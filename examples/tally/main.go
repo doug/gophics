@@ -47,6 +47,9 @@ type state struct {
 	tree *ledger.BalanceTree
 	err  error
 
+	loaded       bool
+	prefsChecked bool
+
 	// account is the drilled-into account ("" → the balances overview).
 	account  string
 	currency string
@@ -63,11 +66,48 @@ func (s *state) Init(widget.Ctx) {
 		stateHook(s)
 	}
 	s.selected = -1
-	s.book, s.err = book.OpenBytes("example.beancount", demoLedger)
-	if s.err != nil {
+}
+
+// prefKeyLedger is where the path of the last opened ledger is remembered.
+const prefKeyLedger = "ledger.path"
+
+// ensureLoaded opens a ledger, upgrading to the remembered one once the shell has
+// wired its capabilities.
+//
+// The ordering matters: the widget tree mounts — Init and the first Build — before
+// a window exists, so ctx.Preferences() is nil on that first pass and only becomes
+// available on the frame after wiring (which triggers a rebuild). A one-shot
+// "load on first Build" would therefore always miss it and show the demo forever.
+// So the demo loads immediately (something is on screen from frame one) and the
+// remembered ledger replaces it as soon as Preferences appears.
+func (s *state) ensureLoaded(ctx widget.Ctx) { s.loadWith(ctx.Preferences()) }
+
+// loadWith holds the logic, taking the capability as a parameter so it can be
+// unit-tested against a fake store (including a nil one).
+func (s *state) loadWith(p shell.Preferences) {
+	if p != nil && !s.prefsChecked {
+		s.prefsChecked = true
+		if path, ok := p.Get(prefKeyLedger); ok && path != "" {
+			if b, err := book.Open(path); err == nil {
+				if tr, err := b.Tree(); err == nil {
+					s.book, s.tree, s.err = b, tr, nil
+					s.loaded = true
+					return
+				}
+			}
+			// The remembered file is unreadable now (moved, deleted, renamed).
+			// Drop the stale entry rather than nagging about it every launch.
+			_ = p.Delete(prefKeyLedger)
+		}
+	}
+	if s.loaded {
 		return
 	}
-	s.tree, s.err = s.book.Tree()
+	s.loaded = true
+	s.book, s.err = book.OpenBytes("example.beancount", demoLedger)
+	if s.err == nil {
+		s.tree, s.err = s.book.Tree()
+	}
 }
 
 // open drills into an account's register; only accounts with their own postings
@@ -91,6 +131,7 @@ func (s *state) back() {
 }
 
 func (s *state) Build(ctx widget.Ctx) widget.Widget {
+	s.ensureLoaded(ctx)
 	th := theme.Auto(ctx)
 	var body widget.Widget
 	switch {
@@ -312,6 +353,10 @@ func (s *state) pick(ctx widget.Ctx) {
 				return // cancelled
 			}
 			s.load(files[0])
+			// Remember it so the next launch opens the same ledger.
+			if p := ctx.Preferences(); p != nil && files[0].Path != "" {
+				_ = p.Set(prefKeyLedger, files[0].Path)
+			}
 		})
 }
 
@@ -438,6 +483,7 @@ func fmtMoney(d decimal.Decimal) string {
 func main() {
 	if err := app.Run(Tally{}, app.Config{
 		Title:      "Tally",
+		AppID:      "com.dougfritz.tally",
 		Size:       geom.Size{W: 1040, H: 680},
 		Background: theme.Light().Bg,
 		Font:       goregular.TTF,
