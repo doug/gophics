@@ -118,6 +118,11 @@ func SetInsets(top, right, bottom, left float64) {
 	bridge.SetInsets(float32(top), float32(right), float32(bottom), float32(left))
 }
 
+// SetKeyboardHeight forwards the on-screen keyboard's height in physical pixels,
+// or 0 when it is dismissed. Without it a phone form is unusable: the keyboard
+// covers the field being typed into and the platform moves nothing.
+func SetKeyboardHeight(heightPx float64) { bridge.SetKeyboardHeight(float32(heightPx)) }
+
 // TextInputActive reports whether the UI wants the on-screen keyboard.
 func TextInputActive() bool { return bridge.TextInputActive() }
 

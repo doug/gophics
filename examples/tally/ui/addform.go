@@ -48,7 +48,10 @@ func (f *addForm) reset(now time.Time) {
 }
 
 // addPanel renders the form, or nothing when it's closed.
-func (s *state) addPanel(th theme.Theme) widget.Widget {
+// addPanel renders the form. fullScreen is the phone arrangement: scrollable,
+// with the keyboard padding inside the scroll so the buttons can be brought
+// above the keys.
+func (s *state) addPanel(th theme.Theme, fullScreen bool) widget.Widget {
 	f := &s.form
 	if !f.open {
 		return widget.Sized{}
@@ -113,17 +116,20 @@ func (s *state) addPanel(th theme.Theme) widget.Widget {
 		return c
 	}
 
-	actions := widget.Row(
+	actionRow := []widget.Widget{
 		theme.Button{Label: saveLabel(s.book), Primary: true, OnTap: func() { s.submitForm() }},
-		widget.Sized{W: 10},
-		theme.Button{Label: "Cancel", OnTap: func() { s.SetState(func() { f.open = false }) }},
-		widget.Sized{W: 16},
-		widget.Expand(s.formStatus(th)),
-	)
+	}
+	if !fullScreen {
+		// The full-screen sheet already has Cancel in its own title bar.
+		actionRow = append(actionRow, widget.Sized{W: 10},
+			theme.Button{Label: "Cancel", OnTap: func() { s.SetState(func() { f.open = false }) }})
+	}
+	actionRow = append(actionRow, widget.Sized{W: 16}, widget.Expand(s.formStatus(th)))
+	actions := widget.Row(actionRow...)
 
 	body := widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
 		fields := stack()
-		if cs.Max.W >= wideWidth {
+		if !fullScreen && cs.Max.W >= wideWidth {
 			fields = spread()
 		}
 		c := widget.Column(fields, widget.Sized{H: 14}, actions)
@@ -134,6 +140,19 @@ func (s *state) addPanel(th theme.Theme) widget.Widget {
 	rows := widget.Column(body)
 	rows.CrossAlign = layout.CrossStretch
 
+	if fullScreen {
+		// The keyboard padding goes *inside* the scroll: that makes the content
+		// taller than the viewport, so the fields and buttons can be scrolled up
+		// clear of the keys. Padding outside a scroll would just move the whole
+		// form further down, which is the opposite of the point.
+		return widget.Scroll{Child: widget.KeyboardAvoiding{
+			Extra: 16,
+			Child: widget.Padding{
+				Insets: geom.Insets{Left: 16, Right: 16, Top: 14, Bottom: 20},
+				Child:  rows,
+			},
+		}}
+	}
 	return widget.Padding{
 		Insets: geom.Insets{Left: 16, Right: 16, Top: 4, Bottom: 14},
 		Child: widget.Decorated{

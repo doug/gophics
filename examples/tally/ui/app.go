@@ -143,6 +143,27 @@ func (s *state) back() {
 func (s *state) Build(ctx widget.Ctx) widget.Widget {
 	s.ensureLoaded(ctx)
 	th := theme.Auto(ctx)
+	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.SafeArea{Child: widget.LayoutBuilder{
+			Build: func(cs layout.Constraints) widget.Widget {
+				return s.screen(th, ctx, cs.Max.W >= wideWidth)
+			},
+		}}}}
+}
+
+// screen assembles the app for a given width.
+//
+// On a phone an open form takes the whole screen and scrolls, rather than sitting
+// as a panel above the dashboard. That is not only the familiar mobile pattern —
+// it is the only arrangement that works with a keyboard up. A panel cannot move
+// out from under the keyboard: padding its bottom pushes it further down, and
+// nothing above it can scroll.
+func (s *state) screen(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget {
+	if s.form.open && !wide {
+		col := widget.Column(s.formHeader(th), widget.Expand(s.addPanel(th, true)))
+		col.CrossAlign = layout.CrossStretch
+		return col
+	}
 	var body widget.Widget
 	switch {
 	case s.err != nil:
@@ -161,13 +182,23 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 			Child:  s.balancesView(th),
 		}})
 	}
-	root := widget.Column(s.header(th, ctx), body)
+	root := widget.Column(s.header(th, ctx, wide), body)
 	root.CrossAlign = layout.CrossStretch
-	// SafeArea keeps the header clear of a notch or Dynamic Island and the
-	// content off the home indicator; it costs nothing on desktop, where the
-	// platform reports no insets.
-	return widget.Provide[theme.Theme]{Value: th,
-		Child: widget.Fill{Color: th.Bg, Child: widget.SafeArea{Child: root}}}
+	return root
+}
+
+// formHeader is the phone form's own title bar, since the app header is replaced.
+func (s *state) formHeader(th theme.Theme) widget.Widget {
+	bar := widget.Padding{
+		Insets: geom.Insets{Left: 16, Right: 16, Top: 12, Bottom: 10},
+		Child: widget.Row(
+			widget.Text{S: "New transaction", Font: theme.FontBold,
+				Size: th.Type.Heading, Color: th.Text},
+			widget.Expand(widget.Sized{W: 8}),
+			theme.Button{Label: "Cancel", OnTap: func() { s.SetState(func() { s.form.open = false }) }},
+		),
+	}
+	return widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}})
 }
 
 // balancesView is the scrolling account balance tree.
@@ -382,7 +413,7 @@ func (s *state) visibleEntries() []book.Entry {
 
 // header is the top bar: the app name, an Open button where the platform offers a
 // file picker, and the loaded ledger's name.
-func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
+func (s *state) header(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget {
 	name := "no ledger"
 	if s.book != nil {
 		name = s.book.Path
@@ -428,7 +459,13 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
 			Child:  widget.Row(cols...),
 		}
 	}}
-	head := widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}}, s.addPanel(th))
+	// The panel form is the wide-screen arrangement; a phone gets the full-screen
+	// sheet in screen() instead.
+	panel := widget.Widget(widget.Sized{})
+	if wide {
+		panel = s.addPanel(th, false)
+	}
+	head := widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}}, panel)
 	head.CrossAlign = layout.CrossStretch
 	return head
 }

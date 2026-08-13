@@ -41,11 +41,17 @@ class MainActivity : Activity() {
         view = v
         setContentView(v)
         ViewCompat.setOnApplyWindowInsetsListener(v) { _, insets ->
-            val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+            // System bars and the keyboard are reported separately on purpose.
+            // Folding the IME into the safe-area insets makes every screen pad
+            // for a keyboard it may not have raised, and makes a layout that
+            // should sit under the gesture bar unable to say so.
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             Tallymobile.setInsets(
                 bars.top.toDouble(), bars.right.toDouble(),
                 bars.bottom.toDouble(), bars.left.toDouble())
+
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            Tallymobile.setKeyboardHeight(ime.bottom.toDouble())
             insets
         }
     }

@@ -53,6 +53,7 @@ class GophicsView: UIView, UIKeyInput {
             layer.addSublayer(cpuLayer)
         }
         TallymobileSetDarkMode(traitCollection.userInterfaceStyle == .dark)
+        observeKeyboard()
         let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
@@ -139,6 +140,33 @@ class GophicsView: UIView, UIKeyInput {
         cpuLayer.contents = img
         cpuLayer.isHidden = false
         CATransaction.commit()
+    }
+
+    // The Go side draws every pixel, so nothing moves out from under the keyboard
+    // unless we say how tall it is. UIKeyboardWillChangeFrame covers show, hide,
+    // height changes (predictive bar, emoji switch) and the interactive dismiss
+    // gesture in one notification.
+    private func observeKeyboard() {
+        let nc = NotificationCenter.default
+        nc.addObserver(self, selector: #selector(keyboardFrameChanged(_:)),
+                       name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        nc.addObserver(self, selector: #selector(keyboardWillHide(_:)),
+                       name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+
+    @objc private func keyboardFrameChanged(_ note: Notification) {
+        guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let window = window else { return }
+        // The notification frame is in screen coordinates; the overlap with this
+        // view is what actually covers content.
+        let inView = convert(end, from: window.screen.coordinateSpace)
+        let overlap = max(0, bounds.maxY - inView.minY)
+        let scale = window.screen.scale
+        TallymobileSetKeyboardHeight(Double(overlap * scale))
+    }
+
+    @objc private func keyboardWillHide(_ note: Notification) {
+        TallymobileSetKeyboardHeight(0)
     }
 
     private func syncKeyboard() {
