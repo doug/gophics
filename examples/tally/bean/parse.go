@@ -44,6 +44,15 @@ func (p *parser) file() *File {
 		}
 		before := p.i
 		if d := p.directive(); d != nil {
+			// Record the directive's span, ignoring blank lines the block loop
+			// consumed past its last real content.
+			last := p.i - 1
+			for last > before && p.lines[last].blank {
+				last--
+			}
+			if es, ok := d.(interface{ setEnd(int) }); ok {
+				es.setEnd(p.lines[last].num)
+			}
 			f.Directives = append(f.Directives, d)
 		}
 		if p.i == before {

@@ -8,10 +8,21 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Position locates a directive in its source, for diagnostics.
+// Position locates a directive in its source. EndLine spans the indented block
+// (postings, metadata) that belongs to it, which is what lets an editor replace
+// or delete exactly one entry and leave the rest of the file untouched.
 type Position struct {
-	File string
-	Line int
+	File    string
+	Line    int
+	EndLine int
+}
+
+// Lines reports the directive's inclusive line span.
+func (p Position) Lines() (start, end int) {
+	if p.EndLine < p.Line {
+		return p.Line, p.Line
+	}
+	return p.Line, p.EndLine
 }
 
 func (p Position) String() string {
@@ -169,6 +180,9 @@ type base struct {
 	Pos  Position
 	Meta Meta
 }
+
+// setEnd records the last source line belonging to this directive.
+func (b *base) setEnd(line int) { b.Pos.EndLine = line }
 
 func (b base) When() Date      { return b.Date }
 func (b base) Where() Position { return b.Pos }
