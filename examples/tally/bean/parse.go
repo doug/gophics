@@ -426,7 +426,7 @@ func (p *parser) balance(b base, toks []token, ln line) Directive {
 	if len(toks) < 4 {
 		return p.fail(ln, "balance needs an account and an amount")
 	}
-	d := &Balance{base: b, Account: Account(toks[2].text)}
+	d := &Assertion{base: b, Account: Account(toks[2].text)}
 	rest := toks[3:]
 
 	// An optional tolerance is written "amount ~ tolerance currency".

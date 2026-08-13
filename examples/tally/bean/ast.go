@@ -219,8 +219,10 @@ type Commodity struct {
 	Currency string
 }
 
-// Balance asserts an account's balance on a date, within an optional tolerance.
-type Balance struct {
+// Assertion checks an account's balance on a date, within an optional tolerance
+// — beancount writes it as the `balance` directive. It is named for what it does
+// so that Balance can mean a running total, which is the far more common noun.
+type Assertion struct {
 	base
 	Account   Account
 	Amount    Amount

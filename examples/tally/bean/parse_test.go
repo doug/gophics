@@ -143,7 +143,7 @@ plugin "beancount.plugins.auto"
 `)
 	want := []any{
 		&Option{}, &Plugin{}, &Open{}, &Open{}, &Close{}, &Commodity{},
-		&Balance{}, &Pad{}, &Price{}, &Note{}, &Document{}, &Event{},
+		&Assertion{}, &Pad{}, &Price{}, &Note{}, &Document{}, &Event{},
 	}
 	if len(f.Directives) != len(want) {
 		for i, d := range f.Directives {
@@ -170,7 +170,7 @@ plugin "beancount.plugins.auto"
 	if c := f.Directives[5].(*Commodity); len(c.Meta) != 1 || c.Meta[0].Key != "name" {
 		t.Errorf("commodity metadata = %+v", c.Meta)
 	}
-	if bal := f.Directives[6].(*Balance); bal.Amount.Number.String() != "3793.56" {
+	if bal := f.Directives[6].(*Assertion); bal.Amount.Number.String() != "3793.56" {
 		t.Errorf("balance = %+v", bal.Amount)
 	}
 	if pr := f.Directives[8].(*Price); pr.Currency != "GLD" || pr.Amount.Currency != "USD" {
@@ -314,7 +314,7 @@ func TestParseRealLedger(t *testing.T) {
 		"*bean.Transaction": 1007,
 		"*bean.Open":        63,
 		"*bean.Price":       810,
-		"*bean.Balance":     78,
+		"*bean.Assertion":   78,
 		"*bean.Commodity":   10,
 		"*bean.Event":       5,
 		"*bean.Option":      2,
@@ -370,8 +370,8 @@ func typeName(v any) string {
 		return "*bean.Close"
 	case *Commodity:
 		return "*bean.Commodity"
-	case *Balance:
-		return "*bean.Balance"
+	case *Assertion:
+		return "*bean.Assertion"
 	case *Pad:
 		return "*bean.Pad"
 	case *Price:
