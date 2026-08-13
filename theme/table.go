@@ -53,7 +53,12 @@ type Table struct {
 	// ColumnGap is the horizontal breathing room inside each cell (0 → 14).
 	ColumnGap float32
 
-	// Selected highlights a row with the faintest tint (−1 → none).
+	// Selectable enables the selection highlight. It exists so the zero Table is
+	// inert: Selected is a row index, and without this gate its zero value would
+	// mean "row 0 is selected" and quietly tint the first row of every table that
+	// never asked for selection.
+	Selectable bool
+	// Selected is the highlighted row when Selectable is set; negative means none.
 	Selected int
 	// OnTapRow fires when a body row is tapped.
 	OnTapRow func(row int)
@@ -110,7 +115,7 @@ func (s *tableState) Build(ctx widget.Ctx) widget.Widget {
 			return tableRow{
 				cols: t.Columns, row: i, cell: t.Cell,
 				gap: gap, vpad: vpad,
-				selected: i == t.Selected,
+				selected: t.Selectable && i == t.Selected,
 				zebra:    t.Zebra, rowRule: t.RowRule,
 				onTap: t.rowTap(i),
 			}

@@ -24,20 +24,22 @@ func (a tableApp) CreateState() widget.State { s := &tableTestState{}; s.hook = 
 
 type tableTestState struct {
 	widget.StateBase[tableApp]
-	hook      func(*tableTestState)
-	rows      int
-	cellCalls int // Cell invocations in the last frame (virtualization probe)
-	tapped    int
-	selected  int
-	sortCol   int
-	sortDesc  bool
-	longText  bool // overflow regression: put an absurdly long string in col 2
+	hook       func(*tableTestState)
+	rows       int
+	cellCalls  int // Cell invocations in the last frame (virtualization probe)
+	tapped     int
+	selected   int
+	sortCol    int
+	sortDesc   bool
+	longText   bool // overflow regression: put an absurdly long string in col 2
+	selectable bool
 }
 
 func (s *tableTestState) Init(widget.Ctx) {
 	s.hook(s)
 	s.rows = 5000
 	s.tapped, s.selected, s.sortCol = -1, -1, -1
+	s.selectable = true
 }
 
 func (s *tableTestState) Build(ctx widget.Ctx) widget.Widget {
@@ -68,9 +70,10 @@ func (s *tableTestState) Build(ctx widget.Ctx) widget.Widget {
 				return widget.Text{S: fmt.Sprintf("%.2f", float64(r%1000)+0.5), Font: "mono", Size: th.Type.Body, Color: th.Text}
 			}
 		},
-		Selected: s.selected,
-		OnTapRow: func(r int) { s.SetState(func() { s.tapped, s.selected = r, r }) },
-		Sortable: true, SortCol: s.sortCol, SortDesc: s.sortDesc,
+		Selectable: s.selectable,
+		Selected:   s.selected,
+		OnTapRow:   func(r int) { s.SetState(func() { s.tapped, s.selected = r, r }) },
+		Sortable:   true, SortCol: s.sortCol, SortDesc: s.sortDesc,
 		OnSort: func(col int, desc bool) { s.SetState(func() { s.sortCol, s.sortDesc = col, desc }) },
 	}
 	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg, Child: tbl}}
@@ -180,6 +183,54 @@ func TestTableCellDoesNotOverflowColumn(t *testing.T) {
 					x, y, [4]uint32{r1, g1, b1, a1}, [4]uint32{r2, g2, b2, a2})
 			}
 		}
+	}
+}
+
+// TestTableZeroValueDoesNotHighlight guards a trap the Tally dashboard walked
+// into: Selected is a row index, so its zero value means "row 0", and a table that
+// never asked for selection had its first row quietly tinted. Selectable gates it,
+// keeping the zero Table inert.
+func TestTableZeroValueDoesNotHighlight(t *testing.T) {
+	render := func(selectable bool) image.Image {
+		var st *tableTestState
+		h, err := NewHeadless(tableApp{hook: func(s *tableTestState) { st = s }}, Config{
+			Size: geom.Size{W: 560, H: 420}, Font: goregular.TTF,
+			FontFamilies: map[string][]byte{theme.FontBold: gobold.TTF, "mono": gomono.TTF},
+		}, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Render()
+		st.selectable, st.selected = selectable, 0
+		h.core.Owner.RebuildAll()
+		return h.Render()
+	}
+
+	inert, highlighted := render(false), render(true)
+	// With Selectable set, row 0 is tinted; without it, the table must be identical
+	// to one with no selection at all — i.e. the two renders must differ.
+	same := true
+	b := inert.Bounds()
+	for y := b.Min.Y; y < b.Max.Y && same; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r1, g1, b1, a1 := inert.At(x, y).RGBA()
+			r2, g2, b2, a2 := highlighted.At(x, y).RGBA()
+			if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+				same = false
+				break
+			}
+		}
+	}
+	if same {
+		t.Fatal("Selectable had no effect — selection is not gated")
+	}
+
+	// And the inert render must have no tinted row: every body row shares the
+	// background, so sampling the far-left column of the first two rows matches.
+	r1, g1, bl1, _ := inert.At(4, 90).RGBA()
+	r2, g2, bl2, _ := inert.At(4, 160).RGBA()
+	if r1 != r2 || g1 != g2 || bl1 != bl2 {
+		t.Errorf("zero-value table tinted a row: (%d,%d,%d) vs (%d,%d,%d)", r1, g1, bl1, r2, g2, bl2)
 	}
 }
 
