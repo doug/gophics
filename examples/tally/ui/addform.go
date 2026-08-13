@@ -55,58 +55,87 @@ func (s *state) addPanel(th theme.Theme) widget.Widget {
 	}
 
 	accounts := s.book.AccountNames()
-	label := func(text string) widget.Widget {
-		return widget.Text{S: text, Size: th.Type.Label, Color: th.Muted}
-	}
 	field := func(value, placeholder string, set func(string)) widget.Widget {
 		return theme.Field{
 			Value: value, Placeholder: placeholder,
 			OnChange: func(v string) { s.SetState(func() { set(v) }) },
 		}
 	}
-	// A field paired with its label, sized so the row's columns line up.
+	// A field paired with its label, sized so a wide row's columns line up.
 	col := func(w float32, name string, child widget.Widget) widget.Widget {
-		c := widget.Column(label(name), widget.Sized{H: 4}, child)
-		c.CrossAlign = layout.CrossStretch
-		return widget.Sized{W: w, Child: c}
+		return widget.Sized{W: w, Child: labelled(th, name, child)}
 	}
 
-	rows := widget.Column(
-		widget.Row(
-			col(130, "Date", field(f.date, "YYYY-MM-DD", func(v string) { f.date = v })),
-			widget.Sized{W: 12},
-			col(220, "Payee", field(f.payee, "Who?", func(v string) { f.payee = v })),
-			widget.Sized{W: 12},
-			widget.Expand(func() widget.Widget {
-				c := widget.Column(label("Description"), widget.Sized{H: 4},
-					field(f.narration, "What for?", func(v string) { f.narration = v }))
-				c.CrossAlign = layout.CrossStretch
-				return c
-			}()),
-		),
-		widget.Sized{H: 12},
-		widget.Row(
-			widget.Expand(accountPicker(th, "From (money leaves)", f.from, accounts,
-				func(v string) { s.SetState(func() { f.from = v }) })),
-			widget.Sized{W: 12},
-			widget.Expand(accountPicker(th, "To (money goes)", f.to, accounts,
-				func(v string) { s.SetState(func() { f.to = v }) })),
-			widget.Sized{W: 12},
-			col(150, "Amount", field(f.amount, "0.00", func(v string) { f.amount = v })),
-		),
-		widget.Sized{H: 14},
-		widget.Row(
-			theme.Button{Label: saveLabel(s.book), Primary: true, OnTap: func() { s.submitForm() }},
-			widget.Sized{W: 10},
-			theme.Button{Label: "Cancel", OnTap: func() { s.SetState(func() { f.open = false }) }},
-			widget.Sized{W: 16},
-			widget.Expand(s.formStatus(th)),
-		),
+	// A phone cannot hold three fields across; stack every field instead. The
+	// order is the order you think in: when, who, what, from, to, how much.
+	stack := func() widget.Widget {
+		c := widget.Column(
+			labelled(th, "Date", field(f.date, "YYYY-MM-DD", func(v string) { f.date = v })),
+			widget.Sized{H: 10},
+			labelled(th, "Payee", field(f.payee, "Who?", func(v string) { f.payee = v })),
+			widget.Sized{H: 10},
+			labelled(th, "Description", field(f.narration, "What for?", func(v string) { f.narration = v })),
+			widget.Sized{H: 10},
+			accountPicker(th, "From (money leaves)", f.from, accounts,
+				func(v string) { s.SetState(func() { f.from = v }) }),
+			widget.Sized{H: 10},
+			accountPicker(th, "To (money goes)", f.to, accounts,
+				func(v string) { s.SetState(func() { f.to = v }) }),
+			widget.Sized{H: 10},
+			labelled(th, "Amount", field(f.amount, "0.00", func(v string) { f.amount = v })),
+		)
+		c.CrossAlign = layout.CrossStretch
+		return c
+	}
+
+	spread := func() widget.Widget {
+		c := widget.Column(
+			widget.Row(
+				col(130, "Date", field(f.date, "YYYY-MM-DD", func(v string) { f.date = v })),
+				widget.Sized{W: 12},
+				col(220, "Payee", field(f.payee, "Who?", func(v string) { f.payee = v })),
+				widget.Sized{W: 12},
+				widget.Expand(labelled(th, "Description",
+					field(f.narration, "What for?", func(v string) { f.narration = v }))),
+			),
+			widget.Sized{H: 12},
+			widget.Row(
+				widget.Expand(accountPicker(th, "From (money leaves)", f.from, accounts,
+					func(v string) { s.SetState(func() { f.from = v }) })),
+				widget.Sized{W: 12},
+				widget.Expand(accountPicker(th, "To (money goes)", f.to, accounts,
+					func(v string) { s.SetState(func() { f.to = v }) })),
+				widget.Sized{W: 12},
+				col(150, "Amount", field(f.amount, "0.00", func(v string) { f.amount = v })),
+			),
+		)
+		c.CrossAlign = layout.CrossStretch
+		return c
+	}
+
+	actions := widget.Row(
+		theme.Button{Label: saveLabel(s.book), Primary: true, OnTap: func() { s.submitForm() }},
+		widget.Sized{W: 10},
+		theme.Button{Label: "Cancel", OnTap: func() { s.SetState(func() { f.open = false }) }},
+		widget.Sized{W: 16},
+		widget.Expand(s.formStatus(th)),
 	)
+
+	body := widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		fields := stack()
+		if cs.Max.W >= wideWidth {
+			fields = spread()
+		}
+		c := widget.Column(fields, widget.Sized{H: 14}, actions)
+		c.CrossAlign = layout.CrossStretch
+		return c
+	}}
+
+	rows := widget.Column(body)
 	rows.CrossAlign = layout.CrossStretch
 
 	return widget.Padding{
-		Insets: geom.Insets{Left: 24, Right: 24, Top: 4, Bottom: 14},
+		Insets: geom.Insets{Left: 16, Right: 16, Top: 4, Bottom: 14},
 		Child: widget.Decorated{
 			Color: th.Surface, Radius: 10, BorderColor: th.Border, BorderWidth: 1,
 			Child: widget.Padding{All: 16, Child: rows},
@@ -116,6 +145,17 @@ func (s *state) addPanel(th theme.Theme) widget.Widget {
 
 // saveLabel tells the truth about where the entry will go: a ledger with no file
 // behind it (the bundled demo) can be added to, but nothing is written.
+// labelled stacks a caption above a control.
+func labelled(th theme.Theme, name string, child widget.Widget) widget.Widget {
+	c := widget.Column(
+		widget.Text{S: name, Size: th.Type.Label, Color: th.Muted},
+		widget.Sized{H: 4},
+		child,
+	)
+	c.CrossAlign = layout.CrossStretch
+	return c
+}
+
 func saveLabel(b *book.Book) string {
 	if b != nil && b.Writable() {
 		return "Save to ledger"

@@ -190,3 +190,19 @@ func monthEnds(first, last time.Time) []time.Time {
 		}
 	}
 }
+
+// ValueOf converts a balance into one currency at the ledger's latest prices,
+// reporting whether everything could be converted.
+//
+// A balance sheet needs one number per row: an account holding shares, a fund and
+// some cash has no readable inline representation, and listing every commodity
+// runs off any screen. Converting is what a balance sheet does — and the second
+// result lets the UI mark a total that had to leave something out.
+func (b *Book) ValueOf(bal bean.Balance, currency string) (decimal.Decimal, bool) {
+	_, last, ok := b.Span()
+	if !ok || currency == "" {
+		return decimal.Zero, false
+	}
+	total, missing := b.led.Value(bal, currency, bean.NewDate(last))
+	return total, len(missing) == 0
+}

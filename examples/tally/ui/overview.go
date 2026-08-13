@@ -27,8 +27,24 @@ func (s *state) overviewView(th theme.Theme) widget.Widget {
 	}
 
 	latest := s.netWorth[len(s.netWorth)-1].Value
+	// Expand must wrap the LayoutBuilder, not live inside it: Flexible is only
+	// meaningful as a direct child of a Flex, and a LayoutBuilder's child is not.
+	return widget.Expand(widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		return s.overviewBody(th, latest, cs.Max.W >= wideWidth)
+	}})
+}
+
+// wideWidth is where Tally stops being a phone layout and starts being a desktop
+// one: below it, rows stack rather than sit side by side.
+const wideWidth = 560
+
+func (s *state) overviewBody(th theme.Theme, latest decimal.Decimal, wide bool) widget.Widget {
+	pad := float32(16)
+	if wide {
+		pad = 24
+	}
 	col := widget.Column(
-		s.summaryRow(th, latest),
+		s.summaryRow(th, latest, wide),
 		widget.Sized{H: 22},
 		sectionLabel(th, "Net worth"),
 		widget.Sized{H: 8},
@@ -44,14 +60,14 @@ func (s *state) overviewView(th theme.Theme) widget.Widget {
 		s.categoryTable(th),
 	)
 	col.CrossAlign = layout.CrossStretch
-	return widget.Expand(widget.Scroll{Child: widget.Padding{
-		Insets: geom.Insets{Left: 24, Right: 24, Top: 12, Bottom: 28},
+	return widget.Scroll{Child: widget.Padding{
+		Insets: geom.Insets{Left: pad, Right: pad, Top: 12, Bottom: 28},
 		Child:  col,
-	}})
+	}}
 }
 
 // summaryRow is the headline: current net worth plus the change over the series.
-func (s *state) summaryRow(th theme.Theme, latest decimal.Decimal) widget.Widget {
+func (s *state) summaryRow(th theme.Theme, latest decimal.Decimal, wide bool) widget.Widget {
 	change := latest.Sub(s.netWorth[0].Value)
 	sign := "+"
 	if change.IsNegative() {
@@ -59,14 +75,42 @@ func (s *state) summaryRow(th theme.Theme, latest decimal.Decimal) widget.Widget
 	}
 	period := s.netWorth[0].Date.Format("Jan 2006") + " – " +
 		s.netWorth[len(s.netWorth)-1].Date.Format("Jan 2006")
+	worth := fmtMoney(latest) + " " + s.baseCurrency
+	delta := sign + fmtMoney(change.Abs()) + " " + s.baseCurrency
 
-	return widget.Row(
-		stat(th, "Net worth", fmtMoney(latest)+" "+s.baseCurrency, th.Text),
-		widget.Sized{W: 40},
-		stat(th, "Change", sign+fmtMoney(change.Abs())+" "+s.baseCurrency, changeColor(th, change)),
-		widget.Expand(widget.Sized{W: 12}),
-		stat(th, "Period", period, th.Muted),
+	if wide {
+		return widget.Row(
+			stat(th, "Net worth", worth, th.Text),
+			widget.Sized{W: 40},
+			stat(th, "Change", delta, changeColor(th, change)),
+			widget.Expand(widget.Sized{W: 12}),
+			stat(th, "Period", period, th.Muted),
+		)
+	}
+
+	// On a phone three figures cannot sit side by side without one of them
+	// running off the screen — and the one that ran off was the change, which is
+	// the second thing anybody wants to know. Stack them into a hierarchy
+	// instead: the balance is the headline, the change qualifies it, the period
+	// is a footnote.
+	col := widget.Column(
+		widget.Text{S: "Net worth", Size: th.Type.Label, Color: th.Muted},
+		widget.Sized{H: 2},
+		widget.Text{S: worth, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text,
+			Ellipsis: true, MaxLines: 1},
+		widget.Sized{H: 4},
+		widget.Row(
+			widget.Text{S: delta, Font: theme.FontBold, Size: th.Type.Body,
+				Color: changeColor(th, change)},
+			widget.Sized{W: 8},
+			widget.Text{S: "·", Size: th.Type.Body, Color: th.Border},
+			widget.Sized{W: 8},
+			widget.Text{S: period, Size: th.Type.Label, Color: th.Muted,
+				Ellipsis: true, MaxLines: 1},
+		),
 	)
+	col.CrossAlign = layout.CrossStart
+	return col
 }
 
 func stat(th theme.Theme, label, value string, col paint.Color) widget.Widget {

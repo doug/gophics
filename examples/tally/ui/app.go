@@ -155,8 +155,9 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 		s.ensureSeries()
 		body = s.overviewView(th)
 	default:
+		s.ensureSeries() // the balances tree converts multi-commodity rows too
 		body = widget.Expand(widget.Scroll{Child: widget.Padding{
-			Insets: geom.Insets{Left: 24, Right: 24, Top: 8, Bottom: 24},
+			Insets: geom.Insets{Left: 16, Right: 16, Top: 8, Bottom: 24},
 			Child:  s.balancesView(th),
 		}})
 	}
@@ -194,7 +195,7 @@ func (s *state) appendNode(th theme.Theme, n *bean.Node, out *[]widget.Widget) {
 		name = lastSegment(string(n.Account))
 	}
 
-	nameText := widget.Text{S: name, Size: th.Type.Body, Color: th.Text}
+	nameText := widget.Text{S: name, Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 	if isRoot {
 		nameText.Font, nameText.Size = theme.FontBold, th.Type.Heading
 	}
@@ -220,24 +221,41 @@ func (s *state) appendNode(th theme.Theme, n *bean.Node, out *[]widget.Widget) {
 	}
 }
 
-// amountText renders a node's non-zero balances (usually one currency) as
-// right-aligned monospace figures, so columns of numbers line up.
+// amountText renders a node's balance as a single figure.
+//
+// One commodity prints as itself. Several are converted to the base currency and
+// marked with a "≈", because a parent account holding shares, a fund and cash has
+// no readable inline form — listing them all is what ran off the right of the
+// screen, and it was unreadable on a desktop too. Anything that cannot be
+// converted keeps its own units rather than being silently dropped from the row.
 func (s *state) amountText(th theme.Theme, n *bean.Node) widget.Widget {
 	if n.Balance == nil {
 		return widget.Sized{}
 	}
-	parts := make([]string, 0, 2)
-	for _, cur := range s.tree.Currencies {
-		amt := n.Balance.Get(cur)
-		if amt.IsZero() {
-			continue
+	held := make([]string, 0, 2)
+	for _, cur := range n.Balance.Currencies() {
+		if !n.Balance.Get(cur).IsZero() {
+			held = append(held, cur)
 		}
-		parts = append(parts, fmtMoney(amt)+" "+cur)
 	}
-	if len(parts) == 0 {
+	switch len(held) {
+	case 0:
 		return widget.Text{S: "—", Font: "mono", Size: th.Type.Body, Color: th.Muted}
+	case 1:
+		cur := held[0]
+		return widget.Text{S: fmtMoney(n.Balance.Get(cur)) + " " + cur,
+			Font: "mono", Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 	}
-	return widget.Text{S: strings.Join(parts, "   "), Font: "mono", Size: th.Type.Body, Color: th.Text}
+
+	total, complete := s.book.ValueOf(n.Balance, s.baseCurrency)
+	label := "≈ " + fmtMoney(total) + " " + s.baseCurrency
+	col := th.Text
+	if !complete {
+		// Some commodity had no price; the overview names which ones.
+		col = th.Muted
+	}
+	return widget.Text{S: label, Font: "mono", Size: th.Type.Body, Color: col,
+		Ellipsis: true, MaxLines: 1}
 }
 
 // registerView is one account's transaction register in the Tufte data table:
@@ -246,54 +264,89 @@ func (s *state) amountText(th theme.Theme, n *bean.Node) widget.Widget {
 func (s *state) registerView(th theme.Theme) widget.Widget {
 	rows := s.visibleEntries()
 
-	tbl := theme.Table{
-		Columns: []theme.Col{
+	// Five columns need a desktop. On a phone the counterpart account and the
+	// running balance are the ones to drop: what you spent and when you spent it
+	// is the register's job, and the balance is one tap away on the overview.
+	tbl := widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		wide := cs.Max.W >= wideWidth
+		cols := []theme.Col{
 			{Title: "Date", Width: 96},
 			{Title: "Payee / narration", Flex: 3},
-			{Title: "Account", Flex: 3},
-			{Title: "Amount", Width: 124, Align: theme.AlignEnd},
-			{Title: "Balance", Width: 132, Align: theme.AlignEnd},
-		},
-		Count:      len(rows),
-		Selectable: true,
-		Selected:   s.selected,
-		OnTapRow:   func(i int) { s.SetState(func() { s.selected = i }) },
-		Cell: func(r, c int) widget.Widget {
-			e := rows[r]
-			switch c {
-			case 0:
-				return widget.Text{S: fmtDate(e.Date), Font: "mono", Size: th.Type.Body, Color: th.Muted}
-			case 1:
-				return widget.Text{S: describe(e), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
-			case 2:
-				return widget.Text{S: e.Other, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
-			case 3:
-				return widget.Text{S: fmtMoney(e.Amount), Font: "mono", Size: th.Type.Body, Color: amountColor(th, e.Amount)}
-			default:
-				return widget.Text{S: fmtMoney(e.Balance), Font: "mono", Size: th.Type.Body, Color: th.Text}
-			}
-		},
-	}
+		}
+		if wide {
+			cols = append(cols, theme.Col{Title: "Account", Flex: 3})
+		}
+		cols = append(cols, theme.Col{Title: "Amount", Width: 110, Align: theme.AlignEnd})
+		if wide {
+			cols = append(cols, theme.Col{Title: "Balance", Width: 132, Align: theme.AlignEnd})
+		}
+		return theme.Table{
+			Columns:    cols,
+			Count:      len(rows),
+			Selectable: true,
+			Selected:   s.selected,
+			OnTapRow:   func(i int) { s.SetState(func() { s.selected = i }) },
+			Cell: func(r, c int) widget.Widget {
+				e := rows[r]
+				// Narrow drops columns 2 and 4, so map the index back.
+				kind := c
+				if !wide && c >= 2 {
+					kind = 3
+				}
+				switch kind {
+				case 0:
+					return widget.Text{S: fmtDate(e.Date), Font: "mono", Size: th.Type.Body, Color: th.Muted}
+				case 1:
+					return widget.Text{S: describe(e), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
+				case 2:
+					return widget.Text{S: e.Other, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
+				case 3:
+					return widget.Text{S: fmtMoney(e.Amount), Font: "mono", Size: th.Type.Body, Color: amountColor(th, e.Amount)}
+				default:
+					return widget.Text{S: fmtMoney(e.Balance), Font: "mono", Size: th.Type.Body, Color: th.Text}
+				}
+			},
+		}
+	}}
 
-	bar := widget.Padding{
-		Insets: geom.Insets{Left: 24, Right: 24, Top: 4, Bottom: 10},
-		Child: widget.Row(
+	filter := theme.Field{
+		Value:       s.filter,
+		Placeholder: "Filter…",
+		OnChange:    func(v string) { s.SetState(func() { s.filter = v; s.selected = -1 }) },
+	}
+	bar := widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
+		wide := cs.Max.W >= wideWidth
+		pad := float32(16)
+		if wide {
+			pad = 24
+		}
+		title := widget.Row(
 			theme.Button{Label: "‹ Balances", OnTap: s.back},
-			widget.Sized{W: 14},
-			widget.Text{S: s.account, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text, Ellipsis: true, MaxLines: 1},
+			widget.Sized{W: 12},
+			widget.Expand(widget.Text{S: shortAccount(s.account, wide), Font: theme.FontBold,
+				Size: th.Type.Heading, Color: th.Text, Ellipsis: true, MaxLines: 1}),
 			widget.Sized{W: 8},
 			widget.Text{S: s.currency, Size: th.Type.Label, Color: th.Muted},
-			widget.Expand(widget.Sized{W: 16}),
-			widget.Sized{W: 220, Child: theme.Field{
-				Value:       s.filter,
-				Placeholder: "Filter…",
-				OnChange:    func(v string) { s.SetState(func() { s.filter = v; s.selected = -1 }) },
-			}},
-		),
-	}
+		)
+		var content widget.Widget
+		if wide {
+			content = widget.Row(title, widget.Sized{W: 16},
+				widget.Sized{W: 220, Child: filter})
+		} else {
+			// The filter gets its own line rather than squeezing the account
+			// name into nothing.
+			c := widget.Column(title, widget.Sized{H: 8}, filter)
+			c.CrossAlign = layout.CrossStretch
+			content = c
+		}
+		return widget.Padding{
+			Insets: geom.Insets{Left: pad, Right: pad, Top: 4, Bottom: 10},
+			Child:  content,
+		}
+	}}
 
 	footer := widget.Padding{
-		Insets: geom.Insets{Left: 24, Right: 24, Top: 8, Bottom: 14},
+		Insets: geom.Insets{Left: 16, Right: 16, Top: 8, Bottom: 14},
 		Child: widget.Text{
 			S:     pluralize(len(rows), "transaction") + total(rows, s.currency),
 			Size:  th.Type.Caption,
@@ -303,7 +356,7 @@ func (s *state) registerView(th theme.Theme) widget.Widget {
 
 	col := widget.Column(
 		bar,
-		widget.Expand(widget.Padding{Insets: geom.Insets{Left: 12, Right: 12}, Child: tbl}),
+		widget.Expand(widget.Padding{Insets: geom.Insets{Left: 8, Right: 8}, Child: tbl}),
 		footer,
 	)
 	col.CrossAlign = layout.CrossStretch
@@ -408,21 +461,30 @@ func (s *state) toggleForm() {
 		}
 		s.form.reset(time.Now())
 		if s.form.from == "" || s.form.to == "" {
-			from, to := defaultAccounts(s.book.AccountNames())
-			s.form.from, s.form.to = from, to
+			s.form.from, s.form.to = s.defaultAccounts()
 		}
 	})
 }
 
-// defaultAccounts guesses a starting pair — the first asset account and the first
-// expense account — so the common case (spending money) is one dropdown away.
-func defaultAccounts(names []string) (from, to string) {
-	for _, n := range names {
-		if from == "" && strings.HasPrefix(n, "Assets:") {
-			from = n
+// defaultAccounts guesses a starting pair so the common case — spending money —
+// is one dropdown away.
+//
+// It prefers the account with the most postings of each kind rather than the
+// first alphabetically: the first is usually a parent like "Assets:US:BofA" that
+// holds nothing, while the busiest is the one you actually spend from.
+func (s *state) defaultAccounts() (from, to string) {
+	bestFrom, bestTo := 0, 0
+	for _, n := range s.book.AccountNames() {
+		used := len(s.book.Currencies(n))
+		if used == 0 {
+			continue // a parent account: nothing posts to it directly
 		}
-		if to == "" && strings.HasPrefix(n, "Expenses:") {
-			to = n
+		entries, _ := s.book.Register(n, "")
+		switch {
+		case strings.HasPrefix(n, "Assets:") && len(entries) > bestFrom:
+			from, bestFrom = n, len(entries)
+		case strings.HasPrefix(n, "Expenses:") && len(entries) > bestTo:
+			to, bestTo = n, len(entries)
 		}
 	}
 	return from, to
@@ -499,6 +561,20 @@ func amountColor(th theme.Theme, d decimal.Decimal) paint.Color {
 		return th.Danger
 	}
 	return th.Text
+}
+
+// shortAccount trims a long account path on a narrow screen: the leaf plus its
+// parent is enough to know where you are ("BofA:Checking"), and the full path
+// would ellipsize into uselessness.
+func shortAccount(account string, wide bool) string {
+	if wide || account == "" {
+		return account
+	}
+	parts := strings.Split(account, ":")
+	if len(parts) <= 2 {
+		return account
+	}
+	return strings.Join(parts[len(parts)-2:], ":")
 }
 
 // lastSegment returns the final colon-separated component of a beancount account
