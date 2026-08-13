@@ -122,6 +122,11 @@ func (c Ctx) ReduceMotion() bool { return c.el.owner.ReduceMotion }
 // on-screen keyboard) in logical pixels; pad content by them.
 func (c Ctx) SafeInsets() geom.Insets { return c.el.owner.SafeInsets }
 
+// KeyboardInset is the height of the on-screen keyboard in logical pixels, or 0
+// when it is hidden. See widget.KeyboardAvoiding, which is usually what a layout
+// wants rather than the raw number.
+func (c Ctx) KeyboardInset() float32 { return c.el.owner.KeyboardInset }
+
 // Post schedules fn onto the UI goroutine before the next build. Use it to
 // deliver results from background goroutines (network fetches, file IO):
 //

@@ -280,6 +280,16 @@ type Text struct{ S string }
 // keyboard) in logical pixels.
 type Insets struct{ Insets geom.Insets }
 
+// KeyboardInset reports the height of the on-screen keyboard, in logical pixels,
+// measured from the bottom of the window. Zero means it is hidden.
+//
+// It is deliberately not folded into Insets. Safe-area insets are static per
+// orientation and describe hardware; the keyboard is transient and describes a
+// mode. A layout that should slide under the home indicator still must not be
+// covered by the keyboard, and a screen with no text input should not reflow just
+// because some other screen raised one — conflating them makes both wrong.
+type KeyboardInset struct{ Height float32 }
+
 // CompositionKind discriminates Composition events.
 type CompositionKind uint8
 
@@ -301,11 +311,12 @@ type Composition struct {
 	Committed string
 }
 
-func (Insets) isEvent()      {}
-func (Resize) isEvent()      {}
-func (Closed) isEvent()      {}
-func (Focus) isEvent()       {}
-func (Pointer) isEvent()     {}
-func (Key) isEvent()         {}
-func (Text) isEvent()        {}
-func (Composition) isEvent() {}
+func (Insets) isEvent()        {}
+func (KeyboardInset) isEvent() {}
+func (Resize) isEvent()        {}
+func (Closed) isEvent()        {}
+func (Focus) isEvent()         {}
+func (Pointer) isEvent()       {}
+func (Key) isEvent()           {}
+func (Text) isEvent()          {}
+func (Composition) isEvent()   {}

@@ -884,6 +884,12 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		h.core.Owner.SafeInsets = e.Insets
 		h.core.Owner.RebuildAll()
 		w.Invalidate()
+	case shell.KeyboardInset:
+		if h.core.Owner.KeyboardInset != e.Height {
+			h.core.Owner.KeyboardInset = e.Height
+			h.core.Owner.RebuildAll()
+			w.Invalidate()
+		}
 	case shell.Resize:
 		w.Invalidate()
 	case shell.Focus:

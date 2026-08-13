@@ -53,6 +53,9 @@ type Owner struct {
 	// on-screen keyboards) in logical pixels, set by the runner; apps pad
 	// content by them (Ctx.SafeInsets).
 	SafeInsets geom.Insets
+	// KeyboardInset is the on-screen keyboard's height in logical pixels, 0 when
+	// hidden (Ctx.KeyboardInset).
+	KeyboardInset float32
 	// Capabilities are the optional platform capabilities (Camera, Haptic,
 	// FilePicker, …) a Window may expose. The app runner publishes each one the
 	// window implements via wireCapabilities. Fields are promoted, so Ctx.<Cap>()

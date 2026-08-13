@@ -162,13 +162,21 @@ func (b *Bridge) Touch(phase int, xPx, yPx float32) {
 // Text delivers committed text input from the on-screen keyboard.
 func (b *Bridge) Text(s string) { b.handler.Event(b, shell.Text{S: s}) }
 
-// SetInsets delivers safe-area insets in physical pixels (status bar,
-// gesture bars, keyboard).
+// SetInsets delivers safe-area insets in physical pixels — the status bar, the
+// notch, gesture bars. The keyboard is separate (SetKeyboardHeight), because it
+// is a transient mode rather than a property of the hardware.
 func (b *Bridge) SetInsets(topPx, rightPx, bottomPx, leftPx float32) {
 	s := b.scale
 	b.handler.Event(b, shell.Insets{Insets: geom.Insets{
 		Top: topPx / s, Right: rightPx / s, Bottom: bottomPx / s, Left: leftPx / s,
 	}})
+}
+
+// SetKeyboardHeight delivers the on-screen keyboard's height in physical pixels,
+// or 0 when it is dismissed. Hosts report it from the platform's keyboard
+// notifications (iOS UIKeyboardWillChangeFrame, Android's IME insets).
+func (b *Bridge) SetKeyboardHeight(heightPx float32) {
+	b.handler.Event(b, shell.KeyboardInset{Height: heightPx / b.scale})
 }
 
 // TextInputActive reports whether the UI wants keyboard input; the host
