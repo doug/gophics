@@ -3,6 +3,8 @@ package main
 import (
 	"image/png"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/gobold"
@@ -12,6 +14,9 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/theme"
+
+	"github.com/dougfritz/tally/bean"
+	"github.com/dougfritz/tally/book"
 )
 
 // harness mounts the app headlessly and returns it with its root state.
@@ -103,5 +108,89 @@ func dump(t *testing.T, h *app.Headless, path string) {
 	defer f.Close()
 	if err := png.Encode(f, h.Render()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestAddFormWritesThroughUI drives the add-transaction panel the way a user
+// would — open it, fill it in, submit — and checks the entry reaches the file and
+// every view refreshes. This is the local-first loop end to end: read the ledger,
+// add to it, save it back.
+func TestAddFormWritesThroughUI(t *testing.T) {
+	// A real file, so the write path is exercised rather than the in-memory one.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ledger.beancount")
+	body := `2021-01-01 open Assets:Cash USD
+2021-01-01 open Expenses:Food USD
+
+2021-01-10 * "Grocer" "Weekly shop"
+  Assets:Cash      -50.00 USD
+  Expenses:Food     50.00 USD
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, s := harness(t)
+	b, err := book.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s.book, s.loaded, s.prefsChecked = b, true, true
+	s.tree, _ = b.Tree()
+	s.baseCurrency = b.MainCurrency()
+	h.Render()
+
+	s.toggleForm()
+	h.Render()
+	if !s.form.open {
+		t.Fatal("the form did not open")
+	}
+	if s.form.date == "" {
+		t.Error("the form should be seeded with today's date")
+	}
+
+	s.form.date = "2021-01-20"
+	s.form.payee, s.form.narration = "Cafe", "Coffee"
+	s.form.from, s.form.to = "Assets:Cash", "Expenses:Food"
+	s.form.amount = "4.50"
+	s.submitForm()
+	h.Render()
+
+	if s.form.err != "" {
+		t.Fatalf("submit reported an error: %s", s.form.err)
+	}
+	if !strings.Contains(s.form.result, "saved") {
+		t.Errorf("result = %q, want a saved confirmation", s.form.result)
+	}
+
+	// The file on disk has it, and the user's original entry survived.
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), `"Cafe" "Coffee"`) {
+		t.Error("the entry did not reach the file")
+	}
+	if !strings.Contains(string(raw), "Weekly shop") {
+		t.Error("saving clobbered the existing entry")
+	}
+
+	// The balance tree the UI draws from reflects the new total.
+	var food string
+	s.tree.Walk(func(n *bean.Node) {
+		if n.Account == "Expenses:Food" {
+			food = n.Balance.Get("USD").String()
+		}
+	})
+	if food != "54.5" {
+		t.Errorf("tree shows Expenses:Food = %s, want 54.5", food)
+	}
+
+	// A bad amount is rejected without touching the file.
+	s.form.amount = "not a number"
+	s.submitForm()
+	if s.form.err == "" {
+		t.Error("a non-numeric amount should be rejected")
+	}
+	after, _ := os.ReadFile(path)
+	if len(after) != len(raw) {
+		t.Error("a rejected entry modified the file")
 	}
 }

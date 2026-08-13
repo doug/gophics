@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"log"
 	"strings"
+	"time"
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gomono"
@@ -62,6 +63,9 @@ type state struct {
 	expenses     []book.Point
 	categories   []book.Category
 	unpriced     []string
+
+	// form is the add-transaction panel (see addform.go).
+	form addForm
 
 	// account is the drilled-into account ("" → the balances overview).
 	account  string
@@ -357,13 +361,21 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
 			widget.Sized{W: 14},
 		)
 	}
+	if s.book != nil && s.book.CanEdit() {
+		row = append(row,
+			theme.Button{Label: "+ New transaction", Primary: true, OnTap: func() { s.toggleForm() }},
+			widget.Sized{W: 14},
+		)
+	}
 	row = append(row, widget.Text{S: name, Size: th.Type.Label, Color: th.Muted, Ellipsis: true, MaxLines: 1})
 
 	bar := widget.Padding{
 		Insets: geom.Insets{Left: 24, Right: 24, Top: 16, Bottom: 14},
 		Child:  widget.Row(row...),
 	}
-	return widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}})
+	head := widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}}, s.addPanel(th))
+	head.CrossAlign = layout.CrossStretch
+	return head
 }
 
 // tab is one top-level nav item: the selected one is emphasized, the rest are
@@ -382,6 +394,36 @@ func (s *state) tab(th theme.Theme, label string, v view) widget.Widget {
 			Child:  widget.Text{S: label, Font: font, Size: th.Type.Body, Color: col},
 		},
 	}
+}
+
+// toggleForm opens or closes the add-transaction panel, seeding it with today's
+// date and sensible default accounts on first open.
+func (s *state) toggleForm() {
+	s.SetState(func() {
+		s.form.open = !s.form.open
+		if !s.form.open {
+			return
+		}
+		s.form.reset(time.Now())
+		if s.form.from == "" || s.form.to == "" {
+			from, to := defaultAccounts(s.book.AccountNames())
+			s.form.from, s.form.to = from, to
+		}
+	})
+}
+
+// defaultAccounts guesses a starting pair — the first asset account and the first
+// expense account — so the common case (spending money) is one dropdown away.
+func defaultAccounts(names []string) (from, to string) {
+	for _, n := range names {
+		if from == "" && strings.HasPrefix(n, "Assets:") {
+			from = n
+		}
+		if to == "" && strings.HasPrefix(n, "Expenses:") {
+			to = n
+		}
+	}
+	return from, to
 }
 
 // pick opens the platform file panel and loads the chosen beancount file.

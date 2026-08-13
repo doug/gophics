@@ -8,6 +8,8 @@
 package book
 
 import (
+	"os"
+
 	"github.com/dougfritz/tally/bean"
 )
 
@@ -16,6 +18,7 @@ type Book struct {
 	// Path is the file (or logical name, for embedded ledgers) this was loaded from.
 	Path string
 
+	src *bean.Source
 	led *bean.Ledger
 
 	// ProcessErr holds any error from loading (a missing include, a syntax error).
@@ -26,12 +29,23 @@ type Book struct {
 }
 
 // Open loads and processes the beancount file at path, following `include`s.
+//
+// The file's text is kept alongside the processed ledger so edits can splice into
+// the original rather than regenerate it — see bean/edit.go for why that matters.
+// Includes are followed for *reading*; edits are written to the root file only, so
+// a ledger split across files is safe to open but only its root is appended to.
 func Open(path string) (*Book, error) {
 	led, err := bean.Load(path)
 	if led == nil {
 		return nil, err
 	}
-	return &Book{Path: path, led: led, ProcessErr: err}, nil
+	b := &Book{Path: path, led: led, ProcessErr: err}
+	if raw, rerr := os.ReadFile(path); rerr == nil {
+		if src, serr := bean.NewSource(path, string(raw)); src != nil && serr == nil {
+			b.src = src
+		}
+	}
+	return b, nil
 }
 
 // OpenBytes loads a beancount ledger from in-memory bytes, tagged with a logical
@@ -42,7 +56,13 @@ func OpenBytes(name string, data []byte) (*Book, error) {
 	if led == nil {
 		return nil, err
 	}
-	return &Book{Path: name, led: led, ProcessErr: err}, nil
+	b := &Book{Path: name, led: led, ProcessErr: err}
+	// Editable in memory even without a file behind it; Writable() is what gates
+	// saving, so the bundled demo can be experimented with but never written.
+	if src, serr := bean.NewSource(name, string(data)); src != nil && serr == nil {
+		b.src = src
+	}
+	return b, nil
 }
 
 // Problems reports the semantic issues found while processing — unbalanced

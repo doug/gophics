@@ -119,3 +119,15 @@ func (s *Source) reparse() {
 }
 
 func splitLines(s string) []string { return strings.Split(s, "\n") }
+
+// NewTransaction builds a transaction for insertion. Callers outside this package
+// cannot set the embedded position, so this is how a UI constructs an entry.
+func NewTransaction(d Date, flag, payee, narration string, postings ...*Posting) *Transaction {
+	return &Transaction{
+		base:      base{Date: d},
+		Flag:      flag,
+		Payee:     payee,
+		Narration: narration,
+		Postings:  postings,
+	}
+}
