@@ -21,6 +21,7 @@ import (
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/intl"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
@@ -273,7 +274,7 @@ func (s *state) registerView(th theme.Theme) widget.Widget {
 			e := rows[r]
 			switch c {
 			case 0:
-				return widget.Text{S: e.Date, Font: "mono", Size: th.Type.Body, Color: th.Muted}
+				return widget.Text{S: fmtDate(e.Date), Font: "mono", Size: th.Type.Body, Color: th.Muted}
 			case 1:
 				return widget.Text{S: describe(e), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 			case 2:
@@ -550,24 +551,40 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// fmtMoney formats a decimal as a grouped fixed-2 string, e.g. -1234.5 → "-1,234.50".
+// locale decides how numbers and dates are punctuated. Resolved once at startup
+// from the environment; a settings screen can override it later.
+var locale = intl.Auto()
+
+// fmtMoney formats a decimal in the reader's locale — 1,234.56 in the US,
+// 1.234,56 in Germany. It formats to two places first so a ledger's columns are
+// even, then hands the digits to intl, which re-punctuates without rounding.
 func fmtMoney(d decimal.Decimal) string {
-	neg := d.IsNegative()
-	s := d.Abs().StringFixed(2)
-	dot := strings.IndexByte(s, '.')
-	intPart, frac := s[:dot], s[dot:]
-	var b strings.Builder
-	if neg {
-		b.WriteByte('-')
+	return locale.Number(d.StringFixed(2))
+}
+
+// fmtDate renders an ISO date (as the engine stores them) in the locale's style.
+// An unparsable value is passed through rather than blanked: showing the raw text
+// is more useful than hiding it.
+func fmtDate(iso string) string {
+	if len(iso) != 10 || iso[4] != '-' || iso[7] != '-' {
+		return iso
 	}
-	for i := 0; i < len(intPart); i++ {
-		if i > 0 && (len(intPart)-i)%3 == 0 {
-			b.WriteByte(',')
+	y, m, d := atoiSafe(iso[0:4]), atoiSafe(iso[5:7]), atoiSafe(iso[8:10])
+	if y == 0 || m == 0 || d == 0 {
+		return iso
+	}
+	return locale.Date(y, m, d)
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return 0
 		}
-		b.WriteByte(intPart[i])
+		n = n*10 + int(s[i]-'0')
 	}
-	b.WriteString(frac)
-	return b.String()
+	return n
 }
 
 func main() {
