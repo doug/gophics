@@ -6,7 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/dougfritz/beango/ast"
+	"github.com/dougfritz/tally/bean"
 )
 
 func testBook(t *testing.T) *Book {
@@ -51,13 +51,9 @@ func TestNetWorthIsCumulative(t *testing.T) {
 
 	// The last point must match the current balance sheet *valued at market
 	// prices*, not the cash-only total.
-	d := dateOf(pts[len(pts)-1].Date)
-	tree, err := b.led.GetBalanceTree(
-		[]ast.AccountType{ast.AccountTypeAssets, ast.AccountTypeLiabilities}, d, d)
-	if err != nil {
-		t.Fatalf("GetBalanceTree: %v", err)
-	}
-	want := b.valueOf(tree, "USD", d)
+	d := bean.NewDate(pts[len(pts)-1].Date)
+	tree := b.led.BalanceTree([]string{"Assets", "Liabilities"}, bean.AsOf(d))
+	want, _ := b.led.Value(tree.Flatten(), "USD", d)
 	got := pts[len(pts)-1].Value
 	if !got.Equal(want) {
 		t.Errorf("final net worth %s != valued balance sheet %s", got, want)
@@ -70,7 +66,7 @@ func TestNetWorthIsCumulative(t *testing.T) {
 	// salary, so a cash-only total is a small fraction of real net worth; if
 	// conversion regressed, the two would coincide and the chart would show the
 	// owner losing money while saving.
-	cashOnly := totalOf(tree, "USD")
+	cashOnly := tree.Flatten().Get("USD")
 	if got.LessThanOrEqual(cashOnly.Mul(decimal.NewFromInt(2))) {
 		t.Errorf("net worth %s barely exceeds the cash-only total %s — commodity holdings are not being valued",
 			got, cashOnly)
@@ -89,7 +85,7 @@ func TestMissingPricesNamesUnvaluedCommodities(t *testing.T) {
 		if cur == "USD" {
 			t.Error("the base currency should never be reported as unpriced")
 		}
-		if _, ok := b.led.GetPrice(dateOf(mustLast(t, b)), cur, "USD"); ok {
+		if _, ok := b.led.Price(bean.NewDate(mustLast(t, b)), cur, "USD"); ok {
 			t.Errorf("%s was reported missing but has a price", cur)
 		}
 	}
@@ -113,11 +109,11 @@ func TestMonthlyFlowIsPeriodChange(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		typ  ast.AccountType
+		typ  string
 		neg  bool // whole-span total is negated to compare
 	}{
-		{"expenses", ast.AccountTypeExpenses, false},
-		{"income", ast.AccountTypeIncome, true},
+		{"expenses", "Expenses", false},
+		{"income", "Income", true},
 	} {
 		pts := b.MonthlyFlow(tc.typ, "USD")
 		if len(pts) == 0 {
@@ -128,11 +124,8 @@ func TestMonthlyFlowIsPeriodChange(t *testing.T) {
 			sum = sum.Add(p.Value)
 		}
 
-		tree, err := b.led.GetBalanceTree([]ast.AccountType{tc.typ}, dateOf(first), dateOf(last))
-		if err != nil {
-			t.Fatalf("%s: GetBalanceTree: %v", tc.name, err)
-		}
-		want := totalOf(tree, "USD")
+		tree := b.led.BalanceTree([]string{tc.typ}, bean.Between(bean.NewDate(first), bean.NewDate(last)))
+		want := tree.Flatten().Get("USD")
 		if tc.neg {
 			want = want.Neg()
 		}

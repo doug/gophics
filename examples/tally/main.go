@@ -26,7 +26,7 @@ import (
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
-	"github.com/dougfritz/beango/ledger"
+	"github.com/dougfritz/tally/bean"
 	"github.com/dougfritz/tally/book"
 )
 
@@ -44,7 +44,7 @@ func (Tally) CreateState() widget.State { return &state{} }
 type state struct {
 	widget.StateBase[Tally]
 	book *book.Book
-	tree *ledger.BalanceTree
+	tree *bean.Tree
 	err  error
 
 	loaded       bool
@@ -194,11 +194,11 @@ func (s *state) balancesView(th theme.Theme) widget.Widget {
 // account name on the left and its balances right-aligned in tabular figures.
 // Rows for accounts that have their own postings are tappable — they drill into
 // the register.
-func (s *state) appendNode(th theme.Theme, n *ledger.BalanceNode, out *[]widget.Widget) {
+func (s *state) appendNode(th theme.Theme, n *bean.Node, out *[]widget.Widget) {
 	isRoot := n.Depth == 0
 	name := n.Name
 	if !isRoot {
-		name = lastSegment(n.Account)
+		name = lastSegment(string(n.Account))
 	}
 
 	nameText := widget.Text{S: name, Size: th.Type.Body, Color: th.Text}
@@ -214,8 +214,8 @@ func (s *state) appendNode(th theme.Theme, n *ledger.BalanceNode, out *[]widget.
 			s.amountText(th, n),
 		),
 	}
-	if !isRoot && len(s.book.Currencies(n.Account)) > 0 {
-		acct := n.Account
+	if !isRoot && len(s.book.Currencies(string(n.Account))) > 0 {
+		acct := string(n.Account)
 		row = theme.Tappable{OnTap: func() { s.open(acct) }, Radius: 6, Child: row}
 	}
 	*out = append(*out, row)
@@ -229,7 +229,7 @@ func (s *state) appendNode(th theme.Theme, n *ledger.BalanceNode, out *[]widget.
 
 // amountText renders a node's non-zero balances (usually one currency) as
 // right-aligned monospace figures, so columns of numbers line up.
-func (s *state) amountText(th theme.Theme, n *ledger.BalanceNode) widget.Widget {
+func (s *state) amountText(th theme.Theme, n *bean.Node) widget.Widget {
 	if n.Balance == nil {
 		return widget.Sized{}
 	}
@@ -418,7 +418,7 @@ func (s *state) load(f shell.PickedFile) {
 	} else {
 		b, err = book.OpenBytes(f.Name, f.Data)
 	}
-	var tr *ledger.BalanceTree
+	var tr *bean.Tree
 	if err == nil {
 		tr, err = b.Tree()
 	}

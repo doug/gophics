@@ -1,18 +1,14 @@
-// Package book wraps the beango accounting engine: it loads a beancount ledger
-// (from a file or embedded bytes), processes it, and exposes the accounting
-// views Tally renders — starting with the account balance tree.
+// Package book wraps the accounting engine: it loads a beancount ledger (from a
+// file or embedded bytes), processes it, and exposes the views Tally renders.
 //
-// beango does the real work (parsing, validation, transaction balancing,
-// cost-basis booking, balance computation); this package is the thin, app-shaped
-// seam over it so the UI never touches beango's AST directly.
+// The engine is bean, this repository's Apache-2.0 implementation, so nothing
+// GPL-licensed is linked into a shipped build. This package stays a thin,
+// app-shaped seam over it so the UI never touches the AST directly — which is
+// what made swapping the engine underneath a contained change.
 package book
 
 import (
-	"context"
-
-	"github.com/dougfritz/beango/ast"
-	"github.com/dougfritz/beango/ledger"
-	"github.com/dougfritz/beango/loader"
+	"github.com/dougfritz/tally/bean"
 )
 
 // Book is a loaded, processed beancount ledger — the accounting model Tally draws.
@@ -20,51 +16,42 @@ type Book struct {
 	// Path is the file (or logical name, for embedded ledgers) this was loaded from.
 	Path string
 
-	tree *ast.AST
-	led  *ledger.Ledger
+	led *bean.Ledger
 
-	// ProcessErr holds any error from processing (validation failures, unbalanced
-	// transactions, failed balance assertions). The ledger stays usable for display
-	// when this is non-nil — a beancount file with a bad assertion should still
-	// open and show its data — so Tally surfaces it rather than refusing to load.
+	// ProcessErr holds any error from loading (a missing include, a syntax error).
+	// The ledger stays usable for display when this is non-nil — a file with one
+	// bad line should still open and show its data — so Tally surfaces it rather
+	// than refusing to load.
 	ProcessErr error
 }
 
 // Open loads and processes the beancount file at path, following `include`s.
 func Open(path string) (*Book, error) {
-	res, err := loader.New(loader.WithFollowIncludes()).Load(context.Background(), path)
-	if err != nil {
+	led, err := bean.Load(path)
+	if led == nil {
 		return nil, err
 	}
-	return process(path, res.AST), nil
+	return &Book{Path: path, led: led, ProcessErr: err}, nil
 }
 
 // OpenBytes loads a beancount ledger from in-memory bytes, tagged with a logical
-// name for diagnostics. Used for the bundled demo ledger (go:embed) and, later,
+// name for diagnostics. Used for the bundled demo ledger (go:embed) and for
 // content handed over by a platform file picker where there is no stable path.
 func OpenBytes(name string, data []byte) (*Book, error) {
-	tree, err := loader.New().LoadBytes(context.Background(), name, data)
-	if err != nil {
+	led, err := bean.LoadString(name, string(data))
+	if led == nil {
 		return nil, err
 	}
-	return process(name, tree), nil
+	return &Book{Path: name, led: led, ProcessErr: err}, nil
 }
 
-func process(path string, tree *ast.AST) *Book {
-	l := ledger.New()
-	perr := l.Process(context.Background(), tree)
-	return &Book{Path: path, tree: tree, led: l, ProcessErr: perr}
-}
+// Problems reports the semantic issues found while processing — unbalanced
+// transactions, failed balance assertions — so the UI can surface them.
+func (b *Book) Problems() []error { return b.led.Problems }
 
 // statementTypes is every beancount account type, in financial-statement order
 // (balance sheet: assets, liabilities, equity; income statement: income, expenses).
-var statementTypes = []ast.AccountType{
-	ast.AccountTypeAssets,
-	ast.AccountTypeLiabilities,
-	ast.AccountTypeEquity,
-	ast.AccountTypeIncome,
-	ast.AccountTypeExpenses,
-}
+var statementTypes = []string{"Assets", "Liabilities", "Equity", "Income", "Expenses"}
 
 // MainCurrency reports the ledger's dominant currency: the one appearing on the
 // most postings. Charts and totals are per-currency, so the UI needs one to lead
@@ -72,10 +59,10 @@ var statementTypes = []ast.AccountType{
 // here; reading options is a later refinement.)
 func (b *Book) MainCurrency() string {
 	counts := map[string]int{}
-	for _, acct := range b.led.Accounts() {
-		for _, ap := range acct.Postings {
-			if _, cur, ok := postingAmount(ap.Posting); ok {
-				counts[cur]++
+	for _, a := range b.led.Accounts() {
+		for _, ref := range a.Postings {
+			if ref.Posting.Amount != nil {
+				counts[ref.Posting.Amount.Currency]++
 			}
 		}
 	}
@@ -90,7 +77,7 @@ func (b *Book) MainCurrency() string {
 }
 
 // Tree returns the current balance tree across all account types: the running
-// inventory state as of the latest entry, aggregated hierarchically by account.
-func (b *Book) Tree() (*ledger.BalanceTree, error) {
-	return b.led.GetBalanceTree(statementTypes, nil, nil)
+// state as of the latest entry, aggregated hierarchically by account.
+func (b *Book) Tree() (*bean.Tree, error) {
+	return b.led.BalanceTree(statementTypes, bean.All()), nil
 }

@@ -5,15 +5,15 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/dougfritz/beango/ledger"
+	"github.com/dougfritz/tally/bean"
 )
 
 // findNodeBalance walks a balance tree for the node of the named account and
 // returns its balance in the given currency.
-func findNodeBalance(tr *ledger.BalanceTree, account, currency string) (decimal.Decimal, bool) {
-	var walk func(n *ledger.BalanceNode) (decimal.Decimal, bool)
-	walk = func(n *ledger.BalanceNode) (decimal.Decimal, bool) {
-		if n.Account == account && n.Balance != nil {
+func findNodeBalance(tr *bean.Tree, account, currency string) (decimal.Decimal, bool) {
+	var walk func(n *bean.Node) (decimal.Decimal, bool)
+	walk = func(n *bean.Node) (decimal.Decimal, bool) {
+		if string(n.Account) == account && n.Balance != nil {
 			return n.Balance.Get(currency), true
 		}
 		for _, c := range n.Children {

@@ -6,8 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/dougfritz/beango/ast"
-	"github.com/dougfritz/beango/ledger"
+	"github.com/dougfritz/tally/bean"
 )
 
 // Entry is one row of an account register: a posting on that account, with the
@@ -34,7 +33,7 @@ type Entry struct {
 // column meaningful: a multi-commodity account (a brokerage holding shares and
 // cash) has no single scalar total, so the caller picks which series to read.
 func (b *Book) Register(account, currency string) ([]Entry, error) {
-	acct, ok := b.led.GetAccount(account)
+	acct, ok := b.led.Account(bean.Account(account))
 	if !ok {
 		return nil, nil
 	}
@@ -44,20 +43,20 @@ func (b *Book) Register(account, currency string) ([]Entry, error) {
 
 	entries := make([]Entry, 0, len(acct.Postings))
 	running := decimal.Zero
-	for _, ap := range acct.Postings {
-		amt, cur, ok := postingAmount(ap.Posting)
-		if !ok || cur != currency {
+	for _, ref := range acct.Postings {
+		amt := ref.Posting.Amount
+		if amt == nil || amt.Currency != currency {
 			continue
 		}
-		running = running.Add(amt)
-		txn := ap.Transaction
+		running = running.Add(amt.Number)
+		txn := ref.Txn
 		entries = append(entries, Entry{
-			Date:      dateString(txn),
-			Payee:     txn.Payee.String(),
-			Narration: txn.Narration.String(),
+			Date:      txn.When().String(),
+			Payee:     txn.Payee,
+			Narration: txn.Narration,
 			Other:     counterparts(txn, account),
-			Amount:    amt,
-			Currency:  cur,
+			Amount:    amt.Number,
+			Currency:  amt.Currency,
 			Balance:   running,
 			Flag:      txn.Flag,
 		})
@@ -68,7 +67,7 @@ func (b *Book) Register(account, currency string) ([]Entry, error) {
 // Currencies lists the currencies an account has postings in, most-used first,
 // so the UI can offer a picker for multi-commodity accounts.
 func (b *Book) Currencies(account string) []string {
-	acct, ok := b.led.GetAccount(account)
+	acct, ok := b.led.Account(bean.Account(account))
 	if !ok {
 		return nil
 	}
@@ -77,32 +76,17 @@ func (b *Book) Currencies(account string) []string {
 
 // AccountNames returns every account name in the ledger, sorted.
 func (b *Book) AccountNames() []string {
-	accts := b.led.Accounts()
-	names := make([]string, 0, len(accts))
-	for name := range accts {
-		names = append(names, name)
+	names := b.led.AccountNames()
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = string(n)
 	}
-	sort.Strings(names)
-	return names
+	return out
 }
 
-// postingAmount reads a posting's amount as a decimal. Postings whose amount was
-// elided in the source are filled in by the ledger's interpolation, but a posting
-// with no resolvable amount (or an unparsable one) is skipped by the caller.
-func postingAmount(p *ast.Posting) (decimal.Decimal, string, bool) {
-	if p == nil || p.Amount == nil {
-		return decimal.Zero, "", false
-	}
-	d, err := decimal.NewFromString(p.Amount.Value)
-	if err != nil {
-		return decimal.Zero, "", false
-	}
-	return d, p.Amount.Currency, true
-}
-
-// counterparts names the other accounts in the transaction, leaf-first and
+// counterparts names the other accounts in the transaction, in source order and
 // de-duplicated: the "where did this go" column of a register.
-func counterparts(txn *ast.Transaction, self string) string {
+func counterparts(txn *bean.Transaction, self string) string {
 	seen := map[string]bool{}
 	parts := make([]string, 0, 2)
 	for _, p := range txn.Postings {
@@ -116,19 +100,12 @@ func counterparts(txn *ast.Transaction, self string) string {
 	return strings.Join(parts, ", ")
 }
 
-func dateString(txn *ast.Transaction) string {
-	if d := txn.Date(); d != nil {
-		return d.String()
-	}
-	return ""
-}
-
 // currenciesByUse orders an account's currencies by posting count, descending.
-func currenciesByUse(acct *ledger.Account) []string {
+func currenciesByUse(acct *bean.AccountInfo) []string {
 	counts := map[string]int{}
-	for _, ap := range acct.Postings {
-		if _, cur, ok := postingAmount(ap.Posting); ok {
-			counts[cur]++
+	for _, ref := range acct.Postings {
+		if a := ref.Posting.Amount; a != nil {
+			counts[a.Currency]++
 		}
 	}
 	curs := make([]string, 0, len(counts))
@@ -144,7 +121,7 @@ func currenciesByUse(acct *ledger.Account) []string {
 	return curs
 }
 
-func dominantCurrency(acct *ledger.Account) string {
+func dominantCurrency(acct *bean.AccountInfo) string {
 	if curs := currenciesByUse(acct); len(curs) > 0 {
 		return curs[0]
 	}

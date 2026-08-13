@@ -14,7 +14,6 @@ import (
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
-	"github.com/dougfritz/beango/ast"
 	"github.com/dougfritz/tally/book"
 )
 
@@ -288,8 +287,8 @@ func (s *state) ensureSeries() {
 	s.seriesReady = true
 	s.baseCurrency = s.book.MainCurrency()
 	s.netWorth = s.book.NetWorth(s.baseCurrency)
-	s.income = s.book.MonthlyFlow(ast.AccountTypeIncome, s.baseCurrency)
-	s.expenses = s.book.MonthlyFlow(ast.AccountTypeExpenses, s.baseCurrency)
+	s.income = s.book.MonthlyFlow("Income", s.baseCurrency)
+	s.expenses = s.book.MonthlyFlow("Expenses", s.baseCurrency)
 	s.categories = s.book.TopCategories(s.baseCurrency, 2, 8)
 	s.unpriced = s.book.MissingPrices(s.baseCurrency)
 }

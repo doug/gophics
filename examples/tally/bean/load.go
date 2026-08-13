@@ -18,8 +18,14 @@ func Load(path string) (*Ledger, error) {
 		visited = map[string]bool{}
 	)
 
-	var read func(path string, from Position)
-	read = func(path string, from Position) {
+	// A missing *include* is a problem to report; a missing *root* file means
+	// there is no ledger at all, and the caller must be able to tell those apart
+	// — "the file you asked for isn't there" is not the same as "one line of your
+	// ledger didn't parse".
+	rootMissing := false
+
+	var read func(path string, from Position, root bool)
+	read = func(path string, from Position, root bool) {
 		abs, err := filepath.Abs(path)
 		if err != nil {
 			abs = path
@@ -32,6 +38,9 @@ func Load(path string) (*Ledger, error) {
 		src, err := os.ReadFile(abs)
 		if err != nil {
 			errs = append(errs, &LoadError{Pos: from, Path: path, Err: err})
+			if root {
+				rootMissing = true
+			}
 			return
 		}
 		f, perr := Parse(abs, string(src))
@@ -55,11 +64,14 @@ func Load(path string) (*Ledger, error) {
 			if !filepath.IsAbs(target) {
 				target = filepath.Join(filepath.Dir(abs), target)
 			}
-			read(target, inc.Where())
+			read(target, inc.Where(), false)
 		}
 	}
 
-	read(path, Position{})
+	read(path, Position{}, true)
+	if rootMissing {
+		return nil, errs.Err()
+	}
 
 	l := Process(dirs)
 	l.Problems = append(l.Problems, errs...)
