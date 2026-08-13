@@ -1,2 +1,13 @@
-*.iconset/
+# Build outputs.
 build/
+*.iconset/
+
+# gomobile bind products: large, generated, and rebuilt by package/ios.sh and
+# package/android.sh. Committing them would put ~100 MB of binaries in the repo
+# and stale ones in every checkout.
+ios/Tallymobile.xcframework/
+ios/Tally.xcodeproj/
+android/app/libs/
+android/.gradle/
+android/local.properties
+android/app/.cxx/
