@@ -50,6 +50,19 @@ type state struct {
 	loaded       bool
 	prefsChecked bool
 
+	// view selects the top-level screen; a non-empty account overrides it with
+	// the register drill-down.
+	view view
+
+	// Dashboard series, computed once per loaded ledger (see ensureSeries).
+	seriesReady  bool
+	baseCurrency string
+	netWorth     []book.Point
+	income       []book.Point
+	expenses     []book.Point
+	categories   []book.Category
+	unpriced     []string
+
 	// account is the drilled-into account ("" → the balances overview).
 	account  string
 	currency string
@@ -57,6 +70,14 @@ type state struct {
 	selected int
 	filter   string
 }
+
+// view is the selected top-level screen.
+type view int
+
+const (
+	viewOverview view = iota
+	viewBalances
+)
 
 // stateHook lets tests observe the mounted state (see render_test.go).
 var stateHook func(*state)
@@ -91,7 +112,7 @@ func (s *state) loadWith(p shell.Preferences) {
 			if b, err := book.Open(path); err == nil {
 				if tr, err := b.Tree(); err == nil {
 					s.book, s.tree, s.err = b, tr, nil
-					s.loaded = true
+					s.loaded, s.seriesReady = true, false
 					return
 				}
 			}
@@ -141,6 +162,9 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 		}}
 	case s.account != "":
 		body = s.registerView(th)
+	case s.view == viewOverview:
+		s.ensureSeries()
+		body = s.overviewView(th)
 	default:
 		body = widget.Expand(widget.Scroll{Child: widget.Padding{
 			Insets: geom.Insets{Left: 24, Right: 24, Top: 8, Bottom: 24},
@@ -237,9 +261,10 @@ func (s *state) registerView(th theme.Theme) widget.Widget {
 			{Title: "Amount", Width: 124, Align: theme.AlignEnd},
 			{Title: "Balance", Width: 132, Align: theme.AlignEnd},
 		},
-		Count:    len(rows),
-		Selected: s.selected,
-		OnTapRow: func(i int) { s.SetState(func() { s.selected = i }) },
+		Count:      len(rows),
+		Selectable: true,
+		Selected:   s.selected,
+		OnTapRow:   func(i int) { s.SetState(func() { s.selected = i }) },
 		Cell: func(r, c int) widget.Widget {
 			e := rows[r]
 			switch c {
@@ -318,6 +343,10 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
 	}
 	row := []widget.Widget{
 		widget.Text{S: "Tally", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
+		widget.Sized{W: 20},
+		s.tab(th, "Overview", viewOverview),
+		widget.Sized{W: 4},
+		s.tab(th, "Balances", viewBalances),
 		widget.Expand(widget.Sized{W: 12}),
 	}
 	// The picker is nil on platforms without one (and the web build carries no
@@ -335,6 +364,24 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx) widget.Widget {
 		Child:  widget.Row(row...),
 	}
 	return widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}})
+}
+
+// tab is one top-level nav item: the selected one is emphasized, the rest are
+// quiet, so the header reads as navigation rather than a row of buttons.
+func (s *state) tab(th theme.Theme, label string, v view) widget.Widget {
+	sel := s.view == v && s.account == ""
+	col, font := th.Muted, ""
+	if sel {
+		col, font = th.Text, theme.FontBold
+	}
+	return theme.Tappable{
+		Radius: 6,
+		OnTap:  func() { s.SetState(func() { s.view, s.account, s.entries = v, "", nil }) },
+		Child: widget.Padding{
+			Insets: geom.Insets{Left: 10, Right: 10, Top: 5, Bottom: 5},
+			Child:  widget.Text{S: label, Font: font, Size: th.Type.Body, Color: col},
+		},
+	}
 }
 
 // pick opens the platform file panel and loads the chosen beancount file.
@@ -381,6 +428,7 @@ func (s *state) load(f shell.PickedFile) {
 			return
 		}
 		s.book, s.tree = b, tr
+		s.seriesReady = false
 		s.account, s.entries, s.selected, s.filter = "", nil, -1, ""
 	})
 }

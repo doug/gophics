@@ -66,6 +66,29 @@ var statementTypes = []ast.AccountType{
 	ast.AccountTypeExpenses,
 }
 
+// MainCurrency reports the ledger's dominant currency: the one appearing on the
+// most postings. Charts and totals are per-currency, so the UI needs one to lead
+// with. (A ledger that declares `option "operating_currency"` should arguably win
+// here; reading options is a later refinement.)
+func (b *Book) MainCurrency() string {
+	counts := map[string]int{}
+	for _, acct := range b.led.Accounts() {
+		for _, ap := range acct.Postings {
+			if _, cur, ok := postingAmount(ap.Posting); ok {
+				counts[cur]++
+			}
+		}
+	}
+	best, bestN := "", 0
+	for cur, n := range counts {
+		// Ties break alphabetically so the choice is stable across runs.
+		if n > bestN || (n == bestN && cur < best) {
+			best, bestN = cur, n
+		}
+	}
+	return best
+}
+
 // Tree returns the current balance tree across all account types: the running
 // inventory state as of the latest entry, aggregated hierarchically by account.
 func (b *Book) Tree() (*ledger.BalanceTree, error) {
