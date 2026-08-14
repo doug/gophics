@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 // Position locates a directive in its source. EndLine spans the indented block

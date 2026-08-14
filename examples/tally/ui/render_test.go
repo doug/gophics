@@ -15,8 +15,8 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/theme"
 
-	"github.com/dougfritz/tally/bean"
-	"github.com/dougfritz/tally/book"
+	"github.com/doug/tally/bean"
+	"github.com/doug/tally/book"
 )
 
 // harness mounts the app headlessly and returns it with its root state.

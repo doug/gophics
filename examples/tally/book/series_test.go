@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
-	"github.com/dougfritz/tally/bean"
+	"github.com/doug/tally/bean"
 )
 
 func testBook(t *testing.T) *Book {

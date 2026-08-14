@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/intl"
@@ -17,9 +17,9 @@ import (
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
-	"github.com/dougfritz/tally/bean"
-	"github.com/dougfritz/tally/book"
-	"github.com/dougfritz/tally/demo"
+	"github.com/doug/tally/bean"
+	"github.com/doug/tally/book"
+	"github.com/doug/tally/demo"
 )
 
 // App is the root widget.

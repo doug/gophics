@@ -3,7 +3,7 @@ package bean
 import (
 	"sort"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 // pricePoint is one dated rate for a commodity pair.

@@ -27,6 +27,6 @@ if [ "${1:-}" = "--run" ]; then
     xcrun simctl boot "$DEV"
   fi
   xcrun simctl install "$DEV" "$APP"
-  xcrun simctl launch "$DEV" com.dougfritz.tally
+  xcrun simctl launch "$DEV" com.gophics.tally
   open -a Simulator
 fi

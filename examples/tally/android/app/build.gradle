@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace 'com.dougfritz.tally'
+    namespace 'com.gophics.tally'
     compileSdk 34
     // The AGP 8.5 default NDK; `gophics run` ensures it (and the CMake below)
     // are installed. Pin here so the native build is reproducible across machines.
     ndkVersion '26.1.10909125'
     defaultConfig {
-        applicationId 'com.dougfritz.tally'
+        applicationId 'com.gophics.tally'
         minSdk 24
         targetSdk 34
         versionCode 1

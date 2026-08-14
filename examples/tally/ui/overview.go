@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
 	"github.com/doug/gophics/chart"
 	"github.com/doug/gophics/geom"
@@ -14,7 +14,7 @@ import (
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
-	"github.com/dougfritz/tally/book"
+	"github.com/doug/tally/book"
 )
 
 // overview is the dashboard: where you stand now, how you got here, and where the

@@ -4,14 +4,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
-	"github.com/dougfritz/tally/book"
+	"github.com/doug/tally/book"
 )
 
 // addForm is the "record a transaction" panel: a date, who it was with, the two

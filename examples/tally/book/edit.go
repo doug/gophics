@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
-	"github.com/dougfritz/tally/bean"
+	"github.com/doug/tally/bean"
 )
 
 // NewEntry is a transaction the user is adding: money moving from one account to

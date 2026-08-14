@@ -7,7 +7,7 @@
 // a real app embedding it via a plain go.mod line. Its only non-stdlib
 // dependencies are gophics itself, x/image for fonts, and a decimal package for
 // money; nothing GPL-licensed, so it is distributable through the app stores.
-module github.com/dougfritz/tally
+module github.com/doug/tally
 
 go 1.26.5
 
@@ -26,7 +26,6 @@ require (
 require (
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/go-webgpu/goffi v0.6.1 // indirect
-	github.com/shopspring/decimal v1.4.0
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )

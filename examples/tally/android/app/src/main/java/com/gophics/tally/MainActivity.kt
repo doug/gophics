@@ -1,4 +1,4 @@
-package com.dougfritz.tally
+package com.gophics.tally
 
 import android.app.Activity
 import android.content.Intent

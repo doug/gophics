@@ -3,7 +3,7 @@ package bean
 import (
 	"strings"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 // Parse reads beancount source into a File.

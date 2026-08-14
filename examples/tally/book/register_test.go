@@ -3,9 +3,9 @@ package book
 import (
 	"testing"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
-	"github.com/dougfritz/tally/bean"
+	"github.com/doug/tally/bean"
 )
 
 // findNodeBalance walks a balance tree for the node of the named account and

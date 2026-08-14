@@ -32,7 +32,7 @@ var bridge *mobile.Bridge
 func Start() string {
 	h, err := app.NewHandler(newRoot(), app.Config{
 		Title:      "Tally",
-		AppID:      "com.dougfritz.tally",
+		AppID:      "com.gophics.tally",
 		Size:       geom.Size{W: 390, H: 844},
 		Background: theme.Light().Bg,
 		Font:       goregular.TTF,

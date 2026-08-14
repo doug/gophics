@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 const editable = `; A hand-kept ledger.

@@ -4,9 +4,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
-	"github.com/dougfritz/tally/bean"
+	"github.com/doug/tally/bean"
 )
 
 // Entry is one row of an account register: a posting on that account, with the

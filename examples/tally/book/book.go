@@ -10,7 +10,7 @@ package book
 import (
 	"os"
 
-	"github.com/dougfritz/tally/bean"
+	"github.com/doug/tally/bean"
 )
 
 // Book is a loaded, processed beancount ledger — the accounting model Tally draws.

@@ -3,7 +3,7 @@ package bean
 import (
 	"testing"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 func dec(s string) decimal.Decimal {

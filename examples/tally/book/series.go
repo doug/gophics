@@ -4,9 +4,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 
-	"github.com/dougfritz/tally/bean"
+	"github.com/doug/tally/bean"
 )
 
 // Point is one sample of a time series: a month-end date and a value.

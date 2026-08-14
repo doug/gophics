@@ -15,13 +15,13 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/theme"
 
-	"github.com/dougfritz/tally/ui"
+	"github.com/doug/tally/ui"
 )
 
 func main() {
 	err := app.Run(ui.App{}, app.Config{
 		Title:      "Tally",
-		AppID:      "com.dougfritz.tally",
+		AppID:      "com.gophics.tally",
 		Size:       geom.Size{W: 1040, H: 680},
 		Background: theme.Light().Bg,
 		Font:       goregular.TTF,

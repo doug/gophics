@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 // Format renders directives as beancount source.

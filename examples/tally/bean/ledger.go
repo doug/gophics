@@ -3,7 +3,7 @@ package bean
 import (
 	"sort"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 // PostingRef pairs a posting with the transaction it came from — an account's

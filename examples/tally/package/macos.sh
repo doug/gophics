@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_NAME="Tally"
-BUNDLE_ID="${BUNDLE_ID:-com.dougfritz.tally}"
+BUNDLE_ID="${BUNDLE_ID:-com.gophics.tally}"
 VERSION="${VERSION:-0.1.0}"
 BUILD="${BUILD:-1}"
 OUT="build/${APP_NAME}.app"

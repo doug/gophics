@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shopspring/decimal"
+	"github.com/doug/tally/decimal"
 )
 
 // Balance is an amount held across one or more commodities — the running total of
