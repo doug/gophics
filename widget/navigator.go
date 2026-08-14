@@ -110,6 +110,19 @@ func (s *navState) settle() {
 }
 
 func (s *navState) push(w Widget) {
+	// Ignore a push while another push is still animating: two quick taps on a
+	// list row would otherwise open the same route twice, and the user has to
+	// press back twice to escape. The transition is exactly the window in which a
+	// tap is easiest to repeat by accident, because nothing has visibly finished
+	// yet, and platform navigators drop the second tap for the same reason.
+	//
+	// Only push-during-push. Interleaving directions is deliberate and tested: a
+	// push during a pop (or the reverse) settles the in-flight transition and
+	// starts the new one, which is how a "go back and immediately elsewhere"
+	// gesture is meant to behave.
+	if s.animating && s.trans != nil && !s.trans.popping {
+		return
+	}
 	s.SetState(func() {
 		s.settle()
 		under := s.top()

@@ -216,3 +216,42 @@ func TestNavigatorPopDuringLastPop(t *testing.T) {
 		t.Fatal("home page missing")
 	}
 }
+
+// TestNavigatorPushDuringPushIsIgnored covers the double-tap: two taps on a list
+// row inside the push transition must open one route, not two. Every other
+// interleaving settles and proceeds (see the tests above); this one is the
+// accidental repeat of a single action, and dropping it is what the platforms do.
+func TestNavigatorPushDuringPushIsIgnored(t *testing.T) {
+	o, s := navFixture(t)
+	nav := Nav{s: s}
+
+	page := probe{ID: "A"}
+	s.push(page)
+	tickNav(o, 3) // mid-flight
+	if s.trans == nil || s.trans.popping {
+		t.Fatal("setup: push transition not in flight")
+	}
+
+	s.push(page) // the second tap
+	pumpNav(t, o, s)
+
+	if got := nav.Depth(); got != 2 {
+		t.Errorf("depth after a double-tap push = %d, want 2 (home + one route)", got)
+	}
+}
+
+// TestNavigatorPushAfterSettlingStillWorks: the guard must only cover the
+// in-flight window, or navigation would stop working after the first push.
+func TestNavigatorPushAfterSettlingStillWorks(t *testing.T) {
+	o, s := navFixture(t)
+	nav := Nav{s: s}
+
+	s.push(probe{ID: "A"})
+	pumpNav(t, o, s)
+	s.push(probe{ID: "B"})
+	pumpNav(t, o, s)
+
+	if got := nav.Depth(); got != 3 {
+		t.Errorf("depth after two settled pushes = %d, want 3", got)
+	}
+}

@@ -585,7 +585,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 			caretIdx = preStart + b.state.preeditCursor
 		}
 		x := origin.X + line.CaretX(caretIdx)
-		c.Line(geom.Pt{X: x, Y: at.Y}, geom.Pt{X: x, Y: at.Y + b.size.H}, 1.5, caretC)
+		drawCaret(c, x, at.Y, at.Y+b.size.H, caretC)
 	}
 
 	c.PopClip()
@@ -593,6 +593,24 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.state.revealPending {
 		b.doReveal(origin.X+line.CaretX(b.state.ed.Caret()), at.Y, at.Y+b.size.H)
 	}
+}
+
+// caretWidth is the caret's thickness in logical pixels.
+const caretWidth = 1.5
+
+// drawCaret paints the insertion point as a rectangle anchored *at* x rather
+// than a stroked line centred on it.
+//
+// A centred stroke puts half its width to the left of the insertion point, so it
+// visibly bleeds into the character before the caret — and at index 0 half of it
+// falls outside the field and is clipped away. Anchoring the rect at the boundary
+// and growing rightwards is what every platform's caret does, and it makes the
+// caret at the start of a field fully visible.
+func drawCaret(c paint.Canvas, x, top, bottom float32, col paint.Color) {
+	c.FillRect(geom.Rect{
+		Min: geom.Pt{X: x, Y: top},
+		Max: geom.Pt{X: x + caretWidth, Y: bottom},
+	}, col)
 }
 
 // paintMultiline draws wrapped lines with per-line selection rects and the
@@ -637,7 +655,7 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 		li := lineOf(lines, b.state.ed.Caret())
 		x := at.X + lines[li].CaretX(b.state.ed.Caret()-lines[li].Start)
 		top := at.Y + float32(li)*lineH
-		c.Line(geom.Pt{X: x, Y: top}, geom.Pt{X: x, Y: top + lineH}, 1.5, caretC)
+		drawCaret(c, x, top, top+lineH, caretC)
 	}
 
 	c.PopClip()
