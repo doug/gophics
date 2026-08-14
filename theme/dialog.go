@@ -27,7 +27,7 @@ func ShowDialog(ctx widget.Ctx, content widget.Widget) (dismiss func()) {
 	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{
 		OnDismiss: close,
 		Child: widget.Center(widget.Decorated{
-			Color: th.Surface, Radius: th.Radius,
+			Color: th.Elevated, Radius: th.Radius,
 			Child: widget.Padding{All: 20, Child: content},
 		}),
 	}})
@@ -65,7 +65,7 @@ func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()
 	col := widget.Column(rows...)
 	col.CrossAlign = 3 // CrossStretch
 	menu := widget.Decorated{
-		Color: th.Surface, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
+		Color: th.Elevated, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
 		Child: widget.Sized{W: 200, Child: col},
 	}
 	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{

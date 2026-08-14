@@ -51,15 +51,21 @@ type Theme struct {
 	Dark bool
 
 	Bg           paint.Color // app background
-	Surface      paint.Color // cards, fields
+	Surface      paint.Color // cards, fields — inline, on the app's own background
 	SurfaceHover paint.Color
-	Primary      paint.Color // accent / actions
-	OnPrimary    paint.Color // content on Primary
-	Text         paint.Color
-	Muted        paint.Color
-	Success      paint.Color
-	Warning      paint.Color
-	Danger       paint.Color
+	// Elevated is the surface of something floating *over* the app: a dialog, a
+	// menu, a dropdown list, a sheet. It has to stay readable above arbitrary
+	// content, which the inline Surface does not — on the glass themes Surface is
+	// around half transparent, which is right for a panel resting on a known
+	// background and wrong for a dialog with a page showing through it.
+	Elevated  paint.Color
+	Primary   paint.Color // accent / actions
+	OnPrimary paint.Color // content on Primary
+	Text      paint.Color
+	Muted     paint.Color
+	Success   paint.Color
+	Warning   paint.Color
+	Danger    paint.Color
 	// Border is decorative chrome: table rules, dividers, the hairline edge of a
 	// panel. It is allowed to be very faint — on the glass themes it is a barely
 	// there rim highlight.
@@ -111,6 +117,7 @@ func Light() Theme {
 	return Theme{
 		Bg:           paint.RGB(0.980, 0.976, 0.961), // warm off-white
 		Surface:      paint.RGB(1, 1, 1),
+		Elevated:     paint.RGB(1, 1, 1),
 		SurfaceHover: paint.RGB(0.957, 0.949, 0.929),
 		Primary:      paint.RGB(0.851, 0.467, 0.341), // clay
 		OnPrimary:    paint.RGB(1, 1, 1),
@@ -134,6 +141,7 @@ func Dark() Theme {
 		Dark:         true,
 		Bg:           paint.RGB(0.086, 0.086, 0.078), // warm near-black
 		Surface:      paint.RGB(0.137, 0.133, 0.125),
+		Elevated:     paint.RGB(0.169, 0.165, 0.157),
 		SurfaceHover: paint.RGB(0.180, 0.176, 0.165),
 		Primary:      paint.RGB(0.878, 0.522, 0.396), // clay, lifted for dark
 		OnPrimary:    paint.RGB(0.086, 0.086, 0.078),
@@ -188,6 +196,7 @@ func Glass() Theme {
 	t := Light()
 	t.Surface = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
 	t.SurfaceHover = paint.Color{R: 1, G: 1, B: 1, A: 0.72}
+	t.Elevated = paint.Color{R: 1, G: 1, B: 1, A: 0.92}
 	t.Border = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
 	// A control's edge cannot borrow the panel rim: over a blurred, arbitrary
 	// backdrop it has to carry its own contrast.
@@ -201,6 +210,7 @@ func GlassDark() Theme {
 	t := Dark()
 	t.Surface = paint.Color{R: 0.13, G: 0.13, B: 0.12, A: 0.48}
 	t.SurfaceHover = paint.Color{R: 0.22, G: 0.22, B: 0.21, A: 0.6}
+	t.Elevated = paint.Color{R: 0.16, G: 0.16, B: 0.15, A: 0.94}
 	t.Border = paint.Color{R: 1, G: 1, B: 1, A: 0.16}
 	t.Outline = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
 	t.Blur = 24

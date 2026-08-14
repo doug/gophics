@@ -190,7 +190,7 @@ func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, options []string
 	col.CrossAlign = layout.CrossStretch
 
 	menu := widget.Decorated{
-		Color: th.Surface, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
+		Color: th.Elevated, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
 		Child: widget.Sized{W: width, Child: col},
 	}
 	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{

@@ -135,7 +135,7 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 
 		bottomSafe := s.ctx.SafeInsets().Bottom
 		surface := widget.Decorated{
-			Color: th.Surface, Radius: th.Radius, Blur: th.Blur,
+			Color: th.Elevated, Radius: th.Radius, Blur: th.Blur,
 			Child: widget.Padding{
 				Insets: geom.Insets{Left: 20, Right: 20, Top: 12, Bottom: 20 + bottomSafe},
 				Child: widget.Column(
