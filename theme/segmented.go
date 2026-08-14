@@ -93,7 +93,7 @@ func (s *segmentedState) Build(ctx widget.Ctx) widget.Widget {
 			indicator := widget.Canvas{H: segH, Draw: func(c paint.Canvas, size geom.Size) {
 				s.width = size.W
 				r := geom.Rect{Max: size.Pt()}
-				c.FillRRect(r, size.H/2, th.Border) // track groove
+				c.FillRRect(r, size.H/2, th.Outline) // track groove
 				segW := size.W / float32(n)
 				const inset = 2
 				ir := geom.RectXYWH(pos*segW+inset, inset, segW-2*inset, size.H-2*inset)

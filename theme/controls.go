@@ -55,7 +55,7 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 		}},
 		Child: widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) {
 			r := geom.Rect{Max: size.Pt()}
-			track := paint.Lerp(th.Border, th.Primary, t)
+			track := paint.Lerp(th.Outline, th.Primary, t)
 			c.FillRRect(r, h/2, track)
 			cx := r.Min.X + h/2 + t*(w-h)
 			cy := r.Min.Y + h/2
@@ -80,7 +80,7 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 			c.Line(r.Min.Add(geom.Pt{X: 4, Y: 10}), r.Min.Add(geom.Pt{X: 8, Y: 14}), 2, th.OnPrimary)
 			c.Line(r.Min.Add(geom.Pt{X: 8, Y: 14}), r.Min.Add(geom.Pt{X: 16, Y: 5}), 2, th.OnPrimary)
 		} else {
-			c.StrokeRRect(r, 5, 1.5, th.Border)
+			c.StrokeRRect(r, 5, 1.5, th.Outline)
 		}
 	}}
 	var child widget.Widget = box
@@ -139,7 +139,7 @@ func (s *sliderState) Build(ctx widget.Ctx) widget.Widget {
 			r := geom.Rect{Max: size.Pt()}
 			s.width = r.Dx()
 			cy := r.Min.Y + r.Dy()/2
-			c.FillRRect(geom.RectXYWH(r.Min.X, cy-2, r.Dx(), 4), 2, th.Border)
+			c.FillRRect(geom.RectXYWH(r.Min.X, cy-2, r.Dx(), 4), 2, th.Outline)
 			fillW := val * r.Dx()
 			c.FillRRect(geom.RectXYWH(r.Min.X, cy-2, fillW, 4), 2, th.Primary)
 			cx := r.Min.X + fillW
@@ -165,7 +165,7 @@ func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
 	dot := widget.Canvas{W: 20, H: 20, Draw: func(c paint.Canvas, size geom.Size) {
 		r := geom.Rect{Max: size.Pt()}
-		ring := th.Border
+		ring := th.Outline
 		if rd.Selected {
 			ring = th.Primary
 		}

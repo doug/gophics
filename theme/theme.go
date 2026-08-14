@@ -60,8 +60,18 @@ type Theme struct {
 	Success      paint.Color
 	Warning      paint.Color
 	Danger       paint.Color
-	Border       paint.Color
-	Selection    paint.Color
+	// Border is decorative chrome: table rules, dividers, the hairline edge of a
+	// panel. It is allowed to be very faint — on the glass themes it is a barely
+	// there rim highlight.
+	Border paint.Color
+	// Outline is the edge of an *interactive* control: an unchecked checkbox or
+	// radio, a switch or slider track, a field or button border. It must stay
+	// legible on every background, because it is the only thing telling the user
+	// the control exists. Keeping it apart from Border is what stops a theme
+	// tuned for pretty panel edges from erasing its own form controls — which is
+	// exactly what the glass themes did.
+	Outline   paint.Color
+	Selection paint.Color
 	// Chart is a categorical palette for data series and per-item accents,
 	// read positionally with ChartAt so a re-theme restyles charts too.
 	Chart [6]paint.Color
@@ -110,6 +120,7 @@ func Light() Theme {
 		Warning:      paint.RGB(0.831, 0.639, 0.290),
 		Danger:       paint.RGB(0.776, 0.361, 0.318),
 		Border:       paint.RGB(0.898, 0.886, 0.859),
+		Outline:      paint.RGB(0.706, 0.690, 0.655),
 		Selection:    paint.Color{R: 0.851, G: 0.467, B: 0.341, A: 0.24},
 		Chart:        lightChart,
 		Radius:       10,
@@ -132,6 +143,7 @@ func Dark() Theme {
 		Warning:      paint.RGB(0.878, 0.694, 0.361),
 		Danger:       paint.RGB(0.851, 0.451, 0.408),
 		Border:       paint.RGB(0.271, 0.263, 0.247),
+		Outline:      paint.RGB(0.451, 0.439, 0.416),
 		Selection:    paint.Color{R: 0.878, G: 0.522, B: 0.396, A: 0.30},
 		Chart:        darkChart,
 		Radius:       10,
@@ -177,6 +189,9 @@ func Glass() Theme {
 	t.Surface = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
 	t.SurfaceHover = paint.Color{R: 1, G: 1, B: 1, A: 0.72}
 	t.Border = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
+	// A control's edge cannot borrow the panel rim: over a blurred, arbitrary
+	// backdrop it has to carry its own contrast.
+	t.Outline = paint.Color{R: 0.20, G: 0.19, B: 0.18, A: 0.55}
 	t.Blur = 24
 	return t
 }
@@ -187,6 +202,7 @@ func GlassDark() Theme {
 	t.Surface = paint.Color{R: 0.13, G: 0.13, B: 0.12, A: 0.48}
 	t.SurfaceHover = paint.Color{R: 0.22, G: 0.22, B: 0.21, A: 0.6}
 	t.Border = paint.Color{R: 1, G: 1, B: 1, A: 0.16}
+	t.Outline = paint.Color{R: 1, G: 1, B: 1, A: 0.55}
 	t.Blur = 24
 	return t
 }
@@ -314,7 +330,7 @@ func (s *buttonState) pressOut() {
 func (s *buttonState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
 	b := s.W()
-	bg, fg, border := th.Surface, th.Text, th.Border
+	bg, fg, border := th.Surface, th.Text, th.Outline
 	if b.Primary {
 		bg, fg, border = th.Primary, th.OnPrimary, th.Primary
 	}
@@ -363,7 +379,7 @@ type fieldState struct {
 func (s *fieldState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
 	f := s.W()
-	border, bw := th.Border, float32(1)
+	border, bw := th.Outline, float32(1)
 	if s.focused {
 		border, bw = th.Primary, 1.5
 	}

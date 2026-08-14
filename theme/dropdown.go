@@ -80,7 +80,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	}
 
 	// The border accents (like a focused Field) while the popup is open.
-	border, bw := th.Border, float32(1)
+	border, bw := th.Outline, float32(1)
 	if s.open {
 		border, bw = th.Primary, 1.5
 	}
