@@ -46,6 +46,14 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 	}
 	const w, h = 44, 26
 	t := s.knob.Value()
+	track := widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) {
+		r := geom.Rect{Max: size.Pt()}
+		col := paint.Lerp(th.Outline, th.Primary, t)
+		c.FillRRect(r, h/2, col)
+		cx := r.Min.X + h/2 + t*(w-h)
+		cy := r.Min.Y + h/2
+		c.FillRRect(geom.RectXYWH(cx-9, cy-9, 18, 18), 9, th.OnPrimary)
+	}}
 	return widget.Interactive{
 		Handler: widget.Handler{OnTap: func() {
 			if f := s.W().OnChange; f != nil {
@@ -53,15 +61,24 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 				f(!on)
 			}
 		}},
-		Child: widget.Canvas{W: w, H: h, Draw: func(c paint.Canvas, size geom.Size) {
-			r := geom.Rect{Max: size.Pt()}
-			track := paint.Lerp(th.Outline, th.Primary, t)
-			c.FillRRect(r, h/2, track)
-			cx := r.Min.X + h/2 + t*(w-h)
-			cy := r.Min.Y + h/2
-			c.FillRRect(geom.RectXYWH(cx-9, cy-9, 18, 18), 9, th.OnPrimary)
-		}},
+		// The tap area is the full minimum target, not the 26pt-tall track: a
+		// switch drawn to look slim still has to be as easy to hit as anything
+		// else, and a target shorter than a fingertip is the difference between
+		// "toggles when I tap it" and "sometimes toggles".
+		Child: touchTarget(track),
 	}
+}
+
+// MinTouchTarget is the smallest comfortable tap area in logical pixels. Both
+// Apple and Google land on 44–48; a control drawn smaller than this keeps its
+// looks and grows its *hit* area to meet it.
+const MinTouchTarget = 44
+
+// touchTarget centres a control inside at least MinTouchTarget in each axis, so
+// the surrounding Interactive covers a finger-sized area. It adds layout space,
+// which is the honest cost: the alternative is a control that silently misses.
+func touchTarget(child widget.Widget) widget.Widget {
+	return widget.Sized{W: MinTouchTarget, H: MinTouchTarget, Child: widget.Center(child)}
 }
 
 // Checkbox is a labeled boolean box. Controlled via Checked/OnChange.

@@ -120,3 +120,20 @@ func TestControlsGolden(t *testing.T) {
 		_ = png.Encode(f, img)
 	}
 }
+
+// TestSwitchTapTargetCoversFullHeight is the regression for a switch that only
+// toggled sometimes: its hit area used to be the 26pt-tall track it draws, so a
+// tap a few points high or low did nothing. The target is now the full minimum
+// touch size, and taps anywhere in it must register.
+func TestSwitchTapTargetCoversFullHeight(t *testing.T) {
+	for _, dy := range []float32{3, 22, 40} { // top edge, centre, bottom edge
+		h, st := controlsHarness(t)
+		h.Render()
+		before := st.sw
+		// The switch is the first control, inside the 24pt padding.
+		h.Tap(geom.Pt{X: 24 + theme.MinTouchTarget/2, Y: 24 + dy})
+		if st.sw == before {
+			t.Errorf("tap at dy=%v within the touch target did not toggle the switch", dy)
+		}
+	}
+}

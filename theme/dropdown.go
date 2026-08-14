@@ -32,7 +32,10 @@ type dropdownState struct {
 	ctx     widget.Ctx
 	hovered bool
 	open    bool
-	anchor  geom.Pt // global pointer at press, where the popup is anchored
+	// origin is the control's top-left in global coordinates, derived at press
+	// from the pointer's global and local positions. The popup hangs from the
+	// control, not from wherever inside it the user happened to press.
+	origin  geom.Pt
 	width   float32 // last painted button width, so the popup matches it
 	dismiss func()  // closes the open popup, nil when closed
 }
@@ -60,7 +63,9 @@ func (s *dropdownState) toggle(ctx widget.Ctx) {
 		w = 120
 	}
 	s.SetState(func() { s.open = true })
-	s.dismiss = showSelect(ctx, s.anchor, w, d.Options, d.Selected, func(i int) {
+	// Hang the list directly under the control, with a hair of separation.
+	below := geom.Pt{X: s.origin.X, Y: s.origin.Y + dropdownHeight + 4}
+	s.dismiss = showSelect(ctx, below, w, d.Options, d.Selected, func(i int) {
 		if f := s.W().OnChange; f != nil {
 			f(i)
 		}
@@ -69,6 +74,9 @@ func (s *dropdownState) toggle(ctx widget.Ctx) {
 		s.SetState(func() { s.open = false })
 	})
 }
+
+// dropdownHeight is the control's fixed height; the popup hangs below it.
+const dropdownHeight float32 = 40
 
 func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
@@ -92,8 +100,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	// The chrome is a full-width Canvas (fills its container like Slider) that
 	// paints the surface, border, and chevron and records its width, so the
 	// popup can match it. The label is layered on top, left-aligned and centered.
-	const h float32 = 40
-	surface := widget.Canvas{H: h, Draw: func(c paint.Canvas, size geom.Size) {
+	surface := widget.Canvas{H: dropdownHeight, Draw: func(c paint.Canvas, size geom.Size) {
 		s.width = size.W
 		r := geom.Rect{Max: size.Pt()}
 		c.FillRRect(r, th.Radius, bg)
@@ -109,10 +116,16 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 
 	return widget.Interactive{
 		Handler: widget.Handler{
-			// Capture the global pointer at press so the popup anchors under the
-			// control (the widget tree exposes no global rect; the pointer is the
-			// reliable proxy, matching ShowMenu's point-anchored API).
-			OnPress: func(geom.Pt) { s.anchor = ctx.Input().Pointer() },
+			// The popup must hang from the control's own edge. A press reports
+			// its position in the control's local coordinates, and Input reports
+			// the same point globally, so the difference is the control's origin
+			// — no global-rect API needed. Anchoring at the raw pointer instead
+			// (as this did) opened the list wherever the finger happened to land,
+			// so it appeared in a different place on every tap.
+			OnPress: func(local geom.Pt) {
+				p := ctx.Input().Pointer()
+				s.origin = geom.Pt{X: p.X - local.X, Y: p.Y - local.Y}
+			},
 			OnTap:   func() { s.toggle(ctx) },
 			OnEnter: func() { s.SetState(func() { s.hovered = true }) },
 			OnExit:  func() { s.SetState(func() { s.hovered = false }) },
