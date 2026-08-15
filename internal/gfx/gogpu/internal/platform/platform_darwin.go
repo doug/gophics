@@ -1734,3 +1734,37 @@ func (p *darwinPlatform) ShowOpenFileDialog(opts FileDialogOptions) ([]string, e
 func (p *darwinPlatform) ShowSaveFileDialog(opts FileDialogOptions) (string, error) {
 	return showSaveFileDialog(opts)
 }
+
+// SetA11yTree implements A11yWindow by handing the tree to the AppKit bridge
+// (darwin/a11y.go). The node type is re-declared on the darwin side because
+// this package imports that one, so the conversion happens here — the only
+// place that can see both.
+func (dw *darwinPlatformWindow) SetA11yTree(nodes []A11yNode, activate func(id int)) {
+	if dw.window == nil {
+		return
+	}
+	out := make([]darwin.A11yNode, len(nodes))
+	for i, n := range nodes {
+		out[i] = darwin.A11yNode{
+			ID: n.ID, ParentID: n.ParentID,
+			Role: n.Role, Label: n.Label, Value: n.Value, Hint: n.Hint,
+			X: n.X, Y: n.Y, W: n.W, H: n.H,
+			Tappable: n.Tappable, Focused: n.Focused, Disabled: n.Disabled,
+			Selected: n.Selected, Checkable: n.Checkable, Checked: n.Checked,
+		}
+	}
+	dw.window.SetA11yTree(out, activate)
+}
+
+// AnnounceA11y implements A11yWindow.
+func (dw *darwinPlatformWindow) AnnounceA11y(message string, assertive bool) {
+	if dw.window == nil {
+		return
+	}
+	dw.window.AnnounceA11y(message, assertive)
+}
+
+// Compile-time proof that the macOS window really does satisfy the optional
+// capability, so a rename on either side fails here rather than degrading
+// silently to "this platform has no accessibility".
+var _ A11yWindow = (*darwinPlatformWindow)(nil)

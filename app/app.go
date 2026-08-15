@@ -234,8 +234,10 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 // the caller still assigning them.
 func (c *core) mount() {
 	// Wrap the app in an OverlayHost so any widget can show dialogs, menus,
-	// and snackbars above the whole tree (widget.Overlay via Of).
-	c.Owner.SetRoot(widget.OverlayHost{Child: c.root})
+	// and snackbars above the whole tree (widget.Overlay via Of), and in a
+	// DragHost so a Draggable and a DropTarget in unrelated subtrees can find
+	// each other. DragHost is inside, so a drag preview shows in the overlay.
+	c.Owner.SetRoot(widget.OverlayHost{Child: widget.DragHost{Child: c.root}})
 }
 
 // Post schedules fn to run on the UI goroutine before the next frame's
@@ -740,6 +742,10 @@ type shellHandler struct {
 	// rendered to has never presented this scene (see present.go).
 	lastGPU gpuCanvasTarget
 
+	// lastA11y is the accessibility tree most recently handed to the platform
+	// bridge, kept so an unchanged tree is not republished every frame.
+	lastA11y []A11yNode
+
 	// Dev-mode state-preserving hot-restart (set only under `gophics dev` via
 	// setupDevState; zero/no-op in a shipped binary). On a restart signal the
 	// handler snapshots UI state to devStatePath so the relaunched process can
@@ -823,6 +829,11 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// Present via the GPU rasterizer or the CPU rasterizer, chosen per frame
 	// from the frame's Target (see present.go).
 	h.present(f, tgt, changed, damage)
+	if changed {
+		// Semantics can only have moved if the frame did, so republishing is
+		// gated on the same signal the renderer uses.
+		h.publishA11y()
+	}
 	if in := h.core.Owner.Input; in != nil {
 		in.NewFrame() // clear per-frame key/pointer edges after the frame read them
 	}

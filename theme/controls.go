@@ -5,6 +5,7 @@ import (
 
 	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
@@ -15,6 +16,10 @@ import (
 type Switch struct {
 	On       bool
 	OnChange func(bool)
+	// Label names what the switch controls, for assistive technology. A
+	// switch is drawn, not written, so without this a screen reader can only
+	// say "on" — true, and useless.
+	Label string
 }
 
 func (s Switch) CreateState() widget.State { return &switchState{} }
@@ -54,7 +59,9 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 		cy := r.Min.Y + h/2
 		c.FillRRect(geom.RectXYWH(cx-9, cy-9, 18, 18), 9, th.OnPrimary)
 	}}
+	checked := on
 	return widget.Interactive{
+		Sem: &layout.SemInfo{Role: layout.RoleSwitch, Label: s.W().Label, Checked: &checked},
 		Handler: widget.Handler{OnTap: func() {
 			if f := s.W().OnChange; f != nil {
 				haptic(ctx, shell.HapticSelection) // a light tick as the value flips
@@ -105,7 +112,9 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 		row := widget.Row(box, widget.Sized{W: 8}, widget.Text{S: cb.Label, Size: 14, Color: th.Text})
 		child = row
 	}
+	checked := cb.Checked
 	return widget.Interactive{
+		Sem: &layout.SemInfo{Role: layout.RoleCheckbox, Label: cb.Label, Checked: &checked},
 		Handler: widget.Handler{OnTap: func() {
 			if cb.OnChange != nil {
 				haptic(ctx, shell.HapticSelection)
@@ -121,6 +130,8 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 type Slider struct {
 	Value    float32
 	OnChange func(float32)
+	// Label names what the slider adjusts, for assistive technology.
+	Label string
 }
 
 func (s Slider) CreateState() widget.State { return &sliderState{} }
@@ -148,6 +159,9 @@ func (s *sliderState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
 	val := s.W().Value
 	return widget.Interactive{
+		Sem: &layout.SemInfo{
+			Role: layout.RoleSlider, Label: s.W().Label, Value: formatPercent(val),
+		},
 		Handler: widget.Handler{
 			OnPress: func(p geom.Pt) { s.set(p.X) },
 			OnDrag:  func(p, _ geom.Pt) { s.set(p.X) },
@@ -196,6 +210,9 @@ func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 		child = widget.Row(dot, widget.Sized{W: 8}, widget.Text{S: rd.Label, Size: 14, Color: th.Text})
 	}
 	return widget.Interactive{
+		Sem: &layout.SemInfo{
+			Role: layout.RoleRadio, Label: rd.Label, Selected: rd.Selected,
+		},
 		Handler: widget.Handler{OnTap: func() {
 			if rd.OnSelect != nil {
 				haptic(ctx, shell.HapticSelection)

@@ -21,8 +21,10 @@ import (
 // reports edits; the parent re-renders with the new Value (set Value to ""
 // after OnSubmit to clear the field).
 //
-// Known limits (PLAN.md §6.1): LTR caret geometry, no IME composition UI
-// yet (committed text works), single line.
+// IME composition is handled: preedit text is spliced in at the caret and
+// underlined until the input method commits it.
+//
+// Known limits (PLAN.md §6.1): LTR caret geometry, single line.
 type TextField struct {
 	Value       string
 	Placeholder string

@@ -14,12 +14,30 @@ import (
 // Role classifies a semantic node for assistive technology.
 type Role uint8
 
+// The role names are the ARIA vocabulary, because every platform's
+// accessibility API can be reached from it and using one spelling everywhere
+// keeps the bridges free of per-platform translation tables.
+//
+// New roles are appended, never inserted: the numeric values are not part of
+// any serialized format, but keeping them stable makes a mismatched build
+// obvious rather than silently mislabeling controls.
 const (
 	RoleNone Role = iota
 	RoleText
 	RoleButton
 	RoleTextField
 	RoleGroup
+	RoleImage
+	RoleLink
+	RoleHeading
+	RoleCheckbox
+	RoleRadio
+	RoleSwitch
+	RoleSlider
+	RoleProgress
+	RoleList
+	RoleListItem
+	RoleTab
 )
 
 func (r Role) String() string {
@@ -32,6 +50,28 @@ func (r Role) String() string {
 		return "textfield"
 	case RoleGroup:
 		return "group"
+	case RoleImage:
+		return "img"
+	case RoleLink:
+		return "link"
+	case RoleHeading:
+		return "heading"
+	case RoleCheckbox:
+		return "checkbox"
+	case RoleRadio:
+		return "radio"
+	case RoleSwitch:
+		return "switch"
+	case RoleSlider:
+		return "slider"
+	case RoleProgress:
+		return "progressbar"
+	case RoleList:
+		return "list"
+	case RoleListItem:
+		return "listitem"
+	case RoleTab:
+		return "tab"
 	}
 	return "none"
 }

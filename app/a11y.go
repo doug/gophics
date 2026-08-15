@@ -3,29 +3,18 @@ package app
 import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/shell"
 )
 
 // A11yNode is one accessibility node in a flat, ID-addressed tree — the
 // shape platform screen-reader bridges (Android AccessibilityNodeProvider,
 // iOS UIAccessibilityElement, AccessKit) consume. Rects are in physical
 // pixels. Built from the semantics tree (core.Semantics).
-type A11yNode struct {
-	ID       int
-	ParentID int // -1 for the root
-	Role     string
-	Label    string
-	Value    string
-	Hint     string
-	// X, Y, W, H are physical-pixel bounds.
-	X, Y, W, H int
-	Tappable   bool
-	Focused    bool
-	Disabled   bool
-	Selected   bool
-	Checkable  bool
-	Checked    bool
-	Children   []int
-}
+//
+// It is an alias for shell.A11yNode so the tree the app flattens is the same
+// value a platform bridge publishes, with no copy or conversion between the
+// layers.
+type A11yNode = shell.A11yNode
 
 // a11yTree is the cached flattening plus the activation callbacks by ID.
 type a11yTree struct {
@@ -82,6 +71,54 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 	return t.nodes
 }
 
+// publishA11y hands the current tree to the platform accessibility bridge, if
+// the window has one. A screen reader is a second renderer with its own frame
+// budget: rebuilding its tree on every frame would churn the platform's node
+// cache (and, on web, the DOM) for animations that change no semantics at all,
+// so the flattened tree is diffed and only a real change is published.
+func (h *shellHandler) publishA11y() {
+	a := h.core.Owner.Accessibility
+	if a == nil {
+		return
+	}
+	nodes := h.core.A11yTree(h.core.lastScale)
+	if a11yTreeEqual(h.lastA11y, nodes) {
+		return
+	}
+	// A11yTree hands back its own slice each call, so retaining it is safe.
+	h.lastA11y = nodes
+	a.SetTree(nodes, h.core.A11yActivate)
+}
+
+// a11yTreeEqual compares two flattened trees field by field. A11yNode holds
+// only comparable fields plus the Children ID slice, so this is a cheap
+// structural equality — no hashing, no allocation.
+func a11yTreeEqual(a, b []A11yNode) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := &a[i], &b[i]
+		if x.ID != y.ID || x.ParentID != y.ParentID || x.Role != y.Role ||
+			x.Label != y.Label || x.Value != y.Value || x.Hint != y.Hint ||
+			x.X != y.X || x.Y != y.Y || x.W != y.W || x.H != y.H ||
+			x.Tappable != y.Tappable || x.Focused != y.Focused ||
+			x.Disabled != y.Disabled || x.Selected != y.Selected ||
+			x.Checkable != y.Checkable || x.Checked != y.Checked {
+			return false
+		}
+		if len(x.Children) != len(y.Children) {
+			return false
+		}
+		for j := range x.Children {
+			if x.Children[j] != y.Children[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // A11yActivate invokes the activation action of the node (screen-reader
 // activate). Safe to call with an unknown or non-actionable ID.
 func (c *core) A11yActivate(id int) {
@@ -112,3 +149,8 @@ func (c *core) A11yHitTest(xPx, yPx int, scale float32) int {
 	}
 	return best
 }
+
+// The app's handler is the A11yProvider every native bridge codes against.
+// Asserting it here means a signature drift breaks this build rather than a
+// platform bridge that only compiles on one GOOS.
+var _ shell.A11yProvider = (*shellHandler)(nil)

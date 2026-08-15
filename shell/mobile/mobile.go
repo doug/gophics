@@ -191,17 +191,16 @@ func (b *Bridge) TextInputActive() bool {
 // Accessibility: the host (Android AccessibilityNodeProvider, iOS
 // UIAccessibility) refreshes the flat node tree, then reads nodes by index
 // and activates by ID. Rects are physical pixels.
-
-type a11yProvider interface {
-	A11yTree(scale float32) []app.A11yNode
-	A11yActivate(id int)
-	A11yHitTest(x, y int, scale float32) int
-}
+//
+// The tree is pulled rather than pushed because that is how both native APIs
+// work — they query the app when their focus moves, on their own schedule.
+// The handler side of that contract is shell.A11yProvider; the accessors
+// below flatten it to the scalar-only surface gomobile bind can export.
 
 // A11yRefresh rebuilds the accessibility node tree and returns the node
 // count (0 if the handler provides no semantics).
 func (b *Bridge) A11yRefresh() int {
-	if p, ok := b.handler.(a11yProvider); ok {
+	if p, ok := b.handler.(shell.A11yProvider); ok {
 		b.a11y = p.A11yTree(b.scale)
 	} else {
 		b.a11y = nil
@@ -305,7 +304,7 @@ func (b *Bridge) A11yChild(i, j int) int {
 
 // A11yActivate fires the node's action (screen-reader activate).
 func (b *Bridge) A11yActivate(id int) {
-	if p, ok := b.handler.(a11yProvider); ok {
+	if p, ok := b.handler.(shell.A11yProvider); ok {
 		p.A11yActivate(id)
 		b.dirty.Store(true)
 	}
@@ -314,7 +313,7 @@ func (b *Bridge) A11yActivate(id int) {
 // A11yHitTest returns the node ID at a physical-pixel point (explore by
 // touch), or -1.
 func (b *Bridge) A11yHitTest(xPx, yPx int) int {
-	if p, ok := b.handler.(a11yProvider); ok {
+	if p, ok := b.handler.(shell.A11yProvider); ok {
 		return p.A11yHitTest(xPx, yPx, b.scale)
 	}
 	return -1
