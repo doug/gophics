@@ -1,5 +1,5 @@
-// Command hn is a HackerNews client: the M-HN driving application
-// (PLAN.md §7.1). Lazy story feed with fling scrolling, Navigator-driven
+// Command hn is a HackerNews client, the app that drove the scrolling, text
+// and navigation work to completion. Lazy story feed with fling scrolling, Navigator-driven
 // pages with slide transitions, rich comments with tappable links, async
 // loading over the real Firebase API — on desktop and web from one
 // codebase.
