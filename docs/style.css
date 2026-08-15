@@ -83,11 +83,43 @@ pre.code, .code { background: #100d08; border: 1px solid var(--line); border-rad
 .t-fn { color: var(--accent-hi); } .t-pkg { color: var(--ink-dim); }
 .filelabel { color: var(--ink-faint); font-family: var(--mono); font-size: 12px; margin: 18px 0 4px; }
 
-/* demo stage (iframe) */
+/* demo stage (iframe) — used by demo.html and the gallery, not the home hero */
 .demo-stage { width: 100%; max-width: 900px; margin: 26px auto 0; aspect-ratio: 16/10;
   border-radius: 14px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 20px 50px #0009; background: #000; }
 .demo-stage iframe { width: 100%; height: 100%; border: 0; display: block; }
 .demo-cap { text-align: center; color: var(--ink-faint); font-size: 13px; margin-top: 12px; }
+
+/* home hero: the program on the left, what it draws on the right */
+.showcase { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start;
+  width: 100%; max-width: 1040px; margin: 30px auto 0; text-align: left; }
+.showcase-code pre.code { margin: 0; height: 100%; font-size: 12.5px; line-height: 1.55; overflow-x: auto; }
+.showcase-shot { margin: 0; }
+/* The stage holds the still and, once it is genuinely painting, the live app
+   stacked on top. Both fill the same box so the swap never shifts layout. */
+.stage { position: relative; aspect-ratio: 512 / 352; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--line); box-shadow: 0 20px 50px #0009; background: var(--card); }
+.stage img { display: block; width: 100%; height: 100%; object-fit: fill; }
+/* The live frame is pinned to the same LOGICAL size the still was rendered at
+   and scaled to fit, rather than being allowed to fill the box at whatever
+   size the grid gives it. Gophics lays out responsively, so a frame free to
+   size itself would put the text at native size with more whitespace around
+   it — which is a different picture from the still, and the swap visibly
+   jumps. Pinning both to 512x352 makes them the same image. --stage-scale is
+   set from the box width in index.html. */
+.stage iframe { position: absolute; top: 0; left: 0; width: 512px; height: 352px; border: 0;
+  transform-origin: 0 0; transform: scale(var(--stage-scale, 1));
+  opacity: 0; transition: opacity .45s ease; }
+.stage.live iframe { opacity: 1; }
+.stage.live img { opacity: 0; transition: opacity .45s ease; }
+/* Nothing marks the wasm being in flight: the still simply holds until the app
+   behind it is painting, then they cross-fade. No spinner, no badge. */
+.showcase-shot figcaption { color: var(--ink-faint); font-size: 13px; line-height: 1.6; margin-top: 12px; }
+.showcase-shot figcaption b { color: var(--ink-dim); }
+@media (max-width: 860px) {
+  .showcase { grid-template-columns: 1fr; }
+  /* the picture is the hook on a phone; the code follows it */
+  .showcase-shot { order: -1; }
+}
 
 /* gallery */
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }

@@ -31,49 +31,82 @@ go run ./examples/hn       # a HackerNews client: feed → comments, scroll, lin
 
   <h3>Your first widget</h3>
   <p>Widgets are plain struct values; state is a generic base you embed. Here's a complete counter — save it as <code>main.go</code> and <code>go run .</code>:</p>
-  <pre class="code">package main
+  <pre class="code"><code><span class="t-com">// Command counter is the smallest complete gophics app, and the one the</span>
+<span class="t-com">// homepage and the getting-started guide both show.</span>
+<span class="t-com">//</span>
+<span class="t-com">// It is a real example rather than a snippet in the docs so that it compiles</span>
+<span class="t-com">// in CI and its screenshot is generated from this exact source — a sample that</span>
+<span class="t-com">// only exists as HTML drifts from the API, and this one already had.</span>
+<span class="t-com">//</span>
+<span class="t-com">// The whole program:</span>
+<span class="t-com">//</span>
+<span class="t-com">//	go run ./examples/counter          # a window</span>
+<span class="t-com">//	GOOS=js GOARCH=wasm go build       # the same UI in a browser</span>
+<span class="t-kw">package</span> main
 
-import (
-	"fmt"
-	"log"
+<span class="t-kw">import</span> (
+	<span class="t-str">&#34;fmt&#34;</span>
+	<span class="t-str">&#34;log&#34;</span>
 
-	"golang.org/x/image/font/gofont/goregular"
+	<span class="t-str">&#34;golang.org/x/image/font/gofont/gobold&#34;</span>
+	<span class="t-str">&#34;golang.org/x/image/font/gofont/goregular&#34;</span>
 
-	"github.com/doug/gophics/app"
-	"github.com/doug/gophics/geom"
-	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/widget"
+	<span class="t-str">&#34;github.com/doug/gophics/app&#34;</span>
+	<span class="t-str">&#34;github.com/doug/gophics/geom&#34;</span>
+	<span class="t-str">&#34;github.com/doug/gophics/theme&#34;</span>
+	<span class="t-str">&#34;github.com/doug/gophics/widget&#34;</span>
 )
 
-type Counter struct{}
+<span class="t-com">// Counter is a widget: a plain struct value describing what to show.</span>
+<span class="t-kw">type</span> Counter <span class="t-kw">struct</span>{ Start <span class="t-typ">int</span> }
 
-func (Counter) CreateState() widget.State { return &amp;counterState{} }
+<span class="t-kw">func</span> (Counter) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;counterState{} }
 
-type counterState struct {
+<span class="t-com">// counterState holds what changes. StateBase[Counter] gives it SetState and a</span>
+<span class="t-com">// typed W() — the current Counter value, with no cast.</span>
+<span class="t-kw">type</span> counterState <span class="t-kw">struct</span> {
 	widget.StateBase[Counter]
-	n int
+	n <span class="t-typ">int</span>
 }
 
-func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
-	return widget.Column(
-		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
-		widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
-			Child:   widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.88, 0.65, 0.31)},
+<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Init</span>(widget.Ctx) { s.n = s.<span class="t-fn">W</span>().Start }
+
+<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Of</span>(ctx)
+	<span class="t-kw">return</span> widget.<span class="t-fn">Center</span>(widget.<span class="t-fn">Column</span>(
+		widget.Text{S: <span class="t-str">&#34;TAPS&#34;</span>, Size: th.Type.Caption, Color: th.Muted},
+		widget.Sized{H: <span class="t-num">4</span>},
+		widget.Text{
+			S:     fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%d&#34;</span>, s.n),
+			Size:  th.Type.Display,
+			Font:  theme.FontBold,
+			Color: th.Text,
 		},
-	)
+		widget.Sized{H: <span class="t-num">18</span>},
+		theme.Button{
+			Label:   <span class="t-str">&#34;Increment&#34;</span>,
+			Primary: <span class="t-typ">true</span>,
+			OnTap:   <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.n++ }) },
+		},
+	))
 }
 
-func main() {
-	if err := app.Run(Counter{}, app.Config{
-		Title:      "gophics counter",
-		Size:       geom.Size{W: 320, H: 200},
-		Background: paint.RGB(0.08, 0.07, 0.05),
+<span class="t-kw">func</span> <span class="t-fn">main</span>() {
+	err := app.<span class="t-fn">Run</span>(Counter{Start: <span class="t-num">3</span>}, app.Config{
+		Title:      <span class="t-str">&#34;counter&#34;</span>,
+		Size:       geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">220</span>},
+		Background: theme.<span class="t-fn">Light</span>().Bg,
 		Font:       goregular.TTF,
-	}); err != nil {
-		log.Fatal(err)
+		FontFamilies: <span class="t-kw">map</span>[<span class="t-typ">string</span>][]<span class="t-typ">byte</span>{
+			theme.FontBold: gobold.TTF,
+		},
+	})
+	<span class="t-kw">if</span> err != <span class="t-typ">nil</span> {
+		log.<span class="t-fn">Fatal</span>(err)
 	}
-}</pre>
+}
+</code></pre>
+  <p class="demo-cap">This is <code>examples/counter</code> verbatim &mdash; the same program on the <a href="index.html">home page</a>, generated from the source so it cannot drift from the API.</p>
 
   <h3>Ship it everywhere with the CLI</h3>
   <p>The <code>gophics</code> CLI drives the multi-platform loops so you don't have to remember the incantations:</p>

@@ -28,8 +28,46 @@
     <a class="btn ghost" href="gallery.html">See it live →</a>
   </div>
 
-  <div class="demo-stage"><iframe src="demo.html?demo=hn" title="A live Gophics app (HackerNews client) compiled to WebAssembly" loading="lazy"></iframe></div>
-  <p class="demo-cap">↑ a real Gophics app — a HackerNews client — compiled to WASM, running on WebGPU in your browser (needs a recent Chrome/Edge/Safari). The same code builds a native desktop binary.</p>
+  <div class="showcase">
+    <div class="showcase-code"><pre class="code"><code><span class="t-com">// Counter is a widget: a plain struct value describing what to show.</span>
+<span class="t-kw">type</span> Counter <span class="t-kw">struct</span>{ Start <span class="t-typ">int</span> }
+
+<span class="t-kw">func</span> (Counter) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;counterState{} }
+
+<span class="t-com">// counterState holds what changes. StateBase[Counter] gives it SetState and a</span>
+<span class="t-com">// typed W() — the current Counter value, with no cast.</span>
+<span class="t-kw">type</span> counterState <span class="t-kw">struct</span> {
+	widget.StateBase[Counter]
+	n <span class="t-typ">int</span>
+}
+
+<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Init</span>(widget.Ctx) { s.n = s.<span class="t-fn">W</span>().Start }
+
+<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Of</span>(ctx)
+	<span class="t-kw">return</span> widget.<span class="t-fn">Center</span>(widget.<span class="t-fn">Column</span>(
+		widget.Text{S: <span class="t-str">&#34;TAPS&#34;</span>, Size: th.Type.Caption, Color: th.Muted},
+		widget.Sized{H: <span class="t-num">4</span>},
+		widget.Text{
+			S:     fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%d&#34;</span>, s.n),
+			Size:  th.Type.Display,
+			Font:  theme.FontBold,
+			Color: th.Text,
+		},
+		widget.Sized{H: <span class="t-num">18</span>},
+		theme.Button{
+			Label:   <span class="t-str">&#34;Increment&#34;</span>,
+			Primary: <span class="t-typ">true</span>,
+			OnTap:   <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.n++ }) },
+		},
+	))</code></pre></div>
+    <figure class="showcase-shot">
+      <div class="stage" id="stage">
+        <img id="shot" src="hero-counter.png" alt="The counter app rendered by Gophics: a TAPS label, the number 3 in bold, and a clay-colored Increment button on a warm off-white background" width="1024" height="704">
+      </div>
+      <figcaption id="cap">Left: the whole program (<a href="source/counter.html">full source</a>). Right: what it draws — rendered <b>headlessly</b>, with no display and no GPU, by the same renderer that paints it on screen. That is how every screenshot on this site is made, and how you test your own UI.</figcaption>
+    </figure>
+  </div>
 </div></header>
 
 <section><div class="wrap">
@@ -55,38 +93,10 @@
 </div></section>
 
 <section><div class="wrap">
-  <h2>A full app, in one screen of Go</h2>
-  <p class="lead">Widgets are plain struct values; state is a generic base you embed. This is a complete counter — <code>go run</code> it as a window, or <code>GOOS=js</code> it into the browser.</p>
-  <pre class="code"><code><span class="t-kw">type</span> Counter <span class="t-kw">struct</span>{}
-
-<span class="t-kw">func</span> (Counter) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;counterState{} }
-
-<span class="t-kw">type</span> counterState <span class="t-kw">struct</span> {
-	widget.StateBase[Counter] <span class="t-com">// gives W(), SetState()</span>
-	n <span class="t-typ">int</span>
-}
-
-<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
-	<span class="t-kw">return</span> widget.<span class="t-fn">Column</span>(
-		widget.Text{S: fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;count: %d&#34;</span>, s.n), Size: <span class="t-num">28</span>, Color: ink},
-		widget.Interactive{
-			Handler: widget.Handler{OnTap: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.n++ }) }},
-			Child:   widget.Text{S: <span class="t-str">&#34;increment&#34;</span>, Size: <span class="t-num">18</span>, Color: accent},
-		},
-	)
-}
-
-<span class="t-kw">func</span> <span class="t-fn">main</span>() {
-	app.<span class="t-fn">Run</span>(Counter{}, app.Config{Title: <span class="t-str">&#34;counter&#34;</span>, Size: geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">200</span>}, Font: goregular.TTF})
-}</code></pre>
-  <p class="demo-cap"><a href="get-started.html">Get started →</a></p>
-</div></section>
-
-<section><div class="wrap">
   <h2>Honest status</h2>
   <p class="lead">Young and moving fast — so, the real caveats up front (the architecture is the hard part, and it's done):</p>
   <div class="pillars">
-    <div class="pillar"><h3>The web binary is big</h3><p>Go compiles the whole renderer into WASM (~5 MB gzipped per demo). Desktop ships lean; the web is one <em>option</em> of a single codebase, and shrinking the web payload is a top roadmap item.</p></div>
+    <div class="pillar"><h3>The web binary is big</h3><p>Go compiles the whole renderer into WASM, so even the counter above is 3.7&nbsp;MB gzipped and a full app is ~5&nbsp;MB — the floor is the renderer, not your code. Desktop ships lean; the web is one <em>option</em> of a single codebase, and shrinking the web payload is a top roadmap item.</p></div>
     <div class="pillar"><h3>No hot reload</h3><p>Go can't match the Dart VM — the answer is fast rebuild + an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second; close.</p></div>
     <div class="pillar"><h3>The catalog compounds</h3><p>You compose primitives rather than assemble hundreds of pre-built widgets. It grows every release, and app-specific widgets are cheap to write.</p></div>
     <div class="pillar"><h3>Bridges are filling in</h3><p>The capability layer — clean Go interfaces, generated wiring, graceful degradation — ships and its web impls are browser-verified; the native desktop/mobile leaves (objc, portals, COM, Kotlin, Swift) land per release. Missing bridges read as <code>nil</code>, so the UI just hides the affordance.</p></div>
@@ -101,5 +111,82 @@
   <a href="get-started.html">Get started</a>
 </div></footer>
 
+
+<script>
+// The hero screenshot upgrades itself into the running app, with no ceremony:
+// no button, no badge, no "click to load". The still ships in the HTML so it
+// paints at once and is what a visitor sees with JavaScript off; the live
+// build arrives behind it and takes over.
+//
+// The swap waits for the app inside to actually paint (demo.html posts "ready"
+// after its first live frame), so the picture is never replaced by a spinner —
+// it simply becomes the program, and most people should not notice it happen.
+//
+// The one case it stays a picture is when the browser has been told not to
+// spend data (Save-Data, or prefers-reduced-data). That is a real preference,
+// and honouring it is also silent: a screenshot is a complete hero on its own.
+(function () {
+  var stage = document.getElementById("stage");
+  if (!stage) return;
+  var shot = document.getElementById("shot"), cap = document.getElementById("cap");
+
+  var c = navigator.connection;
+  if ((c && c.saveData) ||
+      (window.matchMedia && matchMedia("(prefers-reduced-data: reduce)").matches)) {
+    return;
+  }
+
+  var swapped = false;
+  function live() {
+    if (swapped) return;
+    swapped = true;
+    stage.classList.add("live");
+    shot.setAttribute("aria-hidden", "true");
+    cap.innerHTML = 'Left: the whole program (<a href="source/counter.html">full source</a>). ' +
+      'Right: that program, <b>running here</b> — compiled to WebAssembly, drawn by the same ' +
+      'renderer that builds it as a native binary. Tap Increment.';
+  }
+
+  addEventListener("message", function (e) {
+    if (e.data && e.data.gophics === "ready" && e.data.demo === "counter") live();
+  });
+
+  // The frame renders at a fixed 512x352 and is scaled to whatever width the
+  // grid gives the stage, so the live app and the still are the same picture
+  // at every viewport width.
+  var LOGICAL_W = 512;
+  function rescale() {
+    stage.style.setProperty("--stage-scale", stage.clientWidth / LOGICAL_W);
+  }
+  rescale();
+  if (window.ResizeObserver) new ResizeObserver(rescale).observe(stage);
+  else addEventListener("resize", rescale);
+
+  function load() {
+    var f = document.createElement("iframe");
+    f.id = "live";
+    f.title = "The counter example running live in your browser";
+    f.src = "demo.html?demo=counter&bare=1";
+    stage.appendChild(f);
+
+    // Belt and braces. The frame is same-origin, so rather than trust a single
+    // postMessage to arrive, also read the flag the app sets on its own window
+    // once a frame is painted. Deliberately not "does a canvas exist" — the
+    // canvas is created well before anything is drawn into it, and swapping
+    // then would replace the cover image with an empty box.
+    var tries = 0;
+    var poll = setInterval(function () {
+      if (swapped || ++tries > 160) return clearInterval(poll);
+      try {
+        var w = f.contentWindow;
+        if (w && w.gophics && w.gophics.ready) { clearInterval(poll); live(); }
+      } catch (_) { clearInterval(poll); }   // cross-origin: rely on the message
+    }, 250);
+  }
+  // Let the above-the-fold work finish first, then fetch quietly.
+  if ("requestIdleCallback" in window) requestIdleCallback(load, { timeout: 2500 });
+  else setTimeout(load, 1200);
+})();
+</script>
 </body>
 </html>

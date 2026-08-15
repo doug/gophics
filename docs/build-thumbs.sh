@@ -37,7 +37,6 @@ specs=(
   "sudoku      1 "
   "drummachine 1 "
   "whiteboard  1 "
-  "glass       1 "
   "solitaire  8 "
   "hn        10 1"   # networked — realtime so the fetch completes
 )
@@ -77,6 +76,18 @@ if { [ ${#want[@]} -eq 0 ] || printf '%s\n' "${want[@]}" | grep -qx health; }; t
   else
     echo "== health: skipped (needs ImageMagick 'magick') =="
   fi
+fi
+
+# The home page hero: the counter example at the exact logical size the live
+# frame is pinned to (see .stage in style.css). The two have to be the same
+# render or the screenshot-to-live swap jumps — gophics lays out responsively,
+# so a smaller render scaled up is a different picture, not a blurrier one.
+if [ ${#want[@]} -eq 0 ] || printf '%s\n' "${want[@]}" | grep -qx counter; then
+  echo "== counter (home hero) =="
+  env GOPHICS_THUMB=docs/hero-counter.png \
+      GOPHICS_THUMB_SIZE=512x352 GOPHICS_THUMB_OUT=1024x704 \
+      GOPHICS_THUMB_SCALE=2 GOPHICS_THUMB_SETTLE=1 \
+      go run ./examples/counter
 fi
 
 echo "thumbnails written to $OUT/"

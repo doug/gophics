@@ -70,6 +70,21 @@
     // WebGPU is only exposed in a secure context (https or localhost) and on a
     // supported GPU, so it's undefined over plain http even on capable devices;
     // the Go runtime then falls back to a 2D-canvas CPU path automatically.
+    // ?bare=1 hides the chrome so this page can be embedded (the home hero
+    // stacks it under a screenshot). It is hidden rather than removed: the
+    // wiring below reaches into #bar's children, and detaching them made every
+    // later lookup null, which threw and took the wasm load down with it.
+    const bar = document.getElementById("bar");
+    const bare = params.has("bare");
+    if (bare) {
+      bar.style.display = "none";
+      // No loader either. An embedding page shows its own placeholder until
+      // this frame is ready, so a spinner here would only ever be glimpsed
+      // through the cross-fade — which is exactly the flash it is meant to
+      // prevent everywhere else.
+      loader.style.display = "none";
+    }
+
     const forceCPU = params.has("cpu");
     if (forceCPU && "gpu" in navigator) {
       Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true });
@@ -80,26 +95,50 @@
     // Renderer toggle — always available, so a blank GPU canvas (a flaky mobile
     // WebGPU driver) is one tap from the working CPU path, and vice versa.
     const rend = document.getElementById("rend");
-    rend.textContent = onCPU ? "GPU" : "CPU";
-    rend.title = onCPU ? "Try the WebGPU renderer" : "Switch to the CPU renderer (use if the demo is blank)";
-    rend.onclick = (e) => {
-      e.preventDefault();
-      const u = new URL(location.href);
-      if (forceCPU) u.searchParams.delete("cpu"); else u.searchParams.set("cpu", "1");
-      location.replace(u.toString());
-    };
+    if (rend) {
+      rend.textContent = onCPU ? "GPU" : "CPU";
+      rend.title = onCPU ? "Try the WebGPU renderer" : "Switch to the CPU renderer (use if the demo is blank)";
+      rend.onclick = (e) => {
+        e.preventDefault();
+        const u = new URL(location.href);
+        if (forceCPU) u.searchParams.delete("cpu"); else u.searchParams.set("cpu", "1");
+        location.replace(u.toString());
+      };
+    }
 
     // The Go web shell creates its own <canvas>; when it appears, wait two
     // frames (so the first live frame is on screen) then cross-fade the loader
     // away — the animation dissolves into the running app.
+    let revealed = false;
     function reveal() {
+      if (revealed) return;
+      revealed = true;
+      // Tell an embedding page straight away, before the local fade. This used
+      // to sit inside the double requestAnimationFrame below, which was a bug:
+      // the home hero loads this frame at opacity 0, and a browser is free to
+      // throttle rAF for content it considers invisible — so the message might
+      // never be sent and the hero would sit on its screenshot forever.
+      if (window.parent !== window) {
+        window.parent.postMessage({ gophics: "ready", demo }, "*");
+      }
       requestAnimationFrame(() => requestAnimationFrame(() => {
         loader.classList.add("hide");
         setTimeout(() => loader.remove(), 550);
       }));
     }
+    // Wait for a frame to actually be on the canvas. gophics fires this from
+    // its present path (shell/web/present.go); the flag covers the case where
+    // the frame landed before this listener attached.
+    if (window.gophics && window.gophics.ready) reveal();
+    else addEventListener("gophics:ready", reveal, { once: true });
+
+    // Fallback for demos built before that signal existed: a canvas appearing
+    // is early — it is created before anything is drawn — but it is better
+    // than hanging on the loader forever.
     const obs = new MutationObserver(() => {
-      if (document.querySelector("canvas")) { obs.disconnect(); reveal(); }
+      if (!document.querySelector("canvas")) return;
+      obs.disconnect();
+      if (!(window.gophics && window.gophics.ready)) setTimeout(reveal, 400);
     });
     obs.observe(document.body, { childList: true, subtree: true });
 
