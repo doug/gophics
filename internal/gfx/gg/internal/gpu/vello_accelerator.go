@@ -1249,7 +1249,19 @@ func (a *VelloAccelerator) initGPU() error {
 		return fmt.Errorf("request adapter: %w", err)
 	}
 
-	device, err := adapter.RequestDevice(&wgpu.DeviceDescriptor{Label: "gg-vello"})
+	// The coarse-rasterization pass binds 9 storage buffers in one compute
+	// stage, but the WebGPU default is 8 — so a device requested with default
+	// limits cannot create that pipeline, and the compute path degrades with a
+	// wall of validation errors. Ask for exactly what the adapter reports:
+	// always valid, where asking for more than it reports is not.
+	//
+	// Hardware that genuinely cannot reach 9 is not rejected here. The
+	// dispatcher's Init below already degrades cleanly to no compute, and a
+	// renderer that still draws beats one that refuses to start.
+	device, err := adapter.RequestDevice(&wgpu.DeviceDescriptor{
+		Label:          "gg-vello",
+		RequiredLimits: adapter.Limits(),
+	})
 	if err != nil {
 		return fmt.Errorf("request device: %w", err)
 	}

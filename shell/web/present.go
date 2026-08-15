@@ -46,6 +46,43 @@ type presenter struct {
 	format   gputypes.TextureFormat
 	gpuReady bool
 	pw, ph   int // configured physical pixel size
+
+	// painted records that a frame has reached the canvas, so the page is
+	// told exactly once (see signalFirstFrame).
+	painted bool
+}
+
+// signalFirstFrame announces, once, that a real frame is on the canvas.
+//
+// This exists for pages that embed a gophics app and want to show something of
+// their own — a cover image, a skeleton — until the app is genuinely on screen.
+// Without it the only signal available from outside is "a <canvas> element
+// appeared", which happens well before anything is drawn into it, so an
+// embedder either reveals an empty canvas or guesses with a timer.
+//
+// Two mechanisms, deliberately, because either alone races: a flag for code
+// that looks after the fact, and an event for code that subscribed before.
+//
+//	if (window.gophics && window.gophics.ready) show();
+//	else addEventListener("gophics:ready", show, { once: true });
+func (p *presenter) signalFirstFrame() {
+	if p.painted {
+		return
+	}
+	p.painted = true
+
+	g := js.Global().Get("gophics")
+	if g.IsUndefined() || g.IsNull() {
+		g = js.Global().Get("Object").New()
+		js.Global().Set("gophics", g)
+	}
+	g.Set("ready", true)
+
+	ev := js.Global().Get("CustomEvent")
+	if ev.IsUndefined() {
+		return // very old host; the flag above still works
+	}
+	js.Global().Call("dispatchEvent", ev.New("gophics:ready"))
 }
 
 // newPresenter commits to a presentation path based on the resolved renderer
@@ -89,7 +126,15 @@ func (p *presenter) setupGPU() {
 		p.gpuSetupFailed("adapter", err)
 		return
 	}
-	device, err := adapter.RequestDevice(nil)
+	// Request the adapter's own limits rather than the spec defaults. Several
+	// compute passes in the vector renderer bind more storage buffers per stage
+	// than the default 8 allows (vello_coarse binds 9), and with default limits
+	// those pipelines fail to create — which surfaces as a wall of validation
+	// errors and a silently degraded renderer. Asking for exactly what the
+	// adapter reports is always valid; asking for more than it reports is not.
+	device, err := adapter.RequestDevice(&wgpu.DeviceDescriptor{
+		RequiredLimits: adapter.Limits(),
+	})
 	if err != nil {
 		p.gpuSetupFailed("device", err)
 		return
@@ -193,6 +238,7 @@ func (p *presenter) putCPU(img *image.RGBA) {
 	}
 	js.CopyBytesToJS(p.buf, img.Pix)
 	p.ctx2d.Call("putImageData", p.imageData, 0, 0)
+	p.signalFirstFrame()
 }
 
 // gpuTarget implements app.gpuCanvasTarget (RenderGPU).
@@ -220,6 +266,7 @@ func (t gpuTarget) RenderGPU(replay func(*gg.Context)) {
 		log.Printf("gophics/web: render direct: %v", err)
 	}
 	_ = p.surface.Present(st) // no-op on browser (auto-presented)
+	p.signalFirstFrame()
 }
 
 // preferredCanvasFormat asks the browser which format composites without a

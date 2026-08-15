@@ -503,11 +503,36 @@ func (s *GPURenderSession) ClearScissorRect() {
 }
 
 // applyScissorRect applies the current scissor rect (if any) to the given
-// render pass encoder. Call this after BeginRenderPass and before draw calls.
-func (s *GPURenderSession) applyScissorRect(rp *wgpu.RenderPassEncoder) {
-	if s.scissorRect != nil {
-		rp.SetScissorRect(s.scissorRect[0], s.scissorRect[1], s.scissorRect[2], s.scissorRect[3])
+// render pass encoder, clamped to the render area (w x h). Call this after
+// BeginRenderPass and before draw calls.
+//
+// The clamp is required, not defensive: WebGPU rejects a scissor that is not
+// contained in the render area, and the whole command buffer with it. Clip
+// rects arrive here from layout, which is free to describe a box that hangs
+// off the edge of the surface — a row sliding in from the right, a panel
+// mid-transition — and every such frame would otherwise fail validation and
+// drop.
+func (s *GPURenderSession) applyScissorRect(rp *wgpu.RenderPassEncoder, w, h uint32) {
+	if s.scissorRect == nil {
+		return
 	}
+	x, y, sw, sh := s.scissorRect[0], s.scissorRect[1], s.scissorRect[2], s.scissorRect[3]
+
+	// Fully outside the target: an empty scissor, so the draws are clipped
+	// away. Returning early instead would leave them *unclipped*, which is the
+	// opposite of what the caller asked for.
+	if x >= w || y >= h {
+		rp.SetScissorRect(0, 0, 0, 0)
+		return
+	}
+	// Subtraction, not addition, so an oversized width cannot overflow uint32.
+	if sw > w-x {
+		sw = w - x
+	}
+	if sh > h-y {
+		sh = h - y
+	}
+	rp.SetScissorRect(x, y, sw, sh)
 }
 
 // RenderMode returns the current render mode based on whether a surface
@@ -2464,7 +2489,7 @@ func (s *GPURenderSession) encodeSubmitReadback(
 		return fmt.Errorf("begin render pass: %w", rpErr)
 	}
 	rp.SetViewport(0, 0, float32(w), float32(h), 0, 1)
-	s.applyScissorRect(rp)
+	s.applyScissorRect(rp, w, h)
 
 	// Bind no-clip at @group(1) for non-grouped path (no RRect clip).
 	// Clip bind group is passed to each RecordDraws (must be bound AFTER
@@ -2704,7 +2729,7 @@ func (s *GPURenderSession) encodeSubmitSurface(
 		return fmt.Errorf("begin render pass: %w", rpErr)
 	}
 	rp.SetViewport(0, 0, float32(w), float32(h), 0, 1)
-	s.applyScissorRect(rp)
+	s.applyScissorRect(rp, w, h)
 
 	// Clip bind group is passed to each RecordDraws (must be bound AFTER
 	// SetPipeline due to Vulkan pipeline layout requirement).

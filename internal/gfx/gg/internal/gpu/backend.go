@@ -84,7 +84,15 @@ func (b *Backend) Init() error {
 	b.gpuInfo, _ = getGPUInfo(adapter)
 
 	// Step 3: Create Device (nil descriptor → default features/limits).
-	device, err := adapter.RequestDevice(nil)
+	// Request the adapter's own limits rather than the spec defaults. Several
+	// compute passes in the vector renderer bind more storage buffers per stage
+	// than the default 8 allows (vello_coarse binds 9), and with default limits
+	// those pipelines fail to create — which surfaces as a wall of validation
+	// errors and a silently degraded renderer. Asking for exactly what the
+	// adapter reports is always valid; asking for more than it reports is not.
+	device, err := adapter.RequestDevice(&wgpu.DeviceDescriptor{
+		RequiredLimits: adapter.Limits(),
+	})
 	if err != nil {
 		return fmt.Errorf("device creation failed: %w", err)
 	}

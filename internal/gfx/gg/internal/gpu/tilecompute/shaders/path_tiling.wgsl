@@ -137,14 +137,19 @@ fn main(
     let seg_within_line = counts & 0xffffu;
 
     // Recompute DDA parameters (identical to path_count).
-    let p0 = vec2<f32>(line.p0x, line.p0y);
-    let p1 = vec2<f32>(line.p1x, line.p1y);
-    let is_down = p1.y >= p0.y;
-    var xy0 = p0;
-    var xy1 = p1;
+    //
+    // Named line_p0/line_p1 rather than p0/p1 because the clipping section
+    // below declares its own p0/p1, and WGSL — unlike Go or Rust — forbids
+    // shadowing a name within the same function scope. Chrome rejected the
+    // whole module for it, which took down the compute pipeline with it.
+    let line_p0 = vec2<f32>(line.p0x, line.p0y);
+    let line_p1 = vec2<f32>(line.p1x, line.p1y);
+    let is_down = line_p1.y >= line_p0.y;
+    var xy0 = line_p0;
+    var xy1 = line_p1;
     if !is_down {
-        xy0 = p1;
-        xy1 = p0;
+        xy0 = line_p1;
+        xy1 = line_p0;
     }
     let s0 = xy0 * TILE_SCALE;
     let s1 = xy1 * TILE_SCALE;
