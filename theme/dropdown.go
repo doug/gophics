@@ -57,15 +57,19 @@ func (s *dropdownState) toggle(ctx widget.Ctx) {
 		return
 	}
 	d := s.W()
+	th := Of(ctx)
 	haptic(ctx, shell.HapticSelection)
 	w := s.width
 	if w < 120 {
 		w = 120
 	}
 	s.SetState(func() { s.open = true })
-	// Hang the list directly under the control, with a hair of separation.
-	below := geom.Pt{X: s.origin.X, Y: s.origin.Y + dropdownHeight + 4}
-	s.dismiss = showSelect(ctx, below, w, d.Options, d.Selected, func(i int) {
+	// Hang the list directly under the control. The seam is deliberately
+	// narrow — the list is part of this control, not a card that happens to
+	// be nearby — and showSelect gives it the control's own open-state border
+	// so the two read as one object.
+	below := geom.Pt{X: s.origin.X, Y: s.origin.Y + dropdownHeight + dropdownSeam}
+	s.dismiss = showSelect(ctx, below, w, th.Primary, openBorderWidth, d.Options, d.Selected, func(i int) {
 		if f := s.W().OnChange; f != nil {
 			f(i)
 		}
@@ -77,6 +81,15 @@ func (s *dropdownState) toggle(ctx widget.Ctx) {
 
 // dropdownHeight is the control's fixed height; the popup hangs below it.
 const dropdownHeight float32 = 40
+
+// openBorderWidth is the accent border the control wears while its list is
+// open, and that the list wears to match.
+const openBorderWidth float32 = 1.5
+
+// dropdownSeam is the gap between the control and its open list. Small enough
+// that they read as one control, wide enough that the two rounded edges do not
+// pinch into each other.
+const dropdownSeam float32 = 2
 
 func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
@@ -90,7 +103,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	// The border accents (like a focused Field) while the popup is open.
 	border, bw := th.Outline, float32(1)
 	if s.open {
-		border, bw = th.Primary, 1.5
+		border, bw = th.Primary, openBorderWidth
 	}
 	bg := th.Surface
 	if s.hovered {
@@ -109,10 +122,15 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 		cx, cy := size.W-12, size.H/2
 		drawChevron(c, geom.Pt{X: cx, Y: cy}, s.open, th.Muted)
 	}}
-	labelLayer := widget.Padding{
-		Insets: geom.Insets{Left: 12, Right: 34},
+	// Sized to the control's own height on purpose. Without it this layer
+	// shrink-wraps the text, so Align has only a text-tall box to centre
+	// within and the Stack pins that box to the top — the label rode high
+	// while the chevron, drawn at size.H/2 by the Canvas, sat correctly
+	// centred. Matching the Canvas height gives both the same axis.
+	labelLayer := widget.Sized{H: dropdownHeight, Child: widget.Padding{
+		Insets: geom.Insets{Left: labelInset, Right: 34},
 		Child:  widget.Align{X: 0, Y: 0.5, Child: widget.Text{S: label, Size: th.Type.Body, Color: labelColor, MaxLines: 1, Ellipsis: true}},
-	}
+	}}
 
 	return widget.Interactive{
 		Handler: widget.Handler{
@@ -139,7 +157,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 // `selected` is highlighted. Picking a row calls onPick(i) then closes; tapping
 // outside or Escape closes. onClose fires whenever the popup dismisses (a pick
 // or an outside tap), so the caller can drop its open state.
-func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, options []string, selected int, onPick func(int), onClose func()) (dismiss func()) {
+func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, border paint.Color, borderWidth float32, options []string, selected int, onPick func(int), onClose func()) (dismiss func()) {
 	ov := widget.MustOf[widget.Overlay](ctx)
 	th := Of(ctx)
 	var tok widget.OverlayToken
@@ -176,8 +194,14 @@ func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, options []string
 		))
 		rows[i] = Tappable{
 			Background: bg,
-			Pad:        geom.InsetsSymmetric(14, 10),
-			Child:      row,
+			// Rounded and inset (see the menu's padding below) so the
+			// selected row's fill nests inside the card's own corners
+			// instead of squaring off across them.
+			Radius: rowRadius(th),
+			// menuInset + this = the control's own 12pt label inset, so the
+			// selected value does not shift sideways when the list opens.
+			Pad:   geom.InsetsSymmetric(labelInset-menuInset, 10),
+			Child: row,
 			OnTap: func() {
 				closeFn()
 				if onPick != nil {
@@ -189,18 +213,39 @@ func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, options []string
 	col := widget.Column(rows...)
 	col.CrossAlign = layout.CrossStretch
 
+	// Same border as the control wears while open, at the same width: a faint
+	// decorative hairline here made the list look like an unrelated card that
+	// had landed underneath.
 	menu := widget.Decorated{
-		Color: th.Elevated, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
-		Child: widget.Sized{W: width, Child: col},
+		Color: th.Elevated, Radius: th.Radius, BorderColor: border, BorderWidth: borderWidth,
+		Child: widget.Sized{W: width, Child: widget.Padding{All: menuInset, Child: col}},
 	}
 	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{
 		OnDismiss: closeFn,
+		// No dim: the control stays lit so it and its list read as one thing.
+		Clear: true,
 		Child: widget.Padding{
 			Insets: geom.Insets{Left: topLeft.X, Top: topLeft.Y},
 			Child:  widget.Align{X: 0, Y: 0, Child: menu},
 		},
 	}})
 	return closeFn
+}
+
+// labelInset is how far the control's own label sits from its left edge; the
+// list's rows line up with it.
+const labelInset float32 = 12
+
+// menuInset is the gap between the list's border and its rows, so a row
+// highlight never has to be clipped against the card's rounded corners.
+const menuInset float32 = 4
+
+// rowRadius keeps a row's highlight concentric with the card around it.
+func rowRadius(th Theme) float32 {
+	if r := th.Radius - menuInset; r > 0 {
+		return r
+	}
+	return 0
 }
 
 // drawChevron paints a small down- (or up-) pointing arrow centered at c, the

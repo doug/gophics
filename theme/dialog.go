@@ -89,7 +89,15 @@ type MenuItem struct {
 // Tapping the scrim (outside Child) or pressing Escape dismisses.
 type modalScrim struct {
 	OnDismiss func()
-	Child     widget.Widget
+	// Clear makes the scrim invisible. It still catches the tap that
+	// dismisses, but does not dim the app behind it.
+	//
+	// A dialog interrupts you, and dimming says so. A select list does not —
+	// it belongs to the control that opened it, and dimming the page dims
+	// that control too, so the list ends up looking like a bright card
+	// floating over a greyed-out field it is supposed to be part of.
+	Clear bool
+	Child widget.Widget
 }
 
 func (m modalScrim) Build(widget.Ctx) widget.Widget {
@@ -102,8 +110,16 @@ func (m modalScrim) Build(widget.Ctx) widget.Widget {
 				}
 			},
 		},
-		Child: widget.Fill{Color: paint.Color{A: 0.45}},
+		Child: widget.Fill{Color: scrimColor(m.Clear)},
 	}
 	// Scrim below, content above; content taps don't reach the scrim.
 	return widget.Stack{Children: []widget.Widget{scrim, m.Child}}
+}
+
+// scrimColor is the modal dim, or fully transparent for a clear scrim.
+func scrimColor(clear bool) paint.Color {
+	if clear {
+		return paint.Color{}
+	}
+	return paint.Color{A: 0.45}
 }
