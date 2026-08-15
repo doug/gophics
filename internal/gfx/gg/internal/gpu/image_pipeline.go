@@ -163,7 +163,7 @@ func (p *TexturedQuadPipeline) ensurePipelineWithStencil() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -203,7 +203,7 @@ func (p *TexturedQuadPipeline) ensureDepthClipPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -259,7 +259,7 @@ func (p *TexturedQuadPipeline) ensureBlitPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},

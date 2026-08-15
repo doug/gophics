@@ -208,7 +208,7 @@ func (p *DepthClipPipeline) ensurePipeline() error { //nolint:funlen // GPU pipe
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					WriteMask: gputypes.ColorWriteMaskNone,
 				},
 			},
@@ -259,7 +259,7 @@ func (p *DepthClipPipeline) ensurePipeline() error { //nolint:funlen // GPU pipe
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					WriteMask: gputypes.ColorWriteMaskNone, // no color output
 				},
 			},

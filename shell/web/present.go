@@ -160,6 +160,11 @@ func (p *presenter) setupGPU() {
 		log.Printf("gophics/web: ggcanvas: %v", err)
 		return
 	}
+	// Tell the canvas which format the surface actually negotiated. PowerVR
+	// parts (Pixel) offer RGBA8Unorm, and an MSAA attachment left at the
+	// BGRA8Unorm default fails to resolve into it — every frame rejected, a
+	// blank canvas, and only a validation warning to show for it.
+	c.SetSurfaceFormat(p.format)
 	p.ggc = c
 
 	// Force the render-pass pipeline. Auto-selection routes complex scenes to

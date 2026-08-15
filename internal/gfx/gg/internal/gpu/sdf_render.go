@@ -344,7 +344,7 @@ func (p *SDFRenderPipeline) createPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -402,7 +402,7 @@ func (p *SDFRenderPipeline) ensurePipelineWithStencil() error { // Ensure base r
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -447,7 +447,7 @@ func (p *SDFRenderPipeline) ensureDepthClipPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},

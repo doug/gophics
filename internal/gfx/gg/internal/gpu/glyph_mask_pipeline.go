@@ -271,7 +271,7 @@ func (p *GlyphMaskPipeline) ensurePipelineWithStencil() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -313,7 +313,7 @@ func (p *GlyphMaskPipeline) ensureDepthClipPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -480,7 +480,7 @@ func (p *GlyphMaskPipeline) ensureLCDPipelineWithStencil() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},

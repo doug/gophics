@@ -2,6 +2,7 @@ package gg
 
 import (
 	"errors"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 	"image"
 	"os"
 	"strings"
@@ -65,6 +66,13 @@ type GPURenderTarget struct {
 	View       gpucontext.TextureView
 	ViewWidth  uint32
 	ViewHeight uint32
+	// ViewFormat is the view's texture format. WebGPU requires an MSAA color
+	// attachment to match the target it resolves into, and a TextureView does
+	// not report its own format, so the presenter that negotiated the surface
+	// has to say. Zero means BGRA8Unorm, which is what most desktop surfaces
+	// prefer — but not all: PowerVR parts offer RGBA8Unorm, and guessing there
+	// fails validation on every frame.
+	ViewFormat gputypes.TextureFormat
 
 	// Damage-aware compositing (ADR-026/028): when non-empty, compositor
 	// uses LoadOpLoad (preserve previous frame) and per-rect scissor.

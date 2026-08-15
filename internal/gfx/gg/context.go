@@ -2,6 +2,7 @@ package gg
 
 import (
 	"fmt"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -22,6 +23,10 @@ import (
 // pixmap while exposing logical dimensions to user code. Drawing operations use
 // logical coordinates; the Context applies a base scale transform transparently.
 type Context struct {
+	// surfaceFormat is the format of the surface a view flush resolves into;
+	// zero means BGRA8Unorm. See SetSurfaceFormat.
+	surfaceFormat gputypes.TextureFormat
+
 	width    int // logical width (user-facing)
 	height   int // logical height (user-facing)
 	pixmap   *Pixmap
@@ -1412,12 +1417,19 @@ func (c *Context) FlushGPU() error {
 //
 // This is the per-pass render target path for ggcanvas.RenderDirect.
 // When view is nil/zero, behaves identically to FlushGPU (CPU readback).
+// SetSurfaceFormat records the texture format of the surface that
+// FlushGPUWithView resolves into. Zero means BGRA8Unorm. A presenter must set
+// this whenever the surface it negotiated is not that default, or the MSAA
+// attachment and the resolve target disagree and every frame is rejected.
+func (c *Context) SetSurfaceFormat(f gputypes.TextureFormat) { c.surfaceFormat = f }
+
 func (c *Context) FlushGPUWithView(view gpucontext.TextureView, width, height uint32) error {
 	t := c.gpuRenderTarget()
 	if !view.IsNil() {
 		t.View = view
 		t.ViewWidth = width
 		t.ViewHeight = height
+		t.ViewFormat = c.surfaceFormat
 	}
 	rc := c.gpuCtxOps()
 	if rc != nil {
@@ -1452,6 +1464,7 @@ func (c *Context) FlushGPUWithViewDamage(view gpucontext.TextureView, width, hei
 		t.View = view
 		t.ViewWidth = width
 		t.ViewHeight = height
+		t.ViewFormat = c.surfaceFormat
 	}
 	if !damageRect.Empty() {
 		t.DamageRects = []image.Rectangle{damageRect}
@@ -1475,6 +1488,7 @@ func (c *Context) FlushGPUWithViewDamageRects(view gpucontext.TextureView, width
 		t.View = view
 		t.ViewWidth = width
 		t.ViewHeight = height
+		t.ViewFormat = c.surfaceFormat
 	}
 	if len(rects) > 0 {
 		t.DamageRects = rects

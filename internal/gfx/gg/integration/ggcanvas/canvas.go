@@ -6,6 +6,7 @@ package ggcanvas
 import (
 	"errors"
 	"fmt"
+	"github.com/doug/gophics/internal/gfx/gputypes"
 	"image"
 	"io"
 	"math"
@@ -326,6 +327,10 @@ func (c *Canvas) NeedsAnimationFrame() bool {
 //
 // Rects are consumed after one present and do not persist across frames.
 // When nil or empty, the full surface is presented (backward compatible).
+// SetSurfaceFormat records the texture format of the surface this canvas
+// presents into, for presenters whose surface is not BGRA8Unorm.
+func (c *Canvas) SetSurfaceFormat(f gputypes.TextureFormat) { c.ctx.SetSurfaceFormat(f) }
+
 func (c *Canvas) SetPresentDamage(rects []image.Rectangle) {
 	scale := c.ctx.DeviceScale()
 	if scale != 1.0 {

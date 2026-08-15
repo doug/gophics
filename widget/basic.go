@@ -1377,7 +1377,12 @@ func (b *InteractiveBox) Semantics() layout.SemInfo {
 		return info
 	}
 	switch {
-	case b.Handler.OnText != nil || b.Handler.OnKey != nil:
+	case b.Handler.OnText != nil:
+		// Only text *entry* makes a text field. Taking key events does not:
+		// scrollers, list navigation and game surfaces all consume keys, and
+		// treating them as inputs put a full-screen "textfield" over the HN
+		// feed on Android whose label was every headline concatenated — one
+		// stop that reads the entire list and no way past it.
 		return layout.SemInfo{Role: layout.RoleTextField}
 	case b.Handler.OnTap != nil:
 		return layout.SemInfo{Role: layout.RoleButton, OnActivate: b.Handler.OnTap}

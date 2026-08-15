@@ -18,6 +18,7 @@ import (
 //   - Depth/stencil: 4x samples, Depth24PlusStencil8, RenderAttachment
 //   - Resolve: 1x sample, BGRA8Unorm, RenderAttachment | CopySrc
 type textureSet struct {
+	format      gputypes.TextureFormat
 	msaaTex     *wgpu.Texture
 	msaaView    *wgpu.TextureView
 	stencilTex  *wgpu.Texture
@@ -35,27 +36,35 @@ type textureSet struct {
 //
 // The samples parameter sets the MSAA sample count for color and depth/stencil
 // textures (typically 4 for MSAA, 1 for non-MSAA fallback).
-func (ts *textureSet) ensureTextures(device *wgpu.Device, w, h uint32, labelPrefix string, samples ...uint32) error {
+func (ts *textureSet) ensureTextures(device *wgpu.Device, w, h uint32, labelPrefix string, format gputypes.TextureFormat, samples ...uint32) error {
 	sc := uint32(4) // default MSAA sample count
 	if len(samples) > 0 && samples[0] > 0 {
 		sc = samples[0]
 	}
+	if format == 0 {
+		format = gputypes.TextureFormatBGRA8Unorm
+	}
 
-	if ts.width == w && ts.height == h && ts.msaaTex != nil {
+	// Format is part of the identity, not just size: WebGPU requires a resolve
+	// target to match its color attachment, so a surface that reports
+	// RGBA8Unorm (PowerVR does) against an MSAA texture pinned to BGRA8Unorm
+	// fails validation on every frame and nothing reaches the screen.
+	if ts.width == w && ts.height == h && ts.format == format && ts.msaaTex != nil {
 		return nil
 	}
+	ts.format = format
 	ts.destroyTextures()
 
 	size := wgpu.Extent3D{Width: w, Height: h, DepthOrArrayLayers: 1}
 
-	// MSAA color texture (sc samples, BGRA8Unorm).
+	// MSAA color texture (sc samples), in the target's own format.
 	msaaTex, err := device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         labelPrefix + "_msaa_color",
 		Size:          size,
 		MipLevelCount: 1,
 		SampleCount:   sc,
 		Dimension:     gputypes.TextureDimension2D,
-		Format:        gputypes.TextureFormatBGRA8Unorm,
+		Format:        format,
 		Usage:         gputypes.TextureUsageRenderAttachment,
 	})
 	if err != nil {
@@ -65,7 +74,7 @@ func (ts *textureSet) ensureTextures(device *wgpu.Device, w, h uint32, labelPref
 
 	msaaView, err := device.CreateTextureView(msaaTex, &wgpu.TextureViewDescriptor{
 		Label:         labelPrefix + "_msaa_color_view",
-		Format:        gputypes.TextureFormatBGRA8Unorm,
+		Format:        format,
 		Dimension:     gputypes.TextureViewDimension2D,
 		Aspect:        gputypes.TextureAspectAll,
 		MipLevelCount: 1,
@@ -151,11 +160,17 @@ func (ts *textureSet) ensureTextures(device *wgpu.Device, w, h uint32, labelPref
 //
 // If a resolve texture exists from a previous offscreen mode, it is destroyed.
 // If dimensions match and textures exist, this is a no-op.
-func (ts *textureSet) ensureSurfaceTextures(device *wgpu.Device, w, h uint32, labelPrefix string, samples ...uint32) error {
-	if ts.width == w && ts.height == h && ts.msaaTex != nil {
+func (ts *textureSet) ensureSurfaceTextures(device *wgpu.Device, w, h uint32, labelPrefix string, format gputypes.TextureFormat, samples ...uint32) error {
+	if format == 0 {
+		format = gputypes.TextureFormatBGRA8Unorm
+	}
+	// Format participates in the identity for the same reason as above: the
+	// MSAA attachment has to match the surface it resolves into.
+	if ts.width == w && ts.height == h && ts.format == format && ts.msaaTex != nil {
 		return nil
 	}
 	ts.destroyTextures()
+	ts.format = format
 
 	sc := uint32(4) // default MSAA sample count
 	if len(samples) > 0 && samples[0] > 0 {
@@ -164,14 +179,14 @@ func (ts *textureSet) ensureSurfaceTextures(device *wgpu.Device, w, h uint32, la
 
 	size := wgpu.Extent3D{Width: w, Height: h, DepthOrArrayLayers: 1}
 
-	// MSAA color texture (BGRA8Unorm, sample count from GPUShared).
+	// MSAA color texture in the surface format, samples from GPUShared.
 	msaaTex, err := device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         labelPrefix + "_msaa_color",
 		Size:          size,
 		MipLevelCount: 1,
 		SampleCount:   sc,
 		Dimension:     gputypes.TextureDimension2D,
-		Format:        gputypes.TextureFormatBGRA8Unorm,
+		Format:        format,
 		Usage:         gputypes.TextureUsageRenderAttachment,
 	})
 	if err != nil {
@@ -181,7 +196,7 @@ func (ts *textureSet) ensureSurfaceTextures(device *wgpu.Device, w, h uint32, la
 
 	msaaView, err := device.CreateTextureView(msaaTex, &wgpu.TextureViewDescriptor{
 		Label:         labelPrefix + "_msaa_color_view",
-		Format:        gputypes.TextureFormatBGRA8Unorm,
+		Format:        format,
 		Dimension:     gputypes.TextureViewDimension2D,
 		Aspect:        gputypes.TextureAspectAll,
 		MipLevelCount: 1,

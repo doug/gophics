@@ -103,7 +103,8 @@ func (sr *StencilRenderer) SetClipBindLayout(layout *wgpu.BindGroupLayout) {
 // GPU memory leaks. Returns an error if any texture or view creation fails;
 // in that case, partially created resources are cleaned up.
 func (sr *StencilRenderer) EnsureTextures(width, height uint32) error {
-	return sr.textures.ensureTextures(sr.device, width, height, "stencil", sr.sampleCount)
+	// Stencil work is offscreen, so it keeps the default format.
+	return sr.textures.ensureTextures(sr.device, width, height, "stencil", 0, sr.sampleCount)
 }
 
 // Destroy releases all GPU resources held by the renderer: pipelines, shaders,

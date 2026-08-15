@@ -138,6 +138,10 @@ type GPURenderSession struct {
 	device      *wgpu.Device
 	queue       *wgpu.Queue
 	sampleCount uint32 // MSAA sample count (4 or 1), from GPUShared
+	// surfaceFormat is the format of the view frames resolve into. It has to
+	// match the MSAA attachment, and it is not knowable from the view itself,
+	// so the presenter that negotiated it tells us.
+	surfaceFormat gputypes.TextureFormat
 
 	// Shared textures (MSAA 4x color + depth/stencil + 1x resolve).
 	textures textureSet
@@ -484,9 +488,9 @@ func (s *GPURenderSession) ensureTexturesForView(activeView *wgpu.TextureView, w
 	}
 
 	if activeView != nil {
-		return s.textures.ensureSurfaceTextures(s.device, w, h, "session", s.sampleCount)
+		return s.textures.ensureSurfaceTextures(s.device, w, h, "session", s.surfaceFormat, s.sampleCount)
 	}
-	return s.textures.ensureTextures(s.device, w, h, "session", s.sampleCount)
+	return s.textures.ensureTextures(s.device, w, h, "session", s.surfaceFormat, s.sampleCount)
 }
 
 // SetScissorRect sets the scissor rect for subsequent GPU draw commands.
@@ -535,6 +539,10 @@ func (s *GPURenderSession) applyScissorRect(rp *wgpu.RenderPassEncoder, w, h uin
 	rp.SetScissorRect(x, y, sw, sh)
 }
 
+// SetSurfaceFormat records the format of the surface frames resolve into.
+// Zero restores the BGRA8Unorm default.
+func (s *GPURenderSession) SetSurfaceFormat(f gputypes.TextureFormat) { s.surfaceFormat = f }
+
 // RenderMode returns the current render mode based on whether a surface
 // target has been set.
 func (s *GPURenderSession) RenderMode() RenderMode {
@@ -552,9 +560,9 @@ func (s *GPURenderSession) RenderMode() RenderMode {
 // texture is skipped because the surface view serves as the resolve target.
 func (s *GPURenderSession) EnsureTextures(w, h uint32) error {
 	if s.surfaceView != nil {
-		return s.textures.ensureSurfaceTextures(s.device, w, h, "session", s.sampleCount)
+		return s.textures.ensureSurfaceTextures(s.device, w, h, "session", s.surfaceFormat, s.sampleCount)
 	}
-	return s.textures.ensureTextures(s.device, w, h, "session", s.sampleCount)
+	return s.textures.ensureTextures(s.device, w, h, "session", s.surfaceFormat, s.sampleCount)
 }
 
 // RenderFrame renders all draw commands (SDF shapes + convex polygons +
@@ -591,6 +599,13 @@ func (s *GPURenderSession) RenderFrame(
 		"glyphMask", len(glyphMaskBatches),
 		"surface", activeView != nil)
 
+	// Pipelines are compiled against this format too, so it has to be set
+	// before any draw is encoded. Pipelines are built lazily during recording,
+	// which happens below, so the first frame gets the right one — and a
+	// surface's format does not change without rebuilding the GPU stack that
+	// owns these pipelines anyway.
+	s.surfaceFormat = target.ViewFormat
+	SetSurfaceColorFormat(target.ViewFormat)
 	w, h := s.effectiveDimensions(target, activeView)
 	slogger().Debug("RenderFrame dimensions",
 		"target_w", target.Width, "target_h", target.Height,
@@ -698,6 +713,13 @@ func (s *GPURenderSession) RenderFrameGrouped(target gg.GPURenderTarget, groups 
 	// over session-level surfaceView (backward compat).
 	activeView := s.resolveActiveView(target)
 
+	// Pipelines are compiled against this format too, so it has to be set
+	// before any draw is encoded. Pipelines are built lazily during recording,
+	// which happens below, so the first frame gets the right one — and a
+	// surface's format does not change without rebuilding the GPU stack that
+	// owns these pipelines anyway.
+	s.surfaceFormat = target.ViewFormat
+	SetSurfaceColorFormat(target.ViewFormat)
 	w, h := s.effectiveDimensions(target, activeView)
 	s.frameW, s.frameH = int(w), int(h)
 	if err := s.ensureTexturesForView(activeView, w, h); err != nil {

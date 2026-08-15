@@ -155,7 +155,7 @@ func (sr *StencilRenderer) createPipelines() error { //nolint:funlen // GPU pipe
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &stencilOnlyBlend,
 					WriteMask: gputypes.ColorWriteMaskNone,
 				},
@@ -211,7 +211,7 @@ func (sr *StencilRenderer) createPipelines() error { //nolint:funlen // GPU pipe
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &stencilOnlyBlend,
 					WriteMask: gputypes.ColorWriteMaskNone,
 				},
@@ -263,7 +263,7 @@ func (sr *StencilRenderer) createPipelines() error { //nolint:funlen // GPU pipe
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -439,7 +439,7 @@ func (sr *StencilRenderer) ensureDepthClipPipelines() error { //nolint:funlen //
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},

@@ -160,7 +160,7 @@ func (cr *ConvexRenderer) ensurePipelineWithStencil() error { // Ensure base res
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -209,7 +209,7 @@ func (cr *ConvexRenderer) ensureDepthClipPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},
@@ -307,7 +307,7 @@ func (cr *ConvexRenderer) createPipeline() error {
 			EntryPoint: shaderEntryFS,
 			Targets: []gputypes.ColorTargetState{
 				{
-					Format:    gputypes.TextureFormatBGRA8Unorm,
+					Format:    surfaceColorFormat,
 					Blend:     &premulBlend,
 					WriteMask: gputypes.ColorWriteMaskAll,
 				},

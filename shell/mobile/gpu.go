@@ -139,6 +139,10 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	if err != nil {
 		return nil, err
 	}
+	// The surface format is negotiated per device (PowerVR offers RGBA8Unorm
+	// where most desktop parts prefer BGRA8Unorm); the MSAA attachment has to
+	// match it or nothing resolves.
+	c.SetSurfaceFormat(g.format)
 	g.ggc = c
 	// Force the render-pass pipeline (the compute rasterizer reads back to a CPU
 	// pixmap and never reaches the surface — the same fix as the web GPU path).
