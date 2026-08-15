@@ -17,7 +17,54 @@ import (
 	ot "github.com/go-text/typesetting/font/opentype"
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/text/unicode/bidi"
 )
+
+// Direction is a paragraph's base writing direction. It decides two things a
+// per-run bidi analysis cannot: how runs of opposite direction are ordered
+// relative to each other, and which edge a line is anchored to.
+type Direction uint8
+
+const (
+	// DirAuto derives the base direction from the text itself — the first
+	// strong character wins (UAX #9 rules P2/P3), which is what a browser
+	// does for dir="auto". This is the zero value, so a Shaper handles
+	// Arabic and Hebrew correctly without being told about them.
+	DirAuto Direction = iota
+	// DirLTR forces a left-to-right base direction.
+	DirLTR
+	// DirRTL forces a right-to-left base direction — the setting a UI in an
+	// RTL locale wants even for the strings that happen to be Latin.
+	DirRTL
+)
+
+// baseDirection resolves a paragraph's base direction the way UAX #9 does:
+// scan for the first strong character, skipping anything inside an isolate,
+// and fall back to LTR when the text has no strong character at all (digits
+// and punctuation alone decide nothing).
+func baseDirection(runes []rune) di.Direction {
+	depth := 0
+	for _, r := range runes {
+		p, _ := bidi.LookupRune(r)
+		switch p.Class() {
+		case bidi.LRI, bidi.RLI, bidi.FSI:
+			depth++
+		case bidi.PDI:
+			if depth > 0 {
+				depth--
+			}
+		case bidi.L:
+			if depth == 0 {
+				return di.DirectionLTR
+			}
+		case bidi.R, bidi.AL:
+			if depth == 0 {
+				return di.DirectionRTL
+			}
+		}
+	}
+	return di.DirectionLTR
+}
 
 // systemFontMap is the platform system-font fallback (satisfied by
 // fontscan.FontMap on desktop). Abstracting it keeps the heavy fontscan
@@ -131,6 +178,10 @@ type Line struct {
 	Ascent, Descent, Gap float32
 	// Start/End are the rune range of the source string on this line.
 	Start, End int
+	// RTL reports that the line's base direction is right-to-left, so it
+	// should be anchored to the right edge of its box when the caller is
+	// aligning to the "start" of the text rather than to a fixed side.
+	RTL bool
 }
 
 // Shaper shapes text through a font fallback chain, optionally extended by
@@ -140,6 +191,7 @@ type Shaper struct {
 	fonts  []*Font
 	system systemFontMap
 	byFace map[*font.Face]*Font
+	dir    Direction
 	hb     shaping.HarfbuzzShaper
 	seg    shaping.Segmenter
 	wrap   shaping.LineWrapper
@@ -153,6 +205,21 @@ func NewShaper(fonts ...*Font) *Shaper {
 
 // SetFonts replaces the fallback chain.
 func (s *Shaper) SetFonts(fonts ...*Font) { s.fonts = fonts }
+
+// SetDirection sets the base writing direction for subsequent shaping.
+// The default, DirAuto, reads it off each paragraph's own content.
+func (s *Shaper) SetDirection(d Direction) { s.dir = d }
+
+// baseDir resolves the configured direction against the text being shaped.
+func (s *Shaper) baseDir(runes []rune) di.Direction {
+	switch s.dir {
+	case DirLTR:
+		return di.DirectionLTR
+	case DirRTL:
+		return di.DirectionRTL
+	}
+	return baseDirection(runes)
+}
 
 // Primary returns the primary font, or nil.
 func (s *Shaper) Primary() *Font {
@@ -189,12 +256,16 @@ func fx(v float32) fixed.Int26_6 { return fixed.Int26_6(v * 64) }
 
 func unfx(v fixed.Int26_6) float32 { return float32(v) / 64 }
 
-func (s *Shaper) shapeRuns(runes []rune, size float32) []shaping.Output {
+func (s *Shaper) shapeRuns(runes []rune, size float32, base di.Direction) []shaping.Output {
 	inputs := s.seg.Split(shaping.Input{
-		Text:      runes,
-		RunEnd:    len(runes),
-		Size:      fx(size),
-		Direction: di.DirectionLTR,
+		Text:   runes,
+		RunEnd: len(runes),
+		Size:   fx(size),
+		// The segmenter runs the bidi algorithm with this as the paragraph
+		// direction, so it also decides where neutral characters (spaces,
+		// punctuation, digits) attach when the text has no strong character
+		// to anchor them.
+		Direction: base,
 	}, fontmap{s})
 	outs := make([]shaping.Output, len(inputs))
 	for i, in := range inputs {
@@ -213,7 +284,8 @@ func (s *Shaper) Line(str string, size float32) Line {
 		}
 		return Line{}
 	}
-	return s.assemble(s.shapeRuns(runes, size), 0)
+	base := s.baseDir(runes)
+	return s.assemble(s.shapeRuns(runes, size, base), 0, base)
 }
 
 // Paragraph shapes and wraps str to maxWidth (Inf or <= 0 disables
@@ -237,15 +309,19 @@ func (s *Shaper) Paragraph(str string, size, maxWidth float32) []Line {
 			l.Start, l.End = start, start
 			lines = append(lines, l)
 		} else {
-			outs := s.shapeRuns(para, size)
+			// Base direction is resolved per paragraph, not per string: UAX #9
+			// scopes P2/P3 to the paragraph, so a Hebrew line and a Latin line
+			// in one text block each get their own answer.
+			base := s.baseDir(para)
+			outs := s.shapeRuns(para, size, base)
 			if maxWidth <= 0 || maxWidth > 1e8 {
-				l := s.assemble(outs, start)
+				l := s.assemble(outs, start, base)
 				lines = append(lines, l)
 			} else {
 				wrapped, _ := s.wrap.WrapParagraphF(shaping.WrapConfig{}, fx(maxWidth), para,
 					shaping.NewSliceIterator(outs))
 				for _, wl := range wrapped {
-					lines = append(lines, s.assemble(wl, start))
+					lines = append(lines, s.assemble(wl, start, base))
 				}
 			}
 		}
@@ -259,13 +335,13 @@ func (s *Shaper) Paragraph(str string, size, maxWidth float32) []Line {
 
 // assemble positions the runs of one line in visual order and computes
 // bounds. runeOffset shifts cluster/rune indices into the full string.
-func (s *Shaper) assemble(runs []shaping.Output, runeOffset int) Line {
-	visual := visualOrder(runs)
+func (s *Shaper) assemble(runs []shaping.Output, runeOffset int, base di.Direction) Line {
+	visual := visualOrder(runs, base)
 	var l Line
+	l.RTL = base == di.DirectionRTL
 	l.Start = 1<<31 - 1
 	var pen float32
 	for _, run := range visual {
-		rtl := run.Direction == di.DirectionRTL
 		f := s.fontFor(run.Face)
 		for _, g := range run.Glyphs {
 			l.Glyphs = append(l.Glyphs, Glyph{
@@ -278,7 +354,6 @@ func (s *Shaper) assemble(runs []shaping.Output, runeOffset int) Line {
 			})
 			pen += unfx(g.Advance)
 		}
-		_ = rtl
 		if a := unfx(run.LineBounds.Ascent); a > l.Ascent {
 			l.Ascent = a
 		}
@@ -325,27 +400,51 @@ func (s *Shaper) fontFor(face *font.Face) *Font {
 	return s.Primary()
 }
 
-// visualOrder reorders logical runs for display: maximal sequences of RTL
-// runs are reversed. This handles the common single-embedding-level bidi
-// case; full UBA multi-level reordering arrives with paragraph-level
-// direction support.
-func visualOrder(runs []shaping.Output) []shaping.Output {
-	out := make([]shaping.Output, 0, len(runs))
-	i := 0
-	for i < len(runs) {
-		if runs[i].Direction != di.DirectionRTL {
-			out = append(out, runs[i])
+// visualOrder reorders logical runs into the order they are painted, left to
+// right, applying UAX #9 rule L2 over the two embedding levels a bidi split
+// produces: runs at the base level, and runs of the opposite direction one
+// level above.
+//
+// L2 says to reverse each contiguous sequence at the highest level, then at
+// every level down to the lowest odd one. For an LTR base (levels 0 and 1)
+// that is just "reverse each maximal RTL sequence". For an RTL base (levels 1
+// and 2) it is two passes: reverse each maximal LTR sequence in place — which
+// keeps several adjacent LTR runs in their own relative order — and then
+// reverse the whole line, because every run sits at level 1 or above.
+//
+// Getting the second case right is what makes an Arabic sentence with an
+// English phrase in it read correctly: the phrase stays LTR internally while
+// the sentence around it runs right to left.
+func visualOrder(runs []shaping.Output, base di.Direction) []shaping.Output {
+	out := make([]shaping.Output, len(runs))
+	copy(out, runs)
+
+	rtlBase := base == di.DirectionRTL
+	// The level above the base is whichever direction the base is not.
+	upper := di.DirectionRTL
+	if rtlBase {
+		upper = di.DirectionLTR
+	}
+	for i := 0; i < len(out); {
+		if out[i].Direction != upper {
 			i++
 			continue
 		}
 		j := i
-		for j < len(runs) && runs[j].Direction == di.DirectionRTL {
+		for j < len(out) && out[j].Direction == upper {
 			j++
 		}
-		for k := j - 1; k >= i; k-- {
-			out = append(out, runs[k])
-		}
+		reverseRuns(out[i:j])
 		i = j
 	}
+	if rtlBase {
+		reverseRuns(out)
+	}
 	return out
+}
+
+func reverseRuns(runs []shaping.Output) {
+	for i, j := 0, len(runs)-1; i < j; i, j = i+1, j-1 {
+		runs[i], runs[j] = runs[j], runs[i]
+	}
 }

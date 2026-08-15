@@ -55,8 +55,14 @@ type Flex struct {
 	Axis       Axis
 	MainAlign  MainAlign
 	CrossAlign CrossAlign
-	Children   []FlexChild
-	offsets    []geom.Pt
+	// Reverse runs the main axis the other way: the first child is placed at
+	// the far end. Children keep their given order — only the direction of
+	// travel flips — so MainStart still means "packed against the start", it
+	// is just that the start is now the right (or bottom) edge. This is what
+	// mirrors a row for a right-to-left reading direction.
+	Reverse  bool
+	Children []FlexChild
+	offsets  []geom.Pt
 }
 
 // Row returns a horizontal Flex over plain children.
@@ -183,6 +189,22 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 		}
 		f.offsets = append(f.offsets, f.pt(pos, crossPos))
 		pos += f.main(s) + gap
+	}
+	if f.Reverse {
+		// Mirror the main axis about the flex's own extent. Doing it after
+		// placement rather than by walking the children backwards keeps every
+		// other rule — flex distribution, MainAlign, the gaps — computed once
+		// and identically in both directions.
+		for i := range f.offsets {
+			s := f.Children[i].Box.Size()
+			o := f.offsets[i]
+			if f.Axis == Horizontal {
+				o.X = ownMain - o.X - s.W
+			} else {
+				o.Y = ownMain - o.Y - s.H
+			}
+			f.offsets[i] = o
+		}
 	}
 	return f.Done(cs, own)
 }

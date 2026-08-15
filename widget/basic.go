@@ -54,19 +54,36 @@ func (t Text) attach(layout.Box, []layout.Box) {}
 type Padding struct {
 	Insets geom.Insets
 	All    float32
-	Child  Widget
+	// Start and End are directional: in a left-to-right subtree Start is the
+	// left inset and End the right, and in a right-to-left one they swap. Use
+	// them for anything that should follow the reading direction (a leading
+	// icon's gap, a list row's text indent) and keep Insets.Left/Right for
+	// what genuinely means left and right. They are added to Insets, so a
+	// widget can mix a fixed vertical inset with a directional horizontal one.
+	Start, End float32
+	Child      Widget
 }
 
-func (p Padding) insets() geom.Insets {
+func (p Padding) insets(dir Direction) geom.Insets {
+	in := p.Insets
 	if p.All != 0 {
-		return geom.InsetsAll(p.All)
+		in = geom.InsetsAll(p.All)
 	}
-	return p.Insets
+	if p.Start == 0 && p.End == 0 {
+		return in
+	}
+	start, end := p.Start, p.End
+	if dir.RTL() {
+		start, end = end, start
+	}
+	in.Left += start
+	in.Right += end
+	return in
 }
 
 func (p Padding) createBox(Ctx) layout.Box { return &layout.Padded{} }
-func (p Padding) updateBox(_ Ctx, b layout.Box) {
-	b.(*layout.Padded).Insets = p.insets()
+func (p Padding) updateBox(ctx Ctx, b layout.Box) {
+	b.(*layout.Padded).Insets = p.insets(DirectionOf(ctx))
 }
 func (p Padding) childWidgets() []Widget { return []Widget{p.Child} }
 func (p Padding) attach(b layout.Box, kids []layout.Box) {
@@ -115,17 +132,25 @@ func (d Decorated) attach(b layout.Box, kids []layout.Box) {
 
 // Align positions its child; X/Y in [0,1] (0 start, 0.5 center, 1 end).
 type Align struct {
-	X, Y  float32
-	Child Widget
+	X, Y float32
+	// Directional makes X follow the reading direction: X=0 is the leading
+	// edge, which is the left in a left-to-right subtree and the right in a
+	// right-to-left one. Leave it off for anything anchored to a real side.
+	Directional bool
+	Child       Widget
 }
 
 // Center centers its child.
 func Center(child Widget) Align { return Align{X: 0.5, Y: 0.5, Child: child} }
 
 func (a Align) createBox(Ctx) layout.Box { return &layout.Aligned{} }
-func (a Align) updateBox(_ Ctx, b layout.Box) {
+func (a Align) updateBox(ctx Ctx, b layout.Box) {
 	ab := b.(*layout.Aligned)
-	ab.AlignX, ab.AlignY = a.X, a.Y
+	x := a.X
+	if a.Directional && DirectionOf(ctx).RTL() {
+		x = 1 - x
+	}
+	ab.AlignX, ab.AlignY = x, a.Y
 }
 func (a Align) childWidgets() []Widget { return []Widget{a.Child} }
 func (a Align) attach(b layout.Box, kids []layout.Box) {
@@ -146,10 +171,18 @@ type Flex struct {
 	Axis       layout.Axis
 	MainAlign  layout.MainAlign
 	CrossAlign layout.CrossAlign
-	Children   []Widget
+	// NoMirror keeps a horizontal Flex in written order even in a
+	// right-to-left subtree. A row of controls is read like a sentence and
+	// should mirror, which is the default; set this for a row whose order
+	// means something physical rather than textual — a media scrubber, a
+	// timeline, a chart legend keyed to plotted positions.
+	NoMirror bool
+	Children []Widget
 }
 
-// Row is a horizontal Flex (children cross-centered).
+// Row is a horizontal Flex (children cross-centered). In a right-to-left
+// subtree it lays its children from the right, so a row reads in the same
+// order as the text around it; see Flex.NoMirror to opt out.
 func Row(children ...Widget) Flex {
 	return Flex{Axis: layout.Horizontal, CrossAlign: layout.CrossCenter, Children: children}
 }
@@ -160,9 +193,12 @@ func Column(children ...Widget) Flex {
 }
 
 func (f Flex) createBox(Ctx) layout.Box { return &layout.Flex{} }
-func (f Flex) updateBox(_ Ctx, b layout.Box) {
+func (f Flex) updateBox(ctx Ctx, b layout.Box) {
 	fb := b.(*layout.Flex)
 	fb.Axis, fb.MainAlign, fb.CrossAlign = f.Axis, f.MainAlign, f.CrossAlign
+	// Only a horizontal run mirrors: a column reads top-to-bottom in every
+	// script gophics supports.
+	fb.Reverse = f.Axis == layout.Horizontal && !f.NoMirror && DirectionOf(ctx).RTL()
 }
 
 func (f Flex) childWidgets() []Widget {
@@ -1100,13 +1136,33 @@ type Semantics struct {
 	Role   layout.Role
 	Label  string
 	Hidden bool
-	Child  Widget
+	// Value is the node's current content or setting as text — the slider's
+	// number, the field's contents, the progress percentage.
+	Value string
+	// Hint describes what activating the node does ("opens the thread").
+	Hint string
+	// Checked marks a toggleable node's state; nil means not toggleable.
+	Checked *bool
+	// Disabled and Selected mirror the ARIA states of the same name.
+	Disabled bool
+	Selected bool
+	// OnActivate is invoked when assistive technology activates the node — a
+	// VoiceOver double-tap or a TalkBack activate. Set it to the same action
+	// the control's tap handler runs, so a control that is drawn rather than
+	// composed from Interactive is still operable without sight.
+	OnActivate func()
+	Child      Widget
 }
 
 func (sw Semantics) createBox(Ctx) layout.Box { return &semBox{} }
 func (sw Semantics) updateBox(_ Ctx, b layout.Box) {
 	sb := b.(*semBox)
-	sb.info = layout.SemInfo{Role: sw.Role, Label: sw.Label, Hidden: sw.Hidden}
+	sb.info = layout.SemInfo{
+		Role: sw.Role, Label: sw.Label, Hidden: sw.Hidden,
+		Value: sw.Value, Hint: sw.Hint, Checked: sw.Checked,
+		Disabled: sw.Disabled, Selected: sw.Selected,
+		OnActivate: sw.OnActivate,
+	}
 	if sb.info.Role == layout.RoleNone && (sw.Label != "" || sw.Hidden) {
 		sb.info.Role = layout.RoleGroup
 	}
@@ -1247,13 +1303,23 @@ func (b *canvasBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
 // It adds no visuals and takes its child's size.
 type Interactive struct {
 	Handler Handler
-	Child   Widget
+	// Sem overrides the semantics Interactive would otherwise infer from
+	// Handler. Set it whenever the control is not the plain button its
+	// handlers imply — a checkbox, a switch, a slider, a tab. Declaring it
+	// here rather than wrapping the control in Semantics keeps it as one
+	// node: a checkbox nested inside a button is worse for a screen-reader
+	// user than either alone, because it has to be stepped through twice.
+	//
+	// OnActivate defaults to Handler.OnTap when left nil.
+	Sem   *layout.SemInfo
+	Child Widget
 }
 
 func (iw Interactive) createBox(ctx Ctx) layout.Box { return &InteractiveBox{} }
 func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 	ib := b.(*InteractiveBox)
 	ib.Handler = iw.Handler
+	ib.sem = iw.Sem
 	// Autofocus: a focusable widget mounted while nothing has focus takes it.
 	if ib.Handler.focusable() && ctx.el.owner.KeyboardTarget == nil {
 		ctx.el.owner.KeyboardTarget = &ib.Handler
@@ -1272,6 +1338,7 @@ func (iw Interactive) attach(b layout.Box, kids []layout.Box) {
 type InteractiveBox struct {
 	Handler Handler
 	Child   layout.Box
+	sem     *layout.SemInfo
 	size    geom.Size
 }
 
@@ -1298,9 +1365,17 @@ func (b *InteractiveBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 }
 
-// Semantics derives a role from the handlers: keyboard handlers make a
-// text field, tap handlers a button whose activation runs OnTap.
+// Semantics uses the caller's declared description when there is one, and
+// otherwise derives a role from the handlers: keyboard handlers make a text
+// field, tap handlers a button whose activation runs OnTap.
 func (b *InteractiveBox) Semantics() layout.SemInfo {
+	if b.sem != nil {
+		info := *b.sem
+		if info.OnActivate == nil {
+			info.OnActivate = b.Handler.OnTap
+		}
+		return info
+	}
 	switch {
 	case b.Handler.OnText != nil || b.Handler.OnKey != nil:
 		return layout.SemInfo{Role: layout.RoleTextField}
