@@ -15,6 +15,21 @@ type Entity struct {
 	Atk, AC, Damage int // d20 attack bonus, armor class, damage die
 	Alive           bool
 	FlipX           bool
+
+	// Speed is how many turns this entity takes per player turn, as a
+	// numerator over 2: 1 is half speed, 2 is normal, 3 gives an extra turn
+	// every other round. Differing speeds are what stop every monster from
+	// being the same fight with different numbers — a rat you can outrun is a
+	// different problem from a brute you cannot.
+	Speed  int
+	energy int
+
+	// Asleep monsters ignore the player until one comes close, so a room is
+	// something you enter carefully rather than a queue of things already
+	// walking at you.
+	Asleep bool
+
+	XP int // awarded to the player on kill
 }
 
 // Item is a pickup lying on the floor.
@@ -53,9 +68,20 @@ type Game struct {
 	log      []string
 	depth    int
 	gold     int
-	dead     bool
-	won      bool
-	sfx      func(id SoundID, pan float64) // optional; set by the widget
+	// potions are carried, not drunk where they lie: the decision of when to
+	// spend one is the most interesting choice this game has, and picking them
+	// up automatically threw it away.
+	potions int
+	level   int
+	xp      int
+	kills   int
+	turns   int
+	dead    bool
+	won     bool
+	sfx     func(id SoundID, pan float64) // optional; set by the widget
+	// onHit reports a landed blow to the presentation layer. The engine stays
+	// rendering-free: it says what happened, not what it should look like.
+	onHit func(attacker, target *Entity, dmg int)
 }
 
 func (g *Game) play(id SoundID, pan float64) {
@@ -95,21 +121,22 @@ func (g *Game) build() {
 
 	px, py := d.rooms[0].center()
 	if g.player == nil {
-		g.player = &Entity{Tile: TPlayer, Name: "you", HP: 20, MaxHP: 20, Atk: 4, AC: 13, Damage: 6, Alive: true}
+		g.player = &Entity{Tile: TPlayer, Name: "you", HP: 20, MaxHP: 20, Atk: 4, AC: 13, Damage: 6, Alive: true, Speed: 2}
+		g.level, g.potions = 1, 1
 	}
 	g.player.X, g.player.Y = px, py
 
 	// Populate the other rooms with monsters and loot, scaling with depth.
 	for _, r := range d.rooms[1:] {
-		switch g.rng.Intn(3) {
-		case 0:
-			mx, my := r.center()
-			g.monsters = append(g.monsters, &Entity{X: mx, Y: my, Tile: TGoblin,
-				Name: "goblin", HP: 7 + g.depth, MaxHP: 7 + g.depth, Atk: 3, AC: 12, Damage: 5, Alive: true})
-		case 1:
-			mx, my := r.center()
-			g.monsters = append(g.monsters, &Entity{X: mx, Y: my, Tile: TRat,
-				Name: "rat", HP: 3, MaxHP: 3, Atk: 2, AC: 10, Damage: 3, Alive: true})
+		// Deeper levels are denser as well as tougher, so descending feels
+		// like a decision rather than a formality.
+		for n := 0; n < 1+g.rng.Intn(1+g.depth/2); n++ {
+			mx := r.X + 1 + g.rng.Intn(max(1, r.W-1))
+			my := r.Y + 1 + g.rng.Intn(max(1, r.H-1))
+			if !g.d.walkable(mx, my) || g.monsterAt(mx, my) != nil {
+				continue
+			}
+			g.monsters = append(g.monsters, g.spawn(mx, my))
 		}
 		if g.rng.Intn(2) == 0 {
 			ix, iy := r.X+1+g.rng.Intn(r.W-1), r.Y+1+g.rng.Intn(r.H-1)
@@ -132,6 +159,49 @@ func (g *Game) build() {
 		g.logf("Level %d — the Amulet of Yendor is near!", g.depth)
 	} else {
 		g.logf("You enter dungeon level %d.", g.depth)
+	}
+}
+
+// spawn picks a monster for the current depth. The mix shifts down: rats
+// thin out, brutes appear from level three, so the same tactics stop working.
+func (g *Game) spawn(x, y int) *Entity {
+	d := g.depth
+	roll := g.rng.Intn(100)
+	switch {
+	case roll < max(10, 45-d*8):
+		// Rat: fragile and fast. It reaches you first and softens you up.
+		return &Entity{X: x, Y: y, Tile: TRat, Name: "rat", Alive: true, Asleep: true,
+			HP: 3 + d/2, MaxHP: 3 + d/2, Atk: 2, AC: 10, Damage: 3, Speed: 3, XP: 3}
+	case roll < 80 || d < 3:
+		// Goblin: the baseline fight.
+		return &Entity{X: x, Y: y, Tile: TGoblin, Name: "goblin", Alive: true, Asleep: true,
+			HP: 7 + d, MaxHP: 7 + d, Atk: 3 + d/2, AC: 12, Damage: 5, Speed: 2, XP: 8}
+	default:
+		// Brute: slow, armoured, hits hard. You can outwalk it — the question
+		// is whether the room lets you.
+		return &Entity{X: x, Y: y, Tile: TGoblin, Name: "brute", Alive: true, Asleep: true,
+			HP: 14 + d*3, MaxHP: 14 + d*3, Atk: 4 + d/2, AC: 14, Damage: 8, Speed: 1, XP: 20}
+	}
+}
+
+// xpToLevel is the total experience needed for the next level.
+func xpToLevel(level int) int { return 12 * level * level }
+
+// gainXP awards experience and levels the player up, which is what makes
+// fighting worth the risk instead of something to be walked around.
+func (g *Game) gainXP(n int) {
+	g.xp += n
+	for g.xp >= xpToLevel(g.level) {
+		g.xp -= xpToLevel(g.level)
+		g.level++
+		g.player.MaxHP += 4
+		g.player.HP = g.player.MaxHP
+		g.player.Atk++
+		if g.level%2 == 0 {
+			g.player.Damage++
+		}
+		g.logf("You reach level %d — you feel stronger.", g.level)
+		g.play(SndWin, 0)
 	}
 }
 
@@ -167,8 +237,7 @@ func (g *Game) Move(dx, dy int) {
 	nx, ny := g.player.X+dx, g.player.Y+dy
 	if m := g.monsterAt(nx, ny); m != nil {
 		g.attack(g.player, m)
-		g.monstersAct()
-		g.computeFOV()
+		g.endTurn()
 		return
 	}
 	if !g.d.walkable(nx, ny) {
@@ -180,8 +249,7 @@ func (g *Game) Move(dx, dy int) {
 		g.descend()
 		return
 	}
-	g.monstersAct()
-	g.computeFOV()
+	g.endTurn()
 }
 
 func (g *Game) pickup() {
@@ -199,16 +267,55 @@ func (g *Game) pickup() {
 				g.play(SndCoin, 0)
 				g.logf("You pick up %d gold.", it.Gold)
 			} else {
-				heal := 8
-				g.player.HP = min(g.player.MaxHP, g.player.HP+heal)
-				g.play(SndPotion, 0)
-				g.logf("You quaff a potion (+%d HP).", heal)
+				g.potions++
+				g.play(SndCoin, 0)
+				g.logf("You pocket a potion (%d held).", g.potions)
 			}
 			continue
 		}
 		kept = append(kept, it)
 	}
 	g.items = kept
+}
+
+// Quaff drinks a held potion. It is a turn like any other, so healing in
+// front of something that is still swinging costs you a hit — which is the
+// point: the interesting question is when, not whether.
+func (g *Game) Quaff() {
+	if g.dead || g.won {
+		return
+	}
+	if g.potions == 0 {
+		g.logf("You have no potions.")
+		return
+	}
+	if g.player.HP >= g.player.MaxHP {
+		g.logf("You are unhurt.")
+		return
+	}
+	g.potions--
+	heal := 8 + g.level*2
+	before := g.player.HP
+	g.player.HP = min(g.player.MaxHP, g.player.HP+heal)
+	g.play(SndPotion, 0)
+	g.logf("You quaff a potion (+%d HP).", g.player.HP-before)
+	g.endTurn()
+}
+
+// Wait passes a turn. Standing in a doorway so only one thing can reach you
+// is a real tactic, and it needs a way to spend a turn without moving.
+func (g *Game) Wait() {
+	if g.dead || g.won {
+		return
+	}
+	g.endTurn()
+}
+
+// endTurn runs the monsters and recomputes sight after any player action.
+func (g *Game) endTurn() {
+	g.turns++
+	g.monstersAct()
+	g.computeFOV()
 }
 
 func (g *Game) descend() {
@@ -230,15 +337,28 @@ func (g *Game) attack(a, b *Entity) {
 	if roll+a.Atk >= b.AC {
 		dmg := g.rng.Intn(b.hitDie(a)) + 1
 		b.HP -= dmg
+		if b.HP < 0 {
+			b.HP = 0 // a corpse is at zero, not in debt
+		}
 		g.play(SndHit, pan)
+		if g.onHit != nil {
+			g.onHit(a, b, dmg)
+		}
 		g.logf("%s hit %s for %d.", cap1(a.Name), b.Name, dmg)
 		if b.HP <= 0 {
 			b.Alive = false
-			g.logf("%s dies.", cap1(b.Name))
+			if b == g.player {
+				g.logf("You die.")
+			} else {
+				g.logf("%s dies.", cap1(b.Name))
+			}
 			if b == g.player {
 				g.dead = true
 				g.play(SndDie, 0)
 				g.logf("You have died on level %d.", g.depth)
+			} else {
+				g.kills++
+				g.gainXP(b.XP)
 			}
 		}
 	} else {
@@ -260,13 +380,37 @@ func (g *Game) monstersAct() {
 		if !m.Alive || g.dead {
 			continue
 		}
+		// Wake on proximity rather than on sight, so creeping around the edge
+		// of a room is a real option and a corridor is not a conga line.
+		if m.Asleep {
+			if g.visibleAt(m.X, m.Y) && dist(m.X, m.Y, g.player.X, g.player.Y) <= 4 {
+				m.Asleep = false
+				g.logf("The %s notices you.", m.Name)
+			} else {
+				continue
+			}
+		}
+		// Energy accrues at the monster's speed against a cost of 2 per turn,
+		// so a rat acts three times per two player turns and a brute once.
+		sp := m.Speed
+		if sp <= 0 {
+			sp = 2
+		}
+		m.energy += sp
+		for m.energy >= 2 && m.Alive && !g.dead {
+			m.energy -= 2
+			g.monsterStep(m)
+		}
+	}
+}
+
+// monsterStep is one monster action: swing if adjacent, else close in.
+func (g *Game) monsterStep(m *Entity) {
+	{
 		dx, dy := g.player.X-m.X, g.player.Y-m.Y
 		if abs(dx) <= 1 && abs(dy) <= 1 {
 			g.attack(m, g.player)
-			continue
-		}
-		if !g.visibleAt(m.X, m.Y) {
-			continue // only chase when in the lit area
+			return
 		}
 		sx, sy := sign(dx), sign(dy)
 		if g.step(m, sx, sy) || g.step(m, sx, 0) || g.step(m, 0, sy) {
@@ -274,6 +418,22 @@ func (g *Game) monstersAct() {
 		}
 	}
 }
+
+// all returns the player and every living monster — the set the renderer has
+// to track positions for.
+func (g *Game) all() []*Entity {
+	out := make([]*Entity, 0, len(g.monsters)+1)
+	out = append(out, g.player)
+	for _, m := range g.monsters {
+		if m.Alive {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// dist is Chebyshev distance — the grid's own notion of "how many steps".
+func dist(x0, y0, x1, y1 int) int { return max(abs(x1-x0), abs(y1-y0)) }
 
 func (g *Game) step(m *Entity, dx, dy int) bool {
 	if dx == 0 && dy == 0 {

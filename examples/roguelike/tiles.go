@@ -17,7 +17,11 @@ type TileID int
 
 const (
 	TFloor TileID = iota
+	TFloor2
+	TFloor3
 	TWall
+	TWallTop
+	TShadow
 	TPlayer
 	TGoblin
 	TRat
@@ -38,31 +42,37 @@ func src(id TileID) image.Rectangle {
 
 var (
 	cOutline = color.RGBA{18, 20, 28, 255}
-	cFloor   = color.RGBA{44, 46, 58, 255}
-	cFloor2  = color.RGBA{54, 57, 72, 255}
-	cWall    = color.RGBA{92, 84, 78, 255}
-	cWall2   = color.RGBA{68, 62, 58, 255}
-	cPlayer  = color.RGBA{86, 196, 214, 255}
-	cGoblin  = color.RGBA{86, 168, 78, 255}
-	cRat     = color.RGBA{140, 130, 128, 255}
-	cWhite   = color.RGBA{240, 244, 248, 255}
-	cRed     = color.RGBA{206, 66, 68, 255}
-	cGold    = color.RGBA{226, 186, 74, 255}
-	cBrown   = color.RGBA{120, 84, 52, 255}
-	cGlass   = color.RGBA{170, 210, 220, 255}
+	cFloor   = color.RGBA{104, 98, 104, 255}
+	cFloor2  = color.RGBA{124, 117, 122, 255}
+	cWall    = color.RGBA{124, 110, 96, 255}
+	cWall2   = color.RGBA{92, 80, 70, 255}
+	// A wall seen from above catches no torchlight, so it is painted as cold
+	// stone rather than a dimmer copy of the lit face. That difference is what
+	// gives a flat tile grid its sense of height.
+	cWallTop  = color.RGBA{46, 46, 58, 255}
+	cWallTop2 = color.RGBA{38, 38, 50, 255}
+	cPlayer   = color.RGBA{86, 196, 214, 255}
+	cGoblin   = color.RGBA{86, 168, 78, 255}
+	cRat      = color.RGBA{140, 130, 128, 255}
+	cWhite    = color.RGBA{240, 244, 248, 255}
+	cRed      = color.RGBA{206, 66, 68, 255}
+	cGold     = color.RGBA{226, 186, 74, 255}
+	cBrown    = color.RGBA{120, 84, 52, 255}
+	cGlass    = color.RGBA{170, 210, 220, 255}
 )
 
 // buildAtlas draws every tile into one image and returns it.
 func buildAtlas() *image.RGBA {
 	a := image.NewRGBA(image.Rect(0, 0, int(tileCount)*tile, tile))
 
-	// Floor: dark stone with a few lighter specks.
-	fill(a, TFloor, cFloor)
-	for _, p := range [][2]int{{3, 4}, {10, 3}, {6, 11}, {12, 9}, {2, 13}, {9, 8}} {
-		px(a, TFloor, p[0], p[1], cFloor2)
-	}
+	// Floor: stone with a few lighter specks. Three variants, picked per cell
+	// by position hash, so a large room does not read as one flat texture.
+	floorTile(a, TFloor, [][2]int{{3, 4}, {10, 3}, {6, 11}, {12, 9}, {2, 13}, {9, 8}})
+	floorTile(a, TFloor2, [][2]int{{5, 2}, {13, 6}, {2, 8}, {8, 13}, {11, 11}})
+	floorTile(a, TFloor3, [][2]int{{7, 5}, {4, 9}, {12, 3}, {14, 12}, {1, 5}, {9, 2}, {6, 14}})
 
-	// Wall: brick with mortar lines.
+	// Wall face: brick with mortar lines, and a lighter top course so the
+	// upper edge catches the light like a real ledge.
 	fill(a, TWall, cWall)
 	for y := 0; y < tile; y++ {
 		for x := 0; x < tile; x++ {
@@ -71,6 +81,24 @@ func buildAtlas() *image.RGBA {
 			}
 		}
 	}
+	for x := 0; x < tile; x++ {
+		px(a, TWall, x, 0, shade(cWall, 1.22))
+		px(a, TWall, x, 1, shade(cWall, 1.10))
+	}
+
+	// Wall top: cold, coarse stone with no mortar — read as unlit rock above
+	// the room rather than another lit face.
+	fill(a, TWallTop, cWallTop)
+	for y := 0; y < tile; y++ {
+		for x := 0; x < tile; x++ {
+			if (x*7+y*13)%11 == 0 {
+				px(a, TWallTop, x, y, cWallTop2)
+			}
+		}
+	}
+
+	// Shadow: a soft elliptical blot that grounds an entity on its tile.
+	shadowTile(a)
 
 	// Player: cyan adventurer blob with eyes.
 	creature(a, TPlayer, cPlayer, cWhite, cOutline)
@@ -116,6 +144,33 @@ func buildAtlas() *image.RGBA {
 	glowTile(a)
 
 	return a
+}
+
+// floorTile paints one floor variant: a base fill plus lighter grit.
+func floorTile(a *image.RGBA, id TileID, specks [][2]int) {
+	fill(a, id, cFloor)
+	for _, p := range specks {
+		px(a, id, p[0], p[1], cFloor2)
+	}
+}
+
+// shadowTile paints a soft dark ellipse, wider than it is tall, sitting in the
+// lower half of the tile where a standing figure's feet are.
+func shadowTile(a *image.RGBA) {
+	const cx, cy = 7.5, 11.0
+	for y := 0; y < tile; y++ {
+		for x := 0; x < tile; x++ {
+			dx := (float64(x) - cx) / 5.5
+			dy := (float64(y) - cy) / 2.6
+			f := 1 - math.Sqrt(dx*dx+dy*dy)
+			if f < 0 {
+				f = 0
+			}
+			f *= f * 0.55
+			ax, ay := at(TShadow, x, y)
+			a.SetRGBA(ax, ay, color.RGBA{A: uint8(255 * f)})
+		}
+	}
 }
 
 func glowTile(a *image.RGBA) {
@@ -184,6 +239,14 @@ func disc(a *image.RGBA, id TileID, cx, cy, r int, c color.RGBA) {
 
 // outline darkens the transparent-adjacent border of already-drawn body pixels.
 func outline(a *image.RGBA, id TileID, out color.RGBA) {
+	// Collect the edge pixels first, then write them.
+	//
+	// Writing into the image while still scanning it makes each freshly
+	// outlined pixel look like body on the next iteration, so the outline
+	// seeds another outline and floods the whole tile. That is why every
+	// creature and item used to sit on an opaque black square, unable to
+	// stand on the lit floor beneath it.
+	var edge [][2]int
 	for y := 0; y < tile; y++ {
 		for x := 0; x < tile; x++ {
 			ax, ay := at(id, x, y)
@@ -197,10 +260,13 @@ func outline(a *image.RGBA, id TileID, out color.RGBA) {
 				}
 				bx, by := at(id, nx, ny)
 				if a.RGBAAt(bx, by).A == 0 {
-					a.SetRGBA(bx, by, out)
+					edge = append(edge, [2]int{nx, ny})
 				}
 			}
 		}
+	}
+	for _, p := range edge {
+		px(a, id, p[0], p[1], out)
 	}
 }
 

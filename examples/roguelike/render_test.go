@@ -100,3 +100,28 @@ func TestCombatAndFOV(t *testing.T) {
 		t.Fatal("rat should have died from repeated hits")
 	}
 }
+
+// TestDeathShot renders the end-of-run card when ROGUE_DEATH is set.
+func TestDeathShot(t *testing.T) {
+	out := os.Getenv("ROGUE_DEATH")
+	if out == "" {
+		t.Skip("set ROGUE_DEATH")
+	}
+	h, st := mount(t, 3)
+	// Play until the run ends, so the card shows a real run's numbers.
+	for i := 0; i < 3000 && !st.g.dead && !st.g.won; i++ {
+		if m := adjacentMonster(st.g); m != nil {
+			st.g.Move(sign(m.X-st.g.player.X), sign(m.Y-st.g.player.Y))
+			continue
+		}
+		step, ok := botStep(st.g)
+		if !ok {
+			break
+		}
+		st.g.Move(step[0], step[1])
+	}
+	h.Render()
+	f, _ := os.Create(out)
+	defer f.Close()
+	_ = png.Encode(f, h.Render())
+}
