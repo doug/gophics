@@ -1,14 +1,18 @@
-//go:build !js
+//go:build !js && !linux && !windows && !darwin
 
-// Desktop stub for the shell battery capability (shell/battery.go). Battery()
-// returns nil, leaving ctx.Battery() nil so callers hide any battery affordance
-// — the correct nil-where-unsupported signal until the OS power APIs are wired.
+// Fallback for platforms with no battery implementation. Linux reads sysfs
+// (battery_linux.go), Windows calls GetSystemPowerStatus (battery_windows.go)
+// and macOS goes through IOKit (battery_darwin.go); this covers the rest —
+// the BSDs, mainly, where the interface is per-OS (sysctl hw.acpi on FreeBSD,
+// apm on OpenBSD) and nobody has asked yet.
+//
+// Returning nil is the honest answer: ctx.Battery() is nil, so callers hide the
+// affordance rather than rendering a fabricated 100%.
 
 package desktop
 
 import "github.com/doug/gophics/shell"
 
-// Battery makes the desktop window a shell.BatteryWindow. It returns nil today.
-// TODO(platform): read OS battery (IOKit IOPowerSources on macOS, upower/sysfs
-// on Linux, Win32 GetSystemPowerStatus on Windows).
+// Battery makes the desktop window a shell.BatteryWindow. It returns nil here.
+// TODO(platform): the BSDs — FreeBSD sysctl hw.acpi.battery, OpenBSD apm.
 func (w *window) Battery() shell.Battery { return nil }
