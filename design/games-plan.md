@@ -414,8 +414,9 @@ is **only true on the CPU path**. Verified against the fork:
 - **Rotation bails.** `isAxisAligned` (`context_image.go:401-411`) rejects any
   non-axis-aligned CTM and falls back to `SetFillPattern`→`Fill()` — the exact path
   `paint/paint.go:640-648` warns "forces a mid-frame accelerator flush that drops the
-  queued shapes — fatal on the direct-surface path." **A single rotated sprite may
-  corrupt or tank a GPU frame today.** Highest-priority thing to check.
+  queued shapes — fatal on the direct-surface path." **Fixed** (2a5f24b): the
+  non-axis-aligned case now routes to `QueueImageQuad` on the tier-3 path
+  instead of bailing to the fallback. Retested on a Pixel 10 Pro 2026-08-16.
 
 So `Src` (source rect) genuinely is plumbing — the UVs are already in `QueueImageDraw`.
 Tint, flip, nearest sampling, blend mode and rotation are **real work in the gg fork**,
@@ -1021,8 +1022,15 @@ Ordered by threat to the plan.
    per frame** — the predicted bottleneck, worse than gophics's op boxing.
 5. **A full-window Canvas defeats damage tracking twice over** (identity `PushTransform`
    + `hasLayers` escalation). Cheap fix, large payoff, especially solitaire on mobile.
-6. **Rotated sprites vanish on the direct-surface path — this prediction is now
-   CONFIRMED on device (2026-08-03).** In the gpucheck scene the plain and tinted
+6. **Rotated sprites vanish on the direct-surface path — predicted, CONFIRMED on
+   device 2026-08-03, FIXED and reverified on device 2026-08-16.** The gpucheck
+   scene now draws its plain / tinted / rotated trio in full on a Pixel 10 Pro.
+   The fix was the one called for below: rotated quads on the tier-3 path
+   (`QueueImageQuad`), not a better fallback. The original diagnosis follows,
+   since it is a worked example of predicting a bug from the code and then
+   confirming it on hardware.
+
+   *(original, 2026-08-03)* In the gpucheck scene the plain and tinted
    sprites draw and the **rotated one is simply absent**, while a rotated *path* in
    the same frame draws correctly — so it is specific to the image tier, not to
    transforms. Mechanism is exactly as predicted: `internal/gfx/gg/context_image.go:374`

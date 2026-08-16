@@ -405,11 +405,24 @@ full-scene animation every frame costs ~60 ms, because a full-surface raster
 surface even when damage is tiny; damage-rect upload is the clearest
 remaining lever on that path.
 
-Two rendering bugs remain, both in the backend's GPU tiers rather than the
-shell, and both Vulkan-only (the Metal reference render is clean): **GPU text
-draws as solid blocks** (glyph positions correct, coverage wrong — pointing at
-the glyph-mask atlas format or sampler) and **rotated sprites vanish** on the
-direct-surface path. The first blocks any text-bearing Android UI.
+Two rendering bugs were tracked here — **GPU text drawing as solid blocks**
+and **rotated sprites vanishing** on the direct-surface path, both Vulkan-only.
+Both are fixed, retested on a Pixel 10 Pro (2026-08-16, Vulkan, direct
+surface):
+
+- Text renders crisply at every size, from a 32 px balance figure down to
+  10 px chart axis labels. The likely fix is the surface-format work, which
+  was the same class of fault: an attachment format that did not match what
+  the pipeline was compiled for.
+- The `gophics_verify` bring-up scene draws its plain / tinted / **rotated**
+  sprite trio in full, along with gradients, path fill, nested opacity and
+  backdrop blur. Rotated sprites were fixed by routing the non-axis-aligned
+  case to the textured-quad path (`gg/gpu`, 2a5f24b) rather than dropping to a
+  CPU fallback the direct-surface path discards.
+
+Retest with `gophics run -p android -tags gophics_verify ./examples/hn/mobile`;
+the desktop reference to diff against is
+`GPUCHECK_SHOT=out.png go test -run TestGPUCheckRenders ./examples/gpucheck`.
 
 Mobile embedding follows the one pattern the Go ecosystem has converged on —
 **Go as a library (`gomobile bind`-style .aar/.xcframework) inside a thin
@@ -532,18 +545,16 @@ criteria in `design/milestones.md`.
 
 1. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
    the fallback and the reference either way.
-2. **Vulkan glyph coverage and rotated sprites** (§6.4) — blocks
-   text-bearing Android UI on the GPU path.
-3. **Accessibility bridges** for Linux and Windows, plus macOS
+2. **Accessibility bridges** for Linux and Windows, plus macOS
    announcements and on-device VoiceOver validation on iOS (§6.5).
-4. **Damage-rect texture upload** on the CPU present path (§6.4).
-5. **Text editing depth** — multi-line, RTL caret geometry, full UBA.
-6. **Message catalog and plural rules** in `intl` — formatting is done,
+3. **Damage-rect texture upload** on the CPU present path (§6.4).
+4. **Text editing depth** — multi-line, RTL caret geometry, full UBA.
+5. **Message catalog and plural rules** in `intl` — formatting is done,
    translation lookup is not.
-7. **Desktop platform gaps** — native menu bars, system tray, multi-window,
+6. **Desktop platform gaps** — native menu bars, system tray, multi-window,
    and the battery, gamepad and geolocation capabilities that are still
    stubs.
-8. **Widget catalog gaps** — draggable scrollbars, reorderable lists,
+7. **Widget catalog gaps** — draggable scrollbars, reorderable lists,
    pull-to-refresh, tree views, autocomplete.
 
 ## 8. Testing strategy

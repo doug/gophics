@@ -59,7 +59,7 @@ been shown to fail on a deliberately oversized file.
 
 ---
 
-## M2 — Retest GPU text on Android
+## M2 — Retest GPU text on Android ✅
 
 **Goal.** Establish whether the Vulkan text bug still exists.
 
@@ -82,12 +82,19 @@ for. It is plausible this is already fixed and the plan is out of date.
       and bounds, buttons flagged clickable, charts described
       ("Area chart. 31 points…"), and the tree rebuilds live — switching to
       Balances republished 145 nodes.
-- [ ] Test the second listed bug too: rotated sprites vanishing on the
-      direct-surface path.
-- [ ] Update PLAN §6.4 either way — strike the bugs, or record what is
-      actually wrong now with a reproduction.
+- [x] Rotated sprites draw too. The `gophics_verify` bring-up scene shows its
+      plain / tinted / rotated trio in full, plus gradients, path fill, nested
+      opacity and backdrop blur. Fixed by 2a5f24b, which routes the
+      non-axis-aligned case to the textured-quad path rather than to a CPU
+      fallback the direct-surface path discards.
+- [x] PLAN §6.4 rewritten: both bugs struck, with the retest command recorded
+      so the next person does not have to rediscover it. The same stale claim
+      in `design/games-plan.md` (§417 and finding 6) is corrected — the
+      original prediction-then-confirmation is kept, since it is a good worked
+      example, and marked fixed.
 
-**Exit.** PLAN §6.4 matches reality, with device evidence for each claim.
+**Exit — met (2026-08-16).** PLAN §6.4 matches reality; each claim has device
+evidence from a Pixel 10 Pro on Vulkan, direct surface.
 
 ---
 
