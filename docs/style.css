@@ -135,7 +135,11 @@ pre.code, .code { background: #100d08; border: 1px solid var(--line); border-rad
 
 /* prose */
 .prose h2 { margin-top: 34px; } .prose h3 { margin-top: 24px; }
-.prose p, .prose li { color: var(--ink); } .prose code { background: #100d08; padding: 1px 6px; border-radius: 5px;
+.prose p, .prose li { color: var(--ink); }
+/* Inline code chips only. Scoped with :not(pre) because a highlighted block is
+   <pre class="code"><code>…</code></pre>, and the chip's border drew a rule
+   under every line of it. */
+.prose :not(pre) > code { background: #100d08; padding: 1px 6px; border-radius: 5px;
   font-size: 13px; border: 1px solid var(--line); color: var(--accent-hi); }
 .prose ul { padding-left: 20px; } .prose li { margin: 4px 0; }
 
