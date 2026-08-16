@@ -209,14 +209,46 @@ interface for platforms that want handing a tree and a pull interface for
 those that query on their own schedule — so this is per-platform binding
 rather than architecture.
 
-The largest item here. Windows UIA in particular is a COM server, which is
-substantial in pure Go; worth a spike before committing to it.
+The largest item here. Both spikes are now done — see below — and neither
+platform is blocked on feasibility.
 
-- [ ] Spike: can AT-SPI be driven over D-Bus from pure Go? (Likely yes —
-      it is a D-Bus protocol, and there is no C API requirement.)
-- [ ] Spike: what does a minimal UIA provider need in pure Go, and is the
-      COM surface tractable without CGo?
-- [ ] Implement AT-SPI first if the spike is favourable.
+**Both spikes are done, and both are favourable (2026-08-16).**
+
+- [x] **AT-SPI over D-Bus from pure Go: proven, not assumed.** A test now
+      finds `org.a11y.Bus` on the session bus, reads the accessibility bus
+      address from it, dials that second bus and completes SASL EXTERNAL auth
+      plus Hello — verified against a real `at-spi2-core` in a container.
+      Nothing new was needed to get there: `dbus_linux.go` already had the
+      transport, auth and the full type marshaller, written for the file
+      portal. See `atspi_linux.go`.
+
+      What remains is protocol surface, not feasibility. Everything today is
+      client-shaped — send a call, await the reply — and AT-SPI inverts that:
+      the app is a server, exporting an object per node and answering
+      `GetChildAtIndex`, `GetRole`, `GetExtents` on the screen reader's
+      schedule, the same pull model AppKit uses. Needed on top: an inbound
+      dispatch loop, METHOD_RETURN/ERROR replies (the encoder already takes a
+      message type, so this is wiring), signal emission for focus and state,
+      `org.freedesktop.DBus.Introspectable`, and the Accessible, Component and
+      Action interfaces over `A11yNode`.
+
+- [x] **UIA in pure Go: tractable, and the technique already ships here.**
+      `internal/gfx/naga/internal/dxcvalidator/dxcvalidator_windows.go`
+      implements a COM object in Go — a struct whose first qword is a vtable
+      pointer, the vtable filled with `syscall.NewCallback` thunks — and
+      `dxil.dll` calls into it through ordinary COM dispatch. A UIA provider is
+      the same shape, and `platform_windows.go` already owns a `wndProc`, which
+      is where `WM_GETOBJECT` and `UiaReturnRawElementProvider` hook in.
+
+      Harder than that blob in three specific ways, all bounded: it fakes
+      refcounting and answers `QueryInterface` with E_NOINTERFACE, whereas UIA
+      really does query for `IRawElementProviderFragment`,
+      `FragmentRoot` and pattern interfaces, and really does hold references
+      across calls; `GetPropertyValue` and `GetRuntimeId` need VARIANT and
+      SAFEARRAY marshalling; and the callback budget is per *vtable*, not per
+      node, so a large tree costs nothing extra.
+
+- [ ] Implement AT-SPI. The spike says go ahead; this is the large piece.
 - [ ] Wire macOS announcements, currently a documented no-op because AppKit
       routes live-region speech through a C function rather than a method.
 - [ ] Validate iOS on-device with VoiceOver — the one platform verified only
