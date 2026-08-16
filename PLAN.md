@@ -525,6 +525,9 @@ every phase de-risked the ones after it.
 - **DX** — headless rendering, golden tests, state-snapshot hot restart,
   inspector, docs site with live WASM demos.
 
+The near-term slice of what follows is broken into milestones with exit
+criteria in `design/milestones.md`.
+
 ### Remaining, roughly in order of value
 
 1. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
