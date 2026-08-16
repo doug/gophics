@@ -132,12 +132,59 @@ gophics doctor                              # check the toolchain per platform</
 
   <h3>Test the whole UI with <code>go test</code></h3>
   <p>This is the part no other GUI framework gives you. Mount a widget tree headless, drive it, and assert on the rendered pixels — no window, no emulator, no device farm:</p>
-  <pre class="code">func TestCounter(t *testing.T) {
-	h, _ := app.NewHeadless(Counter{}, app.Config{Size: geom.Size{W: 320, H: 200}}, 1)
-	h.Tap(geom.Pt{X: 60, Y: 140}) // "increment"
-	img := h.Render()             // image.Image — diff it against a golden
-	// ... assert on img, or write it out for a golden-image test.
-}</pre>
+  <!-- generated:examples/counter/counter_test.go -->
+  <pre class="code"><code><span class="t-kw">package</span> main
+
+<span class="t-kw">import</span> (
+	<span class="t-str">&#34;testing&#34;</span>
+
+	<span class="t-str">&#34;golang.org/x/image/font/gofont/goregular&#34;</span>
+
+	<span class="t-str">&#34;github.com/doug/gophics/app&#34;</span>
+	<span class="t-str">&#34;github.com/doug/gophics/geom&#34;</span>
+	<span class="t-str">&#34;github.com/doug/gophics/layout&#34;</span>
+)
+
+<span class="t-com">// TestCounter drives the whole app with no window, no GPU and no display —</span>
+<span class="t-com">// the same renderer that draws it on screen, running under `go test`.</span>
+<span class="t-kw">func</span> <span class="t-fn">TestCounter</span>(t *testing.T) {
+	h, err := app.<span class="t-fn">NewHeadless</span>(Counter{Start: <span class="t-num">3</span>}, app.Config{
+		Size: geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">220</span>}, Font: goregular.TTF,
+	}, <span class="t-num">1</span>)
+	<span class="t-kw">if</span> err != <span class="t-typ">nil</span> {
+		t.<span class="t-fn">Fatal</span>(err)
+	}
+	h.<span class="t-fn">Render</span>()
+
+	<span class="t-com">// Find the button the way a screen reader would, rather than hardcoding a</span>
+	<span class="t-com">// pixel that moves the moment the layout changes.</span>
+	<span class="t-kw">var</span> btn geom.Rect
+	<span class="t-kw">for</span> _, n := <span class="t-kw">range</span> layout.<span class="t-fn">FlattenSemantics</span>(h.<span class="t-fn">Semantics</span>()) {
+		<span class="t-kw">if</span> n.Role == layout.RoleButton {
+			btn = n.Rect
+		}
+	}
+	h.<span class="t-fn">Tap</span>(geom.Pt{X: btn.Min.X + btn.<span class="t-fn">Dx</span>()/<span class="t-num">2</span>, Y: btn.Min.Y + btn.<span class="t-fn">Dy</span>()/<span class="t-num">2</span>})
+
+	<span class="t-kw">if</span> !<span class="t-fn">shows</span>(h, <span class="t-str">&#34;4&#34;</span>) {
+		t.<span class="t-fn">Error</span>(<span class="t-str">&#34;tapping Increment did not advance the count&#34;</span>)
+	}
+	<span class="t-kw">if</span> img := h.<span class="t-fn">Render</span>(); img.<span class="t-fn">Bounds</span>().<span class="t-fn">Empty</span>() {
+		t.<span class="t-fn">Fatal</span>(<span class="t-str">&#34;no frame rendered&#34;</span>) <span class="t-com">// img is an image.Image — diff it against a golden</span>
+	}
+}
+
+<span class="t-com">// shows reports whether any semantic node carries this text.</span>
+<span class="t-kw">func</span> <span class="t-fn">shows</span>(h *app.Headless, text <span class="t-typ">string</span>) <span class="t-typ">bool</span> {
+	<span class="t-kw">for</span> _, n := <span class="t-kw">range</span> layout.<span class="t-fn">FlattenSemantics</span>(h.<span class="t-fn">Semantics</span>()) {
+		<span class="t-kw">if</span> n.Label == text {
+			<span class="t-kw">return</span> <span class="t-typ">true</span>
+		}
+	}
+	<span class="t-kw">return</span> <span class="t-typ">false</span>
+}
+</code></pre>
+  <!-- /generated -->
   <p>The same offscreen path means a server can render a widget tree to a PNG or a report with no display at all.</p>
 
   <h3>Next</h3>

@@ -12,8 +12,11 @@ import sys
 page, check = sys.argv[1], sys.argv[2] == "1"
 text = open(page).read()
 
+# The body may be empty — a freshly-placed marker pair has nothing between it
+# yet. Requiring content there meant an empty pair matched nothing, the embed
+# was never filled in, and -check passed because nothing looked stale.
 SPAN = re.compile(
-    r"( *)<!-- generated:([^ ]+) -->\n.*?\n *<!-- /generated -->", re.S
+    r"( *)<!-- generated:([^ ]+) -->\n(?:.*?\n)?? *<!-- /generated -->", re.S
 )
 
 stale = []
@@ -33,7 +36,19 @@ def rewrite(m):
     return new
 
 
-out = SPAN.sub(rewrite, text)
+out, subs = SPAN.subn(rewrite, text)
+
+# Every marker must have been rewritten. A pair the pattern cannot match would
+# otherwise be skipped in silence, which is how an empty embed shipped.
+markers = text.count("<!-- generated:")
+if subs != markers:
+    print(
+        "{}: {} generated markers but {} matched — check the marker syntax".format(
+            page, markers, subs
+        ),
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 if not stale:
     sys.exit(0)
