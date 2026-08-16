@@ -71,9 +71,17 @@ and the native HN app rendered crisp text too. Same subsystem, same class of
 bug: an attachment format that did not match what the pipeline was compiled
 for. It is plausible this is already fixed and the plan is out of date.
 
-- [ ] Build and run a text-heavy example natively on the Pixel (the HN app
-      is already installed and building).
-- [ ] Confirm whether glyphs render correctly on the Vulkan path.
+- [x] Built and ran tally natively on the Pixel 10 Pro — dense text: tab bar,
+      a 111,717.47 USD figure, chart axis labels down to 10 px, a category
+      table.
+- [x] **Glyphs render correctly on Vulkan.** Crisp at every size, no solid
+      blocks. The bug PLAN §6.4 calls blocking is fixed, almost certainly by
+      the surface-format work: same class of fault, an attachment format that
+      did not match what the pipeline was compiled for.
+- [x] Accessibility checked on the same run: 36 nodes with real labels, roles
+      and bounds, buttons flagged clickable, charts described
+      ("Area chart. 31 points…"), and the tree rebuilds live — switching to
+      Balances republished 145 nodes.
 - [ ] Test the second listed bug too: rotated sprites vanishing on the
       direct-surface path.
 - [ ] Update PLAN §6.4 either way — strike the bugs, or record what is
@@ -83,7 +91,7 @@ for. It is plausible this is already fixed and the plan is out of date.
 
 ---
 
-## M3 — Ship the 16 KB alignment fix everywhere it is needed
+## M3 — Ship the 16 KB alignment fix everywhere it is needed ✅
 
 **Goal.** Any documented way of building an Android APK produces one that
 runs without the compatibility dialog.
@@ -97,13 +105,23 @@ session: adding the flag and reinstalling clears it.
 
 Small, and it removes a first-run failure on current hardware.
 
-- [ ] Add the flag to `examples/*/package/android.sh`, or have those scripts
-      shell out to the `gophics` CLI so there is one code path.
-- [ ] Check the iOS scripts for the same class of divergence.
-- [ ] Note in the packaging README that a plain `gomobile bind` is not enough.
+- [x] Added the flag to `examples/tally/package/android.sh`. A test now reads
+      both it and `gomobileBind`, so the two cannot drift apart again; it was
+      checked by deleting the flag and watching the test fail.
+- [x] iOS is not affected — `gomobileBind` only passes the flag for Android, so
+      the script and the CLI already agree there.
+- [x] Two bugs found on the way, both fixed and both invisible without a device:
+      the script aborted under `set -u` because `$TASK…` swallowed the
+      following non-ASCII byte as part of the variable name, and tally's JNI
+      exports still named hn's package, so the app died with
+      `UnsatisfiedLinkError` on its first `SurfaceView` callback.
 
-**Exit.** An APK built by the packaging script launches on the Pixel with no
-compatibility dialog, and both `.so` files report `0x4000` LOAD alignment.
+**Exit — met (2026-08-16).** An APK built by `package/android.sh` installs and
+launches on the Pixel 10 Pro with no compatibility dialog and no crash, and
+both libs report `0x4000`:
+
+    libgojni.so:           LOAD align = 0x4000
+    libgophics_surface.so: LOAD align = 0x4000
 
 ---
 
