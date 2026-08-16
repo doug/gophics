@@ -84,10 +84,19 @@ fi
 # so a smaller render scaled up is a different picture, not a blurrier one.
 if [ ${#want[@]} -eq 0 ] || printf '%s\n' "${want[@]}" | grep -qx counter; then
   echo "== counter (home hero) =="
-  env GOPHICS_THUMB=docs/hero-counter.png \
-      GOPHICS_THUMB_SIZE=512x352 GOPHICS_THUMB_OUT=1024x704 \
-      GOPHICS_THUMB_SCALE=2 GOPHICS_THUMB_SETTLE=1 \
-      go run ./examples/counter
+  # Two stills, because the example follows the viewer's light/dark setting
+  # and the page picks between them with prefers-color-scheme. One still would
+  # be wrong for half the visitors the moment the live build takes over.
+  for scheme in light dark; do
+    out=docs/hero-counter.png
+    dark=
+    if [ "$scheme" = dark ]; then out=docs/hero-counter-dark.png; dark=1; fi
+    env GOPHICS_THUMB="$out" \
+        GOPHICS_THUMB_SIZE=512x352 GOPHICS_THUMB_OUT=1024x704 \
+        GOPHICS_THUMB_SCALE=2 GOPHICS_THUMB_SETTLE=1 \
+        ${dark:+GOPHICS_THUMB_DARK=1} \
+        go run ./examples/counter
+  done
 fi
 
 echo "thumbnails written to $OUT/"

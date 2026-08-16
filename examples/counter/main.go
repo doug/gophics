@@ -40,7 +40,12 @@ func (s *counterState) Init(widget.Ctx) { s.n = s.W().Start }
 
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	return widget.Center(widget.Column(
+	// Paint the background from the theme rather than leaving it to
+	// app.Config.Background. That field is a fixed clear colour chosen before
+	// there is a context to ask, while theme.Of follows the system light/dark
+	// setting — so an app that relies on it renders dark-theme text on a light
+	// background the moment the viewer prefers dark.
+	return widget.Fill{Color: th.Bg, Child: widget.Center(widget.Column(
 		widget.Text{S: "TAPS", Size: th.Type.Caption, Color: th.Muted},
 		widget.Sized{H: 4},
 		widget.Text{
@@ -55,13 +60,15 @@ func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 			Primary: true,
 			OnTap:   func() { s.SetState(func() { s.n++ }) },
 		},
-	))
+	))}
 }
 
 func main() {
 	err := app.Run(Counter{Start: 3}, app.Config{
-		Title:      "counter",
-		Size:       geom.Size{W: 320, H: 220},
+		Title: "counter",
+		Size:  geom.Size{W: 320, H: 220},
+		// Only the colour behind the first frame, before the widget tree
+		// paints; the tree fills it from the theme thereafter.
 		Background: theme.Light().Bg,
 		Font:       goregular.TTF,
 		FontFamilies: map[string][]byte{
