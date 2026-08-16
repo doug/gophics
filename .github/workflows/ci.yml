@@ -42,6 +42,12 @@ jobs:
         run: |
           go generate ./widget
           git diff --exit-code
+      # Code listings embedded in the docs pages must match the source they
+      # claim to show. They have drifted twice, once shipping a method that
+      # does not exist.
+      - name: embedded code listings are fresh
+        run: ./docs/build-embeds.sh -check
+
       # Repo hygiene: no tracked binaries >1MB outside testdata/asset dirs
       # (and known large-but-legit asset extensions).
       - name: no oversized tracked files
