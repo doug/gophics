@@ -50,3 +50,7 @@ docs/source/
 /sudoku
 /todo
 /whiteboard
+
+# `go build ./examples/<name>` drops the binary in the repo root by default.
+# One slipped into a commit at 18 MB; the compiled examples are build output.
+/counter
