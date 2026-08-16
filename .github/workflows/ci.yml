@@ -74,7 +74,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # The runner ships no CJK font, so the system-fallback test can only
+      # reach .notdef. Installing one makes that test meaningful here rather
+      # than skipped, and GOPHICS_REQUIRE_SYSTEM_CJK turns a missing glyph back
+      # into a failure now that the font is guaranteed present.
+      - name: install CJK fonts for the system-fallback test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       - name: framework tests (CPU/headless)
+        env:
+          GOPHICS_REQUIRE_SYSTEM_CJK: "1"
         run: go test -race -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
 
   test-substrate:

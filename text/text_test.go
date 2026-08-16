@@ -178,6 +178,23 @@ func (c *countSink) QuadTo(cx, cy, x, y float32)     { c.curves++ }
 func (c *countSink) CubeTo(a, b, d, e, x, y float32) { c.curves++ }
 func (c *countSink) Close()                          { c.closes++ }
 
+// TestSystemFontFallback covers two claims that fail for unrelated reasons, so
+// it makes them separately.
+//
+// Routing — CJK leaves the primary font and goes to the system map — is ours,
+// and holds on any machine: with no CJK font installed fontscan still answers
+// with some arbitrary face, which is enough to show the handoff happened.
+//
+// Coverage — the glyph that comes back is real rather than .notdef — is the
+// machine's. A bare CI runner has no CJK font, and fontscan says as much
+// ("No font matched for script … returning arbitrary face") before handing
+// back a face whose glyph for 你 is 0. That is a missing font, not a bug, and
+// it failed this test for weeks on ubuntu-latest.
+//
+// So coverage skips by default and is required where the fonts are known to be
+// installed, via GOPHICS_REQUIRE_SYSTEM_CJK=1 — which CI sets, having just
+// apt-installed them. Otherwise a genuine coverage regression would skip
+// silently on the one machine positioned to catch it.
 func TestSystemFontFallback(t *testing.T) {
 	if testing.Short() {
 		t.Skip("system font scan")
@@ -191,16 +208,25 @@ func TestSystemFontFallback(t *testing.T) {
 	if len(l.Glyphs) == 0 {
 		t.Fatal("no glyphs")
 	}
-	sawSystem := false
+	var system []Glyph
 	for _, g := range l.Glyphs {
 		if g.Font != s.Primary() && g.Font != nil {
-			sawSystem = true
-			if g.GID == 0 {
-				t.Fatal("system glyph is .notdef")
-			}
+			system = append(system, g)
 		}
 	}
-	if !sawSystem {
+	if len(system) == 0 {
 		t.Fatal("CJK runes did not use a system font")
+	}
+
+	for _, g := range system {
+		if g.GID != 0 {
+			continue
+		}
+		if os.Getenv("GOPHICS_REQUIRE_SYSTEM_CJK") == "1" {
+			t.Fatalf("system glyph is .notdef, and GOPHICS_REQUIRE_SYSTEM_CJK=1 "+
+				"says a CJK font should be installed (glyph %+v)", g)
+		}
+		t.Skip("no installed system font covers U+4F60 — on Debian/Ubuntu, " +
+			"apt-get install fonts-noto-cjk")
 	}
 }
