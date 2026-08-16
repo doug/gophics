@@ -7,6 +7,36 @@ import (
 	"time"
 )
 
+// PostedAccessibility wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedAccessibility(inner Accessibility, post func(func())) Accessibility {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedAccessibility{inner, post}
+}
+
+type postedAccessibility struct {
+	inner Accessibility
+	post  func(func())
+}
+
+func (p postedAccessibility) Announce(a0 string, a1 bool) {
+	p.inner.Announce(a0, a1)
+}
+
+func (p postedAccessibility) SetTree(a0 []A11yNode, a1 func(id int)) {
+	f1 := a1
+	var w1 func(id int)
+	if f1 != nil {
+		w1 = func(c0 int) { p.post(func() { f1(c0) }) }
+	}
+	p.inner.SetTree(a0, w1)
+}
+
 // PostedAudio wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which

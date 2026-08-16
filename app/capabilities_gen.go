@@ -15,7 +15,7 @@ import (
 // goroutine the platform implementation completes on.
 func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.AccessibilityWindow); ok {
-		o.Accessibility = x.Accessibility()
+		o.Accessibility = shell.PostedAccessibility(x.Accessibility(), o.Post)
 	}
 	if x, ok := w.(shell.BatteryWindow); ok {
 		o.Battery = shell.PostedBattery(x.Battery(), o.Post)
