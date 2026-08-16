@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# The cheap repo gates: formatting, generated-code freshness, doc-embed drift,
+# and tracked-binary size. Seconds, not minutes — no builds, no test suites.
+#
+# Both CI's lint job and .githooks/pre-push run this exact script. They used to
+# be separate copies of the same shell, which is how `gophics build` and
+# examples/tally/package/android.sh ended up disagreeing about a linker flag
+# that only a device could tell you was missing.
+#
+#   ./scripts/gates.sh          # run them all, report every failure
+#   ./scripts/gates.sh -q       # only print failures
+#
+# Exits non-zero if any gate fails, after running all of them — one push should
+# tell you everything that is wrong, not just the first thing.
+#
+# Scope note: these read the *working tree*, not the commits being pushed. With
+# a clean tree those are the same thing. With uncommitted changes you may see a
+# failure for work you were not pushing, which is noisy but never wrong in the
+# unsafe direction.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+quiet=0
+[ "${1:-}" = "-q" ] && quiet=1
+
+failed=0
+
+say() { [ "$quiet" = 1 ] || printf '%s\n' "$*"; }
+fail() {
+	printf '\n\033[31mFAIL\033[0m %s\n' "$1"
+	shift
+	[ $# -gt 0 ] && printf '%s\n' "$@"
+	failed=1
+}
+
+# ---- gofmt ------------------------------------------------------------------
+say "gofmt…"
+# gofmt -l exits 0 while listing files, so the listing is the signal — but it
+# exits non-zero on a parse error, and that must not be mistaken for "clean".
+out=$(gofmt -l . 2>&1)
+if [ $? -ne 0 ] || [ -n "$out" ]; then
+	fail "gofmt" "$out" "" "  fix: gofmt -w <file>"
+fi
+
+# ---- go vet, framework scope ------------------------------------------------
+# The vendored internal/gfx + internal/audio have known benign unsafe.Pointer
+# warnings, so they are out of scope here exactly as they are in CI.
+say "go vet…"
+pkgs=$(go list ./... 2>/dev/null | grep -vE 'internal/gfx|internal/audio|/examples/')
+if [ -n "$pkgs" ]; then
+	# shellcheck disable=SC2086
+	if ! out=$(go vet $pkgs 2>&1); then
+		fail "go vet" "$out"
+	fi
+fi
+
+# ---- generated code is fresh ------------------------------------------------
+# A stale capabilities_gen.go is not cosmetic: it is how Accessibility went
+# without its Posted wrapper, leaving the activate callback to fire on whatever
+# thread the platform bridge used.
+say "generated code…"
+if ! out=$(go generate ./widget 2>&1); then
+	fail "go generate" "$out"
+elif ! diff=$(git diff --stat -- '*_gen.go' 2>&1) || [ -n "$diff" ]; then
+	fail "generated code is stale" "$diff" "" \
+		"  the files have been regenerated in place — review and commit them"
+fi
+
+# ---- embedded doc listings --------------------------------------------------
+say "doc embeds…"
+if ! out=$(./docs/build-embeds.sh -check 2>&1); then
+	fail "doc embeds are stale" "$out" "" "  fix: ./docs/build-embeds.sh"
+fi
+
+# ---- no oversized tracked files ---------------------------------------------
+# An 18 MB compiled binary reached main once. `wc -c` rather than stat, whose
+# flags differ between macOS and Linux — CI's copy used the GNU spelling with a
+# `|| echo 0` fallback, which on a Mac silently measured every file as empty.
+say "tracked file sizes…"
+big=$(git ls-files -z | xargs -0 -n 200 wc -c 2>/dev/null |
+	awk '$1 > 1048576 && $2 != "total" {print $1, $2}' |
+	grep -vE '/testdata/|/assets/|\.png$|\.jpg$|\.wasm\.br$')
+if [ -n "$big" ]; then
+	fail "oversized tracked files (>1MB)" "$big" "" \
+		"  binaries do not belong in git — add to .gitignore and remove"
+fi
+
+if [ "$failed" = 0 ]; then
+	say "all gates passed"
+	exit 0
+fi
+exit 1

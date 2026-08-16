@@ -24,47 +24,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: gofmt
-        run: |
-          out=$(gofmt -l .)
-          if [ -n "$out" ]; then
-            echo "gofmt needed on:"
-            echo "$out"
-            exit 1
-          fi
-      # Vet only the framework packages — the vendored internal/gfx +
-      # internal/audio have known benign unsafe.Pointer vet warnings.
-      - name: go vet (framework scope)
-        run: go vet $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
-      # A stale capabilities_gen.go (widget/, app/, and any shell/ *_gen.go)
-      # must not pass silently: regenerate and require a clean tree.
-      - name: generated code is fresh
-        run: |
-          go generate ./widget
-          git diff --exit-code
-      # Code listings embedded in the docs pages must match the source they
-      # claim to show. They have drifted twice, once shipping a method that
-      # does not exist.
-      - name: embedded code listings are fresh
-        run: ./docs/build-embeds.sh -check
-
-      # Repo hygiene: no tracked binaries >1MB outside testdata/asset dirs
-      # (and known large-but-legit asset extensions).
-      - name: no oversized tracked files
-        run: |
-          bad=$(git ls-files | while read -r f; do
-            size=$(stat -c%s "$f" 2>/dev/null || echo 0)
-            if [ "$size" -gt 1048576 ]; then
-              case "$f" in
-                */testdata/*|*/assets/*|*.png|*.jpg|*.wasm.br) ;;
-                *) echo "oversized tracked file: $f ($size bytes)" ;;
-              esac
-            fi
-          done)
-          if [ -n "$bad" ]; then
-            echo "$bad"
-            exit 1
-          fi
+      # gofmt, go vet (framework scope), generated-code freshness, doc-embed
+      # drift and the tracked-binary size guard. The same script runs from
+      # .githooks/pre-push, so a developer sees these before the push rather
+      # than in a red run afterwards — this job used to be a second copy of
+      # that shell, and copies drift.
+      - name: gates
+        run: ./scripts/gates.sh
 
   build:
     name: build ${{ matrix.goos }}/${{ matrix.goarch }}

@@ -183,6 +183,20 @@ Gophics is licensed under the **[Apache License 2.0](LICENSE)**. The vendored
 substrate under `internal/` retains its original MIT licenses ([NOTICE](NOTICE),
 [THIRD_PARTY.md](THIRD_PARTY.md)).
 
+## Contributing
+
+Point git at the repo's hooks once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+That runs `scripts/gates.sh` before each push — gofmt, `go vet`, generated-code
+freshness, doc-embed drift and a tracked-binary size guard, about two seconds
+in total. CI's lint job runs the same script, so a failure here is a failure
+there. Run it directly any time with `./scripts/gates.sh`, and bypass it in an
+emergency with `git push --no-verify`.
+
 ## Learn more
 
 - **[PLAN.md](PLAN.md)** — the vision, architecture, and roadmap (the thesis for building this in Go).

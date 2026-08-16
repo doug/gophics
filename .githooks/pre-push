@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Run the cheap repo gates before a push leaves the machine.
+#
+# CI runs these too, but a red CI run blocks nothing: pushes to main are not
+# gated on a passing check, so a failure is only a notification, and one nobody
+# was reading. That is how an 18 MB binary reached main past a check written to
+# stop exactly that, and how the capability generator stayed stale for weeks.
+# This is the same script CI's lint job runs — see scripts/gates.sh.
+#
+# Installed by pointing git at this directory:
+#
+#     git config core.hooksPath .githooks
+#
+# Bypass for a genuine emergency:
+#
+#     git push --no-verify
+set -uo pipefail
+
+root=$(git rev-parse --show-toplevel)
+
+# A push that only deletes remote refs has nothing local to check.
+only_deletes=1
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	[ "$local_sha" = "0000000000000000000000000000000000000000" ] || only_deletes=0
+done
+[ "$only_deletes" = 1 ] && exit 0
+
+if [ ! -x "$root/scripts/gates.sh" ]; then
+	echo "pre-push: scripts/gates.sh missing or not executable — skipping gates" >&2
+	exit 0
+fi
+
+if ! "$root/scripts/gates.sh" -q; then
+	cat >&2 <<'MSG'
+
+pre-push: gates failed — push aborted.
+
+Fix the above, or bypass with:
+
+    git push --no-verify
+
+MSG
+	exit 1
+fi
+exit 0
