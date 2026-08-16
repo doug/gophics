@@ -234,6 +234,21 @@ func (o ID) SendUInt(sel string, args ...Arg) uint64 {
 	return out
 }
 
+// SendFloat sends a message returning a C float, such as
+// -[GCControllerButtonInput value].
+//
+// The out buffer is deliberately wider than a float32: libffi writes small
+// return values through an ffi_arg-sized slot, so handing it a bare 4-byte
+// destination invites a write past it on ABIs that pad.
+func (o ID) SendFloat(sel string, args ...Arg) float32 {
+	var out struct {
+		v float32
+		_ [4]byte
+	}
+	_ = send(o, Sel(sel), types.FloatTypeDescriptor, unsafe.Pointer(&out), args...)
+	return out.v
+}
+
 // SendBool sends a message returning a BOOL.
 func (o ID) SendBool(sel string, args ...Arg) bool {
 	var out uint8

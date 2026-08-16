@@ -155,24 +155,45 @@ both libs report `0x4000`:
 **Goal.** Battery, gamepad and geolocation return real data, or are honestly
 absent, on every platform.
 
-**Why now.** Nine `TODO(platform)` markers, all the same shape: the capability
-is declared and wired but returns nothing on desktop, mobile and web. The
-capability layer is a headline claim in `design/positioning.md` — "every
-platform service is a plain `ctx.<Cap>()` that degrades cleanly" — and three
-of them degrading to silence undercuts it. Each is small and independent, so
-this milestone can land in pieces.
+**Why now.** The capability layer is a headline claim in
+`design/positioning.md` — "every platform service is a plain `ctx.<Cap>()` that
+degrades cleanly" — and three of them degrading to silence undercuts it. Each
+is small and independent, so this milestone lands in pieces.
 
-- [ ] Battery: IOKit `IOPowerSources` (macOS), `upower`/sysfs (Linux),
-      `GetSystemPowerStatus` (Windows), `BatteryManager` (Android),
-      `navigator.getBattery` (web).
-- [ ] Geolocation: CoreLocation, geoclue, Win32, FusedLocationProvider.
-- [ ] Gamepad: the web Gamepad API first — it is the cheapest and already
-      has a demo to prove it in (`examples/capabilities`).
-- [ ] For anything that stays unimplemented, return nil from the capability
-      rather than a working-looking stub, as the file pickers now do.
+Two corrections to this entry as first written: there are six `TODO(platform)`
+markers, not nine, and **web already implements all three** — `battery_web.go`,
+`gamepad_web.go` and `geolocation_web.go` have been there the whole time. The
+gap was only ever desktop and mobile.
 
-**Exit.** `examples/capabilities` shows live values for each on at least one
-platform, and returns nil (not a silent zero) everywhere else.
+- [x] **Battery on every desktop platform.** macOS through IOKit's power
+      sources (three FFI symbols; the rest read via toll-free bridging, since
+      the CFDictionary it returns *is* an NSDictionary), Linux from
+      `/sys/class/power_supply` (no upower, no session bus), Windows from
+      `GetSystemPowerStatus`. A machine with no battery returns nil.
+- [x] **Gamepad on macOS and Linux.** macOS through GameController, which
+      already maps each vendor's pad to a known layout; Linux through evdev,
+      chosen over joydev because only evdev reports the axis range that makes
+      full deflection read as 1.0. Y is negated on macOS so `Axes[1]` points
+      the same way it does on the web.
+- [ ] Gamepad on Windows (XInput) — the remaining desktop gap.
+- [ ] Geolocation on desktop: CoreLocation needs an authorization dance and a
+      run loop, geoclue is D-Bus, Windows is COM. Deferred deliberately —
+      three heavy bindings for something desktop apps rarely ask for.
+- [ ] Mobile: battery, gamepad and geolocation all still nil. Each needs host
+      work (Kotlin `BatteryManager`, Swift `CoreLocation`) on the far side of
+      the bridge, not just Go.
+
+**Testing note.** Neither a battery nor a controller was available on the
+machine this was written on — a Mac Studio with nothing plugged in. So the
+paths that only run when hardware *is* present were split out and tested
+against fabricated input: `readDescription` against an NSDictionary shaped like
+a power source, and the evdev decoder against synthetic `input_event` bytes.
+The ioctl request numbers are checked against known constants, and on a laptop
+the macOS read also cross-checks against `pmset`.
+
+**Exit.** Battery meets it. `examples/capabilities` shows live values on web
+and on every desktop, and returns nil rather than a silent zero elsewhere.
+Gamepad meets it everywhere but Windows; geolocation is web-only.
 
 ---
 
