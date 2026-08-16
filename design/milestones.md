@@ -62,9 +62,15 @@ guard was never the problem, and neither was Actions being off.
       `-race` on darwin/arm64 and in a linux/arm64 container, with both the
       stale and the regenerated code. CI is linux/amd64; emulating that under
       podman is too slow to be practical. Needs the job log.
-- [ ] Decide how a red run stops a push. Branch protection requiring CI is the
-      real fix; a pre-push hook running the cheap gates is the fallback that
-      works on a private repo without paid Actions policy.
+- [x] A red run now stops something: `.githooks/pre-push` runs
+      `scripts/gates.sh` — the same script CI's lint job runs, so the two
+      cannot drift — and refuses the push if any gate fails (~2s). Install per
+      clone with `git config core.hooksPath .githooks`; `--no-verify` bypasses.
+      Verified by breaking each gate in turn, including a real push that the
+      hook rejected.
+- [ ] Branch protection requiring CI is still the stronger fix: a hook is
+      per-clone, opt-in and bypassable, and it cannot run the test suite. Worth
+      turning on before this repo goes public or gains a second contributor.
 
 **Exit.** A named CI run is green on `main`, and the oversized-file gate has
 been shown to fail on a deliberately oversized file (done — see above).
