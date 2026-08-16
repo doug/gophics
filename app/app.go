@@ -29,10 +29,22 @@ type Config struct {
 	// AppID identifies the app for per-user storage (where ctx.Preferences()
 	// persists). A stable reverse-DNS name like "com.example.tally" is
 	// conventional; empty falls back to the executable's name.
-	AppID      string
-	Size       geom.Size // initial logical window size
+	AppID string
+	Size  geom.Size // initial logical window size
+	// Background is the colour behind the widget tree. It is filled every
+	// frame, so it shows wherever the tree paints nothing.
+	//
+	// It is resolved per frame against the platform's colour scheme: set
+	// BackgroundDark too and the pair follows light/dark automatically. That
+	// pairing exists because a single fixed colour here is a trap — the theme
+	// a widget reads is chosen per frame from the same signal, so an app that
+	// hardcodes a light background renders dark-theme text over it the moment
+	// the viewer prefers dark, and nothing errors.
 	Background paint.Color
-	Font       []byte // TTF/OTF data for the default font (required for text)
+	// BackgroundDark replaces Background while the platform reports a dark
+	// colour scheme. Leave it zero to use Background in both.
+	BackgroundDark paint.Color
+	Font           []byte // TTF/OTF data for the default font (required for text)
 	// FontFamilies registers named families (e.g. "bold", "mono"),
 	// selectable per text run via widget.Text.Font / layout.RichSpan.Font.
 	FontFamilies map[string][]byte
@@ -67,13 +79,14 @@ type core struct {
 	LastDamage geom.Rect
 	Skipped    bool
 
-	background paint.Color
-	root       widget.Widget
-	size       geom.Size
-	debugPaint bool
-	inspect    bool        // interactive widget inspector (highlights box under pointer)
-	frameTimes [60]float32 // ring of recent raster+record durations, ms
-	frameHead  int
+	background     paint.Color
+	backgroundDark paint.Color
+	root           widget.Widget
+	size           geom.Size
+	debugPaint     bool
+	inspect        bool        // interactive widget inspector (highlights box under pointer)
+	frameTimes     [60]float32 // ring of recent raster+record durations, ms
+	frameHead      int
 
 	cur, prev     *scene.List
 	lastPaintSize geom.Size
@@ -213,14 +226,15 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 		}
 	}
 	c := &core{
-		Owner:      &widget.Owner{Painter: p, Input: input.New()},
-		Painter:    p,
-		background: cfg.Background,
-		root:       root,
-		size:       cfg.Size,
-		cur:        &scene.List{},
-		prev:       &scene.List{},
-		posted:     make(chan func(), 128),
+		Owner:          &widget.Owner{Painter: p, Input: input.New()},
+		Painter:        p,
+		background:     cfg.Background,
+		backgroundDark: cfg.BackgroundDark,
+		root:           root,
+		size:           cfg.Size,
+		cur:            &scene.List{},
+		prev:           &scene.List{},
+		posted:         make(chan func(), 128),
 	}
 	c.Owner.Post = c.Post
 	c.debugPaint = cfg.Debug
@@ -354,6 +368,15 @@ type nullMeasurer struct{}
 func (nullMeasurer) MeasureWidthIn(string, string, float32) float32 { return 0 }
 func (nullMeasurer) MetricsIn(string, float32) paint.TextMetrics    { return paint.TextMetrics{} }
 
+// bg is the background for this frame: the dark variant when the platform
+// reports a dark colour scheme and one was given, else the light one.
+func (c *core) bg() paint.Color {
+	if c.Owner.DarkMode && c.backgroundDark != (paint.Color{}) {
+		return c.backgroundDark
+	}
+	return c.background
+}
+
 func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed bool, damage geom.Rect) {
 	c.cur.Reset()
 	rec := c.cur.Recorder()
@@ -362,7 +385,7 @@ func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed boo
 	// wipe retained pixels outside the damage region during partial replay.
 	// The background is always opaque — the surface is retained across
 	// frames, so a translucent background would ghost previous frames.
-	bg := c.background
+	bg := c.bg()
 	bg.A = 1
 	rec.FillRect(surface, bg)
 	if box := c.Owner.RootBox(); box != nil {

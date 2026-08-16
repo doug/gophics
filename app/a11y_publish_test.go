@@ -6,6 +6,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
@@ -151,4 +152,60 @@ func labels(nodes []shell.A11yNode) []string {
 		}
 	}
 	return out
+}
+
+// bgApp paints nothing, so whatever the runner clears with is what shows.
+type bgApp struct{}
+
+func (bgApp) Build(widget.Ctx) widget.Widget { return widget.Sized{} }
+
+// The background has to follow the platform's colour scheme. It used to be a
+// single colour resolved once at startup while the theme a widget reads is
+// chosen per frame from the same signal — so a light background stayed put
+// under dark-theme text, and nothing errored.
+func TestBackgroundFollowsColorScheme(t *testing.T) {
+	light := paint.RGB(1, 1, 1)
+	dark := paint.RGB(0, 0, 0)
+	h, err := NewHeadless(bgApp{}, Config{
+		Size: geom.Size{W: 40, H: 40}, Font: goregular.TTF,
+		Background: light, BackgroundDark: dark,
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	at := func() (r, g, b uint32) {
+		img := h.Render()
+		c := img.At(20, 20)
+		r, g, b, _ = c.RGBA()
+		return
+	}
+	if r, _, _ := at(); r < 0xf000 {
+		t.Errorf("light scheme: background red = %#x, want near white", r)
+	}
+	h.SetDarkMode(true)
+	if r, _, _ := at(); r > 0x1000 {
+		t.Errorf("dark scheme: background red = %#x, want near black", r)
+	}
+	h.SetDarkMode(false)
+	if r, _, _ := at(); r < 0xf000 {
+		t.Errorf("back to light: background red = %#x, want near white", r)
+	}
+}
+
+// With no dark variant given, one colour is used in both — the old behaviour,
+// so this is not a breaking change for apps that paint their own background.
+func TestBackgroundWithoutDarkVariant(t *testing.T) {
+	h, err := NewHeadless(bgApp{}, Config{
+		Size: geom.Size{W: 40, H: 40}, Font: goregular.TTF,
+		Background: paint.RGB(1, 1, 1),
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.SetDarkMode(true)
+	r, _, _, _ := h.Render().At(20, 20).RGBA()
+	if r < 0xf000 {
+		t.Errorf("background red = %#x, want the single colour unchanged", r)
+	}
 }
