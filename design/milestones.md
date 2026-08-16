@@ -27,13 +27,29 @@ workflow is not running, or it failed and nobody looked. Until that is
 settled, every other guard in CI — the lint pass, the race suite, the
 generate-freshness check, the new embed-drift check — is of unknown value.
 
-Blocked on a working GitHub token: `gh auth status` reports the stored token
-is invalid, which is also why the API returns 404 for this repo.
+**Established so far (2026-08-16).**
 
-- [ ] Restore `gh` auth (`gh auth login`), or check the Actions tab directly.
+- The gate's logic is sound. Staging a 3 MB file locally and running the
+  workflow's own shell makes it fire; the 18 MB binary matched none of its
+  exceptions (`*/testdata/*`, `*/assets/*`, `*.png`, `*.jpg`, `*.wasm.br`),
+  so it would have been caught. The guard is not the problem.
+- `ci.yml` triggers on `push: branches: [main]` with no path filter, so it
+  should run on every push, including the one that carried the binary.
+- Therefore the workflow did not run, or failed before reaching the gate.
+  Which one cannot be settled from here: the repo is private, so the API
+  needs a token, and there is none.
+- `gh` has no OAuth token — `gh auth token` reports "no oauth token found".
+  SSH auth covers git push and pull (verified: `git ls-remote` works), but
+  the REST and GraphQL APIs are a separate credential. `gh auth login` set up
+  the SSH key without storing one.
+
+- [ ] Store an API token: `gh auth login` (choose HTTPS when asked, or paste
+      a PAT), or export `GH_TOKEN`. SSH alone is not enough for the API.
 - [ ] Confirm whether the workflows have ever run, and on which commits.
-- [ ] If the oversized-file gate never fired for the binary, find out why —
-      test it deliberately by committing a large file on a scratch branch.
+- [ ] Check Settings ▸ Actions — a private repo can have Actions disabled
+      entirely, which would explain a guard that never fired. `pages.yml`
+      carries a note that Pages must be enabled by hand, so it is plausible
+      neither was ever turned on.
 - [ ] Confirm the new `docs/build-embeds.sh -check` gate runs and can fail.
 - [ ] If Actions is disabled or unbilled for a private repo, decide: enable
       it, or move the gates into a pre-push hook so they run somewhere.
