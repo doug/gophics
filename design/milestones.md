@@ -43,19 +43,31 @@ generate-freshness check, the new embed-drift check — is of unknown value.
   the REST and GraphQL APIs are a separate credential. `gh auth login` set up
   the SSH key without storing one.
 
-- [ ] Store an API token: `gh auth login` (choose HTTPS when asked, or paste
-      a PAT), or export `GH_TOKEN`. SSH alone is not enough for the API.
-- [ ] Confirm whether the workflows have ever run, and on which commits.
-- [ ] Check Settings ▸ Actions — a private repo can have Actions disabled
-      entirely, which would explain a guard that never fired. `pages.yml`
-      carries a note that Pages must be enabled by hand, so it is plausible
-      neither was ever turned on.
-- [ ] Confirm the new `docs/build-embeds.sh -check` gate runs and can fail.
-- [ ] If Actions is disabled or unbilled for a private repo, decide: enable
-      it, or move the gates into a pre-push hook so they run somewhere.
+**Answered (2026-08-16), from the Actions tab.** CI runs on every push and has
+been **failing**, which is the other branch of the original either/or — not
+"the workflow never ran" as the evidence above suggested. Run #68 on 30ee4dd:
+`lint` and `test (framework)` both red, `build` green on all four targets.
+
+Nothing blocks a push to `main`, so a red run stops nothing. **That is the
+actual reason the 18 MB binary landed**: the gate did fire, and the push
+succeeded anyway because no branch protection requires the check to pass. The
+guard was never the problem, and neither was Actions being off.
+
+- [x] Confirmed the workflows run — on every push, no path filter.
+- [x] `lint` failure found, reproduced locally and fixed (9e4e30b): the
+      capability generator's output was stale, because `Accessibility` gained
+      `SetTree` without a regenerate. Not cosmetic — see that commit; the gate
+      caught a real thread-safety bug in the a11y bridges.
+- [ ] `test (framework)` failure: **not reproducible locally.** Passes with
+      `-race` on darwin/arm64 and in a linux/arm64 container, with both the
+      stale and the regenerated code. CI is linux/amd64; emulating that under
+      podman is too slow to be practical. Needs the job log.
+- [ ] Decide how a red run stops a push. Branch protection requiring CI is the
+      real fix; a pre-push hook running the cheap gates is the fallback that
+      works on a private repo without paid Actions policy.
 
 **Exit.** A named CI run is green on `main`, and the oversized-file gate has
-been shown to fail on a deliberately oversized file.
+been shown to fail on a deliberately oversized file (done — see above).
 
 ---
 
