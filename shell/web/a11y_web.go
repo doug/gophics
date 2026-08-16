@@ -14,6 +14,23 @@
 // own hit testing. Assistive technology activates a node through the
 // accessibility API rather than a real pointer, which arrives here as a click
 // or keydown on the element and is routed back by ID.
+//
+// # Activation and the user-gesture window
+//
+// One asymmetry is worth knowing about. Ordinary pointer events run the widget
+// handler synchronously inside the DOM listener (see web.go), so anything that
+// needs a user gesture — the file picker and camera capture both call
+// input.click() and say so — runs while the gesture is live. Activation from
+// an AT does not: app.wireCapabilities wraps the bridge so the callback is
+// posted to the UI goroutine, which runs it at the top of the next frame.
+//
+// That is still inside the gesture window. Transient activation lives for five
+// seconds in Chrome, against roughly sixteen milliseconds for a frame, so a
+// picker opened by a screen-reader activation works the same as one opened by
+// a tap. It is a wide margin, but it is a dependency rather than a guarantee:
+// if a browser ever tightened transient activation to the dispatching task,
+// AT-driven file pickers would silently stop opening while mouse-driven ones
+// kept working. Reasoned from the spec, not yet measured in a browser.
 
 package web
 

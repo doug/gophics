@@ -96,6 +96,13 @@ func registerA11yElementClass() (Class, error) {
 
 	// -(BOOL)accessibilityPerformPress — VoiceOver's "activate" (VO-Space).
 	// A scalar return, which is all the callback trampoline supports.
+	//
+	// YES means "accepted", not "completed". fn posts to the UI goroutine and
+	// returns, so the widget handler has not run by the time this answers —
+	// deliberately, since this is called on the AppKit thread and the handler
+	// touches widget state. That is the ordinary dispatch-then-report-handled
+	// pattern; VoiceOver wants to know the action was recognised, not to wait
+	// for it.
 	pressIMP := ffi.NewCallback(func(self, sel uintptr) uintptr {
 		a11yRegistry.Lock()
 		id, ok := a11yRegistry.nodes[self]
