@@ -52,5 +52,10 @@ docs/source/
 /whiteboard
 
 # `go build ./examples/<name>` drops the binary in the repo root by default.
-# One slipped into a commit at 18 MB; the compiled examples are build output.
+# Several slipped into commits at ~18 MB each; the compiled examples are build
+# output. The named entries above cover the ones that did.
 /counter
+
+# gomobile bind output. These were tracked and reached ~200 MB across their
+# versions before being purged from history; package/ios.sh regenerates them.
+examples/*/ios/*.xcframework/
