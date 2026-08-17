@@ -171,12 +171,22 @@ func vtFragment() uintptr {
 			if e == nil {
 				return eElementNotAvailable
 			}
+			// The window element has no gophics node. It must still report a
+			// real rectangle: UIA clips descendants to the fragment root, so a
+			// zero-sized root silently empties the whole tree.
+			if e.id == rootElemID {
+				l, t, w, h := e.prov.windowRect()
+				*r = uiaRect{left: l, top: t, width: w, height: h}
+				uiaLogf("bounds root=(%v,%v %vx%v)", l, t, w, h)
+				return sOK
+			}
 			n, ok := e.node()
 			if !ok {
 				return sOK
 			}
 			x, y := e.prov.clientToScreen(n.X, n.Y)
 			*r = uiaRect{left: float64(x), top: float64(y), width: float64(n.W), height: float64(n.H)}
+			uiaLogf("bounds id=%d node=(%d,%d %dx%d) screen=(%d,%d)", e.id, n.X, n.Y, n.W, n.H, x, y)
 			return sOK
 		})
 
@@ -317,6 +327,19 @@ func vtPattern() uintptr {
 		})
 	})
 	return uintptr(unsafe.Pointer(&vtPatternArr[0]))
+}
+
+// safeArrayOfFloat64 builds a SAFEARRAY of VT_R8, used for BoundingRectangle.
+func safeArrayOfFloat64(vals []float64) uintptr {
+	sa, _, _ := procSafeArrayCreateVector.Call(uintptr(vtR8), 0, uintptr(len(vals)))
+	if sa == 0 {
+		return 0
+	}
+	for i := range vals {
+		idx := int32(i)
+		procSafeArrayPutElement.Call(sa, uintptr(unsafe.Pointer(&idx)), uintptr(unsafe.Pointer(&vals[i])))
+	}
+	return sa
 }
 
 // safeArrayOfInt32 builds a SAFEARRAY of VT_I4, which is what GetRuntimeId

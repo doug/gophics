@@ -46,6 +46,11 @@ var (
 	procUiaRaiseAutomationEvent     = uiaCore.NewProc("UiaRaiseAutomationEvent")
 	procUiaDisconnectProvider       = uiaCore.NewProc("UiaDisconnectProvider")
 
+	// The window's own rectangle. The fragment root must report real bounds:
+	// UIA clips descendants to it, so a zero-sized root makes every element
+	// empty however correct its own rect is.
+	procGetWindowRect = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowRect")
+
 	procSysAllocString        = oleaut.NewProc("SysAllocString")
 	procSafeArrayCreateVector = oleaut.NewProc("SafeArrayCreateVector")
 	procSafeArrayPutElement   = oleaut.NewProc("SafeArrayPutElement")
@@ -74,6 +79,8 @@ const (
 	vtBSTR  = 8
 	vtBool  = 11
 	vtR8    = 5
+	// VT_ARRAY is a modifier: a SAFEARRAY of the base type.
+	vtArray = 0x2000
 )
 
 // variant mirrors the Win32 VARIANT: a type tag, three reserved words, then the
@@ -101,6 +108,17 @@ func (v *variant) setBool(b bool) {
 		x = 0xFFFF
 	}
 	*v = variant{vt: vtBool, val: x}
+}
+
+// setRect writes the four-double SAFEARRAY that UIA expects for
+// BoundingRectangle: left, top, width, height, in screen coordinates.
+func (v *variant) setRect(left, top, width, height float64) {
+	sa := safeArrayOfFloat64([]float64{left, top, width, height})
+	if sa == 0 {
+		v.setEmpty()
+		return
+	}
+	*v = variant{vt: vtArray | vtR8, val: sa}
 }
 
 func (v *variant) setString(s string) {

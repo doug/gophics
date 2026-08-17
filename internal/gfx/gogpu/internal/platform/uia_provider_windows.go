@@ -33,6 +33,7 @@ func (e *uiaElem) property(id int32, v *variant) {
 	if !ok {
 		return
 	}
+	uiaLogf("prop id=%d node=%d", id, e.id)
 	switch id {
 	case propName:
 		name := n.Label
@@ -61,6 +62,15 @@ func (e *uiaElem) property(id int32, v *variant) {
 		v.setBool(true)
 	case propIsOffscreen:
 		v.setBool(false)
+	case propBoundingRectangle:
+		// Also served by IRawElementProviderFragment.get_BoundingRectangle, but
+		// that is not the route clients take: UIA asks for the property, and a
+		// provider that only implements the fragment method reports every
+		// element as zero-sized — which is what a screen reader uses to place
+		// its highlight, so the tree reads correctly and highlights nothing.
+		x, y := e.prov.clientToScreen(n.X, n.Y)
+		uiaLogf("prop bounds id=%d node=(%d,%d %dx%d) screen=(%d,%d)", e.id, n.X, n.Y, n.W, n.H, x, y)
+		v.setRect(float64(x), float64(y), float64(n.W), float64(n.H))
 	case propToggleState:
 		if supportsToggle(n) {
 			v.setI4(toggleState(n))
@@ -83,6 +93,9 @@ func (e *uiaElem) rootProperty(id int32, v *variant) {
 		v.setBool(false)
 	case propAutomationID:
 		v.setString("gophics.root")
+	case propBoundingRectangle:
+		l, t, w, h := e.prov.windowRect()
+		v.setRect(l, t, w, h)
 	case propName:
 		// The window's own title is what the shell already shows; leaving this
 		// empty lets UIA fall back to the host provider rather than duplicating
@@ -207,6 +220,14 @@ func (p *uiaProvider) screenToClient(x, y int) (int, int) {
 	return int(pt.X), int(pt.Y)
 }
 
+// windowRect returns the window's bounds in screen coordinates, which is what
+// the fragment root reports.
+func (p *uiaProvider) windowRect() (left, top, width, height float64) {
+	var r struct{ Left, Top, Right, Bottom int32 }
+	procGetWindowRect.Call(uintptr(p.hwnd), uintptr(unsafe.Pointer(&r)))
+	return float64(r.Left), float64(r.Top), float64(r.Right - r.Left), float64(r.Bottom - r.Top)
+}
+
 // SetTree publishes a new tree.
 func (p *uiaProvider) SetTree(nodes []A11yNode, activate func(id int)) {
 	p.mu.Lock()
@@ -252,20 +273,24 @@ func uiaLookup(hwnd windows.HWND) *uiaProvider {
 //
 // Reports handled=false to let DefWindowProc take the message.
 func handleGetObject(hwnd windows.HWND, wParam, lParam uintptr) (uintptr, bool) {
+	uiaLogf("WM_GETOBJECT lParam=%d wantRoot=%d", int32(lParam), uiaRootObjectID)
 	if int32(lParam) != uiaRootObjectID {
 		return 0, false
 	}
 	p := uiaLookup(hwnd)
 	if p == nil {
+		uiaLogf("no provider for this window yet")
 		return 0, false
 	}
 	p.mu.RLock()
 	empty := p.tree == nil || len(p.tree.nodes) == 0
 	p.mu.RUnlock()
 	if empty {
+		uiaLogf("provider exists but has no tree")
 		return 0, false
 	}
 	root := p.rootElem()
+	uiaLogf("returning provider")
 	ret, _, _ := procUiaReturnRawElementProvider.Call(
 		uintptr(hwnd), wParam, lParam, root.simplePtr())
 	return ret, true

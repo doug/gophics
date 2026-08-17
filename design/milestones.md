@@ -335,6 +335,43 @@ platform is blocked on feasibility.
 - [ ] Run a real gophics window under Xvfb, rather than a tree published
       directly by a test.
 
+### Windows (UI Automation)
+
+**A UIA provider works, verified by a real client against a running app.**
+`uia_windows.go` and friends build COM objects in pure Go —
+`syscall.NewCallback` vtables, four interfaces per element laid out like C++
+multiple inheritance, real refcounting and QueryInterface. A UIA client walking
+a live gophics window on Windows 11 ARM64 sees:
+
+    WINDOW name='counter' type=window
+    NODE|0|group||enabled=True|focusable=False
+    NODE|1|text|TAPS|enabled=True|focusable=False
+    NODE|1|text|3|enabled=True|focusable=False
+    NODE|1|button|Increment|InvokePatternIdentifiers.Pattern|enabled=True|focusable=True
+
+Structure, names, control types, enabled and focusable states, and
+InvokePattern on the button alone. The app side shows the handshake:
+`WM_GETOBJECT lParam=-25` → `returning provider`.
+
+- [ ] **BoundingRectangle reaches the client as zero.** Known, and narrowed but
+      not solved. The provider is asked and answers correctly — traced on
+      device, `bounds id=3 node=(111,129 97x32) screen=(275,316)` for the
+      Increment button — yet both `Current.BoundingRectangle` and an explicit
+      `GetCurrentPropertyValue` come back `0,0,0,0`. Property 30001 is never
+      requested from us, so UIA is using the fragment method, getting real
+      numbers, and reporting zeros anyway. Giving the fragment root the
+      window's own rect (UIA clips descendants to it) did not change it.
+      A screen reader needs this to place its highlight; navigation and
+      activation do not depend on it.
+- [ ] Confirm with Narrator itself, the counterpart to the Orca pass.
+- [ ] `AnnounceA11y` — UIA delivers announcements as a NotificationEvent, which
+      needs `UiaRaiseNotificationEvent`. Currently a documented no-op.
+- [ ] Point hit-testing. `ElementProviderFromPoint` takes two doubles and
+      `syscall.NewCallback` refuses float parameters outright, so it answers
+      E_NOTIMPL. Keyboard and focus navigation are unaffected; mouse and touch
+      exploration are not available. The provider's own `hitTest` is written
+      and tested, waiting on a route that can carry the coordinates.
+
 **The validation loop is containerisable** — checked 2026-08-16, and worth
 knowing before starting, because "needs a Linux desktop with a screen reader"
 would otherwise make this look untestable from a Mac. In a plain
