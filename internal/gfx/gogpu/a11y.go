@@ -23,16 +23,29 @@ type A11yNode = platform.A11yNode
 // marshal it if that matters.
 //
 // It reports whether the running platform has an accessibility bridge. false
-// means the tree was not published and nothing was changed — today that is
-// every platform except macOS, so a caller can decide between staying quiet
-// and telling the user their screen reader will not see this window.
+// means the tree was not published and nothing was changed, so a caller can
+// decide between staying quiet and telling the user their screen reader will
+// not see this window. On Linux that answer depends on the machine, not just
+// the build: AT-SPI is only there when the desktop has accessibility enabled.
 func (a *App) SetAccessibilityTree(nodes []A11yNode, activate func(id int)) bool {
 	w, ok := a.platWindow.(platform.A11yWindow)
 	if !ok {
 		return false
 	}
+	if !a11yAvailable(a.platWindow) {
+		return false
+	}
 	w.SetA11yTree(nodes, activate)
 	return true
+}
+
+// a11yAvailable asks a platform that can lose its bridge at run time — Linux,
+// whose AT-SPI bus exists only when the desktop has accessibility enabled —
+// whether it has one right now. Platforms that do not implement the probe are
+// taken at their word.
+func a11yAvailable(w any) bool {
+	p, ok := w.(platform.A11yAvailable)
+	return !ok || p.A11yAvailable()
 }
 
 // AnnounceAccessibility speaks a transient message through the assistive
@@ -44,6 +57,9 @@ func (a *App) SetAccessibilityTree(nodes []A11yNode, activate func(id int)) bool
 func (a *App) AnnounceAccessibility(message string, assertive bool) bool {
 	w, ok := a.platWindow.(platform.A11yWindow)
 	if !ok {
+		return false
+	}
+	if !a11yAvailable(a.platWindow) {
 		return false
 	}
 	w.AnnounceA11y(message, assertive)

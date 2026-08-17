@@ -267,7 +267,42 @@ platform is blocked on feasibility.
       SAFEARRAY marshalling; and the callback budget is per *vtable*, not per
       node, so a large tree costs nothing extra.
 
-- [ ] Implement AT-SPI. The spike says go ahead; this is the large piece.
+- [x] **AT-SPI implemented and verified end to end.** A gophics tree is
+      published on the accessibility bus and read back through the real client
+      stack — `pyatspi`, the same libraries a screen reader uses. Roles,
+      labels, extents, states and actions all survive the trip, and `DoAction`
+      over the bus reaches the Go callback:
+
+          NODE|0|application|gophics-atspi-test|-||active,enabled,…
+          NODE|1|frame|Root|0,0,400,300||enabled,sensitive,showing,visible
+          NODE|2|button|Send|10,20,80,30|click|enabled,focusable,…
+          DIDACTION
+          NODE|2|check box|Agree|10,90,120,24|click|checkable,checked,…
+
+      Four files: `dbus_server_linux.go` turns the client into a peer
+      (METHOD_RETURN, ERROR, and the object-path/struct/dict writers AT-SPI
+      needs); `atspi_tree_linux.go` maps ARIA roles and node flags onto AT-SPI's
+      enums; `atspi_server_linux.go` is the object server —
+      Accessible, Component, Action, Application, Properties, Introspectable —
+      and `atspi_window_linux.go` hangs it off both the X11 and Wayland windows,
+      which share it because AT-SPI knows nothing about the display server.
+
+      The role and state numbers were read out of pyatspi rather than written
+      from memory. Several are unobvious — CHECKABLE is 41, so it lands in the
+      second word of the state bitset — and a wrong one does not fail loudly, it
+      makes a button announce as something else.
+
+- [ ] **Signals.** The tree is answered correctly on demand, but nothing is
+      emitted when it changes, so a screen reader that has already read a node
+      will not notice it move, change label, or become checked until it
+      re-queries. `object:children-changed` and `object:state-changed` on
+      `org.a11y.atspi.Event.Object` are the next increment, and the reason
+      `AnnounceA11y` is still a documented no-op — announcements are delivered
+      as events too.
+- [ ] Confirm with Orca itself. pyatspi proves the protocol; Orca proves the
+      experience, and it installs in the same container.
+- [ ] Run a real gophics window under Xvfb, rather than a tree published
+      directly by a test.
 
 **The validation loop is containerisable** — checked 2026-08-16, and worth
 knowing before starting, because "needs a Linux desktop with a screen reader"
@@ -291,4 +326,6 @@ Vulkan looks plausible; lavapipe is the fallback. Confirm before relying on it.
       in the simulator.
 
 **Exit.** Orca on Linux reads and activates the widget catalogue; the same
-for Narrator on Windows.
+for Narrator on Windows. Linux is most of the way there — the tree is served
+and activation works; what is missing is change notification and a test with a
+real window.

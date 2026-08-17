@@ -52,3 +52,21 @@ type A11yWindow interface {
 	// interrupts current speech; otherwise the message is queued politely.
 	AnnounceA11y(message string, assertive bool)
 }
+
+// A11yAvailable refines A11yWindow for platforms whose bridge may be absent at
+// run time rather than at compile time.
+//
+// Implementing A11yWindow is a static claim, and on macOS it is the whole
+// story: if the binary is running there, AppKit is there too. Linux is not like
+// that. AT-SPI lives on a second D-Bus that exists only when the desktop has
+// accessibility enabled, so the same binary has a bridge on one machine and
+// none on the next. Without this, such a platform would have to either claim a
+// bridge it cannot use — leaving callers with a capability that silently
+// discards everything, which is worse than an absent one because an app cannot
+// tell the difference — or never claim one at all.
+type A11yAvailable interface {
+	// A11yAvailable reports whether the bridge can actually publish. A window
+	// implementing this is treated as having no accessibility support while it
+	// returns false.
+	A11yAvailable() bool
+}

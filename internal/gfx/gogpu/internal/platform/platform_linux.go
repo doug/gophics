@@ -483,6 +483,10 @@ type x11PlatformWindow struct {
 	platform  *x11Platform
 	id        WindowID
 	secondary *secondaryX11Conn // non-nil for secondary windows
+
+	// atspiHost supplies SetA11yTree/AnnounceA11y/A11yAvailable. AT-SPI is
+	// a D-Bus protocol, so X11 and Wayland share one implementation.
+	atspiHost
 }
 
 // inner returns the *x11.Platform connection backing this window: the
@@ -602,6 +606,10 @@ type waylandPlatformWindow struct {
 	platform  *waylandPlatform
 	id        WindowID
 	secondary *secondaryWaylandConn // non-nil for secondary windows
+
+	// atspiHost supplies SetA11yTree/AnnounceA11y/A11yAvailable. AT-SPI is
+	// a D-Bus protocol, so X11 and Wayland share one implementation.
+	atspiHost
 }
 
 func (w *waylandPlatformWindow) ID() WindowID { return w.id }
