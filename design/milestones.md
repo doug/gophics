@@ -268,6 +268,23 @@ platform is blocked on feasibility.
       node, so a large tree costs nothing extra.
 
 - [ ] Implement AT-SPI. The spike says go ahead; this is the large piece.
+
+**The validation loop is containerisable** — checked 2026-08-16, and worth
+knowing before starting, because "needs a Linux desktop with a screen reader"
+would otherwise make this look untestable from a Mac. In a plain
+`debian:trixie` container, `at-spi2-core`, `python3-pyatspi`, Xvfb and Orca
+itself (48.1) all install and run headless; the registry answers and
+`pyatspi.Registry.getDesktop(0)` enumerates.
+
+Prefer pyatspi to Orca for the work: it scripts the client side, so tree
+shape, roles, labels, bounds and actions become assertions rather than
+something read off a screen. `gdbus`/`busctl` sit below that for when one
+reply is malformed. Keep Orca for the end-to-end pass — `--debug-file` records
+what it perceived, so no speech output is needed.
+
+Untested: running a gophics window in that container. Xvfb covers the display
+and the `nogpu` pure-CPU tag exists (CI builds it), so an X11 window without
+Vulkan looks plausible; lavapipe is the fallback. Confirm before relying on it.
 - [ ] Wire macOS announcements, currently a documented no-op because AppKit
       routes live-region speech through a C function rather than a method.
 - [ ] Validate iOS on-device with VoiceOver — the one platform verified only
