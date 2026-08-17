@@ -484,14 +484,12 @@ func (b *atspiBridge) handleAccessible(msg *dbusMsg, tree *a11yTree, node A11yNo
 		body := newMsgBuf(0)
 		if isRoot {
 			var bits [2]uint32
-			bits[stateVisible/32] |= 1 << (stateVisible % 32)
-			bits[stateShowing/32] |= 1 << (stateShowing % 32)
-			bits[stateActive/32] |= 1 << (stateActive % 32)
-			bits[stateEnabled/32] |= 1 << (stateEnabled % 32)
-			bits[stateSensitive/32] |= 1 << (stateSensitive % 32)
+			for _, st := range []uint{stateVisible, stateShowing, stateActive, stateEnabled, stateSensitive} {
+				bits[st/32] |= 1 << (st % 32)
+			}
 			body.u32Array(bits[:])
 		} else {
-			body.u32Array(atspiStates(node))
+			body.u32Array(statesFor(node))
 		}
 		b.reply(msg, "au", body.data)
 	case "GetAttributes":
@@ -509,6 +507,27 @@ func (b *atspiBridge) handleAccessible(msg *dbusMsg, tree *a11yTree, node A11yNo
 	default:
 		b.replyErr(msg, "org.freedesktop.DBus.Error.UnknownMethod", msg.Member)
 	}
+}
+
+// statesFor is atspiStates plus what only the server knows: the tree's root
+// node is the window the user sees, and a top-level frame must carry ACTIVE.
+//
+// Orca will not navigate into a frame without it — it looks for the active
+// window, finds none, and stops, having already listed the application and the
+// frame correctly. pyatspi never showed this because a client that is handed a
+// tree walks it regardless; only a real screen reader applies the rule.
+//
+// gophics publishes one tree per window and has no way here to learn which
+// window the compositor considers focused, so the frame it publishes is taken
+// to be the active one. For a single-window app that is exactly right; with
+// several windows a screen reader may treat more than one as active until
+// focus is plumbed through A11yWindow.
+func statesFor(node A11yNode) []uint32 {
+	bits := atspiStates(node)
+	if node.ParentID == -1 {
+		bits[stateActive/32] |= 1 << (stateActive % 32)
+	}
+	return bits
 }
 
 func (b *atspiBridge) roleOf(node A11yNode, isRoot bool) uint32 {

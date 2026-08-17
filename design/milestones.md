@@ -311,8 +311,27 @@ platform is blocked on feasibility.
 
       `AnnounceA11y` works now as well — announcements are delivered as events,
       so they could not exist before this.
-- [ ] Confirm with Orca itself. pyatspi proves the protocol; Orca proves the
-      experience, and it installs in the same container.
+- [x] **Confirmed with Orca**, which found a bug pyatspi could not. Orca listed
+      the application and the frame, then refused to enter it:
+
+          [frame: 'Catalogue'] ... lacks active state
+          Unable to find active window from [application: 'Gophics …']
+
+      A top-level frame must carry ACTIVE, and must announce itself with a
+      `window:activate` event. pyatspi never showed this because a client handed
+      a tree walks it regardless; the active-window rule is the screen reader's.
+      With both added, Orca speaks:
+
+          SPEECH OUTPUT: 'Save button.'
+          SPEECH OUTPUT: 'Remember me check box checked.'
+
+      driven by our `object:state-changed:focused` events, with role and checked
+      state announced correctly. Orca cannot run in CI, so `TestFrameIsActive`
+      stands in for it.
+
+      Worth remembering as a method note: two clients disagreed, and the
+      stricter one was right. A protocol-level client proves the wire format; it
+      does not prove the conventions layered on top.
 - [ ] Run a real gophics window under Xvfb, rather than a tree published
       directly by a test.
 
@@ -337,7 +356,9 @@ Vulkan looks plausible; lavapipe is the fallback. Confirm before relying on it.
 - [ ] Validate iOS on-device with VoiceOver — the one platform verified only
       in the simulator.
 
-**Exit.** Orca on Linux reads and activates the widget catalogue; the same
-for Narrator on Windows. Linux is most of the way there — the tree is served
-and activation works; what is missing is change notification and a test with a
-real window.
+**Exit — Linux met (2026-08-17).** Orca reads a gophics tree and announces
+each widget with its role and state, and activation over the bus reaches the
+Go callback. What remains for Linux is cosmetic rather than structural: the
+tree in these tests is published directly rather than by a running window under
+Xvfb. Windows and Narrator are untouched, though the UIA spike found the COM
+technique already proven in-repo.

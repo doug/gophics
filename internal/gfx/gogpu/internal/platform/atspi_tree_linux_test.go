@@ -209,3 +209,21 @@ func TestInterfacesFollowCapability(t *testing.T) {
 		t.Error("a tappable node did not advertise the Action interface")
 	}
 }
+
+// The frame must carry ACTIVE. This is a regression test for something only a
+// real screen reader surfaced: Orca listed the application and the frame
+// correctly, then refused to enter it — "lacks active state", "Unable to find
+// active window" — and read nothing. pyatspi never showed it, because a client
+// handed a tree walks it regardless; the active-window rule is Orca's.
+//
+// Orca is not in CI, so this stands in for it.
+func TestFrameIsActive(t *testing.T) {
+	frame := statesFor(A11yNode{ID: 1, ParentID: -1, Role: "group"})
+	if !hasState(frame, stateActive) {
+		t.Error("the tree's root is the window a reader must enter; it needs ACTIVE")
+	}
+	child := statesFor(A11yNode{ID: 2, ParentID: 1, Role: "button"})
+	if hasState(child, stateActive) {
+		t.Error("an ordinary node reported ACTIVE, which belongs to the frame")
+	}
+}

@@ -23,7 +23,12 @@ package platform
 
 import "strconv"
 
-const ifaceEventObject = "org.a11y.atspi.Event.Object"
+const (
+	ifaceEventObject = "org.a11y.atspi.Event.Object"
+	// Window events live on their own interface. Orca watches these to decide
+	// which window it is reading.
+	ifaceEventWindow = "org.a11y.atspi.Event.Window"
+)
 
 // AT-SPI live-region politeness, used by announcements.
 const (
@@ -37,6 +42,12 @@ const (
 // and goes in the trailing (so). The variant payload is written by writeAny,
 // which most events leave as an empty string.
 func (b *atspiBridge) emit(sourcePath, member, detail string, d1, d2 int32, writeAny func(*msgBuf)) {
+	b.emitOn(ifaceEventObject, sourcePath, member, detail, d1, d2, writeAny)
+}
+
+// emitOn is emit with an explicit interface, for the window events that do not
+// live under Event.Object.
+func (b *atspiBridge) emitOn(iface, sourcePath, member, detail string, d1, d2 int32, writeAny func(*msgBuf)) {
 	body := newMsgBuf(0)
 	body.str(detail)
 	body.i32(d1)
@@ -51,7 +62,7 @@ func (b *atspiBridge) emit(sourcePath, member, detail string, d1, d2 int32, writ
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
 	b.conn.serial++
-	raw := dbusEncodeSignal(b.conn.serial, sourcePath, ifaceEventObject, member, "siiv(so)", body.data)
+	raw := dbusEncodeSignal(b.conn.serial, sourcePath, iface, member, "siiv(so)", body.data)
 	b.conn.rw.Write(raw)
 }
 
@@ -79,8 +90,13 @@ var trackedStates = []struct {
 // and answering a query costs a D-Bus round trip, not a layout pass.
 func (b *atspiBridge) emitDiff(old, cur *a11yTree) {
 	if old == nil {
-		// First publication: the application gained its whole tree.
+		// First publication: the application gained its whole tree, and its
+		// window became the active one. Orca needs the second event to start
+		// reading; without it the frame is listed but never entered.
 		b.emit(atspiRootPath, "ChildrenChanged", "add", 0, 0, nil)
+		for _, id := range cur.roots {
+			b.emitOn(ifaceEventWindow, atspiNodePrefix+strconv.Itoa(id), "Activate", "", 0, 0, nil)
+		}
 		return
 	}
 
