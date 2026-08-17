@@ -16,7 +16,7 @@ main past a check written to stop exactly that.
 
 ---
 
-## M1 — Prove the build gates actually run
+## M1 — Prove the build gates actually run ✅
 
 **Goal.** Know that CI runs, what it reports, and that its guards work.
 
@@ -58,10 +58,14 @@ guard was never the problem, and neither was Actions being off.
       capability generator's output was stale, because `Accessibility` gained
       `SetTree` without a regenerate. Not cosmetic — see that commit; the gate
       caught a real thread-safety bug in the a11y bridges.
-- [ ] `test (framework)` failure: **not reproducible locally.** Passes with
-      `-race` on darwin/arm64 and in a linux/arm64 container, with both the
-      stale and the regenerated code. CI is linux/amd64; emulating that under
-      podman is too slow to be practical. Needs the job log.
+- [x] `test (framework)` failure found and fixed (e4b5d3d). It was not
+      reproducible locally for a good reason: `TestSystemFontFallback` asserted
+      that a CJK glyph resolves to a real system font, and the runner has no
+      CJK font installed, so fontscan returned an arbitrary face whose glyph
+      for 你 is 0. Routing and coverage are now asserted separately — routing
+      holds anywhere, coverage skips with the package name to install — and CI
+      installs `fonts-noto-cjk` and sets `GOPHICS_REQUIRE_SYSTEM_CJK=1` so a
+      missing glyph is a failure there rather than a silent skip.
 - [x] A red run now stops something: `.githooks/pre-push` runs
       `scripts/gates.sh` — the same script CI's lint job runs, so the two
       cannot drift — and refuses the push if any gate fails (~2s). Install per
@@ -72,8 +76,20 @@ guard was never the problem, and neither was Actions being off.
       per-clone, opt-in and bypassable, and it cannot run the test suite. Worth
       turning on before this repo goes public or gains a second contributor.
 
-**Exit.** A named CI run is green on `main`, and the oversized-file gate has
-been shown to fail on a deliberately oversized file (done — see above).
+**Exit — met (2026-08-16).** Run #69 is green on `main`, the first green run
+this repo has had. The oversized-file gate was shown to fail twice over: once
+against a deliberately staged 3 MB file, and once for real, when the pre-push
+hook rejected a push carrying one.
+
+**What this milestone was actually about.** The premise — "either the workflow
+is not running, or it failed and nobody looked" — turned out to be the second,
+and the local evidence pointed hard at the first: the gate worked when tested,
+and CI triggers on every push, so it looked as though nothing could have run.
+That reasoning was wrong in a way worth remembering. A guard that runs, fails,
+and blocks nothing is indistinguishable from a guard that never ran, unless you
+go and look. Both failures had been red for weeks and both were real: a stale
+generator hiding a thread-safety bug in the a11y bridges, and a test that
+could only ever fail on the machine it was written to protect.
 
 ---
 
