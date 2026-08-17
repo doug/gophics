@@ -2316,6 +2316,15 @@ func wndProc(hwnd windows.HWND, message uint32, wParam, lParam uintptr) uintptr 
 		p.queueEvent(Event{Type: EventClose, WindowID: w.id})
 		return 0
 
+	case wmGetObject:
+		// A screen reader attaching asks for our automation tree. Only
+		// UiaRootObjectId is answered, and only once a tree has been
+		// published; anything else falls through to DefWindowProc, which is
+		// how a window with nothing to say stays silent.
+		if ret, handled := handleGetObject(hwnd, wParam, lParam); handled {
+			return ret
+		}
+
 	case wmGetMinMaxInfo:
 		mmi := (*minMaxInfo)(unsafe.Pointer(lParam)) //nolint:govet // lParam is MINMAXINFO*
 		// Let DefWindowProc fill defaults first.
