@@ -13,6 +13,7 @@ package gles
 // and shared between Windows (WGL) and Linux (EGL) adapters.
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/doug/gophics/internal/gfx/gputypes"
@@ -112,6 +113,37 @@ func queryAdapterCapabilities(glCtx *gl.Context) AdapterCapabilities {
 	)
 
 	return caps
+}
+
+// Usable reports whether this GL implementation is new enough to run the
+// renderer at all.
+//
+// The backend needs vertex array objects, which arrived in desktop GL 3.0 and
+// ES 3.0, and the shaders it compiles need GLSL 3.30 / ES 3.00. Anything older
+// cannot run it — not slowly, not at reduced quality, at all.
+//
+// This has to be checked before an adapter is offered, not while using it.
+// Windows will happily hand back a "GDI Generic" OpenGL 1.1 context when there
+// is no graphics driver — inside a VM, over RDP, on a fresh install — and every
+// GL 3.0 entry point is then a null pointer. Calling one is an access violation
+// at PC=0, which is how a gophics app died on first launch in a UTM VM: the
+// adapter was enumerated, selected, and crashed on the first VAO call in
+// Adapter.Open.
+func (c AdapterCapabilities) Usable() bool {
+	if c.IsES {
+		return c.GLMajor >= 3
+	}
+	return c.GLMajor > 3 || (c.GLMajor == 3 && c.GLMinor >= 3)
+}
+
+// UnusableReason explains, for a log line, why Usable said no.
+func (c AdapterCapabilities) UnusableReason() string {
+	want := "OpenGL 3.3+"
+	if c.IsES {
+		want = "OpenGL ES 3.0+"
+	}
+	return fmt.Sprintf("%s reports %q (%d.%d); %s is required",
+		c.Renderer, c.Version, c.GLMajor, c.GLMinor, want)
 }
 
 // ---------------------------------------------------------------------------

@@ -129,6 +129,13 @@ func (i *Instance) EnumerateAdapters(_ hal.Surface) []hal.ExposedAdapter {
 	}
 
 	caps := queryAdapterCapabilities(glCtx)
+	if !caps.Usable() {
+		// Offering this adapter would crash rather than run slowly: every GL
+		// 3.0 entry point is null on such a context. Reporting none lets the
+		// caller fall back instead.
+		hal.Logger().Warn("gles: no usable GL adapter", "reason", caps.UnusableReason())
+		return nil
+	}
 
 	version := glCtx.GetString(gl.VERSION)
 	renderer := glCtx.GetString(gl.RENDERER)

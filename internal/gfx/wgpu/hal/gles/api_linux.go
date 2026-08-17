@@ -182,6 +182,12 @@ func (i *Instance) EnumerateAdapters(surfaceHint hal.Surface) []hal.ExposedAdapt
 
 	// Priority 2: instance-level context (created in CreateInstance via pbuffer/surfaceless)
 	if i.glCtx != nil {
+		if caps := queryAdapterCapabilities(i.glCtx); !caps.Usable() {
+			// Same rule as Windows: a context too old for VAOs would crash on
+			// the first call in Adapter.Open rather than run slowly.
+			hal.Logger().Warn("gles: no usable GL adapter", "reason", caps.UnusableReason())
+			return nil
+		}
 		return []hal.ExposedAdapter{
 			makeAdapterFromGL(i.glCtx, i.eglCtx),
 		}

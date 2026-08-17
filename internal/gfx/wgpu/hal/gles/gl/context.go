@@ -571,18 +571,32 @@ func (c *Context) UnmapBuffer(target uint32) bool {
 
 // --- VAO ---
 
+// GenVertexArrays returns 0 when the entry point is absent — GL below 3.0, such
+// as the "GDI Generic" 1.1 context Windows falls back to with no driver.
+// Callers should not reach here (EnumerateAdapters rejects such a context), but
+// calling a null pointer is an access violation with an empty stack, which is a
+// miserable thing to debug for the sake of one comparison.
 func (c *Context) GenVertexArrays(n int32) uint32 {
+	if c.glGenVertexArrays == 0 {
+		return 0
+	}
 	var vao uint32
 	syscall.SyscallN(c.glGenVertexArrays, uintptr(n), uintptr(unsafe.Pointer(&vao)))
 	return vao
 }
 
 func (c *Context) DeleteVertexArrays(arrays ...uint32) {
+	if c.glDeleteVertexArrays == 0 || len(arrays) == 0 {
+		return
+	}
 	syscall.SyscallN(c.glDeleteVertexArrays, uintptr(len(arrays)),
 		uintptr(unsafe.Pointer(&arrays[0])))
 }
 
 func (c *Context) BindVertexArray(array uint32) {
+	if c.glBindVertexArray == 0 {
+		return
+	}
 	syscall.SyscallN(c.glBindVertexArray, uintptr(array))
 }
 
