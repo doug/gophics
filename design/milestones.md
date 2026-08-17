@@ -72,9 +72,12 @@ guard was never the problem, and neither was Actions being off.
       clone with `git config core.hooksPath .githooks`; `--no-verify` bypasses.
       Verified by breaking each gate in turn, including a real push that the
       hook rejected.
-- [ ] Branch protection requiring CI is still the stronger fix: a hook is
-      per-clone, opt-in and bypassable, and it cannot run the test suite. Worth
-      turning on before this repo goes public or gains a second contributor.
+- [x] **Branch protection: declined (2026-08-16).** It is the stronger guard —
+      a hook is per-clone, opt-in, bypassable, and cannot run the test suite —
+      but this is a single-author private repo where requiring a four-minute
+      check on every push costs more than it saves. The pre-push hook is the
+      accepted answer. Revisit only if the repo gains a second contributor;
+      until then a red run is a signal to read, not a gate.
 
 **Exit — met (2026-08-16).** Run #69 is green on `main`, the first green run
 this repo has had. The oversized-file gate was shown to fail twice over: once
