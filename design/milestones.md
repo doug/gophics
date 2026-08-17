@@ -353,16 +353,44 @@ Structure, names, control types, enabled and focusable states, and
 InvokePattern on the button alone. The app side shows the handshake:
 `WM_GETOBJECT lParam=-25` → `returning provider`.
 
-- [ ] **BoundingRectangle reaches the client as zero.** Known, and narrowed but
-      not solved. The provider is asked and answers correctly — traced on
-      device, `bounds id=3 node=(111,129 97x32) screen=(275,316)` for the
-      Increment button — yet both `Current.BoundingRectangle` and an explicit
-      `GetCurrentPropertyValue` come back `0,0,0,0`. Property 30001 is never
-      requested from us, so UIA is using the fragment method, getting real
-      numbers, and reporting zeros anyway. Giving the fragment root the
-      window's own rect (UIA clips descendants to it) did not change it.
-      A screen reader needs this to place its highlight; navigation and
-      activation do not depend on it.
+- [ ] **BoundingRectangle reaches the client as zero.** Still open after a
+      systematic hunt; what follows is so the next attempt does not repeat it.
+
+      Established on device:
+
+      - `get_BoundingRectangle` **is** called, for every node, with correct
+        screen coordinates — `bounds id=3 node=(111,129 97x32) screen=(223,264)`
+        for the Increment button.
+      - Returning a hardcoded `100,100 200x50` from that method changes nothing
+        at the client, so this is delivery, not arithmetic.
+      - Property 30001 is never requested; UIA uses the fragment method.
+      - The HWND is healthy: `GetWindowRect` gives `156,156 336x259` and the
+        window is visible. The host provider is handed over successfully
+        (`UiaHostProviderFromHwnd` → `hr=0x0`, non-null).
+      - Writing through an out-parameter works in general — `GetPropertyValue`
+        fills a VARIANT the same way and Name, ControlType and the rest all
+        arrive intact.
+
+      Ruled out: implementing 30001 as a property; giving the fragment root the
+      window's rect; `NativeWindowHandle` (worse — answering it with our own
+      HWND makes UIA re-enter the host provider and the tree becomes an endless
+      chain of window elements); the not-supported sentinel.
+
+      Not yet ruled out, and where to start next: **the client**. The native
+      windows it reads correctly are HWND-based, where UIA derives geometry
+      itself, so nothing has yet proved this client can surface *provider*
+      -supplied rects at all. A native UIA client (IUIAutomation via COM) or
+      Accessibility Insights would settle it. Also worth checking whether the
+      fragment root failing `ElementProviderFromPoint` with E_NOTIMPL makes UIA
+      distrust the fragment's geometry.
+
+      Navigation, properties and activation do not depend on this; a screen
+      reader's highlight does.
+- [x] Returning UIA's reserved not-supported value for properties we do not
+      answer. `VT_EMPTY` is not "no opinion" to UIA — it is "the value is
+      empty", and it overrides whatever the host provider would have said. This
+      did not fix the rectangle, but it is correct provider behaviour and was
+      wrong before.
 - [ ] Confirm with Narrator itself, the counterpart to the Orca pass.
 - [ ] `AnnounceA11y` — UIA delivers announcements as a NotificationEvent, which
       needs `UiaRaiseNotificationEvent`. Currently a documented no-op.

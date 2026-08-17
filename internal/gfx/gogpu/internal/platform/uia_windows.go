@@ -45,6 +45,7 @@ var (
 	procUiaHostProviderFromHwnd     = uiaCore.NewProc("UiaHostProviderFromHwnd")
 	procUiaRaiseAutomationEvent     = uiaCore.NewProc("UiaRaiseAutomationEvent")
 	procUiaDisconnectProvider       = uiaCore.NewProc("UiaDisconnectProvider")
+	procUiaGetReservedNotSupported  = uiaCore.NewProc("UiaGetReservedNotSupportedValue")
 
 	// The window's own rectangle. The fragment root must report real bounds:
 	// UIA clips descendants to it, so a zero-sized root makes every element
@@ -74,11 +75,12 @@ const providerOptionsServerSide = 1
 
 // VARIANT types.
 const (
-	vtEmpty = 0
-	vtI4    = 3
-	vtBSTR  = 8
-	vtBool  = 11
-	vtR8    = 5
+	vtEmpty   = 0
+	vtI4      = 3
+	vtBSTR    = 8
+	vtBool    = 11
+	vtR8      = 5
+	vtUnknown = 13
 	// VT_ARRAY is a modifier: a SAFEARRAY of the base type.
 	vtArray = 0x2000
 )
@@ -137,6 +139,37 @@ func sysAllocString(s string) uintptr {
 	}
 	r, _, _ := procSysAllocString.Call(uintptr(unsafe.Pointer(p)))
 	return r
+}
+
+// notSupported is UIA's sentinel for "this provider does not supply that
+// property — fall back".
+//
+// This distinction is the whole ballgame for a provider that hosts an HWND.
+// VT_EMPTY does not mean "I have no opinion"; it means "the value is empty",
+// and UIA takes it at its word, overriding whatever the host provider would
+// have said. Return it for BoundingRectangle and the window reports no size,
+// which then clips every descendant to nothing — a tree that reads perfectly
+// and cannot be highlighted or hit-tested.
+var (
+	notSupportedOnce sync.Once
+	notSupportedVal  uintptr
+)
+
+func reservedNotSupported() uintptr {
+	notSupportedOnce.Do(func() {
+		procUiaGetReservedNotSupported.Call(uintptr(unsafe.Pointer(&notSupportedVal)))
+	})
+	return notSupportedVal
+}
+
+// setNotSupported marks a variant as "ask someone else".
+func (v *variant) setNotSupported() {
+	p := reservedNotSupported()
+	if p == 0 {
+		v.setEmpty()
+		return
+	}
+	*v = variant{vt: vtUnknown, val: p}
 }
 
 // uiaRect is UiaRect: four doubles, in screen coordinates.

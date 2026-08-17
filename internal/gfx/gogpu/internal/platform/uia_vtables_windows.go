@@ -85,6 +85,12 @@ func vtSimple() uintptr {
 				return eElementNotAvailable
 			}
 			e.property(propID, v)
+			// Anything we did not answer must say so explicitly, or UIA treats
+			// the empty variant as a real, empty value and stops consulting the
+			// host provider.
+			if v.vt == vtEmpty {
+				v.setNotSupported()
+			}
 			return sOK
 		})
 
@@ -103,7 +109,8 @@ func vtSimple() uintptr {
 			if e == nil || e.id != rootElemID {
 				return sOK
 			}
-			procUiaHostProviderFromHwnd.Call(uintptr(e.prov.hwnd), uintptr(unsafe.Pointer(out)))
+			hr, _, _ := procUiaHostProviderFromHwnd.Call(uintptr(e.prov.hwnd), uintptr(unsafe.Pointer(out)))
+			uiaLogf("hostProvider hwnd=%#x hr=%#x ptr=%#x", uintptr(e.prov.hwnd), hr, *out)
 			return sOK
 		})
 	})

@@ -26,6 +26,7 @@ func (e *uiaElem) property(id int32, v *variant) {
 	v.setEmpty()
 
 	if e.id == rootElemID {
+		uiaLogf("ROOT prop id=%d", id)
 		e.rootProperty(id, v)
 		return
 	}
@@ -62,6 +63,8 @@ func (e *uiaElem) property(id int32, v *variant) {
 		v.setBool(true)
 	case propIsOffscreen:
 		v.setBool(false)
+	case propProcessID:
+		v.setI4(int32(windows.GetCurrentProcessId()))
 	case propBoundingRectangle:
 		// Also served by IRawElementProviderFragment.get_BoundingRectangle, but
 		// that is not the route clients take: UIA asks for the property, and a
@@ -93,8 +96,11 @@ func (e *uiaElem) rootProperty(id int32, v *variant) {
 		v.setBool(false)
 	case propAutomationID:
 		v.setString("gophics.root")
+	case propProcessID:
+		v.setI4(int32(windows.GetCurrentProcessId()))
 	case propBoundingRectangle:
 		l, t, w, h := e.prov.windowRect()
+		uiaLogf("ROOT bounds -> %v,%v %vx%v", l, t, w, h)
 		v.setRect(l, t, w, h)
 	case propName:
 		// The window's own title is what the shell already shows; leaving this

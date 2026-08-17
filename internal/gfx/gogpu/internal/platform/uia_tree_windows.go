@@ -44,8 +44,15 @@ const (
 
 // UIA property IDs (UIA_*PropertyId).
 const (
-	propRuntimeID            = 30000
-	propBoundingRectangle    = 30001
+	propRuntimeID         = 30000
+	propBoundingRectangle = 30001
+	propProcessID         = 30002
+	// NativeWindowHandle. Deliberately *not* implemented: answering it with
+	// our own HWND makes UIA re-enter the host provider it already gave us,
+	// and the tree comes back as an endless chain of identical window
+	// elements. The host provider is what ties us to the HWND; this must stay
+	// unanswered.
+	propNativeWindowHandle   = 30020
 	propControlType          = 30003
 	propName                 = 30005
 	propHasKeyboardFocus     = 30008
