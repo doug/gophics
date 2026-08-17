@@ -292,13 +292,25 @@ platform is blocked on feasibility.
       second word of the state bitset — and a wrong one does not fail loudly, it
       makes a button announce as something else.
 
-- [ ] **Signals.** The tree is answered correctly on demand, but nothing is
-      emitted when it changes, so a screen reader that has already read a node
-      will not notice it move, change label, or become checked until it
-      re-queries. `object:children-changed` and `object:state-changed` on
-      `org.a11y.atspi.Event.Object` are the next increment, and the reason
-      `AnnounceA11y` is still a documented no-op — announcements are delivered
-      as events too.
+- [x] **Change events, verified at a real client.** Serving on demand was only
+      half of it: a screen reader reads a node once and then waits to be told.
+      All five arrive —
+
+          EVENT|object:property-change:accessible-name|0||
+          EVENT|object:state-changed:checked|1|Agree|
+          EVENT|object:children-changed:add|2|Root|
+          EVENT|object:announcement|2|gophics-atspi-events|5 results
+          EVENT|object:children-changed:remove|2|Root|
+
+      Events come from diffing successive trees, not from republishing. gophics
+      rebuilds whenever the widget tree changes, which for an animating UI is
+      every frame; broadcasting an unchanged tree at 60Hz would drown the bus
+      and make a reader unusable. Tests pin the quiet cases too: an identical
+      republish emits nothing, and a node that merely *moves* emits nothing,
+      since bounds are not state.
+
+      `AnnounceA11y` works now as well — announcements are delivered as events,
+      so they could not exist before this.
 - [ ] Confirm with Orca itself. pyatspi proves the protocol; Orca proves the
       experience, and it installs in the same container.
 - [ ] Run a real gophics window under Xvfb, rather than a tree published

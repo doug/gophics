@@ -52,6 +52,8 @@ type atspiBridge struct {
 	parent   objRef // the desktop, learned from Embed
 	appName  string
 
+	published bool // whether a tree has been published yet
+
 	stop chan struct{}
 	once sync.Once
 }
@@ -124,12 +126,35 @@ func (b *atspiBridge) embed() {
 	// never replies is not fatal.
 }
 
-// SetTree replaces the published tree.
+// SetTree replaces the published tree and tells anyone listening what changed.
+//
+// The diff happens outside the lock: emitting means writing to a socket, and
+// holding the tree lock across that would stall every query the screen reader
+// makes while we talk to it.
 func (b *atspiBridge) SetTree(nodes []A11yNode, activate func(id int)) {
+	next := buildTree(nodes)
+
 	b.mu.Lock()
-	b.tree = buildTree(nodes)
+	prev := b.tree
+	b.tree = next
 	b.activate = activate
+	first := !b.published
+	b.published = true
 	b.mu.Unlock()
+
+	if first {
+		b.emitDiff(nil, next)
+		return
+	}
+	b.emitDiff(prev, next)
+}
+
+// Announce speaks a transient message through the screen reader.
+func (b *atspiBridge) Announce(message string, assertive bool) {
+	if message == "" {
+		return
+	}
+	b.announce(message, assertive)
 }
 
 // Close shuts the connection down.

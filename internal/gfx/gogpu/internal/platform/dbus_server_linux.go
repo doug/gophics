@@ -156,3 +156,16 @@ func dbusEncodeError(serial, replyTo uint32, dest, errName, message string) []by
 	dbusWriteHdrField(hdr, dbusFieldSignature, "g", func() { hdr.sig("s") })
 	return dbusAssembleMsg(dbusMsgError, 0, serial, hdr.data, body.data)
 }
+
+// dbusEncodeSignal builds a SIGNAL. Signals are broadcast, so unlike a reply
+// there is no destination — the bus routes them to whoever has a match rule.
+func dbusEncodeSignal(serial uint32, path, iface, member, bodySig string, body []byte) []byte {
+	hdr := newMsgBuf(16)
+	dbusWriteHdrField(hdr, dbusFieldPath, "o", func() { hdr.objPath(path) })
+	dbusWriteHdrField(hdr, dbusFieldInterface, "s", func() { hdr.str(iface) })
+	dbusWriteHdrField(hdr, dbusFieldMember, "s", func() { hdr.str(member) })
+	if bodySig != "" {
+		dbusWriteHdrField(hdr, dbusFieldSignature, "g", func() { hdr.sig(bodySig) })
+	}
+	return dbusAssembleMsg(dbusMsgSignal, 0, serial, hdr.data, body)
+}

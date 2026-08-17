@@ -47,12 +47,11 @@ func (h *atspiHost) SetA11yTree(nodes []A11yNode, activate func(id int)) {
 }
 
 // AnnounceA11y implements A11yWindow.
-//
-// Announcements are a documented no-op for now. AT-SPI delivers them as
-// object:announcement events, which means emitting signals — the piece the
-// bridge does not have yet — and a silent no-op is better than a fabricated
-// one, since the tree itself is already being read correctly.
-func (h *atspiHost) AnnounceA11y(message string, assertive bool) {}
+func (h *atspiHost) AnnounceA11y(message string, assertive bool) {
+	if b := h.get(); b != nil {
+		b.Announce(message, assertive)
+	}
+}
 
 // a11yAppName is what the screen reader announces when focus enters the
 // window. The executable's name is not a great title, but it is honest and it
