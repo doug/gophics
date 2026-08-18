@@ -859,6 +859,21 @@ func unpackPixels(data []byte, width, height int) *image.RGBA {
 // logPipelineDiagnostics reads back key intermediate buffers and logs their state.
 // This detects silent pipeline failures (e.g., all-zero output from a broken stage).
 func (a *VelloAccelerator) logPipelineDiagnostics(bufs *VelloComputeBuffers, config VelloComputeConfig, totalPathTiles uint32) {
+	// Every check below reads a GPU buffer back to host memory, and a readback
+	// is a submit, a wait for the GPU to go idle, and a map — milliseconds
+	// each, on a path that runs once per frame. With the default no-op logger
+	// none of it was ever printed, so this was pure cost: it dominated the
+	// compute pipeline's frame time so completely that its benchmark came out
+	// flat at ~4.5ms regardless of what the scene contained.
+	//
+	// Gated on Debug rather than on the individual log levels because the
+	// expense is the readback, not the logging. A caller who turns on Info
+	// should not start paying for a dozen GPU stalls per frame to populate
+	// messages they will not see.
+	if !slogger().Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
+
 	le := binary.LittleEndian
 
 	// Dump config for debugging.

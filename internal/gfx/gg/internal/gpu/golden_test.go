@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
 	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"github.com/doug/gophics/internal/gfx/gg/scene"
@@ -447,15 +446,12 @@ func TestVelloComputeGolden(t *testing.T) {
 		t.Skip("compute pipeline not available")
 	}
 
-	// Tied to the same flag that gates automatic selection, so the two can
-	// never disagree about whether compute is trusted. These cases skipped
-	// silently for a long time — first because the pipeline would not build,
-	// then because it built and rendered wrongly — and each silence hid the
-	// next problem. If anyone pins AutoSelectCompute off, this stops claiming
-	// the compute path is verified.
-	if !gg.AutoSelectCompute {
-		t.Skip("compute auto-selection is pinned off; skipping the compute equivalence check")
-	}
+	// Deliberately NOT gated on gg.AutoSelectCompute. Whether the compute path
+	// is correct and whether it is fast enough to be chosen automatically are
+	// different questions, and tying the correctness check to the performance
+	// policy is how this pipeline hid four bugs behind each other: it would not
+	// build, so CanCompute() was false, so these cases skipped, so nobody
+	// learned it did not build. The gate now is availability alone.
 
 	tests := computeGoldenTests()
 

@@ -53,24 +53,36 @@ type SceneStats struct {
 //   - Default for medium complexity: Compute
 //
 // AutoSelectCompute controls whether PipelineModeAuto may choose the compute
-// pipeline. It is true: the compute path now matches the CPU rasterizer
-// exactly on every scene in TestVelloComputeGolden.
+// pipeline. It is false — on measurement, not on doubt about correctness.
 //
-// It exists because that was not always so, and the sequence is worth keeping.
-// The compute pipeline failed to build at all on Metal, so CanCompute() was
-// false everywhere, auto-selection could never reach it, and TestVelloComputeGolden
-// skipped — three bugs hiding behind each other. Fixing the build made the
-// path selectable and made those goldens run for the first time, and they
-// failed: 12–29% of pixels wrong. This flag held the previous *behaviour*
-// while the fixes stayed in, so no real app could silently switch to a broken
-// renderer mid-scene, while explicit PipelineModeCompute kept the path
-// reachable to work on.
+// The compute path is correct: it matches the CPU rasterizer pixel for pixel on
+// every scene in TestVelloComputeGolden, and those tests run whenever a GPU is
+// present, independent of this flag. What it is not, on the evidence so far, is
+// faster. Against the CPU rasterizer on this machine:
 //
-// It gates only the automatic choice, never the heuristic: SelectPipeline
-// stays a pure function of its inputs, so its tests describe the policy rather
-// than the readiness of the thing the policy selects. Set it false to pin the
-// render-pass path — for a bisect, or if a compute regression ever surfaces.
-var AutoSelectCompute = true
+//	 256px,  16 paths   2.87ms vs  1.29ms   2.2x slower
+//	 512px,  64 paths   6.05ms vs  4.77ms   1.3x slower
+//	1024px, 256 paths   18.0ms vs  18.7ms   parity
+//	2048px, 512 paths   65.6ms vs  66.7ms   parity
+//
+// SelectPipeline switches to compute above 50 shapes, which is the 512px row —
+// where it is measurably slower. Defaulting to it there would trade a known
+// cost for a hoped-for benefit.
+//
+// The measurement is not the last word, and the flag is not a verdict. The only
+// headless harness for the compute path renders and then reads the whole
+// framebuffer back to host memory — 16MB at 2048px — which a real frame would
+// never pay, and the render-pass path it would actually replace needs a surface
+// and cannot be benchmarked headlessly at all. So these numbers bound the
+// compute path from below and say nothing yet about the comparison that
+// matters. Until that comparison exists, the default stays where the evidence
+// is.
+//
+// Set true to opt in; PipelineModeCompute always works when asked for
+// explicitly. This gates only the automatic choice, never the heuristic:
+// SelectPipeline stays a pure function of its inputs, so its tests describe the
+// policy rather than the readiness of what the policy selects.
+var AutoSelectCompute = false
 
 func SelectPipeline(stats SceneStats, hasComputeSupport bool) PipelineMode {
 	if !hasComputeSupport {

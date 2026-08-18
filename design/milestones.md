@@ -813,13 +813,63 @@ no check at all, which is why buffer checks are now off rather than left on.
 cost with no user. The decision needs numbers and a correctness record, and
 those only exist after M10 and M11.
 
-- [ ] Benchmark both paths on the same scenes: large fills, gradients, text,
-      blurred backdrops, and a scrolling list — the cases that hurt today.
+**Status: measured, decision deferred, default set to the evidence.**
+
+- [x] Benchmark the compute path against the CPU rasterizer
+      (`BenchmarkComputeVsCPU`, `BenchmarkComputeScaling`). On this machine:
+
+      | scene | compute | CPU | |
+      |---|---|---|---|
+      | 256px, 16 paths | 2.87ms | 1.29ms | 2.2× slower |
+      | 512px, 64 paths | 6.05ms | 4.77ms | 1.3× slower |
+      | 1024px, 256 paths | 18.0ms | 18.7ms | parity |
+      | 2048px, 512 paths | 65.6ms | 66.7ms | parity |
+
+- [x] **`gg.AutoSelectCompute` is false**, on that measurement rather than on
+      any doubt about correctness. `SelectPipeline` switches to compute above 50
+      shapes, which is the 512px row — where it is measurably slower. It was
+      briefly true after M11, set on correctness evidence alone; that was the
+      wrong basis, and this milestone exists to correct exactly that.
+- [x] **Decoupled the correctness tests from the policy flag.**
+      `TestVelloComputeGolden` and `TestPathTilingFillsEveryReservedSegment` now
+      run whenever a GPU is present. Whether the path is *correct* and whether
+      it is *fast enough to choose automatically* are different questions, and
+      tying them together is precisely how four bugs hid behind one another
+      through M10 and M11.
+- [x] **Fixed a real per-frame cost the benchmark exposed.**
+      `logPipelineDiagnostics` read back a dozen GPU buffers on every render —
+      each one a submit, a wait for idle, and a map — with the default no-op
+      logger discarding every message. It cost ~3.3ms per frame, so the compute
+      benchmark came out flat at ~4.5ms whatever the scene contained. Gated on
+      Debug being enabled; blue-square frame time went 4.20ms → 1.14ms.
+
+**What the numbers do not say.** They bound the compute path from below and
+nothing more, for two reasons worth stating plainly rather than discovering
+later:
+
+- The only headless harness for the compute path renders and then reads the
+  entire framebuffer back to host memory — 16MB at 2048px. A real frame keeps
+  the result on the GPU and composites it. A large and unknown share of these
+  timings is a transfer a renderer would never make.
+- The render-pass pipeline it would actually replace **cannot be benchmarked
+  headlessly at all**: it needs a window and surface. So the comparison that
+  decides this milestone has not been run. Compute-versus-CPU is a proxy, and a
+  poor one.
+
+Two per-frame costs are also visible and probably fixable before any verdict:
+buffers are allocated and destroyed every frame, and the pipeline reallocates
+rather than reusing across frames of the same size.
+
+- [ ] Build an offscreen harness that renders through both GPU pipelines without
+      a surface and without a readback, and compare those.
+- [ ] Reuse buffers across frames instead of allocating per render.
 - [ ] Run the full `gophics_gpu` suite against both on Metal and on Vulkan (the
       Pixel), since a compute pipeline is where backends diverge most.
-- [ ] Decide: default, opt-in behind a tag, or removed. Removing is a real
+- [ ] Then decide: default, opt-in behind a tag, or removed. Removing is a real
       option and a better outcome than carrying an unused second renderer.
 - [ ] Whichever way it goes, update PLAN §5 to say what was measured.
 
 **Exit.** A decision recorded with the numbers behind it, and one renderer that
-is clearly the default.
+is clearly the default. Not yet reached: the numbers so far are the wrong
+comparison, and the honest thing is to say so rather than to declare a winner
+from a proxy.

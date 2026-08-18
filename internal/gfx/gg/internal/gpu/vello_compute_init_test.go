@@ -2,11 +2,7 @@
 
 package gpu
 
-import (
-	"testing"
-
-	"github.com/doug/gophics/internal/gfx/gg"
-)
+import "testing"
 
 // TestVelloComputeInitialisesOnRealDevice asserts that the compute vector
 // pipeline actually builds on this machine's GPU.
@@ -85,10 +81,6 @@ func TestVelloAcceleratorReportsCompute(t *testing.T) {
 // The check itself lives in logPipelineDiagnostics, which warns whenever
 // reserved != written; this drives a render and lets that fire.
 func TestPathTilingFillsEveryReservedSegment(t *testing.T) {
-	if !gg.AutoSelectCompute {
-		t.Skip("compute auto-selection is pinned off; skipping the path_tiling invariant check")
-	}
-
 	accel := &VelloAccelerator{}
 	if err := accel.initGPU(); err != nil {
 		t.Skipf("GPU not available: %v", err)
