@@ -89,6 +89,14 @@ jobs:
           GOPHICS_REQUIRE_SYSTEM_CJK: "1"
         run: go test -race -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
 
+      # The nogpu build was compiled but never exercised. It is the pure-CPU
+      # fallback, and it is not hypothetical: a machine with no graphics driver
+      # — a VM, an RDP session, a fresh Windows install — lands on it, which is
+      # exactly what happened when a gophics app was first run under UTM.
+      # Compiling it proves the tags line up; running it proves the path works.
+      - name: framework tests (pure-CPU, -tags nogpu)
+        run: go test -tags nogpu -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
+
   test-substrate:
     name: test (substrate, best-effort)
     runs-on: macos-latest
