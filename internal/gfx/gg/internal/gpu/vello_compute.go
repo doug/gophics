@@ -68,6 +68,11 @@ const (
 	// velloPTCLMaxPerTile is the maximum PTCL words per tile.
 	// Each tile's command list is bounded to this size.
 	velloPTCLMaxPerTile = 1024
+
+	// velloPathSegmentSize is sizeof(PathSegment) in bytes: 5 f32 fields.
+	// Package-level because both the buffer sizing and the diagnostic that
+	// checks path_tiling filled what coarse reserved have to agree on it.
+	velloPathSegmentSize = 5 * 4
 )
 
 // =============================================================================
@@ -753,7 +758,6 @@ func (d *VelloComputeDispatcher) computeBufferSizes(
 		pathMonoidSize   = 5 * 4 // PathMonoid: 5 u32 fields = 20 bytes
 		drawMonoidSize   = 4 * 4 // DrawMonoid: 4 u32 fields = 16 bytes
 		tileSize         = 2 * 4 // Tile: 2 fields (i32 + u32) = 8 bytes
-		pathSegmentSize  = 5 * 4 // PathSegment: 5 f32 fields = 20 bytes
 		segmentCountSize = 2 * 4 // SegmentCount: 2 u32 fields = 8 bytes
 	)
 
@@ -782,7 +786,7 @@ func (d *VelloComputeDispatcher) computeBufferSizes(
 		paths:           uint64(pathWords) * 4,
 		tiles:           uint64(totalPathTiles) * tileSize, // per-path tile allocation, NOT global grid
 		segCounts:       estimatedSegments * segmentCountSize,
-		segments:        estimatedSegments * pathSegmentSize,
+		segments:        estimatedSegments * velloPathSegmentSize,
 		ptcl:            uint64(globalTiles) * velloPTCLMaxPerTile * 4,
 		bumpAlloc:       16,
 		tilePTCLOffsets: uint64(globalTiles) * 4,

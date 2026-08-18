@@ -770,9 +770,37 @@ as three bugs. It took a test that demanded the true path to find them.
 - [x] Pin all three with tests that fail without the fix
       (`TestVelloComputeInitialisesOnRealDevice`,
       `TestSelectAsBinaryOperandIsParenthesised`).
-- [ ] **Fix the fill bleed.** With the pipeline building, the golden tests run
-      for the first time and fail: 12–29% of pixels differ from the CPU
-      reference. It is characterised, not guesswork — on
+- [ ] **Fix the fill bleed — traced to `path_tiling`.** With the pipeline
+      building, the golden tests run for the first time and fail: 12–29% of
+      pixels differ from the CPU reference.
+
+      **The cause is now located.** `coarse` reserves a run of segment slots
+      per tile with an atomic bump, and `path_tiling` fills them. Nothing
+      checked that the second step covered the first, and it does not: for a
+      plain filled rectangle the bump reports **16 reserved slots and
+      path_tiling writes 8**, leaving the rest zeroed — and two of the eight
+      that are written are byte-identical, so the write indices collide rather
+      than simply stopping early. A tile whose `~seg_ix` points into the
+      unwritten half finds degenerate segments and falls back to its backdrop
+      alone: solid where the backdrop is 1, empty where it is 0. That is
+      exactly the observed picture — a fill that starts in the right place and
+      then runs to the tile edge.
+
+      `logPipelineDiagnostics` now warns on that mismatch, and
+      `TestPathTilingFillsEveryReservedSegment` pins it. The next step is the
+      slot index in `path_tiling` — `seg_start + seg_within_slice`, where
+      `seg_within_slice` is the order `path_count` returned from its per-tile
+      `atomicAdd`. Two records landing on the same `(tile, order)` pair would
+      produce precisely this.
+
+      Everything around it was checked and is **sound**: the bump allocator
+      does not overflow, per-tile bases are distinct and cover 0..15 exactly,
+      every stage's dispatch dimensions scale correctly with canvas size, the
+      `PTCL_MAX_PER_TILE` stride agrees across both shaders and Go, `coarse`
+      maps global tile indices to per-path ones correctly, and the Config
+      struct layout matches the WGSL declaration field for field.
+
+      The original characterisation, which still holds — on
       `compute_blue_square`, a 64×64 target with a 4×4 grid of 16×16 tiles:
 
       - The CPU reference fills `x=[10..53] y=[10..53]`, a 44×44 square.

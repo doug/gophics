@@ -13,6 +13,7 @@ import (
 	"image/color"
 	"log/slog"
 	"math"
+	"os"
 	"sync"
 
 	"github.com/doug/gophics/internal/gfx/gg"
@@ -874,6 +875,70 @@ func (a *VelloAccelerator) logPipelineDiagnostics(bufs *VelloComputeBuffers, con
 		"drawdata_base", config.DrawDataBase,
 		"transform_base", config.TransformBase,
 		"style_base", config.StyleBase)
+
+	if os.Getenv("VELLO_DUMP_TILES") != "" {
+		if b, e := a.readbackBuffer(bufs.BumpAlloc, 16); e == nil {
+			fmt.Fprintf(os.Stderr, "BUMP seg_counts=%d segments=%d pad0=%d pad1=%d\n",
+				le.Uint32(b[0:4]), le.Uint32(b[4:8]), le.Uint32(b[8:12]), le.Uint32(b[12:16]))
+		}
+		if b, e := a.readbackBuffer(bufs.SegCounts, 64*8); e == nil {
+			fmt.Fprintf(os.Stderr, "SEGCOUNTS first 16: ")
+			for i := 0; i < 16; i++ {
+				fmt.Fprintf(os.Stderr, "(%d,%d) ", le.Uint32(b[i*8:i*8+4]), le.Uint32(b[i*8+4:i*8+8]))
+			}
+			fmt.Fprintln(os.Stderr)
+		}
+		n := totalPathTiles
+		if b, e := a.readbackBuffer(bufs.Tiles, uint64(n)*8); e == nil {
+			fmt.Fprintf(os.Stderr, "TILES (%d, grid %dx%d)\n", n, config.WidthInTiles, config.HeightInTiles)
+			for i := uint32(0); i < n; i++ {
+				bd := int32(le.Uint32(b[i*8 : i*8+4]))
+				sc := le.Uint32(b[i*8+4 : i*8+8])
+				fmt.Fprintf(os.Stderr, "  tile[%2d] (col %d,row %d) backdrop=%d segcount=%d\n",
+					i, i%config.WidthInTiles, i/config.WidthInTiles, bd, sc)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "TILES readback failed: %v\n", e)
+		}
+	}
+
+	// Segments allocated vs segments actually written.
+	//
+	// coarse reserves a slot range per tile with an atomic bump, and
+	// path_tiling fills those slots. Nothing checked that the second step
+	// covered the first, and it does not: for a plain filled rectangle the
+	// bump reports 16 reserved slots while path_tiling writes only 8, leaving
+	// the rest zeroed. A tile pointing into the unwritten half finds
+	// degenerate segments and falls back to its backdrop alone — solid where
+	// the backdrop is 1, empty where it is 0 — which is the fill bleed the
+	// golden tests show.
+	//
+	// Logged as a warning because the pipeline cannot render correctly when it
+	// holds, and it is silent otherwise: every buffer is the right size, every
+	// dispatch is the right shape, and the tile metadata all looks plausible.
+	if b, e := a.readbackBuffer(bufs.BumpAlloc, 16); e == nil {
+		reserved := le.Uint32(b[4:8])
+		if reserved > 0 {
+			if sb, se := a.readbackBuffer(bufs.Segments, uint64(reserved)*velloPathSegmentSize); se == nil {
+				written := uint32(0)
+				for i := uint32(0); i < reserved; i++ {
+					seg := sb[i*velloPathSegmentSize : (i+1)*velloPathSegmentSize]
+					for j := 0; j < len(seg); j += 4 {
+						if le.Uint32(seg[j:j+4]) != 0 {
+							written++
+							break
+						}
+					}
+				}
+				if written != reserved {
+					slogger().Warn("vello-diag: path_tiling did not fill every reserved segment slot",
+						"reserved", reserved, "written", written)
+				} else {
+					slogger().Debug("vello-diag: segments", "reserved", reserved, "written", written)
+				}
+			}
+		}
+	}
 
 	// Check Lines: verify data was uploaded.
 	linesSize := uint64(config.NumLines) * 5 * 4 // 5 u32 per LineSoup
