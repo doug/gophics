@@ -454,50 +454,54 @@ restored, and a demo persists on `StateBackground` and restores on relaunch.
 
 ---
 
-## M7 — Background execution on mobile
+## M7 — Durable background work
 
-**Goal.** Deferred work runs when the app is not in front.
+**Goal.** Work an app declares gets done — eventually, once — whether or not the
+app is open, on every platform.
 
 **Why now.** Nothing in the tree touches WorkManager, JobScheduler,
 BGTaskScheduler or `beginBackgroundTask`, so a gophics goroutine lives only as
 long as the OS lets the process run.
 
-**Target the deferred/periodic half.** "Background task" is two unrelated
-things — a few seconds of grace to finish an upload, versus deferred periodic
-work — but only the second is what people mean by the phrase, and it is the
-harder one. Scope M7 to it.
+**Not a scheduler.** The design (`design/mobile-background.md`) deliberately does
+not wrap the platform schedulers. A `Schedule(name, every: 15m)` API looks like
+it delegates the problem and does not: it leaves every app to solve idempotency,
+retry, backoff, deduplication and persistence alone, which WorkManager does for
+you and BGTaskScheduler does not. Instead gophics owns a durable queue, and the
+platform mechanisms are demoted to what they are — sources of "you may run now".
 
-**Know what it cannot promise before building it.** Neither platform offers a
-schedule. iOS runs `BGAppRefreshTask` opportunistically and stops scheduling it
-entirely for an app the user force-quit, until they launch it by hand; Low Power
-Mode and a Settings switch disable it outright. Android honours a 15-minute
-floor, batches wakeups in Doze, throttles by App Standby bucket, and several OEM
-skins kill background work aggressively. The API must never resemble a ticker,
-and every task must be idempotent and safe to be killed halfway.
+That inversion is what makes iOS's unreliability degrade instead of fail (work
+that cannot run stays queued and runs at next launch), makes the same API work on
+web and desktop, and turns push into an optional wakeup source rather than an
+architecture.
 
-**And check the requirement first, because push may beat this.** For the
-commonest reason to want periodic work — keep the data fresh — iOS's intended
-mechanism is silent push, not the scheduler; BGAppRefresh is for prefetching
-around habitual use. gophics has no push capability at all: `shell/notify.go` is
-local notifications only. If the real requirement is timely data rather than
-periodic work, a push capability is roughly the same size and is the only
-reliable answer on iOS. See `design/mobile-background.md`.
+The capability is `Handle` / `Enqueue` / `KeepFresh` / `Pending`, with payloads
+as `[]byte` rather than closures — work must survive process death, so it cannot
+capture app state, and the signature should force that at compile time rather
+than at 3am on a user's phone. Handlers take a `context.Context` and cannot
+reach the widget tree, because when they run there may be no frames at all.
 
-The design also records why this cannot be an ordinary capability callback:
-when a background task runs there may be no frames, so the `Posted` wrapper
-every other capability relies on would never deliver. Background handlers get a
-`context.Context` and no access to the widget tree, and `RunBackgroundTask` is
-the one Bridge entry point that does not run on the UI goroutine.
-
-- [ ] Confirm the requirement is periodic work rather than timely data. If it
-      is the latter, build push instead and revisit this.
-- [ ] `shell/backgroundtask.go` so capgen generates the plumbing.
-- [ ] Host schedulers, following the MediaHost pattern.
+- [ ] `shell/background.go`, so capgen generates the plumbing.
+- [ ] The durable queue: append-only log, at-least-once, persisted backoff,
+      deadline cancellation. Pure Go, fully testable headlessly — including that
+      at-least-once holds when killed between the work and its acknowledgement.
+- [ ] Wakeup sources, cheapest first: launch and foreground (which alone make
+      the feature useful everywhere), then the iOS backgrounding grace period,
+      then WorkManager, then BGTaskScheduler.
 - [ ] CLI writes task identifiers into `Info.plist` and `AndroidManifest.xml` —
-      the piece most likely to be underestimated, since it is build-system work
-      rather than API work.
+      the piece most likely to be underestimated, being build-system work rather
+      than API work.
 - [ ] Record the device triggers (`adb shell cmd jobscheduler run`, the iOS
       debugger incantation) in the packaging README.
+- [ ] Decide whether the requirement is periodic work or *timely* data. If the
+      latter, push is the only reliable answer on iOS and is roughly the same
+      size; gophics has none today (`shell/notify.go` is local-only).
 
-**Exit.** A demo schedules a task, is backgrounded, and the task is observed to
-run on a physical Android device and a physical iPhone.
+**Exit.** An app enqueues work, is killed, and the work completes on next
+wakeup; and on a physical Android device and a physical iPhone, work enqueued
+while backgrounded completes without the app being reopened.
+
+**Ordering note.** After the queue lands with launch/foreground wakeups, the
+feature already works durably on every platform with no platform-specific code
+at all. Each scheduler after that is an independent improvement, not a
+prerequisite — which is the main practical argument for this shape.
