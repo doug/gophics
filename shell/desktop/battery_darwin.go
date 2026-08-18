@@ -208,16 +208,18 @@ func (w *window) Battery() shell.Battery {
 const sampleTTL = time.Second
 
 type darwinBattery struct {
-	mu      sync.Mutex
+	batteryWatcher
+
+	// The sample cache has its own lock: it is taken on every Level() call,
+	// which can be every frame, and must not contend with the watcher's.
+	cacheMu sync.Mutex
 	last    reading
 	at      time.Time
-	watches []func()
-	polling bool
 }
 
 func (b *darwinBattery) sample() reading {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
 	if !b.at.IsZero() && time.Since(b.at) < sampleTTL {
 		return b.last
 	}
@@ -229,39 +231,7 @@ func (b *darwinBattery) Level() float32 { return b.sample().level }
 
 func (b *darwinBattery) Charging() bool { return b.sample().charging }
 
-// batteryPoll matches the other desktop platforms. IOKit can notify through a
-// run-loop source (IOPSNotificationCreateRunLoopSource), but that needs a
-// CFRunLoop this goroutine does not own; polling a cached read is cheap.
-const batteryPoll = 30 * time.Second
-
 // OnChange registers f, called when the level or charging state changes.
 func (b *darwinBattery) OnChange(f func()) {
-	if f == nil {
-		return
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.watches = append(b.watches, f)
-	if b.polling {
-		return
-	}
-	b.polling = true
-	go b.poll()
-}
-
-func (b *darwinBattery) poll() {
-	prev := b.sample()
-	for range time.Tick(batteryPoll) {
-		cur := b.sample()
-		if cur.level == prev.level && cur.charging == prev.charging {
-			continue
-		}
-		prev = cur
-		b.mu.Lock()
-		watches := append([]func(){}, b.watches...)
-		b.mu.Unlock()
-		for _, f := range watches {
-			f()
-		}
-	}
+	b.watch(f, func() (float32, bool) { return b.Level(), b.Charging() })
 }

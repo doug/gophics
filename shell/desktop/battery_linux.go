@@ -17,8 +17,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/doug/gophics/shell"
 )
@@ -71,9 +69,7 @@ func readFile(path string) string {
 }
 
 type linuxBattery struct {
-	mu      sync.Mutex
-	watches []func()
-	polling bool
+	batteryWatcher
 }
 
 // Level reads the charge percentage. sysfs reports whole percent, so this is
@@ -128,44 +124,7 @@ func mainsOnline() bool {
 	return false
 }
 
-// batteryPoll is how often the sysfs files are re-read once something is
-// watching. Battery state moves over minutes, and each poll is two small reads
-// from a virtual filesystem, so this is cheap without being chatty. udev would
-// give real events, but it needs a netlink socket and a parser to save a read
-// that costs microseconds.
-const batteryPoll = 30 * time.Second
-
-// OnChange registers f, called when the level or charging state changes. The
-// first registration starts the poll; the goroutine then runs for the life of
-// the process, which is the same lifetime as the window that published the
-// capability.
+// OnChange registers f, called when the level or charging state changes.
 func (b *linuxBattery) OnChange(f func()) {
-	if f == nil {
-		return
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.watches = append(b.watches, f)
-	if b.polling {
-		return
-	}
-	b.polling = true
-	go b.poll()
-}
-
-func (b *linuxBattery) poll() {
-	level, charging := b.Level(), b.Charging()
-	for range time.Tick(batteryPoll) {
-		nl, nc := b.Level(), b.Charging()
-		if nl == level && nc == charging {
-			continue
-		}
-		level, charging = nl, nc
-		b.mu.Lock()
-		watches := append([]func(){}, b.watches...)
-		b.mu.Unlock()
-		for _, f := range watches {
-			f()
-		}
-	}
+	b.watch(f, func() (float32, bool) { return b.Level(), b.Charging() })
 }

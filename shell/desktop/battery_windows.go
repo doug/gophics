@@ -7,8 +7,6 @@
 package desktop
 
 import (
-	"sync"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -58,9 +56,7 @@ func (w *window) Battery() shell.Battery {
 }
 
 type windowsBattery struct {
-	mu      sync.Mutex
-	watches []func()
-	polling bool
+	batteryWatcher
 }
 
 // Level is the charge fraction, or 0 when Windows reports it as unknown.
@@ -80,40 +76,7 @@ func (b *windowsBattery) Charging() bool {
 	return ok && s.ACLineStatus == acOnline
 }
 
-// batteryPoll matches the Linux path: GetSystemPowerStatus is a cheap call, and
-// battery state moves over minutes. Windows does broadcast WM_POWERBROADCAST,
-// but only to a window procedure, and gophics does not run one it could hook
-// here without reaching into the backend's message loop.
-const batteryPoll = 30 * time.Second
-
 // OnChange registers f, called when the level or charging state changes.
 func (b *windowsBattery) OnChange(f func()) {
-	if f == nil {
-		return
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.watches = append(b.watches, f)
-	if b.polling {
-		return
-	}
-	b.polling = true
-	go b.poll()
-}
-
-func (b *windowsBattery) poll() {
-	level, charging := b.Level(), b.Charging()
-	for range time.Tick(batteryPoll) {
-		nl, nc := b.Level(), b.Charging()
-		if nl == level && nc == charging {
-			continue
-		}
-		level, charging = nl, nc
-		b.mu.Lock()
-		watches := append([]func(){}, b.watches...)
-		b.mu.Unlock()
-		for _, f := range watches {
-			f()
-		}
-	}
+	b.watch(f, func() (float32, bool) { return b.Level(), b.Charging() })
 }
