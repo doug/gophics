@@ -543,19 +543,42 @@ criteria in `design/milestones.md`.
 
 ### Remaining, roughly in order of value
 
-1. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
+Reordered 2026-08-17 against the code rather than against the previous list.
+Three items had been overtaken by work — accessibility on Linux and Windows,
+desktop battery and gamepad, and multi-line editing — and one gap was missing
+entirely: native menus exist in the substrate and are not reachable from an app.
+
+1. **Native menus, exposed** — the highest ratio of value to work on this list,
+   because the hard part is already done. `gogpu.App.SetMenu` takes a full
+   `Menu`/`MenuItem`/`MenuRole` model and is implemented for macOS, Linux and
+   Windows with tests, but `shell` publishes no menu capability, so no gophics
+   app can use any of it. A desktop app with no menu bar reads as unfinished on
+   macOS in particular. This is a shell capability and a desktop binding, not
+   platform work.
+2. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
    the fallback and the reference either way.
-2. **Accessibility bridges** for Linux and Windows, plus macOS
-   announcements and on-device VoiceOver validation on iOS (§6.5).
-3. **Damage-rect texture upload** on the CPU present path (§6.4).
-4. **Text editing depth** — multi-line, RTL caret geometry, full UBA.
-5. **Message catalog and plural rules** in `intl` — formatting is done,
-   translation lookup is not.
-6. **Desktop platform gaps** — native menu bars, system tray, multi-window,
-   and the battery, gamepad and geolocation capabilities that are still
-   stubs.
-7. **Widget catalog gaps** — draggable scrollbars, reorderable lists,
+3. **Mobile lifecycle** — `ctx.Lifecycle()` is nil on Android and iOS, so an app
+   cannot tell it is about to be killed. Small, and it is what "save my state"
+   needs. See `design/mobile-background.md` and M6.
+4. **Accessibility, the remainder** (§6.5) — Linux (AT-SPI) and Windows (UIA)
+   now publish trees, verified with Orca and a UIA client. What is left is
+   narrower than the old entry implied: Windows `BoundingRectangle` arrives at
+   clients as zero, macOS announcements are a documented no-op, and iOS has only
+   been checked in the simulator.
+5. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
+   tracked; the upload still sends the whole surface.
+6. **Widget catalog gaps** — draggable scrollbars, reorderable lists,
    pull-to-refresh, tree views, autocomplete.
+7. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
+   geometry and full UBA have not.
+8. **Message catalog and plural rules** in `intl` — formatting is done,
+   translation lookup is not.
+9. **Remaining platform gaps** — system tray, multi-window, desktop and mobile
+   geolocation, and the mobile battery/gamepad bridges. Desktop battery and
+   gamepad are done on all three platforms.
+10. **Durable background work** on mobile — see M7. Deliberately last: it is
+    the largest, and the design deliberately makes it useful before any
+    platform scheduler exists.
 
 ## 8. Testing strategy
 

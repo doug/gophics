@@ -224,7 +224,7 @@ elsewhere. Geolocation remains web-only, and mobile remains unimplemented.
 
 ---
 
-## M5 — Accessibility on Linux and Windows
+## M5 — Accessibility on Linux and Windows (Linux ✅, Windows all but bounds)
 
 **Goal.** A screen reader can explore and operate a gophics app on every
 supported desktop.
@@ -513,3 +513,39 @@ while backgrounded completes without the app being reopened.
 feature already works durably on every platform with no platform-specific code
 at all. Each scheduler after that is an independent improvement, not a
 prerequisite — which is the main practical argument for this shape.
+
+---
+
+## M8 — Native menus, exposed to apps
+
+**Goal.** A gophics desktop app can have a real menu bar.
+
+**Why now.** The highest ratio of value to work outstanding, because the hard
+part is already built. `gogpu.App.SetMenu` takes a full `Menu` / `MenuItem` /
+`MenuRole` model and is implemented for macOS, Linux and Windows, with tests in
+`platform/menu_linux.go` and `menu_windows.go`. None of it is reachable: `shell`
+publishes no menu capability, so no app can call any of it. A desktop app with
+no menu bar reads as unfinished, on macOS especially, where the menu bar is the
+application.
+
+This is a capability declaration and a desktop binding — not platform work.
+capgen generates the widget, app and posted plumbing from the interface, as it
+did for every other capability.
+
+- [ ] `shell/menu.go` declaring `MenuWindow`, and a menu model that maps onto
+      gogpu's without leaking it into the public API.
+- [ ] Desktop binding, converting to `gogpu.MenuItem` the way
+      `a11y_desktop.go` converts nodes.
+- [ ] Decide what the other shells do. Web has no menu bar; terminal has none.
+      Both should return nil rather than a capability that silently discards —
+      the same rule the file pickers follow.
+- [ ] Roles matter for macOS: About, Preferences, Quit, Services and the window
+      list are placed by the OS, and an app that hand-rolls them looks wrong.
+      `MenuRole` already exists; make sure the shell surface carries it.
+- [ ] A demo in `examples/` — menus are the kind of thing that looks fine in a
+      test and wrong on screen.
+
+**Exit.** An example app shows a native menu bar on macOS, Linux and Windows,
+with a working Quit and a custom item that invokes a Go callback.
+
+---
