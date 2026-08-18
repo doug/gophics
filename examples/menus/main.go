@@ -38,6 +38,7 @@ func (Menus) CreateState() widget.State { return &menusState{} }
 type menusState struct {
 	widget.StateBase[Menus]
 	published bool
+	trayShown bool
 	last      string
 	bold      bool
 	italic    bool
@@ -45,6 +46,22 @@ type menusState struct {
 
 func (s *menusState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Auto(ctx)
+
+	// A tray item, if the platform has one. Same shape as the menu bar: it is
+	// published once and persists until replaced, because it outlives the
+	// build that described it.
+	if tr := ctx.Tray(); tr != nil && !s.trayShown {
+		s.trayShown = true
+		tr.Show(shell.TrayItem{
+			Title:   "◆ gophics",
+			Tooltip: "gophics menu demo",
+			Menu: []shell.MenuItem{
+				{ID: itemNew, Title: "New"},
+				{Separator: true},
+				{Role: shell.RoleQuit, Title: "Quit"},
+			},
+		}, func(id int) { s.SetState(func() { s.last = label(id) + " (tray)" }) })
+	}
 
 	// Publish once. The bar persists until replaced, so republishing every
 	// frame would rebuild the platform's menus sixty times a second.

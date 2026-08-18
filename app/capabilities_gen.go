@@ -69,6 +69,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.TextInputWindow); ok {
 		o.TextInput = shell.PostedTextInput(x.TextInput(), o.Post)
 	}
+	if x, ok := w.(shell.TrayWindow); ok {
+		o.Tray = shell.PostedTray(x.Tray(), o.Post)
+	}
 	if x, ok := w.(shell.WebViewWindow); ok {
 		o.WebView = x.WebView()
 	}

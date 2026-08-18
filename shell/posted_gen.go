@@ -541,3 +541,33 @@ func (p postedTextInput) Hide() {
 func (p postedTextInput) SetText(a0 string, a1 int, a2 int) {
 	p.inner.SetText(a0, a1, a2)
 }
+
+// PostedTray wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedTray(inner Tray, post func(func())) Tray {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedTray{inner, post}
+}
+
+type postedTray struct {
+	inner Tray
+	post  func(func())
+}
+
+func (p postedTray) Show(a0 TrayItem, a1 func(id int)) {
+	f1 := a1
+	var w1 func(id int)
+	if f1 != nil {
+		w1 = func(c0 int) { p.post(func() { f1(c0) }) }
+	}
+	p.inner.Show(a0, w1)
+}
+
+func (p postedTray) Hide() {
+	p.inner.Hide()
+}

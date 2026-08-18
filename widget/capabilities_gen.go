@@ -28,6 +28,7 @@ type Capabilities struct {
 	Share         shell.Share
 	Socket        shell.Socket
 	TextInput     shell.TextInput
+	Tray          shell.Tray
 	WebView       shell.WebView
 	WindowControl shell.WindowControl
 }
@@ -107,6 +108,10 @@ func (c Ctx) Socket() shell.Socket { return c.el.owner.Socket }
 // TextInput returns the platform TextInput capability (shell.TextInput), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) TextInput() shell.TextInput { return c.el.owner.TextInput }
+
+// Tray returns the platform Tray capability (shell.Tray), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Tray() shell.Tray { return c.el.owner.Tray }
 
 // WebView returns the platform WebView capability (shell.WebView), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

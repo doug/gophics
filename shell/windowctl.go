@@ -9,17 +9,16 @@ package shell
 // OS owns window chrome.
 //
 // This is deliberately a *small, honest* interface: every method is backed by a
-// real platform primitive on at least desktop. In particular there is no
-// SetSize — gogpu's App exposes no runtime resize (only SetMinSize/SetMaxSize
-// constraints), and the browser cannot resize its own tab, so a SetSize here
-// would be a no-op on every platform. Rather than advertise capability we can't
-// deliver, it is left out; Size() (read-only) is kept because it maps cleanly to
-// App.Size on desktop and the canvas logical size on web.
+// real platform primitive on at least desktop, and each reports whether the
+// platform did the thing rather than assuming.
 //
-// Tray and native menus are intentionally not in this capability yet — they need
-// per-OS native code (NSStatusItem/AppIndicator/Shell_NotifyIcon and native menu
-// bars) that can't be build-verified here; see docs/design-capabilities.md
-// roadmap.
+// SetSize reports false where the windowing system owns geometry — Wayland,
+// where a toplevel is told its size, and the browser, which refuses resizeTo
+// for anything but a popup it opened.
+//
+// Tray and native menus have their own capabilities now (shell/tray.go,
+// shell/menu.go) rather than living here: both outlive any one window, which is
+// the whole point of a tray icon and is true of a macOS menu bar too.
 
 // WindowControlWindow is implemented by a Window that can control its own
 // window chrome. The app runner type-asserts the Window to it and, when present,
