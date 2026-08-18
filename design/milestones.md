@@ -736,25 +736,84 @@ all-zero reference, and "the GPU wrote nothing" must not read as agreement.
 
 ---
 
-## M11 — Sparse strips, part 2: the pipeline stages
+## M11 — Sparse strips, part 2: make the compute pipeline correct
 
-**Goal.** The remaining tilecompute stages made real, in dependency order.
+**Goal.** The compute pipeline renders a scene that matches the CPU reference.
 
-Each stage is the same exercise as M10 with a different shader, so they can land
-independently and be diffed independently. Order follows the data: geometry
-before coverage, coverage before compositing.
+**This milestone changed shape once M10 could see the truth.** It was written as
+"the remaining tilecompute stages made real, in dependency order", on the
+assumption that the stages were stubs waiting to be implemented. They are not.
+Every stage — `pathtag_reduce`, `pathtag_scan`, `flatten`, `path_count`,
+`path_tiling`, `coarse`, `fine` — is written, and the dispatcher wires all of
+them. The work is not construction, it is correctness.
 
-- [ ] `pathtag_reduce` and `pathtag_scan` — the prefix scan over path tags.
-- [ ] `flatten` — curves to line segments on the GPU. Today `tilecompute.
-      FlattenFill` does this on the CPU, which makes it a good first comparison:
-      the same input has a known-good output.
-- [ ] `path_count` and `path_tiling` — binning segments into tiles.
-- [ ] `coarse` and `fine` — per-tile rasterization.
-- [ ] Keep the CPU path working at every step. It is the reference; a stage that
-      only works when the whole pipeline is enabled cannot be diffed.
+What was actually wrong is that **none of it had ever run**. `CanCompute()` was
+false on every machine, so `FillPath`'s compute branch was dead code,
+`SelectPipeline`'s compute arm was unreachable, and `TestVelloComputeGolden`
+skipped. Nothing reported this: `initGPU` logs the pipeline failure at Warn and
+returns nil, and every existing test of `CanCompute()` asserted the *false*
+path, so "compute is unavailable" read as a fact about the hardware rather than
+as three bugs. It took a test that demanded the true path to find them.
 
-**Exit.** A scene of filled and stroked paths renders entirely through the
-compute pipeline and matches the CPU reference.
+- [x] **naga: parenthesise a select used as a binary operand.** `needsParens`,
+      which binary operands go through, omitted `ExprSelect` while its sibling
+      `needsParensInContext` listed it. `x + select(a, b, c)` was emitted as
+      `x + c ? a : b` — grouped by C++ as `(x + c) ? a : b`, a different number
+      from a shader Metal accepts with a warning.
+- [x] **naga: bound a global that *is* a runtime-sized array.** Only a struct's
+      last member was handled, so `var<storage> tiles: array<Tile>` yielded no
+      bound, no bounds check was hoisted out of the atomic, and the access
+      guarded itself inside the `&`. The address of a ternary is not an lvalue.
+- [x] **Metal: report the real storage-buffer limit.** The HAL published the
+      WebGPU baseline of 8 per stage; the argument table holds 31 and entries
+      are assigned into it sequentially. The coarse stage binds 9.
+- [x] Pin all three with tests that fail without the fix
+      (`TestVelloComputeInitialisesOnRealDevice`,
+      `TestSelectAsBinaryOperandIsParenthesised`).
+- [ ] **Fix the fill bleed.** With the pipeline building, the golden tests run
+      for the first time and fail: 12–29% of pixels differ from the CPU
+      reference. It is characterised, not guesswork — on
+      `compute_blue_square`, a 64×64 target with a 4×4 grid of 16×16 tiles:
+
+      - The CPU reference fills `x=[10..53] y=[10..53]`, a 44×44 square.
+        The GPU fills `x=[10..63] y=[10..63]` — the fill starts in the right
+        place and then **runs to the right and bottom edges** instead of
+        stopping.
+      - Every differing pixel has ink in both images with different colour;
+        none is missing-versus-present. So geometry arrives, and it is the
+        *extent* of the fill that is wrong, not the path.
+      - Rows above `y=32` match exactly. The bleed begins at **tile row 2 of
+        4** and affects everything below.
+      - It is not a global offset: the best single linear shift over the whole
+        image is `d=0`.
+
+      That shape — inside-ness persisting past the right edge of a shape, from
+      one tile row onward — points at backdrop propagation or the winding
+      accumulated across tiles in `coarse`/`path_count`, not at flattening.
+
+      Two suspects are already **ruled out**. The fine stage dispatches
+      `(WidthInTiles, HeightInTiles, 1)` = `(4, 4, 1)`, which is correct. And
+      the new bounds check on the `tiles` atomics is not silently skipping the
+      upper half: for this scene the grid is 16 tiles, `totalPathTiles` is 16,
+      the buffer is 128 bytes and the emitted bound evaluates to 16. The
+      "breaks at exactly half the tiles" coincidence made that worth measuring
+      rather than assuming.
+- [ ] Then work outward from the failing stage, keeping the CPU path as the
+      reference at every step. `tilecompute.FlattenFill` and
+      `RasterizeScenePTCL` are known-good CPU implementations of stages the GPU
+      also has, so each can be diffed independently — the same trick that made
+      M10 tractable.
+
+**Exit.** `TestVelloComputeGolden` passes, and `gg.AutoSelectCompute` flips to
+true in the same change.
+
+**Note on the gate.** Making the pipeline buildable made it *selectable*, which
+would have put a 20%-wrong renderer behind `PipelineModeAuto` for any complex
+scene. `gg.AutoSelectCompute` holds the previous behaviour while keeping the
+fixes; explicit `PipelineModeCompute` still works, because the path has to stay
+reachable to be worked on. The gate is at the call site, not inside
+`SelectPipeline`, so the heuristic stays a pure function and its tests keep
+describing the policy to return to.
 
 ---
 
