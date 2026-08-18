@@ -37,6 +37,12 @@ import (
 type VelloAccelerator struct {
 	mu sync.Mutex
 
+	// wantStageCapture requests that the next render read its intermediate
+	// buffers back for comparison against the CPU port. Off on every normal
+	// frame — see DebugComputeStages.
+	wantStageCapture bool
+	stageCapture     *ComputeStageSnapshot
+
 	instance *wgpu.Instance // standalone mode only; nil when using external device
 	device   *wgpu.Device
 	queue    *wgpu.Queue
@@ -612,6 +618,12 @@ func (a *VelloAccelerator) dispatchComputeScene(
 
 	// Step 9b: Diagnostic readback — verify intermediate buffers have data.
 	a.logPipelineDiagnostics(bufs, config, totalPathTiles)
+
+	// Stage capture for GPU-vs-CPU comparison. Requested explicitly and never
+	// on a normal frame: each readback stalls the GPU.
+	if a.wantStageCapture {
+		a.stageCapture = a.captureStages(bufs, config, totalPathTiles)
+	}
 
 	// Step 10: Readback output pixels.
 	outputSize := uint64(width) * uint64(height) * 4

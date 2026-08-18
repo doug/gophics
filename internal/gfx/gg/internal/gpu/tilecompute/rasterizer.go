@@ -15,6 +15,11 @@ import (
 // Rasterizer runs the complete Vello CPU rasterization pipeline.
 type Rasterizer struct {
 	width, height int
+
+	// capture, when non-nil, receives each stage's intermediate state.
+	// Set only through RasterizeCapturing; nil on every normal render, so
+	// the copies below cost nothing in the hot path.
+	capture *StageCapture
 }
 
 // NewRasterizer creates a new rasterizer for the given canvas size.
@@ -24,6 +29,36 @@ func NewRasterizer(width, height int) *Rasterizer {
 
 // Rasterize runs the full pipeline and returns per-pixel alpha values [0.0, 1.0].
 // The result is a flat array of width*height float32 values in row-major order.
+// StageCapture holds the pipeline's intermediate state, so a GPU run can be
+// diffed against this one stage by stage rather than only at the final image.
+//
+// Every field mirrors a GPU buffer exactly — same struct, same order — because
+// the CPU stages are direct ports of the shaders. That correspondence is the
+// most useful debugging asset this package has, and until now it was only ever
+// used to compare finished pictures. A wrong picture says the pipeline is
+// broken; a diff of these says which stage broke it and at which element.
+type StageCapture struct {
+	Path      Path
+	Bump      BumpAllocators
+	Tiles     []Tile
+	SegCounts []SegmentCount
+	Segments  []PathSegment
+
+	// TilesAfterPathCount is Tiles before coarse rewrites SegmentCountOrIx
+	// from a count into an inverted index. Both are worth comparing: a
+	// divergence in the counts is a path_count bug, a divergence in the
+	// indices with matching counts is a coarse bug.
+	TilesAfterPathCount []Tile
+}
+
+// Rasterize renders lines to a coverage buffer. If capture is non-nil it is
+// filled with the intermediate state of each stage; pass nil in normal use.
+func (r *Rasterizer) RasterizeCapturing(lines []LineSoup, fillRule FillRule, capture *StageCapture) []float32 {
+	r.capture = capture
+	defer func() { r.capture = nil }()
+	return r.Rasterize(lines, fillRule)
+}
+
 func (r *Rasterizer) Rasterize(lines []LineSoup, fillRule FillRule) []float32 {
 	if len(lines) == 0 {
 		return make([]float32, r.width*r.height)
@@ -68,6 +103,11 @@ func (r *Rasterizer) Rasterize(lines []LineSoup, fillRule FillRule) []float32 {
 
 	pathCountMain(bump, lines, paths, tiles, segCounts)
 
+	if r.capture != nil {
+		r.capture.Path = path
+		r.capture.TilesAfterPathCount = append([]Tile(nil), tiles...)
+	}
+
 	// Step 2: Coarse allocation — convert counts to indices
 	// (Port of coarse.rs segment allocation, lines 79-83)
 	nextSegIx := uint32(0)
@@ -84,6 +124,17 @@ func (r *Rasterizer) Rasterize(lines []LineSoup, fillRule FillRule) []float32 {
 	segments := make([]PathSegment, totalSegments)
 	pathTilingMain(bump, segCounts, lines, paths, tiles, segments)
 
+	if r.capture != nil {
+		r.capture.Bump = *bump
+		// The CPU port keeps its segment total in a local rather than in the
+		// bump allocator — the GPU has to use an atomic there, this does not.
+		// Recorded explicitly so the two are comparable.
+		r.capture.Bump.Segments = totalSegments
+		r.capture.Tiles = append([]Tile(nil), tiles...)
+		r.capture.SegCounts = append([]SegmentCount(nil), segCounts[:bump.SegCounts]...)
+		r.capture.Segments = append([]PathSegment(nil), segments...)
+	}
+
 	// Step 4: Backdrop prefix sum
 	// (Port of backdrop.rs)
 	bboxW := int(path.BBox[2] - path.BBox[0])
@@ -96,6 +147,17 @@ func (r *Rasterizer) Rasterize(lines []LineSoup, fillRule FillRule) []float32 {
 			sum += tiles[idx].Backdrop
 			tiles[idx].Backdrop = sum
 		}
+	}
+
+	if r.capture != nil {
+		// Captured here, after the prefix sum, because the GPU runs its
+		// backdrop stage between path_count and coarse while this port runs it
+		// last. The two orders are equivalent — the prefix sum touches only
+		// Backdrop, and the stages between touch only SegmentCountOrIx — but a
+		// snapshot taken before it would be comparing the same field at two
+		// different points in the pipeline, which reads as a divergence on
+		// every scene.
+		r.capture.Tiles = append([]Tile(nil), tiles...)
 	}
 
 	// Step 5: Fine rasterization — per tile fill_path
