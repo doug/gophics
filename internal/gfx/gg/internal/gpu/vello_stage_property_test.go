@@ -84,24 +84,46 @@ func TestComputeStagesProperty(t *testing.T) {
 		cx := half + (rng.Float32()-0.5)*float32(size)*0.25
 		cy := half + (rng.Float32()-0.5)*float32(size)*0.25
 
-		lines := randomPolygon(rng, cx, cy, rMin, rMax, verts)
-		paths := []tilecompute.PathDef{{Lines: lines, Color: [4]uint8{0, 0, 255, 255}, FillRule: fill}}
+		// Most cases are a single path; a third carry two or three. The GPU
+		// packs every path into one tile array with a base per path while the
+		// CPU port starts each at zero, so multi-path scenes are the only ones
+		// that exercise those bases and bboxes at all.
+		nPaths := 1
+		if rng.Intn(3) == 0 {
+			nPaths = 2 + rng.Intn(2)
+		}
+		paths := make([]tilecompute.PathDef, nPaths)
+		for p := range paths {
+			pcx := half + (rng.Float32()-0.5)*float32(size)*0.5
+			pcy := half + (rng.Float32()-0.5)*float32(size)*0.5
+			pr := rMax * (0.3 + rng.Float32()*0.7)
+			paths[p] = tilecompute.PathDef{
+				Lines:    randomPolygon(rng, pcx, pcy, pr*0.4, pr, 3+rng.Intn(7)),
+				Color:    [4]uint8{uint8(p * 90), 0, 255, 255},
+				FillRule: fill,
+			}
+		}
+		if nPaths == 1 {
+			paths[0].Lines = randomPolygon(rng, cx, cy, rMin, rMax, verts)
+		}
 
-		name := fmt.Sprintf("case%03d_size%d_verts%d_fill%d", i, size, verts, fill)
+		name := fmt.Sprintf("case%03d_size%d_paths%d_verts%d_fill%d", i, size, nPaths, verts, fill)
 		t.Run(name, func(t *testing.T) {
 			gpu, err := accel.DebugComputeStages(size, size, bg, paths)
 			if err != nil {
 				t.Fatalf("DebugComputeStages: %v", err)
 			}
 
-			var cpu tilecompute.StageCapture
-			tilecompute.NewRasterizer(size, size).RasterizeCapturing(lines, fill, &cpu)
-
-			if cpu.Bump.Segments == 0 {
+			cpus := captureCPUStages(size, size, paths)
+			total := uint32(0)
+			for i := range cpus {
+				total += cpus[i].Bump.Segments
+			}
+			if total == 0 {
 				t.Skip("degenerate scene produced no segments")
 			}
 
-			diffs := DiffComputeStages(gpu, &cpu)
+			diffs := DiffComputeStages(gpu, cpus)
 			if len(diffs) == 0 {
 				return
 			}

@@ -36,6 +36,13 @@ type ComputeStageSnapshot struct {
 	WidthInTiles  uint32
 	HeightInTiles uint32
 
+	// Paths is the per-path metadata the GPU built: tile-space bbox and the
+	// base offset of that path's run inside Tiles. The CPU port rasterises
+	// each path independently from index 0, so this is what makes the two
+	// comparable — and a bbox disagreement is its own bug class, since every
+	// later stage indexes tiles through it.
+	Paths []tilecompute.Path
+
 	Bump      tilecompute.BumpAllocators
 	Tiles     []tilecompute.Tile
 	SegCounts []tilecompute.SegmentCount
@@ -57,6 +64,22 @@ func (a *VelloAccelerator) captureStages(bufs *VelloComputeBuffers, config Vello
 			Lines:     config.NumLines,
 			SegCounts: le.Uint32(b[0:4]),
 			Segments:  le.Uint32(b[4:8]),
+		}
+	}
+
+	if n := config.NumPaths; n > 0 {
+		if b, err := a.readbackBuffer(bufs.Paths, uint64(n)*5*4); err == nil {
+			snap.Paths = make([]tilecompute.Path, n)
+			for i := range snap.Paths {
+				o := i * 5 * 4
+				snap.Paths[i] = tilecompute.Path{
+					BBox: [4]uint32{
+						le.Uint32(b[o : o+4]), le.Uint32(b[o+4 : o+8]),
+						le.Uint32(b[o+8 : o+12]), le.Uint32(b[o+12 : o+16]),
+					},
+					Tiles: le.Uint32(b[o+16 : o+20]),
+				}
+			}
 		}
 	}
 
@@ -186,30 +209,59 @@ func (d StageDiff) String() string {
 // tile solid? On the set of segments produced, regardless of where they landed?
 // And is every slot that was reserved actually written — the invariant that
 // located the M11 bug.
-func DiffComputeStages(gpu *ComputeStageSnapshot, cpu *tilecompute.StageCapture) []StageDiff {
+func DiffComputeStages(gpu *ComputeStageSnapshot, cpus []tilecompute.StageCapture) []StageDiff {
 	var diffs []StageDiff
 
-	// path_count: total crossings found. Order-independent.
-	if gpu.Bump.SegCounts != cpu.Bump.SegCounts {
+	// Totals first. These are sums, so they survive the GPU running paths and
+	// lines in whatever order it likes.
+	var cpuSegCounts, cpuSegments uint32
+	for i := range cpus {
+		cpuSegCounts += cpus[i].Bump.SegCounts
+		cpuSegments += cpus[i].Bump.Segments
+	}
+	if gpu.Bump.SegCounts != cpuSegCounts {
 		diffs = append(diffs, StageDiff{"path_count", "total crossings", -1,
-			fmt.Sprint(gpu.Bump.SegCounts), fmt.Sprint(cpu.Bump.SegCounts)})
+			fmt.Sprint(gpu.Bump.SegCounts), fmt.Sprint(cpuSegCounts)})
 	}
-
-	// backdrop drives whether a tile fills solid, and is a sum — independent
-	// of the order the contributions arrived in. This is the field that was
-	// wrong when the compute path bled fills to the tile edge.
-	if d, ok := diffBackdrops(gpu.Tiles, cpu.Tiles); ok {
-		diffs = append(diffs, d)
-	}
-
-	// coarse: total slots reserved, and how many tiles carry segments.
-	if gpu.Bump.Segments != cpu.Bump.Segments {
+	if gpu.Bump.Segments != cpuSegments {
 		diffs = append(diffs, StageDiff{"coarse", "segment slots reserved", -1,
-			fmt.Sprint(gpu.Bump.Segments), fmt.Sprint(cpu.Bump.Segments)})
+			fmt.Sprint(gpu.Bump.Segments), fmt.Sprint(cpuSegments)})
 	}
-	if g, c := tilesWithSegments(gpu.Tiles), tilesWithSegments(cpu.Tiles); g != c {
-		diffs = append(diffs, StageDiff{"coarse", "tiles carrying segments", -1,
-			fmt.Sprint(g), fmt.Sprint(c)})
+
+	// Per-path metadata and per-tile backdrop. The GPU packs every path into
+	// one Tiles array with a base per path; the CPU port gives each path its
+	// own array starting at zero. The bbox is what reconciles them, so it is
+	// checked before it is used — an agreement on tiles computed from
+	// disagreeing bboxes would mean nothing.
+	if len(gpu.Paths) != len(cpus) {
+		diffs = append(diffs, StageDiff{"scene", "path count", -1,
+			fmt.Sprint(len(gpu.Paths)), fmt.Sprint(len(cpus))})
+		return diffs
+	}
+	for i := range cpus {
+		g, c := gpu.Paths[i], cpus[i].Path
+		if g.BBox != c.BBox {
+			diffs = append(diffs, StageDiff{"scene", "path bbox (tile space)", i,
+				fmt.Sprint(g.BBox), fmt.Sprint(c.BBox)})
+			continue
+		}
+		w := int(g.BBox[2] - g.BBox[0])
+		h := int(g.BBox[3] - g.BBox[1])
+		base := int(g.Tiles)
+		if w <= 0 || h <= 0 {
+			continue
+		}
+		if base+w*h > len(gpu.Tiles) {
+			diffs = append(diffs, StageDiff{"scene", "path tile range overruns buffer", i,
+				fmt.Sprintf("base %d + %d tiles > %d", base, w*h, len(gpu.Tiles)),
+				fmt.Sprint(w * h)})
+			continue
+		}
+		if d, ok := diffBackdrops(gpu.Tiles[base:base+w*h], cpus[i].Tiles); ok {
+			d.Index = i
+			d.Field = fmt.Sprintf("path %d %s", i, d.Field)
+			diffs = append(diffs, d)
+		}
 	}
 
 	// path_tiling: every reserved slot must be written. This is the invariant
@@ -220,8 +272,13 @@ func DiffComputeStages(gpu *ComputeStageSnapshot, cpu *tilecompute.StageCapture)
 			fmt.Sprintf("%d of %d left zeroed", unwritten, len(gpu.Segments)), "0"})
 	}
 
-	// path_tiling: the geometry produced, as a set.
-	if d, ok := diffSegmentSets(gpu.Segments, cpu.Segments); ok {
+	// The segments produced, as one multiset across all paths: the GPU
+	// interleaves paths into a single buffer, so only the union is comparable.
+	var cpuSegs []tilecompute.PathSegment
+	for i := range cpus {
+		cpuSegs = append(cpuSegs, cpus[i].Segments...)
+	}
+	if d, ok := diffSegmentSets(gpu.Segments, cpuSegs); ok {
 		diffs = append(diffs, d)
 	}
 

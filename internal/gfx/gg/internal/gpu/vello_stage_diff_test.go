@@ -18,9 +18,11 @@ import (
 // two stages disagreed: coarse reserved 16 segment slots and path_tiling filled
 // 8. Diffing these buffers says that in one line.
 //
-// Restricted to single-path scenes because tilecompute's Rasterize takes one
-// path's lines; the multi-path scenes are covered at image level by
-// TestVelloComputeGolden. The stage that broke was per-path anyway.
+// Covers multi-path scenes too. The GPU packs every path into one Tiles array
+// with a base per path, while the CPU port rasterises each path independently
+// from index zero, so the comparison goes through each path's tile-space bbox —
+// and checks that bbox agrees first, since tiles compared through disagreeing
+// bboxes would agree about nothing.
 func TestComputeStagesMatchCPU(t *testing.T) {
 	accel := &VelloAccelerator{}
 	if err := accel.initGPU(); err != nil {
@@ -32,9 +34,6 @@ func TestComputeStagesMatchCPU(t *testing.T) {
 	}
 
 	for _, tc := range computeGoldenTests() {
-		if len(tc.Paths) != 1 {
-			continue
-		}
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			gpu, err := accel.DebugComputeStages(tc.Width, tc.Height, tc.BgColor, tc.Paths)
@@ -42,18 +41,20 @@ func TestComputeStagesMatchCPU(t *testing.T) {
 				t.Fatalf("DebugComputeStages: %v", err)
 			}
 
-			var cpu tilecompute.StageCapture
-			tilecompute.NewRasterizer(tc.Width, tc.Height).
-				RasterizeCapturing(tc.Paths[0].Lines, tc.Paths[0].FillRule, &cpu)
+			cpus := captureCPUStages(tc.Width, tc.Height, tc.Paths)
 
 			// A scene that produces no work would make every comparison
 			// vacuously true, which is the failure mode this whole exercise
 			// exists to avoid.
-			if cpu.Bump.Segments == 0 {
+			total := uint32(0)
+			for i := range cpus {
+				total += cpus[i].Bump.Segments
+			}
+			if total == 0 {
 				t.Fatal("CPU port produced no segments — the fixture does not exercise the pipeline")
 			}
 
-			diffs := DiffComputeStages(gpu, &cpu)
+			diffs := DiffComputeStages(gpu, cpus)
 			for i, d := range diffs {
 				// Later stages consume earlier ones, so only the first is a
 				// root cause; the rest are consequences.
@@ -65,4 +66,14 @@ func TestComputeStagesMatchCPU(t *testing.T) {
 			}
 		})
 	}
+}
+
+// captureCPUStages runs the CPU port over each path, mirroring how the GPU
+// pipeline handles a multi-path scene.
+func captureCPUStages(w, h int, paths []tilecompute.PathDef) []tilecompute.StageCapture {
+	caps := make([]tilecompute.StageCapture, len(paths))
+	for i, pd := range paths {
+		tilecompute.NewRasterizer(w, h).RasterizeCapturing(pd.Lines, pd.FillRule, &caps[i])
+	}
+	return caps
 }
