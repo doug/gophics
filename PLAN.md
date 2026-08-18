@@ -566,7 +566,21 @@ entirely: native menus exist in the substrate and are not reachable from an app.
    clients as zero, macOS announcements are a documented no-op, and iOS has only
    been checked in the simulator.
 5. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
-   tracked; the upload still sends the whole surface.
+   tracked and the raster is already damage-culled (`ReplayDamaged`); only the
+   upload sends the whole surface. It is *not* the one-line change it looks
+   like, and the trap is worth stating because the API invites it:
+
+   `Painter.PresentGPU` already calls `FlushGPUWithViewDamage`, passing an
+   empty rect. Filling that rect in would work — the CPU present path is
+   blit-only, so damage is honoured rather than dropped with the MSAA warning —
+   and would be **wrong**. The two-frame union that makes partial damage safe
+   against a recycled swapchain image lives in `ggcanvas.Canvas`
+   (`prevFrameDamageRects`, the Wayland buffer-age pattern), and `PresentGPU`
+   goes to the context directly, bypassing it. Single-frame damage into a
+   double- or triple-buffered surface leaves pixels from two frames ago:
+   intermittent, invisible to tests, visible to users.
+
+   So the work is the buffer-age accounting on this path, not the plumbing.
 6. **Widget catalog gaps** — draggable scrollbars, reorderable lists,
    pull-to-refresh, tree views, autocomplete.
 7. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
