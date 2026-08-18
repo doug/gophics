@@ -793,12 +793,30 @@ as three bugs. It took a test that demanded the true path to find them.
       `atomicAdd`. Two records landing on the same `(tile, order)` pair would
       produce precisely this.
 
-      Everything around it was checked and is **sound**: the bump allocator
-      does not overflow, per-tile bases are distinct and cover 0..15 exactly,
-      every stage's dispatch dimensions scale correctly with canvas size, the
-      `PTCL_MAX_PER_TILE` stride agrees across both shaders and Go, `coarse`
-      maps global tile indices to per-path ones correctly, and the Config
-      struct layout matches the WGSL declaration field for field.
+      **Also confirmed: `path_count`'s output is correct.** For the rectangle
+      it records 16 crossings over 12 distinct tiles with the four corner
+      tiles taking two each — exactly the right answer for four edges on a
+      4×4 grid — and `coarse` turns that into 12 bases covering slots 0..15
+      with no gaps and no overlaps. So the counting and the reservation are
+      both right, and the fault is on the writing side.
+
+      Everything around it was checked and is **sound**, listed so it is not
+      re-derived: the bump allocator does not overflow; per-tile bases are
+      distinct and cover the range exactly; every stage's dispatch dimensions
+      scale correctly with canvas size and every shader declares
+      `workgroup_size(256)`, so one workgroup really does cover the grid;
+      `PTCL_MAX_PER_TILE` agrees across both shaders and Go; `coarse` maps
+      global tile indices to per-path ones correctly, and both of its
+      `base_idx` forms are right for their context; the Config struct layout
+      matches the WGSL declaration field for field; and `path_count` and
+      `path_tiling` compute identical DDA parameters — same `count`,
+      `count_x`, `robust_err`, `y0`, `x0`, same `stride` from the path bbox,
+      and the two spellings of `x0` (`select(-1, 0, ...)` versus
+      `0.5 * (x_sign - 1)`) are algebraically equal.
+
+      What remains is to trace, per record, the `tile_ix` that `path_tiling`
+      resolves against the one `path_count` used. They agree on paper; the
+      collisions say they do not agree in fact.
 
       The original characterisation, which still holds — on
       `compute_blue_square`, a 64×64 target with a 4×4 grid of 16×16 tiles:
