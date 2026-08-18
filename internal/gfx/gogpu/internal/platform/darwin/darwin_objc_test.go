@@ -350,6 +350,20 @@ func runOnMainThread(t *testing.T, fn func()) {
 func withAutoreleasePool(t *testing.T, rt *objcRuntime, fn func()) {
 	t.Helper()
 
+	// An NSAutoreleasePool belongs to the thread that created it, and draining
+	// one from a different thread is undefined behaviour. Nothing was keeping
+	// this goroutine on a single thread: TestMain pins the *main* goroutine and
+	// runs a task pump on it, but m.Run() is launched on a fresh goroutine that
+	// the scheduler is free to move between OS threads.
+	//
+	// So the pool was created on one thread and, if the goroutine happened to
+	// migrate before the deferred drain, released on another. That is why this
+	// package crashed only when the whole suite ran in parallel and passed
+	// every time it was run alone — migration needs other runnable goroutines
+	// to migrate to.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	poolClass := rt.getClass(t, "NSAutoreleasePool")
 	selNew := rt.sel(t, "new")
 	selDrain := rt.sel(t, "drain")
