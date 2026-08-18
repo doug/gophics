@@ -920,8 +920,72 @@ into the target view on the GPU before comparing it to a path that always has.
       and reads it back to check the pixels arrived. The readback belongs to
       the assertion, not the path under test — the path is only correct
       because it never needs one.
-- [ ] Then build the offscreen harness that renders through both GPU pipelines
-      without a surface and without a readback, and compare those.
+- [x] **Built the offscreen harness and ran the comparison.** Both pipelines
+      now render to a texture view with no window, no surface and no readback
+      in either arm — `newOffscreenHarness` drives a real `GPURenderContext`,
+      and the only variable between arms is the pipeline mode. The claim that
+      the render-pass path "needs a surface and cannot be benchmarked
+      headlessly" was simply wrong; `gpu_layers.go` had been flushing one to a
+      view all along.
+
+      `TestOffscreenHarnessDrivesBothPipelines` checks each arm actually
+      reaches the target before any timing is believed. This pipeline has
+      produced silently-empty results twice, so a benchmark whose arms do
+      nothing — and report excellent numbers for it — is a real hazard here.
+
+      **The harness immediately found a bug worth more than the measurement.**
+      `velloSameTarget` compared targets by their CPU buffer and required
+      `len(Data) > 0`, so a GPU-direct target never matched itself. Every
+      `FillPath` concluded the target had changed and flushed, running the
+      entire eight-stage pipeline **once per path**. It scaled exactly with
+      shape count: 256 shapes meant 256 dispatches, and a 1024px scene of 256
+      shapes took **2.5 seconds**. Comparing views as well as buffers took that
+      to 11ms — 143× on that scene, and it would have been invisible without a
+      second pipeline to compare against.
+
+      | scene | render-pass | compute | |
+      |---|---|---|---|
+      | 256px, 16 shapes | 1.21ms | 1.95ms | RP 1.6× |
+      | 256px, 64 shapes | 1.28ms | 2.16ms | RP 1.7× |
+      | 256px, 256 shapes | 1.57ms | 2.79ms | RP 1.8× |
+      | 512px, 16 shapes | 1.24ms | 3.57ms | RP 2.9× |
+      | 512px, 64 shapes | 1.37ms | 3.84ms | RP 2.8× |
+      | 512px, 256 shapes | 1.56ms | 4.42ms | RP 2.8× |
+      | 1024px, 16 shapes | 1.42ms | 9.46ms | RP 6.6× |
+      | 1024px, 64 shapes | 1.46ms | 10.0ms | RP 6.8× |
+      | 1024px, 256 shapes | 1.67ms | 10.97ms | RP 6.6× |
+
+**The decision: render-pass stays the default, compute stays opt-in.**
+
+The shape of the numbers matters more than any single row. Render-pass is
+nearly flat in resolution — 1.21ms to 1.42ms across a 16× increase in pixels —
+while compute tracks pixel count almost directly, 1.95ms to 9.46ms over the
+same range. Both scale well with shape count. So compute is dominated by
+per-pixel work, and it loses by more as the target grows, which is the wrong
+direction for a renderer whose windows are usually large.
+
+That also contradicts the premise `SelectPipeline` encodes, which routes
+*complex* scenes to compute on the theory that its fixed costs amortise. At 256
+shapes render-pass is still 1.8× ahead at 256px and 6.6× at 1024px.
+`gg.AutoSelectCompute` stays false, now on a direct GPU-to-GPU comparison
+rather than a CPU proxy.
+
+**Not removed, and the reason is not sentiment.** Removal was a real option and
+these numbers argue for it. Against: the path is now correct — pixel-exact
+against the CPU port on every golden scene and across 2000 generated ones —
+and the scenes measured here are simple filled triangles. A compute
+rasterizer's case is heavy overlap, deep clip nesting and thousands of paths,
+none of which this benchmark exercises. Deleting a verified implementation
+because it lost on the workload least suited to it would be the wrong call, and
+the harness to test the right workload now exists.
+
+- [ ] Extend the harness to the scenes compute is supposed to win: deep clip
+      stacks, heavy overlap, thousands of paths. If it loses there too, remove
+      it — that is the evidence removal needs, and this benchmark is not it.
+- [ ] The render-pass path leaks GPU resources under the harness: every
+      iteration logs `Buffer released by GC (missing explicit Release)` for
+      `clip_no_clip_uniform`, `session_convex_verts` and others. Harmless to
+      the timings, but a per-frame leak in the default renderer.
 - [ ] Reuse buffers across frames instead of allocating per render.
 - [ ] Run the full `gophics_gpu` suite against both on Metal and on Vulkan (the
       Pixel), since a compute pipeline is where backends diverge most.

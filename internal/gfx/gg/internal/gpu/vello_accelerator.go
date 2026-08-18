@@ -493,8 +493,22 @@ func compositeOver(target gg.GPURenderTarget, src *image.RGBA) {
 
 // velloSameTarget checks if two render targets point to the same pixel buffer.
 func velloSameTarget(a *gg.GPURenderTarget, b *gg.GPURenderTarget) bool {
-	return a.Width == b.Width && a.Height == b.Height &&
-		len(a.Data) == len(b.Data) && len(a.Data) > 0 && &a.Data[0] == &b.Data[0]
+	if a.Width != b.Width || a.Height != b.Height {
+		return false
+	}
+
+	// A GPU-direct target is identified by its texture view; it has no CPU
+	// buffer to compare. Without this branch the Data test below could never
+	// hold for one — len(Data) > 0 is false — so every FillPath decided the
+	// target had changed and flushed, running the whole eight-stage pipeline
+	// once per path. That cost scaled exactly with shape count: 16 shapes took
+	// 16 dispatches, 256 took 256, and a 1024px scene of 256 shapes spent 2.5
+	// seconds where one dispatch would have done.
+	if !a.View.IsNil() || !b.View.IsNil() {
+		return a.View == b.View && a.ViewWidth == b.ViewWidth && a.ViewHeight == b.ViewHeight
+	}
+
+	return len(a.Data) == len(b.Data) && len(a.Data) > 0 && &a.Data[0] == &b.Data[0]
 }
 
 // snapPathToPixelGrid rounds all path coordinates to the nearest integer pixel.
