@@ -462,11 +462,26 @@ restored, and a demo persists on `StateBackground` and restores on relaunch.
 BGTaskScheduler or `beginBackgroundTask`, so a gophics goroutine lives only as
 long as the OS lets the process run.
 
-**Decide the fork first.** "Background task" is two unrelated things — a few
-seconds of grace to finish an upload, versus deferred periodic work — with
-different APIs, limits and review consequences. The first is much cheaper and
-covers the common case. See `design/mobile-background.md`; do not start until
-this is chosen, because the answer changes most of the work.
+**Target the deferred/periodic half.** "Background task" is two unrelated
+things — a few seconds of grace to finish an upload, versus deferred periodic
+work — but only the second is what people mean by the phrase, and it is the
+harder one. Scope M7 to it.
+
+**Know what it cannot promise before building it.** Neither platform offers a
+schedule. iOS runs `BGAppRefreshTask` opportunistically and stops scheduling it
+entirely for an app the user force-quit, until they launch it by hand; Low Power
+Mode and a Settings switch disable it outright. Android honours a 15-minute
+floor, batches wakeups in Doze, throttles by App Standby bucket, and several OEM
+skins kill background work aggressively. The API must never resemble a ticker,
+and every task must be idempotent and safe to be killed halfway.
+
+**And check the requirement first, because push may beat this.** For the
+commonest reason to want periodic work — keep the data fresh — iOS's intended
+mechanism is silent push, not the scheduler; BGAppRefresh is for prefetching
+around habitual use. gophics has no push capability at all: `shell/notify.go` is
+local notifications only. If the real requirement is timely data rather than
+periodic work, a push capability is roughly the same size and is the only
+reliable answer on iOS. See `design/mobile-background.md`.
 
 The design also records why this cannot be an ordinary capability callback:
 when a background task runs there may be no frames, so the `Posted` wrapper
@@ -474,7 +489,8 @@ every other capability relies on would never deliver. Background handlers get a
 `context.Context` and no access to the widget tree, and `RunBackgroundTask` is
 the one Bridge entry point that does not run on the UI goroutine.
 
-- [ ] Choose finish-what-you-started or deferred/periodic.
+- [ ] Confirm the requirement is periodic work rather than timely data. If it
+      is the latter, build push instead and revisit this.
 - [ ] `shell/backgroundtask.go` so capgen generates the plumbing.
 - [ ] Host schedulers, following the MediaHost pattern.
 - [ ] CLI writes task identifiers into `Info.plist` and `AndroidManifest.xml` —

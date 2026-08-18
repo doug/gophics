@@ -70,11 +70,18 @@ one-line overrides per platform.
 
 This is the real work, and it is mostly *not* Go.
 
-### The fork that has to be decided first
+### The fork, and which side of it people mean
 
 "Background task" means two unrelated things, with different APIs, different
-limits, and different review consequences. Pick per use case; they are not
-substitutes.
+limits, and different review consequences. They are not substitutes, and most
+apps eventually want both — but they are not equally weighted.
+
+**When someone asks whether a framework supports background tasks, they mean
+the deferred/periodic sense**: sync, fetch, upload while the app is not open.
+The grace-period variant is real and useful, but nobody calls it a background
+task; they call it "finishing the upload". So the deferred half is both the
+harder work and the one that answers the question, and it is what M7 should
+target unless there is a specific reason otherwise.
 
 **1. Finish what you started** — a few seconds of grace to complete an upload or
 flush a database after the user leaves.
@@ -98,6 +105,57 @@ Anything continuous — audio playback, turn-by-turn location — is a third thi
 again: entitlement-gated background modes on iOS and a typed foreground service
 on Android, both with App Store or Play review implications. Out of scope here;
 it belongs to whichever capability owns that domain (audio, geolocation).
+
+### What the deferred half cannot promise
+
+Committing to deferred/periodic means committing to an API that is honest about
+being advisory, because on neither platform is it a schedule.
+
+**iOS is opportunistic and may simply never run.** `BGAppRefreshTask` is
+scheduled by the system against its own model of battery, usage and network. Two
+cases produce no execution at all, and both are common:
+
+- If the user force-quits the app from the app switcher, iOS stops scheduling
+  background refresh for it until the app is launched manually again.
+- Low Power Mode, and the per-app Background App Refresh switch in Settings,
+  disable it outright.
+
+**Android is more dependable but still not a clock.** WorkManager honours a
+15-minute floor for periodic work, Doze batches wakeups into maintenance
+windows, and App Standby buckets throttle rarely-used apps. Several OEM Android
+skins kill background work far more aggressively than stock, which is a
+well-known and unfixable-from-inside problem.
+
+The API must therefore never look like `time.Ticker`. `Schedule.Earliest` is a
+floor, not a target, and the documentation should say plainly that a task may
+run late, may be coalesced, and may not run at all. An app that needs
+correctness must treat every run as opportunistic: idempotent, resumable, and
+safe to be killed halfway, since both platforms will do exactly that.
+
+### The part that changes the architecture: push
+
+For the commonest reason people want periodic background work — *keep the data
+fresh* — iOS's intended answer is not the task scheduler. It is **silent push**
+(`content-available: 1`), where the server decides there is new data and wakes
+the app. BGAppRefresh is designed for prefetching around habitual usage, not for
+delivering timely updates, and treating it as a sync mechanism is the single
+most common way apps end up with stale data on iOS.
+
+gophics has no push capability. `shell/notify.go` is **local notifications
+only** — `Notifier.Notify` posts on-device; nothing registers for APNs or FCM
+tokens or handles a remote payload.
+
+That is worth knowing before M7 is scoped, because it means:
+
+- A background *scheduler* alone will not deliver reliable sync on iOS, however
+  well implemented.
+- The complete answer to "keep my app's data fresh" is probably
+  scheduler + push, and push is its own capability (token registration,
+  server-side certificates or FCM, payload handling, and a background delivery
+  path that has the same no-UI-goroutine problem described above).
+- If the actual requirement is timely data rather than periodic work, **push may
+  be the more valuable capability to build first**, and it is roughly the same
+  size.
 
 ### Proposed API
 
@@ -212,10 +270,13 @@ surface above is perhaps a day; the rest is the milestone.
 
 1. **Phase A (Lifecycle)** — small, self-contained, and delivers most of the
    practical value, since "save before you die" is what most apps need.
-2. **Decide the fork** — finish-what-you-started, or deferred/periodic. If it is
-   the former, a much smaller capability than the one above will do, and it
-   should not be called BackgroundTask.
-3. **Phase B**, scoped to the chosen half.
+2. **Decide what the requirement actually is.** Periodic work (a scheduler), or
+   timely data (push, with a scheduler as a fallback)? They look like the same
+   ask and are not. If it is timely data, build push first — same size, better
+   answer, and on iOS it is the only reliable one.
+3. **Phase B**, scoped to the answer. Deferred/periodic is the default reading
+   of "background task" and the harder half; plan for the CLI manifest work and
+   the device-trigger tooling, which are where the time actually goes.
 
 Doing 1 first is not a stalling tactic: without lifecycle states there is no way
 to observe that a background task ran at the right moment, so Phase A is also
