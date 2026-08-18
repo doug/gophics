@@ -1239,6 +1239,19 @@ type stageDispatch struct {
 }
 
 // submitAndWait submits the command buffer and waits for GPU completion.
+//
+// The wait is a full barrier — waitUntilCompleted on Metal — once per frame,
+// and it serialises the CPU against the GPU: the next frame cannot begin
+// encoding until this one has finished drawing. It is an obvious thing to want
+// gone, and removing it was measured: frame time got *worse*, 8.2ms to 10.1ms,
+// so it is not what the fixed cost is made of.
+//
+// It also cannot simply be dropped. AllocateBuffers' caller destroys every
+// buffer as soon as Dispatch returns, so without a completion barrier the GPU
+// may still be reading buffers that have been released. Removing the wait
+// means giving those buffers a lifetime that outlives the frame — reuse across
+// frames would do it, and would remove the per-frame allocation at the same
+// time.
 func (d *VelloComputeDispatcher) submitAndWait(res *dispatchResources) error {
 	if _, err := d.queue.Submit(res.cmdBuf); err != nil {
 		return fmt.Errorf("vello compute: submit: %w", err)

@@ -1071,10 +1071,29 @@ than a general deficit, and it moved 20% with a single change that had nothing
 to do with rasterization.
 
 - [ ] Find what is left in the ~8.2ms floor. It is flat across scene content
-      and nearly flat across resolution, so it is per-frame setup, not drawing:
-      the remaining candidates are the per-frame buffer allocation itself
-      (roughly a dozen buffers created and destroyed every frame) and pipeline
-      or bind-group construction.
+      and nearly flat across resolution, so it is per-frame setup, not drawing.
+
+      **Profiling says it is not CPU work.** A CPU profile of the compute arm
+      collects 370ms of samples across 1.02s of wall clock — the frame is
+      waiting, not computing, and nothing in Go's own allocation shows up.
+
+      **Two candidates were tested and one is now ruled out.**
+      `submitAndWait` calls `device.WaitIdle()` — a full `waitUntilCompleted`
+      barrier — once per frame, which serialises the CPU against the GPU
+      entirely. It looks exactly like the cause and is not: removing it made
+      frame time *worse*, 8.2ms to 10.1ms. It also cannot simply be dropped,
+      because the caller destroys every buffer as soon as `Dispatch` returns,
+      so without the barrier the GPU may still be reading released buffers.
+      Removing it means first giving those buffers a lifetime beyond the frame.
+
+      What remains: Metal's queue allows `maxFramesInFlight = 2` and **every
+      Submit consumes a slot**, while a compute frame submits twice — once for
+      the stages, once for the present. So it spends both slots and the CPU can
+      never run ahead, where render-pass submits once and gets the pipelining.
+      Merging the present into the dispatch encoder would make it one submit
+      per frame, and is the next thing to try. That the earlier
+      separate-encoder clear cost exactly one display interval is consistent
+      with this: it was a third submit.
 - [ ] The 1024px overlap-256 outlier survives at 32.31ms against a ~9ms trend
       — 3.5× its neighbours. Whatever it is, it is specific to many
       heavily-overlapping paths at high resolution.
