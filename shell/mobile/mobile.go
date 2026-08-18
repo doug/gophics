@@ -13,6 +13,7 @@ package mobile
 
 import (
 	"image"
+	"sync"
 	"sync/atomic"
 
 	"github.com/doug/gophics/app"
@@ -48,6 +49,12 @@ type Bridge struct {
 	dispHandle   int64        // retained native handles so Resize can full-rebuild
 	winHandle    int64        // the GPU surface on an orientation change (see Resize)
 	snapshotting bool         // force a CPU offscreen frame (Snapshot)
+
+	// Lifecycle state, written from the host UI thread via SetAppState and
+	// read by the widget tree; see lifecycle.go.
+	lcMu    sync.Mutex
+	lcState shell.AppState
+	lcSubs  []func(shell.AppState)
 }
 
 // NewBridge wraps a shell.Handler (see app.NewHandler).

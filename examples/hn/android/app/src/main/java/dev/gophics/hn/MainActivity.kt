@@ -50,14 +50,24 @@ class MainActivity : Activity() {
         }
     }
 
+    // Run states, matching shell.AppState: 0 active, 1 inactive, 2 background.
+    // onPause means "no longer frontmost" — a dialog over the app counts —
+    // while onStop means "not visible", which is the one worth persisting on.
     override fun onPause() {
         super.onPause()
         Hnmobile.focused(false)
+        Hnmobile.setAppState(1)
     }
 
     override fun onResume() {
         super.onResume()
         Hnmobile.focused(true)
+        Hnmobile.setAppState(0)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Hnmobile.setAppState(2)
     }
 }
 

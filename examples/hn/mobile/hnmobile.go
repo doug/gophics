@@ -11,10 +11,13 @@
 package hnmobile
 
 import (
+	"log"
+
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/shell/mobile"
 )
 
@@ -102,8 +105,20 @@ func TakeHaptic() int {
 	return -1
 }
 
-// Focused forwards app focus/visibility.
+// Focused forwards window focus. Note this is *focus*, not visibility: it fires
+// for a dialog appearing over the app. Use SetAppState for the run state.
 func Focused(f bool) { bridge.Focused(f) }
+
+// SetAppState forwards the host's run state: 0 active, 1 inactive, 2
+// background, matching shell.AppState. Android drives it from onResume,
+// onPause and onStop.
+func SetAppState(state int) {
+	// Logged because this is the example that demonstrates the capability, and
+	// a lifecycle callback that silently does nothing is indistinguishable from
+	// one that was never wired up.
+	log.Printf("hn: app state -> %s", shell.AppState(state))
+	bridge.SetAppState(state)
+}
 
 // SetInsets forwards safe-area insets in physical pixels.
 func SetInsets(top, right, bottom, left float64) {

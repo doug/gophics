@@ -438,7 +438,7 @@ technique already proven in-repo.
 
 ---
 
-## M6 — Lifecycle on mobile
+## M6 — Lifecycle on mobile (Go + Android done; device check pending)
 
 **Goal.** An app knows when it has been backgrounded, in time to save.
 
@@ -451,10 +451,22 @@ support, and it needs no scheduler at all.
 Small: an atomic and a callback list on the Go side, four one-line overrides per
 platform on the host side. Design in `design/mobile-background.md`.
 
-- [ ] Map `onResume`/`onPause`/`onStop` and the iOS scene callbacks onto the
-      existing three-state ladder. Do not reuse `Bridge.Focused` — it is window
-      focus, and fires for a dialog over the app.
-- [ ] Inbound `Bridge.SetAppState`, and a real `Bridge.Lifecycle()`.
+- [x] `Bridge.SetAppState` and a real `Bridge.Lifecycle()`, replacing the nil.
+      Repeated states are ignored, because Android sends onPause both on the way
+      out and on the way back, and an app persisting on every callback would
+      write several times for one visit to the background. Out-of-ladder values
+      are ignored rather than clamped: clamping to background would pause an app
+      that is running fine.
+- [x] Android drives it from `onResume`/`onPause`/`onStop`, and `Focused` keeps
+      its old meaning — it is window focus and fires for a dialog over the app,
+      which is why the TODO said not to reuse it.
+- [x] Race-tested: SetAppState arrives on the host UI thread while the widget
+      tree reads State() on its own goroutine.
+- [ ] Observe it on a device. The APK builds, which proves the gomobile binding
+      exposes `setAppState` and Kotlin compiles against it, but the phone was
+      unplugged before the transitions could be watched in logcat.
+- [ ] iOS: `sceneDidBecomeActive` / `sceneWillResignActive` /
+      `sceneDidEnterBackground`. Same three calls, not yet written.
 - [ ] Show it in `examples/capabilities`.
 
 **Exit.** State changes are observed on a device as the app is backgrounded and
