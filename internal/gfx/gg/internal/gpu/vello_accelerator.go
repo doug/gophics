@@ -37,6 +37,14 @@ import (
 type VelloAccelerator struct {
 	mu sync.Mutex
 
+	// computeErr records why the compute pipeline is unavailable, when it is.
+	// Init degrades rather than failing — a renderer that still draws beats one
+	// that refuses to start — but degrading silently is how this pipeline
+	// stayed broken and unnoticed: CanCompute() returned false on every
+	// machine, which reads as a fact about the hardware rather than as an
+	// error that was thrown away. The degradation stays; the reason is kept.
+	computeErr error
+
 	// wantStageCapture requests that the next render read its intermediate
 	// buffers back for comparison against the CPU port. Off on every normal
 	// frame — see DebugComputeStages.
@@ -184,6 +192,7 @@ func (a *VelloAccelerator) SetDeviceProvider(provider gpucontext.DeviceProvider)
 	dispatcher := NewVelloComputeDispatcher(device, queue)
 	if err := dispatcher.Init(); err != nil {
 		slogger().Warn("vello-compute: pipeline init failed, compute unavailable", "error", err)
+		a.computeErr = err
 		// Still mark gpuReady — device is valid, just compute isn't available.
 		a.gpuReady = true
 		return nil
@@ -1363,6 +1372,7 @@ func (a *VelloAccelerator) initGPU() error {
 	dispatcher := NewVelloComputeDispatcher(a.device, a.queue)
 	if err := dispatcher.Init(); err != nil {
 		slogger().Warn("vello-compute: pipeline init failed, compute unavailable", "error", err)
+		a.computeErr = err
 		a.gpuReady = true
 		return nil
 	}

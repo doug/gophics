@@ -606,8 +606,21 @@ func (d *Device) CreateShaderModule(desc *hal.ShaderModuleDescriptor) (hal.Shade
 		}, nil
 	}
 
-	// No WGSL source - just store the descriptor for later
-	return &ShaderModule{source: desc.Source, device: d}, nil
+	// No WGSL source. This used to return a ShaderModule with no library
+	// behind it, which is the worst thing it could do: the call succeeded, the
+	// caller carried on, and the failure surfaced later and somewhere else as
+	// "metal: invalid compute shader module" — a message that describes the
+	// symptom and not the cause. It cost a long time to trace that back to a
+	// module built from SPIR-V.
+	//
+	// Metal compiles MSL, and this HAL gets there from WGSL through naga.
+	// SPIR-V is a Vulkan input; there is no path from it here, so saying so at
+	// the point the wrong format arrives is the whole fix.
+	if len(desc.Source.SPIRV) > 0 {
+		return nil, fmt.Errorf("metal: shader module needs WGSL source, got SPIR-V — " +
+			"SPIR-V is a Vulkan-only input, and Metal compiles WGSL through naga's MSL writer")
+	}
+	return nil, fmt.Errorf("metal: shader module has no source")
 }
 
 func formatNSError(errObj ID) string {

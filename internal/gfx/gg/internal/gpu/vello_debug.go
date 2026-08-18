@@ -102,6 +102,23 @@ func (a *VelloAccelerator) captureStages(bufs *VelloComputeBuffers, config Vello
 	return snap
 }
 
+// ComputeUnavailableReason returns why CanCompute reports false, or nil when
+// compute is available or was never initialised.
+//
+// Init deliberately degrades: a pipeline that fails to build leaves the
+// renderer working without it. What it must not do is discard the reason.
+// "CanCompute() is false" looks like a statement about the machine, and for a
+// long time it was actually three bugs in shader translation — findable only
+// by re-running init by hand and reading a log nobody had enabled.
+func (a *VelloAccelerator) ComputeUnavailableReason() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.dispatcher != nil && a.dispatcher.initialized {
+		return nil
+	}
+	return a.computeErr
+}
+
 // DebugComputeStages renders a scene and returns the pipeline's intermediate
 // buffers alongside the image, for diffing against tilecompute's CPU port with
 // DiffComputeStages.

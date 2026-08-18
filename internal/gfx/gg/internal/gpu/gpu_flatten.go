@@ -164,7 +164,7 @@ func (r *GPUFlattenRasterizer) init() error {
 	r.shaderReady = true
 
 	// Create shader module using shared helper
-	shaderModule, err := CreateShaderModule(r.device, "flatten_shader", r.spirvCode)
+	shaderModule, err := CreateShaderModuleWGSL(r.device, "flatten_shader", flattenShaderWGSL)
 	if err != nil {
 		return fmt.Errorf("gpu_flatten: failed to create shader module: %w", err)
 	}

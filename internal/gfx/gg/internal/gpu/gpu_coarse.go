@@ -102,7 +102,7 @@ func (r *GPUCoarseRasterizer) init() error {
 	r.shaderReady = true
 
 	// Create shader module using shared helper
-	shaderModule, err := CreateShaderModule(r.device, "coarse_shader", r.spirvCode)
+	shaderModule, err := CreateShaderModuleWGSL(r.device, "coarse_shader", coarseShaderWGSL)
 	if err != nil {
 		return fmt.Errorf("gpu_coarse: failed to create shader module: %w", err)
 	}

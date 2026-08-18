@@ -99,3 +99,35 @@ func TestPathTilingFillsEveryReservedSegment(t *testing.T) {
 		}
 	}
 }
+
+// TestComputeUnavailabilityHasAReason asserts that if the compute pipeline is
+// not available, something says why.
+//
+// This is the check whose absence cost the most. The pipeline failed to build
+// on Metal for three separate reasons, and the only symptom was CanCompute()
+// returning false — which reads as a fact about the hardware, not as an error
+// that was caught and thrown away. initGPU logs at Warn and returns nil, and
+// the default logger discards Warn, so the explanation existed for a moment and
+// then did not.
+//
+// Degrading is still right: a renderer that draws without compute beats one
+// that refuses to start. Degrading without a recoverable reason is not.
+func TestComputeUnavailabilityHasAReason(t *testing.T) {
+	a := &VelloAccelerator{}
+	if err := a.InitStandalone(); err != nil {
+		t.Skipf("no GPU: %v", err)
+	}
+	defer a.Close()
+
+	if a.CanCompute() {
+		if reason := a.ComputeUnavailableReason(); reason != nil {
+			t.Errorf("compute is available but a reason is still recorded: %v", reason)
+		}
+		return
+	}
+
+	if a.ComputeUnavailableReason() == nil {
+		t.Fatal("compute is unavailable and nothing says why — the failure was discarded")
+	}
+	t.Logf("compute unavailable, reason preserved: %v", a.ComputeUnavailableReason())
+}
