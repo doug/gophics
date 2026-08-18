@@ -588,3 +588,30 @@ goroutine, while a menu belongs to AppKit and must be built where AppKit lives.
 Marshalling is not one hop that fits everywhere.
 
 ---
+
+---
+
+## M9 — Close the widget and platform gaps
+
+**Goal.** The things an app author reaches for and finds missing.
+
+Six items, grouped because they share a property: each is small enough to finish
+and visible enough that its absence is felt on first use.
+
+- [ ] **Reorderable lists** — drag a row to a new position. The drag machinery
+      exists (`Dismissible` swipes, `dragdrop.go`); this is the ordering case.
+- [ ] **Tree views** — expand/collapse hierarchy, which every file browser,
+      outline and settings pane needs and nobody wants to rebuild.
+- [ ] **Autocomplete** — a text field with a filtered suggestion list.
+- [ ] **System tray** — a desktop app that keeps running when its window closes
+      has nowhere to live without it.
+- [ ] **Desktop geolocation** — the last capability that is web-only.
+      CoreLocation, geoclue over D-Bus, and the Windows Location API; the
+      heaviest of the six, and the reason it was deferred from M4.
+- [ ] **RTL caret geometry** — multi-line landed, but the caret still assumes
+      left-to-right, so editing Arabic or Hebrew puts it in the wrong place.
+
+**Exit.** Each is demonstrated in an example and covered by tests that do not
+need a device.
+
+---
