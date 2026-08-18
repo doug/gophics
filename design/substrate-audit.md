@@ -145,3 +145,42 @@ driverless machine actually lands on.
 
 Everything else found here is upstream's to prioritise, and is better raised
 with the fork than patched locally.
+
+---
+
+## Addendum: code that looks alive (found during M10–M12)
+
+Three separate times, work started against code that turned out never to run.
+Recorded together because the pattern cost more than any individual instance,
+and because each one looked entirely healthy from the outside.
+
+- **`PipelineCache` and its nine `Stub*ID` types** (`internal/gpu/pipeline.go`)
+  are constructed nowhere but their own `renderer_test.go`. M10 was written to
+  "replace `createStripPipeline`'s stub with a real compute pipeline"; doing so
+  would have produced a working pipeline that nothing calls, and the tests
+  asserting `GetStripPipeline() != 0` would have passed either way.
+
+- **Three embedded shaders are never compiled into a pipeline**: `blend.wgsl`,
+  `strip.wgsl` and `composite.wgsl`. Each has a `Get…ShaderSource()` accessor,
+  and nothing calls any of them. `strip.wgsl` is the shader the sparse-strips
+  milestone was named after. `composite.wgsl` matters for a second reason: it
+  is the only render-stage shader with a runtime-sized array, so it is the sole
+  reason the render path needs `_mslBufferSizes` wiring at all — wiring that
+  therefore cannot be exercised.
+
+- **`GPUFineRasterizer` compiled its shader, built its layouts and created three
+  compute pipelines — then computed coverage in a Go loop.** It returned
+  correct pixels, so every test passed. Only the *source* of the pixels was
+  wrong.
+
+What connects them is that none is detectable by reading the code that contains
+them; each needs a question asked from outside — who constructs this, who calls
+that accessor, where does this result actually come from. The defences that
+worked were the ones that assert on an outcome rather than a return value: a
+test that demands a real device, a diff against an independent implementation,
+a benchmark with a second contestant.
+
+**Not deleted here.** Removal is right for at least `PipelineCache`, but it is a
+decision about direction rather than a cleanup, and M12 is where the
+sparse-strips direction is being settled. Deleting `strip.wgsl` while that is
+open would foreclose it by accident.
