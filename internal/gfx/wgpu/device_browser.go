@@ -283,16 +283,19 @@ func (d *Device) WaitForFence(_ *Fence, _ uint64, _ time.Duration) (bool, error)
 }
 
 // PushErrorScope pushes a new error scope onto the device's error scope stack.
-// Phase 2 — not yet implemented for browser.
-func (d *Device) PushErrorScope(filter ErrorFilter) {
-	panic("wgpu: browser PushErrorScope not yet implemented (Phase 2)")
-}
+//
+// Not implemented on the browser backend, where it is a no-op rather than a
+// panic. These are exported methods on Device: a caller reaching one on web
+// would have killed the whole application to report a feature gap, which is a
+// bad trade for something the browser's own console already surfaces. Scoped
+// error capture remains unavailable here; PopErrorScope reports no error.
+func (d *Device) PushErrorScope(filter ErrorFilter) {}
 
 // PopErrorScope pops the most recently pushed error scope.
-// Phase 2 — not yet implemented for browser.
-func (d *Device) PopErrorScope() *GPUError {
-	panic("wgpu: browser PopErrorScope not yet implemented (Phase 2)")
-}
+//
+// Always nil on the browser backend — see PushErrorScope. Nil means "no error
+// was captured", which is honest: nothing was capturing.
+func (d *Device) PopErrorScope() *GPUError { return nil }
 
 // WaitIdle waits for all GPU work to complete.
 // On browser, the GPU is polled automatically. This is a no-op.
