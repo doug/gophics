@@ -860,25 +860,43 @@ those only exist after M10 and M11.
       benchmark came out flat at ~4.5ms whatever the scene contained. Gated on
       Debug being enabled; blue-square frame time went 4.20ms → 1.14ms.
 
-**What the numbers do not say.** They bound the compute path from below and
-nothing more, for two reasons worth stating plainly rather than discovering
-later:
+**A correction, and it changes the milestone.** I wrote above that the readback
+in those timings is "a transfer a renderer would never make", and that the
+numbers therefore only bound the compute path from below. That was wrong, and
+reading `VelloAccelerator.flushLocked` is what settled it:
 
-- The only headless harness for the compute path renders and then reads the
-  entire framebuffer back to host memory — 16MB at 2048px. A real frame keeps
-  the result on the GPU and composites it. A large and unknown share of these
-  timings is a transfer a renderer would never make.
-- The render-pass pipeline it would actually replace **cannot be benchmarked
-  headlessly at all**: it needs a window and surface. So the comparison that
-  decides this milestone has not been run. Compute-versus-CPU is a proxy, and a
-  poor one.
+	img, err := a.dispatchComputeScene(target.Width, target.Height, bgColor, paths)
+	compositeOver(target, img)
 
-Two per-frame costs are also visible and probably fixable before any verdict:
-buffers are allocated and destroyed every frame, and the pipeline reallocates
-rather than reusing across frames of the same size.
+Every compute flush dispatches, reads the **entire framebuffer** back to host
+memory, and composites it in a CPU loop over every pixel. The readback is not a
+benchmark artifact. It is what the integration does on every frame, and the
+measured numbers are honest.
 
-- [ ] Build an offscreen harness that renders through both GPU pipelines without
-      a surface and without a readback, and compare those.
+**And it is worse than slow: the compute path cannot draw to a GPU-direct
+target at all.** `compositeOver` writes only to `target.Data`. A GPU-direct
+target carries a texture view and no CPU buffer, so the loop skipped every
+pixel and returned success — blank output, no error. That is reachable through
+the public API: `gpu_layers.go` renders opacity layers into a view-only target
+and passes the pipeline mode straight through, and `gg.PipelineModeCompute` is
+documented for callers to select. An app asking for compute got empty opacity
+layers and nothing said why.
+
+- [x] Fixed the silence: a view-only target now returns `ErrFallbackToCPU`, so
+      the caller gets correct pixels from another path instead of nothing.
+      `TestComputeFallsBackOnGPUDirectTarget` pins it and fails without the
+      guard.
+
+**So the blocker for this milestone is not the harness.** A fair GPU-vs-GPU
+comparison cannot exist while one of the two contestants renders through host
+memory and cannot target a texture view — that is not a measurement problem,
+it is the answer to the measurement. The compute path has to write its output
+into the target view on the GPU before comparing it to a path that always has.
+
+- [ ] Make the compute path composite into `target.View` on the GPU instead of
+      reading back and looping on the CPU. Everything else here waits on it.
+- [ ] Then build the offscreen harness that renders through both GPU pipelines
+      without a surface and without a readback, and compare those.
 - [ ] Reuse buffers across frames instead of allocating per render.
 - [ ] Run the full `gophics_gpu` suite against both on Metal and on Vulkan (the
       Pixel), since a compute pipeline is where backends diverge most.

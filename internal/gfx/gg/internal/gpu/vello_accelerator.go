@@ -367,6 +367,24 @@ func (a *VelloAccelerator) flushLocked(target gg.GPURenderTarget) error {
 		return nil
 	}
 
+	// This path renders into target.Data: it dispatches, reads the framebuffer
+	// back to host memory, and composites in a CPU loop. A GPU-direct target
+	// carries a texture view and no Data at all, and compositeOver would then
+	// skip every pixel and report success — a layer that renders blank with no
+	// error anywhere.
+	//
+	// That is reachable today. gpu_layers.go renders opacity layers into a
+	// view-only target and passes the pipeline mode through, and
+	// PipelineModeCompute is a documented public option. Falling back gives the
+	// caller correct pixels from another path; silence gives it nothing.
+	if !target.View.IsNil() && len(target.Data) == 0 {
+		slogger().Warn("vello-compute: target is GPU-direct (texture view, no CPU buffer) " +
+			"and this path can only composite into host memory — falling back")
+		a.pendingPaths = nil
+		a.pendingTarget = nil
+		return gg.ErrFallbackToCPU
+	}
+
 	// Take ownership of pending data and reset.
 	paths := a.pendingPaths
 	a.pendingPaths = nil
