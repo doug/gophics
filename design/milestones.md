@@ -194,7 +194,15 @@ gap was only ever desktop and mobile.
       chosen over joydev because only evdev reports the axis range that makes
       full deflection read as 1.0. Y is negated on macOS so `Axes[1]` points
       the same way it does on the web.
-- [ ] Gamepad on Windows (XInput) — the remaining desktop gap.
+- [x] **Gamepad on Windows (XInput).** Desktop gamepad is now complete on all
+      three platforms. XInput rather than raw HID or DirectInput, for the same
+      reason macOS uses GameController: Windows already normalises any
+      Xbox-compatible pad to one layout, and the per-vendor mapping table is the
+      part that ages badly. Verified on Windows 11 ARM64 — button order,
+      analog triggers, axis clamping (XInput's range is asymmetric, so full-left
+      would read past -1), Y negation to match the other shells, and that
+      XInputGetState actually resolves rather than every test passing against a
+      nil proc.
 - [ ] Geolocation on desktop: CoreLocation needs an authorization dance and a
       run loop, geoclue is D-Bus, Windows is COM. Deferred deliberately —
       three heavy bindings for something desktop apps rarely ask for.
@@ -210,9 +218,9 @@ a power source, and the evdev decoder against synthetic `input_event` bytes.
 The ioctl request numbers are checked against known constants, and on a laptop
 the macOS read also cross-checks against `pmset`.
 
-**Exit.** Battery meets it. `examples/capabilities` shows live values on web
-and on every desktop, and returns nil rather than a silent zero elsewhere.
-Gamepad meets it everywhere but Windows; geolocation is web-only.
+**Exit.** Battery and gamepad both meet it: `examples/capabilities` shows live
+values on web and on every desktop, and returns nil rather than a silent zero
+elsewhere. Geolocation remains web-only, and mobile remains unimplemented.
 
 ---
 
