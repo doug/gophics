@@ -205,6 +205,15 @@ type PlatformWindow interface {
 	// SetTitle changes the window title.
 	SetTitle(title string)
 
+	// SetSize resizes the window's content area, in logical pixels.
+	//
+	// It reports whether the platform applied the request. Not every windowing
+	// system lets a client choose its own size: on Wayland the compositor owns
+	// window geometry and a toplevel asks rather than tells, so that backend
+	// answers false instead of pretending. Even where true, a window manager
+	// may clamp or ignore the result — this is a request, not an assignment.
+	SetSize(width, height int) bool
+
 	// SetMinSize sets the minimum window size in logical pixels.
 	// Use 0 for a dimension to remove that minimum constraint.
 	SetMinSize(width, height int)

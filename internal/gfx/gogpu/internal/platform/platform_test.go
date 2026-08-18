@@ -122,16 +122,22 @@ func TestNewWindowID_Unique(t *testing.T) {
 type mockPlatformWindow struct {
 	frameless       bool
 	hitTestCallback func(x, y float64) gpucontext.HitTestResult
+	width, height   int
 }
 
-func (m *mockPlatformWindow) ID() WindowID                     { return 0 }
-func (m *mockPlatformWindow) GetHandle() (uintptr, uintptr)    { return 0, 0 }
-func (m *mockPlatformWindow) LogicalSize() (int, int)          { return 0, 0 }
-func (m *mockPlatformWindow) PhysicalSize() (int, int)         { return 0, 0 }
-func (m *mockPlatformWindow) ScaleFactor() float64             { return 1.0 }
-func (m *mockPlatformWindow) ShouldClose() bool                { return false }
-func (m *mockPlatformWindow) InSizeMove() bool                 { return false }
-func (m *mockPlatformWindow) SetTitle(string)                  {}
+func (m *mockPlatformWindow) ID() WindowID                  { return 0 }
+func (m *mockPlatformWindow) GetHandle() (uintptr, uintptr) { return 0, 0 }
+func (m *mockPlatformWindow) LogicalSize() (int, int)       { return 0, 0 }
+func (m *mockPlatformWindow) PhysicalSize() (int, int)      { return 0, 0 }
+func (m *mockPlatformWindow) ScaleFactor() float64          { return 1.0 }
+func (m *mockPlatformWindow) ShouldClose() bool             { return false }
+func (m *mockPlatformWindow) InSizeMove() bool              { return false }
+func (m *mockPlatformWindow) SetTitle(string)               {}
+func (m *mockPlatformWindow) SetSize(width, height int) bool {
+	m.width, m.height = width, height
+	return true
+}
+
 func (m *mockPlatformWindow) SetMinSize(int, int)              {}
 func (m *mockPlatformWindow) SetMaxSize(int, int)              {}
 func (m *mockPlatformWindow) PrepareFrame() PrepareFrameResult { return PrepareFrameResult{} }
@@ -221,5 +227,20 @@ func TestPlatformWindow_HitTestCallback(t *testing.T) {
 	mock.hitTestCallback(0, 0)
 	if !called2 {
 		t.Error("second callback should have been called")
+	}
+}
+
+// SetSize reports whether the platform applied the request, so the interface
+// can carry an honest "this windowing system does not allow it" — Wayland and
+// the browser both answer false.
+func TestPlatformWindow_SetSize(t *testing.T) {
+	m := &mockPlatformWindow{}
+	var pw PlatformWindow = m
+
+	if !pw.SetSize(640, 480) {
+		t.Error("SetSize should report success on a platform that supports it")
+	}
+	if m.width != 640 || m.height != 480 {
+		t.Errorf("size = %dx%d, want 640x480", m.width, m.height)
 	}
 }

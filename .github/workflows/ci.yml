@@ -10,10 +10,10 @@ on:
 #                     freshness, and a tracked-binary size guard.
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
 #   - test-framework: gophics's own packages (CPU/headless, deterministic) — the gate.
-#   - test-substrate: the vendored internal/gfx + internal/audio. Their
-#                     GPU / Metal-toolchain / interactive-display tests self-skip
-#                     when those prerequisites are absent, so this job is
-#                     best-effort (does not block merges).
+#   - test-substrate: the vendored internal/gfx + internal/audio. Compiling
+#                     their tests blocks; running them does not, since the
+#                     GPU / Metal-toolchain / interactive-display cases depend
+#                     on the machine and self-skip when prerequisites are absent.
 
 jobs:
   lint:
@@ -90,11 +90,19 @@ jobs:
   test-substrate:
     name: test (substrate, best-effort)
     runs-on: macos-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      # Compiling the substrate's tests is a blocking gate even though running
+      # them is not. An interface change in internal/gfx can break a test file
+      # while every build stays green: `go build` does not compile tests, and
+      # the lint job's vet deliberately skips this tree. Running them stays
+      # best-effort because the GPU and toolchain cases depend on the machine;
+      # compiling them does not.
+      - name: substrate tests compile
+        run: go test -run '^$' -count=1 ./internal/...
       - name: substrate tests (GPU/toolchain tests self-skip)
+        continue-on-error: true
         run: go test -count=1 ./internal/...

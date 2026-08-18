@@ -253,6 +253,20 @@ func (a *App) HasFocus() bool {
 
 // SetMinSize sets the minimum window size in logical pixels at runtime.
 // Use 0 for both dimensions to remove the minimum constraint.
+// SetSize resizes the window's content area, in logical pixels.
+//
+// It reports whether the platform applied the request. False means the
+// windowing system does not let a client choose its own size — Wayland, where
+// the compositor owns geometry — so a caller can hide a "resize" affordance
+// rather than offer one that does nothing. Even true is a request: a window
+// manager may clamp it to the screen or to the min/max constraints.
+func (a *App) SetSize(width, height int) bool {
+	if a.platWindow == nil {
+		return false
+	}
+	return a.platWindow.SetSize(width, height)
+}
+
 func (a *App) SetMinSize(width, height int) {
 	a.config.MinWidth = width
 	a.config.MinHeight = height

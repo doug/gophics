@@ -385,6 +385,13 @@ func (w *browserWindow) SetCursor(cursorID int) {
 }
 
 // SetMinSize is a no-op on browser — window sizing is controlled by the page.
+// SetSize implements PlatformWindow by declining.
+//
+// A page cannot resize the window it lives in: window.resizeTo is refused for
+// anything but a popup the script itself opened. The canvas follows its CSS box
+// instead, which is the layout's business rather than the window's.
+func (w *browserWindow) SetSize(width, height int) bool { return false }
+
 func (w *browserWindow) SetMinSize(_, _ int) {}
 
 // SetMaxSize is a no-op on browser — window sizing is controlled by the page.

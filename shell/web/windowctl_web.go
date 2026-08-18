@@ -44,9 +44,14 @@ func (c *webWindowControl) Fullscreen() bool {
 	return !c.w.doc.Get("fullscreenElement").IsNull()
 }
 
-// Size returns the canvas logical size (the viewport). The browser owns the tab
-// dimensions, so this is read-only on web; there is no SetSize in the
-// capability (see shell/windowctl.go).
+// Size returns the canvas logical size (the viewport).
 func (c *webWindowControl) Size() (w, h float32) {
 	return c.w.logical.W, c.w.logical.H
 }
+
+// SetSize declines. The browser owns the tab's dimensions: window.resizeTo is
+// refused for anything but a popup the script itself opened, and the canvas
+// follows its CSS box, which is the page's layout rather than a window size.
+// Reporting false lets a caller hide a resize affordance instead of offering
+// one that does nothing.
+func (c *webWindowControl) SetSize(w, h float32) bool { return false }

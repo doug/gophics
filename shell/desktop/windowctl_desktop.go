@@ -35,9 +35,15 @@ func (c desktopWindowControl) Size() (w, h float32) {
 	return float32(lw), float32(lh)
 }
 
-// Note: there is intentionally no SetSize. gogpu's App exposes no runtime
-// window resize — only SetMinSize/SetMaxSize constraints, and darwin's platform
-// Window.SetSize is not reachable through the App/PlatformWindow interface — so
-// a SetSize here could not be honestly backed.
-// TODO(desktop): if gogpu grows App.SetSize (wrapping platWindow), add it to
-// shell.WindowControl and implement it here.
+// SetSize resizes the window, reporting whether the platform allowed it.
+//
+// This used to be deliberately absent, on the grounds that gogpu exposed no
+// runtime resize. It does now: PlatformWindow.SetSize is implemented by
+// AppKit's setFrame on macOS, SetWindowPos on Windows and an X11 configure
+// request, and declined by Wayland, where the compositor owns geometry.
+func (c desktopWindowControl) SetSize(w, h float32) bool {
+	if w <= 0 || h <= 0 {
+		return false
+	}
+	return c.w.app.SetSize(int(w), int(h))
+}

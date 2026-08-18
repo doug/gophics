@@ -826,6 +826,37 @@ func (w *win32Window) SetTitle(title string) {
 	}
 }
 
+// SetSize implements PlatformWindow.
+//
+// The argument is the *content* size, matching every other backend, so the
+// frame has to be added back before SetWindowPos — which takes the outer window
+// rect. AdjustWindowRectEx does that, and the per-monitor DPI variant is
+// preferred because border and caption thickness scale with DPI: computing them
+// at 96 and applying the result on a 200% display leaves the client area short
+// by several pixels.
+func (w *win32Window) SetSize(width, height int) bool {
+	if width <= 0 || height <= 0 || w.hwnd == 0 {
+		return false
+	}
+	hwnd := uintptr(w.hwnd)
+	style, _, _ := procGetWindowLongPtrW.Call(hwnd, gwlStyle)
+	dpi, _, _ := procGetDpiForWindow.Call(hwnd)
+	if dpi == 0 {
+		dpi = 96
+	}
+
+	r := rect{0, 0, int32(width), int32(height)}
+	adjustWindowRectForDpi(&r, style, uint32(dpi))
+	procSetWindowPos.Call(hwnd, 0, 0, 0,
+		uintptr(r.right-r.left), uintptr(r.bottom-r.top),
+		swpNoMove|swpNoZOrder|swpNoActivate)
+
+	w.sizeMu.Lock()
+	w.width, w.height = width, height
+	w.sizeMu.Unlock()
+	return true
+}
+
 func (w *win32Window) SetMinSize(width, height int) {
 	w.sizeMu.Lock()
 	w.minWidth = width

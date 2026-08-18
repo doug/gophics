@@ -336,6 +336,33 @@ func (c *Connection) GetProperty(window ResourceID, property, reqType Atom, long
 	return reply[32 : 32+dataLen], actualType, format, nil
 }
 
+// ResizeWindow changes a window's size without moving it.
+//
+// Distinct from ConfigureWindow, which sets position and size together: a
+// resize that also sends X and Y would snap the window back to wherever the
+// caller last thought it was, undoing any move by the user or the window
+// manager. The value mask is what makes the difference, so this is a different
+// request rather than a wrapper.
+func (c *Connection) ResizeWindow(window ResourceID, width, height uint16) error {
+	const (
+		ConfigWidth  = 1 << 2
+		ConfigHeight = 1 << 3
+	)
+	e := NewEncoder(c.byteOrder)
+	e.PutUint8(OpcodeConfigureWindow)
+	e.PutUint8(0)
+	e.PutUint16(5) // request length in 4-byte units: 3 fixed + 2 values
+	e.PutUint32(uint32(window))
+	e.PutUint16(uint16(ConfigWidth | ConfigHeight))
+	e.PutUint16(0) // pad
+	e.PutUint32(uint32(width))
+	e.PutUint32(uint32(height))
+	if _, err := c.sendRequest(e.Bytes()); err != nil {
+		return fmt.Errorf("x11: ResizeWindow failed: %w", err)
+	}
+	return nil
+}
+
 // ConfigureWindow configures window position and size.
 func (c *Connection) ConfigureWindow(window ResourceID, x, y int16, width, height uint16) error {
 	// Value mask bits

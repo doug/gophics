@@ -1499,6 +1499,15 @@ func (p *Platform) SetTitle(title string) {
 	_ = p.conn.SetWindowTitle(p.primary.window, title, p.atoms)
 }
 
+// SetSize resizes the window to a logical content size. Reports whether the
+// request was sent; the window manager may still override it.
+func (p *Platform) SetSize(width, height int) bool {
+	if p.primary == nil || p.conn == nil || width <= 0 || height <= 0 {
+		return false
+	}
+	return p.conn.ResizeWindow(p.primary.window, uint16(width), uint16(height)) == nil
+}
+
 func (p *Platform) SetMinSize(width, height int) {
 	if p.primary == nil || p.conn == nil {
 		return

@@ -559,15 +559,17 @@ type stubWindow struct {
 	fullscreen                   bool
 }
 
-func (s *stubWindow) ID() WindowID                                                         { return 0 }
-func (s *stubWindow) GetHandle() (uintptr, uintptr)                                        { return 0, 0 }
-func (s *stubWindow) LogicalSize() (int, int)                                              { return 0, 0 }
-func (s *stubWindow) PhysicalSize() (int, int)                                             { return 0, 0 }
-func (s *stubWindow) ScaleFactor() float64                                                 { return 1 }
-func (s *stubWindow) PrepareFrame() PrepareFrameResult                                     { return PrepareFrameResult{} }
-func (s *stubWindow) InSizeMove() bool                                                     { return false }
-func (s *stubWindow) ShouldClose() bool                                                    { return s.closed }
-func (s *stubWindow) SetTitle(_ string)                                                    {}
+func (s *stubWindow) ID() WindowID                     { return 0 }
+func (s *stubWindow) GetHandle() (uintptr, uintptr)    { return 0, 0 }
+func (s *stubWindow) LogicalSize() (int, int)          { return 0, 0 }
+func (s *stubWindow) PhysicalSize() (int, int)         { return 0, 0 }
+func (s *stubWindow) ScaleFactor() float64             { return 1 }
+func (s *stubWindow) PrepareFrame() PrepareFrameResult { return PrepareFrameResult{} }
+func (s *stubWindow) InSizeMove() bool                 { return false }
+func (s *stubWindow) ShouldClose() bool                { return s.closed }
+func (s *stubWindow) SetTitle(_ string)                {}
+func (s *stubWindow) SetSize(width, height int) bool   { return true }
+
 func (s *stubWindow) SetMinSize(_, _ int)                                                  {}
 func (s *stubWindow) SetMaxSize(_, _ int)                                                  {}
 func (s *stubWindow) SetCursor(_ int)                                                      {}

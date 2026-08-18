@@ -368,6 +368,15 @@ func (dw *darwinPlatformWindow) SetTitle(title string) {
 	}
 }
 
+// SetSize implements PlatformWindow by setting the NSWindow content size.
+func (dw *darwinPlatformWindow) SetSize(width, height int) bool {
+	if dw.window == nil || width <= 0 || height <= 0 {
+		return false
+	}
+	dw.window.SetSize(width, height)
+	return true
+}
+
 func (dw *darwinPlatformWindow) SetMinSize(width, height int) {
 	if dw.window != nil {
 		dw.window.SetMinSize(float64(width), float64(height))

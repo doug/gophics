@@ -512,11 +512,27 @@ func (w *x11PlatformWindow) LogicalSize() (int, int) {
 }
 
 // PhysicalSize returns the window size in physical device pixels (what the GPU sees).
-func (w *x11PlatformWindow) PhysicalSize() (int, int)       { return w.inner().GetSize() }
-func (w *x11PlatformWindow) ScaleFactor() float64           { return w.inner().ScaleFactor() }
-func (w *x11PlatformWindow) ShouldClose() bool              { return w.inner().ShouldClose() }
-func (w *x11PlatformWindow) InSizeMove() bool               { return false }
-func (w *x11PlatformWindow) SetTitle(title string)          { w.inner().SetTitle(title) }
+func (w *x11PlatformWindow) PhysicalSize() (int, int) { return w.inner().GetSize() }
+func (w *x11PlatformWindow) ScaleFactor() float64     { return w.inner().ScaleFactor() }
+func (w *x11PlatformWindow) ShouldClose() bool        { return w.inner().ShouldClose() }
+func (w *x11PlatformWindow) InSizeMove() bool         { return false }
+func (w *x11PlatformWindow) SetTitle(title string)    { w.inner().SetTitle(title) }
+
+// SetSize implements PlatformWindow via an X11 resize request. The window
+// manager may still clamp it.
+func (w *x11PlatformWindow) SetSize(width, height int) bool {
+	return w.inner().SetSize(width, height)
+}
+
+// SetSize implements PlatformWindow for Wayland by declining.
+//
+// Wayland inverts window management: the compositor owns geometry and a
+// toplevel is told its size through a configure event, having only asked via
+// min/max hints. There is no request that means "become this size", so
+// answering false is the truthful reply — a client that resized its own buffer
+// would fight the next configure and flicker.
+func (w *waylandPlatformWindow) SetSize(width, height int) bool { return false }
+
 func (w *x11PlatformWindow) SetMinSize(width, height int)   { w.inner().SetMinSize(width, height) }
 func (w *x11PlatformWindow) SetMaxSize(width, height int)   { w.inner().SetMaxSize(width, height) }
 func (w *x11PlatformWindow) SetCursor(cursorID int)         { w.inner().SetCursor(cursorID) }

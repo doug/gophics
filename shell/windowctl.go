@@ -42,4 +42,14 @@ type WindowControl interface {
 	Fullscreen() bool
 	// Size returns the current window size in logical pixels.
 	Size() (w, h float32)
+	// SetSize requests a new window content size in logical pixels, reporting
+	// whether the platform applied it.
+	//
+	// False is a real answer, not an error: Wayland gives the compositor
+	// ownership of window geometry, and a browser refuses resizeTo for anything
+	// but a popup it opened. Callers should treat a resize affordance as
+	// unavailable when this returns false rather than leaving a control that
+	// silently does nothing. Even true is a request — a window manager may
+	// clamp it.
+	SetSize(w, h float32) bool
 }
