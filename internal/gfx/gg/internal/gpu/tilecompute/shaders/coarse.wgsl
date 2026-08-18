@@ -137,6 +137,26 @@ fn main(
 
     // Iterate all draw objects in Z-order (path 0 first, path 1 second, ...).
     for (var draw_ix = 0u; draw_ix < config.n_drawobj; draw_ix = draw_ix + 1u) {
+        // Stop before overrunning this tile's command list.
+        //
+        // The list is terminated by an implicit CMD_END — a zero word the
+        // buffer already holds — so writes have to stay strictly inside the
+        // tile's region. Running past it did two things at once: it overwrote
+        // the next tile's commands, and it left this tile unterminated, so the
+        // fine stage walked off the end and kept interpreting whatever
+        // followed as commands. On 256 overlapping paths at 512px, where one
+        // tile needs 1 header word plus 4 per path against a 1024-word budget,
+        // that hung the GPU outright — every thread parked, no progress, no
+        // error.
+        //
+        // Four words is the largest single command emitted below. Dropping the
+        // remaining draws for this tile loses coverage in a scene that already
+        // exceeds the budget, which is visible but bounded; the alternative is
+        // not.
+        if ptcl_offset + 4u >= PTCL_MAX_PER_TILE {
+            break;
+        }
+
         let tag = scene[config.drawtag_base + draw_ix];
         let dm = draw_monoids[draw_ix];
         let path_ix = dm.path_ix;

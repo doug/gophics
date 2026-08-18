@@ -979,13 +979,65 @@ none of which this benchmark exercises. Deleting a verified implementation
 because it lost on the workload least suited to it would be the wrong call, and
 the harness to test the right workload now exists.
 
-- [ ] Extend the harness to the scenes compute is supposed to win: deep clip
-      stacks, heavy overlap, thousands of paths. If it loses there too, remove
-      it — that is the evidence removal needs, and this benchmark is not it.
-- [ ] The render-pass path leaks GPU resources under the harness: every
-      iteration logs `Buffer released by GC (missing explicit Release)` for
-      `clip_no_clip_uniform`, `session_convex_verts` and others. Harmless to
-      the timings, but a per-frame leak in the default renderer.
+- [x] **Ran the scenes compute is supposed to win.** Three classes now:
+      `disjoint` (many small separate shapes), `overlap` (translucent shapes
+      piled on the same pixels), `clipped` (each shape under its own clip
+      path), at two resolutions and two densities. Milliseconds per frame:
+
+      | scene | render-pass | compute | |
+      |---|---|---|---|
+      | 512px disjoint 256 | 0.70 | 9.95 | RP 14× |
+      | 512px disjoint 2000 | 2.10 | 10.59 | RP 5.0× |
+      | 512px overlap 64 | 0.77 | 9.80 | RP 13× |
+      | 512px overlap 256 | 1.92 | 10.56 | RP 5.5× |
+      | 512px clipped 64 | 3.41 | 9.80 | RP 2.9× |
+      | **512px clipped 256** | **12.95** | **9.85** | **compute 1.3×** |
+      | 1024px disjoint 256 | 0.83 | 10.81 | RP 13× |
+      | 1024px disjoint 2000 | 2.30 | 15.17 | RP 6.6× |
+      | 1024px overlap 64 | 1.79 | 13.77 | RP 7.7× |
+      | 1024px overlap 256 | 5.89 | 92.78 | RP 15.8× |
+      | 1024px clipped 64 | 3.58 | 16.89 | RP 4.7× |
+      | 1024px clipped 256 | 13.67 | 35.32 | RP 2.6× |
+
+      **Compute wins exactly one cell, and it is the predicted one.** With 256
+      clip paths at 512px it is 1.3× ahead — and the reason is visible in the
+      scaling rather than the single number. Going from 64 to 256 clips costs
+      render-pass 3.41ms → 12.95ms, while compute barely moves, 9.80ms →
+      9.85ms. Clip changes are what a render-pass pipeline pays per-draw for
+      and a tile-based one absorbs into a command list it was already walking.
+
+      That is the whole of compute's case, and it does not survive resolution:
+      the same scene at 1024px costs compute 35.32ms against render-pass's
+      13.67ms, because compute's floor rises with pixel count while
+      render-pass's tracks content. Thousands of paths do not help it either —
+      2000 disjoint paths still lose 5-6×.
+
+**Decision: render-pass stays the default; compute stays available, not
+selected.** One favourable cell at one resolution, against 3-16× losses
+everywhere else, is not a case for switching. `gg.AutoSelectCompute` stays
+false, and `SelectPipeline`'s premise — that complexity favours compute — is
+contradicted by every density row here.
+
+**Not removed, and now for a concrete reason rather than caution.** There is a
+regime where the design does what it claims: clip-heavy scenes, where its cost
+is flat in the thing that makes render-pass expensive. Removing it would
+discard a pipeline that is pixel-exact against the CPU port and wins its
+intended workload, on the grounds that it loses the others. What it needs is
+its floor brought down — roughly 10ms at 512px regardless of content — not
+deletion.
+
+**Two caveats on these numbers, both worth carrying forward.** The 1024px
+overlap-256 row (92.78ms) is an outlier against its own trend and probably
+pathological rather than representative. And at 256 overlapping paths a tile is
+at the edge of its PTCL budget, so some draws may be dropped; measured coverage
+is within 6% of render-pass and the ratio is identical to the non-overflowing
+64-path case, but that row should be read with care.
+
+- [ ] Bring down compute's fixed floor — ~10ms at 512px regardless of scene
+      content — before revisiting the default. That, not the per-scene work, is
+      what loses it every other cell.
+- [ ] Investigate the 1024px overlap-256 outlier (92.78ms against a ~15ms
+      trend).
 - [ ] Reuse buffers across frames instead of allocating per render.
 - [ ] Run the full `gophics_gpu` suite against both on Metal and on Vulkan (the
       Pixel), since a compute pipeline is where backends diverge most.
