@@ -330,6 +330,15 @@ type scrollState struct {
 	barFade float32
 	barTick scrollbarFade
 
+	// Thumb geometry, measured by the scrollbar's Paint and read by Build to
+	// place the drag target over it. It lags by one frame, which is invisible:
+	// the bar is hidden until a scroll happens, and that scroll is the frame
+	// that measures it.
+	barThumbLen  float32 // thumb length along the scroll axis
+	barTrackLen  float32 // travel available to the thumb (extent - thumbLen)
+	barDragging  bool
+	barDragStart float32 // offset when the drag began
+
 	// reveal lets a focused descendant (a TextField caret) ask to be scrolled
 	// into view; provided to the child subtree and captured at paint.
 	reveal *scrollReveal
@@ -446,6 +455,43 @@ func (b *scrollbarFade) Tick(dt float64) bool {
 	}
 	b.s.ctx.Invalidate()
 	return b.s.barFade > 0
+}
+
+// barDrag maps a drag along the scrollbar into a content offset.
+//
+// The thumb travels (extent - thumbLen) while the content travels maxOffset, so
+// a pixel of thumb is worth maxOffset/track pixels of content — which is why
+// dragging a short thumb through a long document moves so fast, and why the
+// ratio must come from the measured track rather than from the viewport size.
+func (s *scrollState) barDrag(delta float32) {
+	if s.vp.box == nil || s.barTrackLen <= 0 {
+		return
+	}
+	maxOff := s.vp.box.MaxOffset()
+	if maxOff <= 0 {
+		return
+	}
+	s.fling.active = false
+	next := barOffsetFor(s.offset, delta, maxOff, s.barTrackLen)
+	s.SetState(func() { s.offset = next })
+	s.barFade = 1 // keep the bar visible for the whole drag
+	s.reportOffset()
+}
+
+// barOffsetFor is the drag arithmetic on its own, so it can be tested without
+// a live widget state.
+func barOffsetFor(offset, delta, maxOff, track float32) float32 {
+	if track <= 0 || maxOff <= 0 {
+		return offset
+	}
+	next := offset + delta*(maxOff/track)
+	if next < 0 {
+		return 0
+	}
+	if next > maxOff {
+		return maxOff
+	}
+	return next
 }
 
 func (s *scrollState) jumpTo(offset float32) {
@@ -855,6 +901,9 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 	// Overlay the fading scroll indicator, and the pull-to-refresh spinner
 	// when enabled, above the content.
 	layers := []Widget{inner, scrollbar{s: s}}
+	if t := scrollbarThumb(s); t != nil {
+		layers = append(layers, t)
+	}
 	if w.OnRefresh != nil {
 		layers = append(layers, Align{X: 0.5, Y: 0, Child: refreshIndicator{
 			extent:   s.overscroll,
@@ -919,6 +968,66 @@ func (b *revealAnchorBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
 // scrollbar overlays a thin, fading position indicator on the scroll's
 // trailing edge — so scrollable regions are discoverable. It reads the live
 // scroll state each paint and never intercepts input.
+// scrollbarThumb places a drag target over the painted thumb.
+//
+// It is a separate, thumb-sized widget rather than input on the bar itself: the
+// scrollbar box fills the whole scroll area so it can paint at the edge, and an
+// Interactive that size would swallow every tap meant for the content beneath.
+// Aligning a small child positions it without any new layout machinery — the
+// fraction is exactly the thumb's travel.
+//
+// Returns nil when there is nothing to drag, which keeps the target out of the
+// tree entirely rather than leaving an invisible one to catch stray presses.
+func scrollbarThumb(s *scrollState) Widget {
+	if s.vp.box == nil || s.barThumbLen <= 0 || s.barFade <= 0 {
+		return nil
+	}
+	if s.vp.box.MaxOffset() <= 0 {
+		return nil
+	}
+	frac := float32(0)
+	if s.barTrackLen > 0 {
+		frac = s.offset / s.vp.box.MaxOffset()
+		if frac < 0 {
+			frac = 0
+		}
+		if frac > 1 {
+			frac = 1
+		}
+	}
+	horiz := s.W().Axis == layout.Horizontal
+
+	// A little wider than the 4pt bar it covers: a 4-pixel drag target is a
+	// miss on a mouse and unusable on touch.
+	const grab = 16
+	size := Sized{W: grab, H: s.barThumbLen}
+	align := Align{X: 1, Y: frac}
+	axis := DragVertical
+	if horiz {
+		size = Sized{W: s.barThumbLen, H: grab}
+		align = Align{X: frac, Y: 1}
+		axis = DragHorizontal
+	}
+
+	size.Child = Interactive{
+		Handler: Handler{
+			DragAxis: axis,
+			OnPress:  func(geom.Pt) { s.barDragging, s.barDragStart = true, s.offset },
+			OnDrag: func(_, d geom.Pt) {
+				if horiz {
+					s.barDrag(d.X)
+				} else {
+					s.barDrag(d.Y)
+				}
+			},
+			OnRelease:  func() { s.barDragging = false },
+			OnPressEnd: func() { s.barDragging = false },
+		},
+	}
+	align.Child = size
+	return align
+}
+
 type scrollbar struct{ s *scrollState }
 
 func (b scrollbar) createBox(Ctx) layout.Box        { return &scrollbarBox{s: b.s} }
@@ -961,6 +1070,7 @@ func (b *scrollbarBox) Paint(c paint.Canvas, at geom.Pt) {
 		thumbLen = 28
 	}
 	pos := (s.offset / maxOff) * (extent - thumbLen)
+	s.barThumbLen, s.barTrackLen = thumbLen, extent-thumbLen
 	const th, pad = 4, 2
 	alpha := s.barFade
 	if alpha > 1 {

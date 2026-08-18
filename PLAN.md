@@ -581,8 +581,9 @@ entirely: native menus exist in the substrate and are not reachable from an app.
    intermittent, invisible to tests, visible to users.
 
    So the work is the buffer-age accounting on this path, not the plumbing.
-6. **Widget catalog gaps** — draggable scrollbars, reorderable lists,
-   pull-to-refresh, tree views, autocomplete.
+6. **Widget catalog gaps** — reorderable lists, tree views, autocomplete.
+   Draggable scrollbars landed; pull-to-refresh was already there (`Scroll`
+   grows a spinner from overscroll), which the old entry had missed.
 7. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
    geometry and full UBA have not.
 8. ~~**Message catalog and plural rules** in `intl`~~ — done. `Catalog` keys by
