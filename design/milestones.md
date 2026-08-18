@@ -648,7 +648,7 @@ see above.
 
 ---
 
-## M10 — Sparse strips, part 1: one pipeline, end to end
+## M10 — Sparse strips, part 1: one pipeline, end to end ✅
 
 **Goal.** One stubbed compute pipeline made real, holding the CPU reference.
 
@@ -657,29 +657,82 @@ is what PLAN implied before it was checked. `strip.wgsl` is written, the
 tilecompute stage shaders exist (`pathtag_reduce`, `pathtag_scan`, `flatten`,
 `coarse`, `fine`, `path_count`, `path_tiling`), and a traditional GPU vector
 renderer already runs beside them. What is missing is that the pipelines are
-stubs — `StubComputePipelineID(1)`, with a comment deferring to "when wgpu is
-ready", which it now is.
+stubs, with comments deferring to "when wgpu is ready", which it now is.
 
-So the first milestone is a vertical slice, not a survey: take the strip
-rasterizer alone, give it a real `CreateComputePipeline`, run it, and diff the
-result against the CPU rasterizer. Everything after that is repetition; this is
-the one that proves the approach and the harness together.
+So the first milestone is a vertical slice, not a survey: take one rasterizer,
+give it a real dispatch, and diff the result against the CPU. Everything after
+that is repetition; this is the one that proves the approach and the harness
+together.
 
-- [ ] Replace `createStripPipeline`'s stub with a real compute pipeline and
-      bind-group layout (the layout is already described in its comments).
-- [ ] Feed it strips from one simple filled path and read the texture back.
-- [ ] Diff against the CPU rasterizer with `TestGPUMatchesCPU`'s tolerance, and
-      add the case to the `gophics_gpu` suite that CI now runs.
+**The target moved, and that is the main finding.** This milestone was written
+against `createStripPipeline`'s `StubComputePipelineID(1)`. Checking before
+building showed that was the wrong code to make real: `PipelineCache` — every
+stub pipeline, all nine `Stub*ID` types — is constructed nowhere but its own
+`renderer_test.go`. Making it real would have produced a working pipeline that
+nothing calls, and the tests asserting `GetStripPipeline() != 0` would have gone
+on passing either way.
+
+The code that is actually wired is `GPUFineRasterizer`, and it had the more
+interesting problem. It compiled its shader, built its bind-group layouts and
+created three compute pipelines — and then computed coverage in a Go loop,
+because of a comment reading "buffer binding needs HAL API extensions". That had
+stopped being true: `CreateBuffer`, `CreateBindGroup` and a native compute pass
+with `Dispatch` all exist, and `vello_compute.go` in the same package already
+uses them. The comment outlived the limitation by long enough for the type to
+look finished.
+
+That is the worst possible shape, and worth naming: a type called
+`GPUFineRasterizer`, holding real pipelines, returning *correct pixels* from the
+CPU. Every test passed. Nothing was wrong with the output — only with where it
+came from.
+
+- [x] Replace the stub with a real compute pipeline and bind-group layout — the
+      layouts were already fully described, so this was buffers, bind groups,
+      dispatch and readback (`gpu_fine_dispatch.go`).
+- [x] Feed it one simple filled path and read the coverage buffer back.
+- [x] Diff against the CPU reference. `TestGPUFineMatchesCPU` runs a rectangle
+      and a triangle through both paths under both fill rules and compares them
+      within one coverage level.
 - [ ] Record the cost against the CPU path. `BenchmarkDraw_FillRect/1000x1000`
       is 9.8ms on an M1 Ultra, against a 16.7ms frame — that number is the
-      reason for the whole project, and it should move.
+      reason for the whole project, and it should move. **Deferred to M12**,
+      where the measurement decides whether this becomes the default; there is
+      nothing to compare yet, since the dispatch is not on the live path.
 
-**Exit.** A filled path rasterizes through the strip pipeline, matches the CPU
-reference within tolerance, and the benchmark is recorded both ways.
+**Two real bugs fell out, neither of them GPU work.** Both had been invisible
+because no test had ever built a pipeline on a real device:
 
-**Risk to watch.** The stub returns success, so a half-wired pipeline will look
-like it works and quietly draw nothing — the same shape as the GL entry points
-that returned zero. Assert on pixels, not on error returns.
+1. **The fine shader could not run on Metal at all.** The module was created
+   from SPIR-V, which is a Vulkan-only input. Metal's HAL takes its "no source"
+   branch for it and returns a module with no library behind it, so the failure
+   surfaced later and unhelpfully as `invalid compute shader module`. WGSL is
+   the portable input — Vulkan compiles it through naga, Metal through its MSL
+   writer — so the module is built from WGSL now, and the SPIR-V is still
+   compiled because `SPIRVCode()` exposes it for verification.
+
+2. **Tile order was randomised.** `buildTileData` grouped tiles into a map and
+   then ranged over it, so the same scene produced its tiles — and therefore its
+   whole coverage buffer — in a different order on every call. Nothing
+   downstream could diff two runs or cache a tile, and for a project whose
+   selling point is golden-image testing that is a bad property to have. Tiles
+   are emitted in scanline order now, pinned by
+   `TestFineTileOrderIsDeterministic`.
+
+The second one is why the GPU and CPU appeared to disagree on 96 of 128 samples
+when the dispatch first worked. They were computing identical pixels and writing
+them to different slots.
+
+**Exit.** ✅ A filled path rasterizes through the real compute pipeline on a
+Metal device and matches the CPU reference within tolerance, for two fill rules
+and two path shapes. The benchmark moves to M12 with the default decision.
+
+**Risk to watch — and it was the right risk.** The stub returns success, so a
+half-wired pipeline will look like it works and quietly draw nothing. The
+defence held: `RasterizeGPU` never falls back, so a test cannot pass on CPU
+pixels, and the comparison separately requires the buffer to contain ink and the
+diagonal fixture to contain anti-aliased values — an all-zero result matches an
+all-zero reference, and "the GPU wrote nothing" must not read as agreement.
+`Rasterize` keeps a fallback for frames in flight, but logs when it takes it.
 
 ---
 

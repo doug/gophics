@@ -39,6 +39,19 @@ func CreateShaderModule(device *wgpu.Device, label string, spirvCode []uint32) (
 	})
 }
 
+// CreateShaderModuleWGSL creates a shader module from WGSL source, which is the
+// portable input: Vulkan compiles it to SPIR-V through naga, and Metal compiles
+// it to MSL. Handing a backend SPIR-V only works on Vulkan — Metal's HAL takes
+// the "no source" branch and returns a module with no library behind it, which
+// fails later at pipeline creation as "invalid compute shader module" rather
+// than at the point the wrong format was supplied.
+func CreateShaderModuleWGSL(device *wgpu.Device, label, wgsl string) (*wgpu.ShaderModule, error) {
+	return device.CreateShaderModule(&wgpu.ShaderModuleDescriptor{
+		Label: label,
+		WGSL:  wgsl,
+	})
+}
+
 // DestroyGPUResources safely destroys common GPU resources.
 // This is a helper for the cleanup pattern used by all GPU rasterizers.
 type GPUResources struct {

@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/doug/gophics/internal/gfx/gg/scene"
@@ -147,8 +148,10 @@ func (r *GPUFineRasterizer) init() error {
 	r.spirvCode = spirvCode
 	r.shaderReady = true
 
-	// Create shader module using shared helper
-	shaderModule, err := CreateShaderModule(r.device, "fine_shader", r.spirvCode)
+	// Created from WGSL, not from the SPIR-V above: SPIR-V is a Vulkan-only
+	// input, and Metal silently accepts a module it cannot use. The SPIR-V is
+	// still compiled, since it is what SPIRVCode() exposes for verification.
+	shaderModule, err := CreateShaderModuleWGSL(r.device, "fine_shader", fineShaderWGSL)
 	if err != nil {
 		return fmt.Errorf("gpu_fine: failed to create shader module: %w", err)
 	}
@@ -290,11 +293,11 @@ func (r *GPUFineRasterizer) createPipelines() error {
 	return nil
 }
 
-// Rasterize performs fine rasterization on the GPU.
-// It takes the coarse rasterizer output and produces coverage values.
-//
-// Note: Phase 6.1 implementation. Full GPU dispatch requires buffer binding
-// which needs HAL API extensions. Currently falls back to CPU-computed coverage.
+// Rasterize performs fine rasterization, preferring the GPU and falling back
+// to the CPU reference if the dispatch fails. A frame in flight wants pixels
+// more than it wants an error, so the fallback is deliberate — but it is
+// logged, because a GPU that quietly stopped being used is exactly the failure
+// this package spent its first life in. Tests call RasterizeGPU instead.
 func (r *GPUFineRasterizer) Rasterize(
 	coarse *CoarseRasterizer,
 	segments *SegmentList,
@@ -304,35 +307,77 @@ func (r *GPUFineRasterizer) Rasterize(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	segs, refs, tiles, err := r.prepareLocked(coarse, segments, backdrop)
+	if err != nil || len(tiles) == 0 {
+		return nil, err
+	}
+
+	coverage, gpuErr := r.rasterizeGPULocked(segs, refs, tiles, fillRule)
+	if gpuErr == nil {
+		return coverage, nil
+	}
+	slogger().Warn("gpu_fine: GPU dispatch failed, using CPU reference", "err", gpuErr)
+	return r.computeCoverageCPU(segs, refs, tiles, fillRule), nil
+}
+
+// RasterizeGPU runs the fine shader on the GPU and reports any failure instead
+// of falling back. This is the entry point the equivalence test uses: a silent
+// fallback would turn "the GPU drew nothing" into a passing test.
+func (r *GPUFineRasterizer) RasterizeGPU(
+	coarse *CoarseRasterizer,
+	segments *SegmentList,
+	backdrop []int32,
+	fillRule scene.FillStyle,
+) ([]uint8, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	segs, refs, tiles, err := r.prepareLocked(coarse, segments, backdrop)
+	if err != nil || len(tiles) == 0 {
+		return nil, err
+	}
+	return r.rasterizeGPULocked(segs, refs, tiles, fillRule)
+}
+
+// RasterizeCPU computes coverage with the Go transcription of the shader. It is
+// the reference the GPU is diffed against, and the fallback Rasterize uses.
+func (r *GPUFineRasterizer) RasterizeCPU(
+	coarse *CoarseRasterizer,
+	segments *SegmentList,
+	backdrop []int32,
+	fillRule scene.FillStyle,
+) ([]uint8, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	segs, refs, tiles, err := r.prepareLocked(coarse, segments, backdrop)
+	if err != nil || len(tiles) == 0 {
+		return nil, err
+	}
+	return r.computeCoverageCPU(segs, refs, tiles, fillRule), nil
+}
+
+// prepareLocked turns coarse output into the three shader-facing arrays. It
+// returns no tiles when there is nothing to rasterize, which every caller
+// treats as an empty result rather than an error. The caller holds r.mu.
+func (r *GPUFineRasterizer) prepareLocked(
+	coarse *CoarseRasterizer,
+	segments *SegmentList,
+	backdrop []int32,
+) ([]GPUSegment, []GPUTileSegmentRef, []GPUTileInfo, error) {
 	if !r.initialized {
-		return nil, fmt.Errorf("gpu_fine: rasterizer not initialized")
+		return nil, nil, nil, fmt.Errorf("gpu_fine: rasterizer not initialized")
+	}
+	if coarse == nil || segments == nil || len(coarse.Entries()) == 0 {
+		return nil, nil, nil, nil
 	}
 
-	if coarse == nil || segments == nil {
-		return nil, nil
-	}
-
-	entries := coarse.Entries()
-	if len(entries) == 0 {
-		return nil, nil
-	}
-
-	// Build tile info from coarse entries
 	tiles, tileSegRefs := r.buildTileData(coarse, segments, backdrop)
 	if len(tiles) == 0 {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 
-	// Prepare GPU data structures (validates data conversion)
-	gpuSegments := r.convertSegments(segments)
-	gpuTileRefs := r.convertTileSegmentRefs(tileSegRefs)
-	gpuTiles := r.convertTileInfos(tiles)
-
-	// Phase 6.1: GPU infrastructure is ready, but buffer binding needs HAL extension.
-	// For now, compute coverage on CPU using the same algorithm as the shader.
-	coverage := r.computeCoverageCPU(gpuSegments, gpuTileRefs, gpuTiles, fillRule)
-
-	return coverage, nil
+	return r.convertSegments(segments), r.convertTileSegmentRefs(tileSegRefs), r.convertTileInfos(tiles), nil
 }
 
 // computeCoverageCPU computes coverage using CPU (mirrors GPU shader algorithm).
@@ -518,7 +563,25 @@ func (r *GPUFineRasterizer) buildTileData(
 
 	tileColumns := int(coarse.TileColumns())
 
-	for key, indices := range tileMap {
+	// Iterate the tiles in a stable order. Ranging the map directly made the
+	// output depend on Go's randomised map iteration: the same scene produced
+	// the same pixels in a different buffer order on every call, so nothing
+	// downstream could cache a tile, diff two runs, or compare this rasterizer
+	// against another one. Scanline order (top to bottom, left to right) is
+	// also the order the coarse rasterizer's entries are already sorted into.
+	keys := make([]tileKey, 0, len(tileMap))
+	for key := range tileMap {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].y != keys[j].y {
+			return keys[i].y < keys[j].y
+		}
+		return keys[i].x < keys[j].x
+	})
+
+	for _, key := range keys {
+		indices := tileMap[key]
 		//nolint:gosec // len(refs) is bounded by number of coarse entries
 		startIdx := uint32(len(refs))
 
