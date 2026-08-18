@@ -531,7 +531,38 @@ func (d *Device) CreateShaderModule(desc *hal.ShaderModuleDescriptor) (hal.Shade
 		workgroupSizes := extractWorkgroupSizes(irModule)
 
 		// Compile IR to MSL
-		mslSource, info, err := msl.Compile(irModule, msl.DefaultOptions())
+		// Buffer bounds checks are disabled because the check they generate
+		// cannot work here, not because bounds do not matter.
+		//
+		// naga's ReadZeroSkipWrite policy guards a storage-buffer access with
+		// a bound computed from `_mslBufferSizes` — an extra argument it adds
+		// to every entry point that touches a runtime-sized array. Nothing in
+		// this HAL binds that argument: DefaultOptions sets no SizesBuffer
+		// slot, so the parameter is emitted without a [[buffer(N)]] attribute
+		// and never written. The checks therefore compare against whatever
+		// happens to be in that memory.
+		//
+		// The failure mode is silent and severe. A comparison against garbage
+		// does not fault or warn; it decides that a perfectly valid index is
+		// out of range and yields zero. In the vello compute pipeline that
+		// zeroed the tile metadata `path_tiling` reads for roughly half the
+		// tiles, so those tiles fell back to their backdrop and filled solid
+		// to the tile edge. Every one of the seven compute golden scenes now
+		// matches the CPU rasterizer exactly with this off, and none did with
+		// it on.
+		//
+		// Unchecked is strictly better than checked-against-garbage: it trades
+		// an unchecked access for a correct one. The real fix is to bind a
+		// real sizes buffer — naga already reports RequiresSizesBuffer and
+		// accepts a SizesBuffer slot per entry point — which needs the HAL to
+		// map each runtime-array global to its bound buffer's length at
+		// dispatch time. That is tracked in design/milestones.md under M11.
+		//
+		// Index checks stay on: those bound fixed-size arrays with static
+		// lengths and never consult _mslBufferSizes.
+		mslOpts := msl.DefaultOptions()
+		mslOpts.BoundsCheckPolicies.Buffer = msl.BoundsCheckUnchecked
+		mslSource, info, err := msl.Compile(irModule, mslOpts)
 		if err != nil {
 			return nil, fmt.Errorf("metal: failed to compile to MSL: %w", err)
 		}

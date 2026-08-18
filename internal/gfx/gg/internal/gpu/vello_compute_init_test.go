@@ -65,25 +65,28 @@ func TestVelloAcceleratorReportsCompute(t *testing.T) {
 	}
 }
 
-// TestPathTilingFillsEveryReservedSegment pins the invariant that the fill
-// bleed traces back to.
+// TestPathTilingFillsEveryReservedSegment guards the invariant that caught the
+// fill bleed, and is worth keeping now that it holds.
 //
-// The coarse stage reserves a run of segment slots per tile with an atomic
-// bump, and path_tiling fills them. Nothing checked that the second step
-// covered the first — and it does not. For a plain filled rectangle the bump
-// reports 16 reserved slots and path_tiling writes 8, leaving the rest zeroed.
-// A tile whose ~seg_ix points into the unwritten half finds degenerate
-// segments and falls back to its backdrop alone: solid where the backdrop is
-// 1, empty where it is 0. That is exactly the shape of the golden-test
-// failures — a fill that starts in the right place and then runs to the tile
-// edge.
+// coarse reserves a run of segment slots per tile with an atomic bump and
+// path_tiling fills them. Nothing checked that the second step covered the
+// first, and for a plain filled rectangle it did not: 16 slots reserved, 8
+// written, two of those identical. Tiles pointing into the unwritten half
+// found degenerate segments and fell back to their backdrop alone — solid
+// where the backdrop was 1, empty where it was 0 — which is what the goldens
+// showed.
 //
-// This is narrower than TestVelloComputeGolden and worth having beside it: the
-// golden test says the picture is wrong, this says which stage stopped early.
-// Both are gated on the same flag, so they come back together.
+// The cause turned out to be under the shaders entirely: Metal bounds checks
+// comparing against an unbound _mslBufferSizes, zeroing valid reads. This test
+// stays because it is much narrower than TestVelloComputeGolden. The golden
+// test says the picture is wrong; this says which stage stopped early, and
+// that is the difference between a day of bisecting and an afternoon.
+//
+// The check itself lives in logPipelineDiagnostics, which warns whenever
+// reserved != written; this drives a render and lets that fire.
 func TestPathTilingFillsEveryReservedSegment(t *testing.T) {
 	if !gg.AutoSelectCompute {
-		t.Skip("compute rendering is incorrect (M11): path_tiling fills 8 of 16 reserved segment slots; set gg.AutoSelectCompute when fixed")
+		t.Skip("compute auto-selection is pinned off; skipping the path_tiling invariant check")
 	}
 
 	accel := &VelloAccelerator{}

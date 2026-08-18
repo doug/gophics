@@ -736,24 +736,22 @@ all-zero reference, and "the GPU wrote nothing" must not read as agreement.
 
 ---
 
-## M11 — Sparse strips, part 2: make the compute pipeline correct
+## M11 — Sparse strips, part 2: make the compute pipeline correct ✅
 
 **Goal.** The compute pipeline renders a scene that matches the CPU reference.
 
-**This milestone changed shape once M10 could see the truth.** It was written as
-"the remaining tilecompute stages made real, in dependency order", on the
-assumption that the stages were stubs waiting to be implemented. They are not.
-Every stage — `pathtag_reduce`, `pathtag_scan`, `flatten`, `path_count`,
-`path_tiling`, `coarse`, `fine` — is written, and the dispatcher wires all of
-them. The work is not construction, it is correctness.
+**Exit. ✅** `TestVelloComputeGolden` matches the CPU rasterizer **exactly** —
+0 differing pixels — on all seven scenes: triangle, square, circle, star under
+both fill rules, a multi-path scene, and overlapping semi-transparent paths.
+`gg.AutoSelectCompute` is true.
 
-What was actually wrong is that **none of it had ever run**. `CanCompute()` was
-false on every machine, so `FillPath`'s compute branch was dead code,
-`SelectPipeline`'s compute arm was unreachable, and `TestVelloComputeGolden`
-skipped. Nothing reported this: `initGPU` logs the pipeline failure at Warn and
-returns nil, and every existing test of `CanCompute()` asserted the *false*
-path, so "compute is unavailable" read as a fact about the hardware rather than
-as three bugs. It took a test that demanded the true path to find them.
+**This milestone changed shape once M10 could see the truth.** It was written as
+"the remaining tilecompute stages made real, in dependency order", assuming the
+stages were stubs awaiting implementation. They are not. Every stage —
+`pathtag_reduce`, `pathtag_scan`, `flatten`, `path_count`, `path_tiling`,
+`coarse`, `fine` — was written and wired. The work was never construction. It
+was that **none of it had ever run**, and four bugs were hiding behind each
+other, each invisible until the one in front of it was fixed:
 
 - [x] **naga: parenthesise a select used as a binary operand.** `needsParens`,
       which binary operands go through, omitted `ExprSelect` while its sibling
@@ -763,103 +761,47 @@ as three bugs. It took a test that demanded the true path to find them.
 - [x] **naga: bound a global that *is* a runtime-sized array.** Only a struct's
       last member was handled, so `var<storage> tiles: array<Tile>` yielded no
       bound, no bounds check was hoisted out of the atomic, and the access
-      guarded itself inside the `&`. The address of a ternary is not an lvalue.
+      guarded itself inside the `&`. The address of a ternary is not an lvalue,
+      so Metal rejected the module outright.
 - [x] **Metal: report the real storage-buffer limit.** The HAL published the
       WebGPU baseline of 8 per stage; the argument table holds 31 and entries
       are assigned into it sequentially. The coarse stage binds 9.
-- [x] Pin all three with tests that fail without the fix
-      (`TestVelloComputeInitialisesOnRealDevice`,
-      `TestSelectAsBinaryOperandIsParenthesised`).
-- [ ] **Fix the fill bleed — traced to `path_tiling`.** With the pipeline
-      building, the golden tests run for the first time and fail: 12–29% of
-      pixels differ from the CPU reference.
+- [x] **Metal: stop bounds-checking against a buffer nothing binds.** With the
+      module finally building, the pipeline ran and drew the wrong picture.
+      naga's ReadZeroSkipWrite policy guards each storage access with a bound
+      read from `_mslBufferSizes`, an argument it adds to every entry point
+      touching a runtime-sized array — and this HAL never bound it. The checks
+      compared against garbage, decided valid indices were out of range, and
+      returned zero. Buffer checks are off until a real sizes buffer is bound;
+      index checks stay on, since those use static lengths.
 
-      **The cause is now located.** `coarse` reserves a run of segment slots
-      per tile with an atomic bump, and `path_tiling` fills them. Nothing
-      checked that the second step covered the first, and it does not: for a
-      plain filled rectangle the bump reports **16 reserved slots and
-      path_tiling writes 8**, leaving the rest zeroed — and two of the eight
-      that are written are byte-identical, so the write indices collide rather
-      than simply stopping early. A tile whose `~seg_ix` points into the
-      unwritten half finds degenerate segments and falls back to its backdrop
-      alone: solid where the backdrop is 1, empty where it is 0. That is
-      exactly the observed picture — a fill that starts in the right place and
-      then runs to the tile edge.
+**Why this one was hard to see, and what made it visible.** The symptom was a
+fill that started in the right place and ran to the tile edge, 12–29% of pixels
+wrong. Every structural explanation checked out: buffers correctly sized,
+dispatches correctly shaped, `PTCL_MAX_PER_TILE` agreeing across both shaders
+and Go, `coarse` mapping global tile indices to per-path ones correctly, the
+Config layout matching the WGSL field for field, and `path_count` and
+`path_tiling` computing identical DDA parameters down to two algebraically
+equal spellings of `x0`. `path_count`'s output was *correct*: 16 crossings over
+12 tiles with two per corner, exactly right for four edges on a 4×4 grid.
 
-      `logPipelineDiagnostics` now warns on that mismatch, and
-      `TestPathTilingFillsEveryReservedSegment` pins it. The next step is the
-      slot index in `path_tiling` — `seg_start + seg_within_slice`, where
-      `seg_within_slice` is the order `path_count` returned from its per-tile
-      `atomicAdd`. Two records landing on the same `(tile, order)` pair would
-      produce precisely this.
+What cracked it was an invariant nobody had stated — that `path_tiling` should
+fill every slot `coarse` reserved. It reserved 16 and wrote 8. Tracing each
+record showed `path_tiling` reading zero from tiles the final buffer proved
+`coarse` had written, and the split fell at 64 bytes. Reads returning zero for
+in-range indices is the signature of a bounds check, and the bound was garbage.
 
-      **Also confirmed: `path_count`'s output is correct.** For the rectangle
-      it records 16 crossings over 12 distinct tiles with the four corner
-      tiles taking two each — exactly the right answer for four edges on a
-      4×4 grid — and `coarse` turns that into 12 bases covering slots 0..15
-      with no gaps and no overlaps. So the counting and the reservation are
-      both right, and the fault is on the writing side.
+**A note on the shape of this.** Three of the four bugs were in the layer
+*below* the renderer, and the last was a safety mechanism causing the damage it
+existed to prevent. A bounds check comparing against unbound memory does not
+fault or warn; it quietly turns a correct read into a zero. That is worse than
+no check at all, which is why buffer checks are now off rather than left on.
 
-      Everything around it was checked and is **sound**, listed so it is not
-      re-derived: the bump allocator does not overflow; per-tile bases are
-      distinct and cover the range exactly; every stage's dispatch dimensions
-      scale correctly with canvas size and every shader declares
-      `workgroup_size(256)`, so one workgroup really does cover the grid;
-      `PTCL_MAX_PER_TILE` agrees across both shaders and Go; `coarse` maps
-      global tile indices to per-path ones correctly, and both of its
-      `base_idx` forms are right for their context; the Config struct layout
-      matches the WGSL declaration field for field; and `path_count` and
-      `path_tiling` compute identical DDA parameters — same `count`,
-      `count_x`, `robust_err`, `y0`, `x0`, same `stride` from the path bbox,
-      and the two spellings of `x0` (`select(-1, 0, ...)` versus
-      `0.5 * (x_sign - 1)`) are algebraically equal.
-
-      What remains is to trace, per record, the `tile_ix` that `path_tiling`
-      resolves against the one `path_count` used. They agree on paper; the
-      collisions say they do not agree in fact.
-
-      The original characterisation, which still holds — on
-      `compute_blue_square`, a 64×64 target with a 4×4 grid of 16×16 tiles:
-
-      - The CPU reference fills `x=[10..53] y=[10..53]`, a 44×44 square.
-        The GPU fills `x=[10..63] y=[10..63]` — the fill starts in the right
-        place and then **runs to the right and bottom edges** instead of
-        stopping.
-      - Every differing pixel has ink in both images with different colour;
-        none is missing-versus-present. So geometry arrives, and it is the
-        *extent* of the fill that is wrong, not the path.
-      - Rows above `y=32` match exactly. The bleed begins at **tile row 2 of
-        4** and affects everything below.
-      - It is not a global offset: the best single linear shift over the whole
-        image is `d=0`.
-
-      That shape — inside-ness persisting past the right edge of a shape, from
-      one tile row onward — points at backdrop propagation or the winding
-      accumulated across tiles in `coarse`/`path_count`, not at flattening.
-
-      Two suspects are already **ruled out**. The fine stage dispatches
-      `(WidthInTiles, HeightInTiles, 1)` = `(4, 4, 1)`, which is correct. And
-      the new bounds check on the `tiles` atomics is not silently skipping the
-      upper half: for this scene the grid is 16 tiles, `totalPathTiles` is 16,
-      the buffer is 128 bytes and the emitted bound evaluates to 16. The
-      "breaks at exactly half the tiles" coincidence made that worth measuring
-      rather than assuming.
-- [ ] Then work outward from the failing stage, keeping the CPU path as the
-      reference at every step. `tilecompute.FlattenFill` and
-      `RasterizeScenePTCL` are known-good CPU implementations of stages the GPU
-      also has, so each can be diffed independently — the same trick that made
-      M10 tractable.
-
-**Exit.** `TestVelloComputeGolden` passes, and `gg.AutoSelectCompute` flips to
-true in the same change.
-
-**Note on the gate.** Making the pipeline buildable made it *selectable*, which
-would have put a 20%-wrong renderer behind `PipelineModeAuto` for any complex
-scene. `gg.AutoSelectCompute` holds the previous behaviour while keeping the
-fixes; explicit `PipelineModeCompute` still works, because the path has to stay
-reachable to be worked on. The gate is at the call site, not inside
-`SelectPipeline`, so the heuristic stays a pure function and its tests keep
-describing the policy to return to.
+- [ ] **Follow-up: bind a real sizes buffer.** naga already reports
+      `RequiresSizesBuffer` and accepts a `SizesBuffer` slot per entry point;
+      the HAL needs to map each runtime-array global to its bound buffer's
+      length at dispatch time and write that small buffer. Then buffer bounds
+      checks can be turned back on and actually mean something.
 
 ---
 

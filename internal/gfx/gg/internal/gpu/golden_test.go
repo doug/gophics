@@ -447,18 +447,14 @@ func TestVelloComputeGolden(t *testing.T) {
 		t.Skip("compute pipeline not available")
 	}
 
-	// The compute pipeline builds and runs, but places tiles wrongly: 12–29%
-	// of pixels differ from the CPU reference. That is tracked as M11, and
-	// gg.AutoSelectCompute is false until it is fixed, so nothing in a real
-	// app reaches this path.
-	//
-	// This test is tied to that same flag rather than skipped on its own. The
-	// compute path spent a long time failing to build, which made these cases
-	// skip silently and hid both facts at once; the flag is now the single
-	// place that says "compute is not ready", and flipping it turns this back
-	// on in the same motion.
+	// Tied to the same flag that gates automatic selection, so the two can
+	// never disagree about whether compute is trusted. These cases skipped
+	// silently for a long time — first because the pipeline would not build,
+	// then because it built and rendered wrongly — and each silence hid the
+	// next problem. If anyone pins AutoSelectCompute off, this stops claiming
+	// the compute path is verified.
 	if !gg.AutoSelectCompute {
-		t.Skip("compute rendering is incorrect (M11): tiles are misplaced; set gg.AutoSelectCompute when fixed")
+		t.Skip("compute auto-selection is pinned off; skipping the compute equivalence check")
 	}
 
 	tests := computeGoldenTests()

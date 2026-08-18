@@ -906,16 +906,15 @@ func (a *VelloAccelerator) logPipelineDiagnostics(bufs *VelloComputeBuffers, con
 	//
 	// coarse reserves a slot range per tile with an atomic bump, and
 	// path_tiling fills those slots. Nothing checked that the second step
-	// covered the first, and it does not: for a plain filled rectangle the
-	// bump reports 16 reserved slots while path_tiling writes only 8, leaving
-	// the rest zeroed. A tile pointing into the unwritten half finds
-	// degenerate segments and falls back to its backdrop alone — solid where
-	// the backdrop is 1, empty where it is 0 — which is the fill bleed the
-	// golden tests show.
+	// covered the first, and for a while it did not: a plain filled rectangle
+	// reserved 16 slots and had 8 written, so tiles pointing into the
+	// unwritten half fell back to their backdrop and filled solid to the tile
+	// edge. This check is what localised that, and it is cheap enough to keep.
 	//
 	// Logged as a warning because the pipeline cannot render correctly when it
-	// holds, and it is silent otherwise: every buffer is the right size, every
-	// dispatch is the right shape, and the tile metadata all looks plausible.
+	// trips, and because nothing else says so: every buffer is the right size,
+	// every dispatch is the right shape, and the tile metadata all looks
+	// entirely plausible while the picture is wrong.
 	if b, e := a.readbackBuffer(bufs.BumpAlloc, 16); e == nil {
 		reserved := le.Uint32(b[4:8])
 		if reserved > 0 {

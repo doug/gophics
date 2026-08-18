@@ -52,29 +52,25 @@ type SceneStats struct {
 //   - Text-heavy: RenderPass (MSDF Text tier is specialized)
 //   - Default for medium complexity: Compute
 //
-// AutoSelectCompute controls whether PipelineModeAuto is allowed to choose the
-// compute pipeline. It is false because the compute pipeline does not yet
-// render correctly — not because it is unavailable.
+// AutoSelectCompute controls whether PipelineModeAuto may choose the compute
+// pipeline. It is true: the compute path now matches the CPU rasterizer
+// exactly on every scene in TestVelloComputeGolden.
 //
-// The distinction matters. Until the Metal codegen and storage-buffer-limit
-// fixes landed, the compute pipeline failed to build at all: CanCompute() was
-// false on every machine, auto-selection could never reach it, and its
-// wrongness was invisible and harmless. Making it buildable made it
-// selectable, and TestVelloComputeGolden — which had been skipping for exactly
-// the same reason — started running and failing, with tiles landing in the
-// wrong places and 12–29% of pixels off.
+// It exists because that was not always so, and the sequence is worth keeping.
+// The compute pipeline failed to build at all on Metal, so CanCompute() was
+// false everywhere, auto-selection could never reach it, and TestVelloComputeGolden
+// skipped — three bugs hiding behind each other. Fixing the build made the
+// path selectable and made those goldens run for the first time, and they
+// failed: 12–29% of pixels wrong. This flag held the previous *behaviour*
+// while the fixes stayed in, so no real app could silently switch to a broken
+// renderer mid-scene, while explicit PipelineModeCompute kept the path
+// reachable to work on.
 //
-// So this holds the previous *behaviour* while keeping the fixes. Asking for
-// PipelineModeCompute explicitly still works, which is what the golden tests
-// do; the path has to stay reachable to be worked on. What must not happen is
-// a real app silently switching to it partway through a complex scene.
-//
-// This gates only the automatic choice, not the heuristic: SelectPipeline
-// stays a pure function of its inputs so its own tests keep describing the
-// policy we intend to return to.
-//
-// Flip to true when TestVelloComputeGolden passes.
-var AutoSelectCompute = false
+// It gates only the automatic choice, never the heuristic: SelectPipeline
+// stays a pure function of its inputs, so its tests describe the policy rather
+// than the readiness of the thing the policy selects. Set it false to pin the
+// render-pass path — for a bisect, or if a compute regression ever surfaces.
+var AutoSelectCompute = true
 
 func SelectPipeline(stats SceneStats, hasComputeSupport bool) PipelineMode {
 	if !hasComputeSupport {
