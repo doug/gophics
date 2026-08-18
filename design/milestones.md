@@ -1012,6 +1012,56 @@ the harness to test the right workload now exists.
       render-pass's tracks content. Thousands of paths do not help it either —
       2000 disjoint paths still lose 5-6×.
 
+### Vulkan changes the answer
+
+Everything above is Metal. Run on a Pixel 10 Pro — PowerVR D-Series, real
+Vulkan, real SPIR-V — and the conclusion inverts for clip-heavy scenes.
+
+First, correctness: **the compute pipeline is correct on Vulkan**. Every golden
+scene matches the CPU rasterizer, five exactly and two by a single pixel
+(0.01%, inside tolerance). The stage differ and the 400-scene generated sweep
+both pass on device. None of the four fixes that made it work on Metal are
+shared with the SPIR-V path, so this was not a foregone conclusion.
+
+Milliseconds per frame on the Pixel:
+
+| scene | render-pass | compute | |
+|---|---|---|---|
+| 512px disjoint 256 | 16.89 | 39.82 | RP 2.4× |
+| 512px disjoint 2000 | 53.94 | 65.46 | RP 1.2× |
+| 512px overlap 256 | 34.82 | 51.58 | RP 1.5× |
+| 512px clipped 64 | 37.36 | 35.11 | compute 1.06× |
+| **512px clipped 256** | **178.28** | **36.93** | **compute 4.8×** |
+| 1024px disjoint 2000 | 19.05 | 62.02 | RP 3.3× |
+| **1024px clipped 64** | **93.69** | **54.34** | **compute 1.7×** |
+| **1024px clipped 256** | **312.23** | **38.02** | **compute 8.2×** |
+
+**Compute is flat in clip count and render-pass is not.** Across 64 and 256
+clips at both resolutions compute stays between 35ms and 54ms, while
+render-pass runs 37 → 178ms at 512px and 94 → 312ms at 1024px. On Metal the
+same effect existed but was worth 1.58×; here it is worth 8×, because a
+tile-based mobile GPU pays far more for the per-clip work a render-pass
+pipeline does.
+
+That is not an exotic workload. Rounded corners, scroll containers and cards
+are clips, and a real UI has many.
+
+**Decision: no single default. Choose per platform and per scene.** Render-pass
+remains right for the disjoint and overlapping cases everywhere, and on Metal
+for nearly everything. Compute is decisively right for clip-heavy scenes on
+mobile and mildly right for them on Metal. `SelectPipeline` already exists to
+make that choice and currently switches on *shape count*, which is the wrong
+signal — it is contradicted by every density row on both platforms. **Clip
+count is the signal that predicts the winner on both.**
+
+- [ ] Reweight `SelectPipeline` around clip depth and clip count rather than
+      shape count, and re-enable `gg.AutoSelectCompute` behind it.
+- [ ] Investigate render-pass's clip cost directly: 312ms for 256 clips at
+      1024px on mobile is pathological, and fixing it may be worth more than
+      the pipeline choice.
+
+### Earlier Metal-only decision, kept for the record
+
 **Decision: render-pass stays the default; compute stays available, not
 selected.** One favourable cell at one resolution, against 3-16× losses
 everywhere else, is not a case for switching. `gg.AutoSelectCompute` stays
