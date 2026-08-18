@@ -120,6 +120,18 @@ type ShaderModule struct {
 	device          *Device
 	workgroupSizes  map[string][3]uint32 // entry point name -> workgroup size
 	entrypointNames map[string]string
+
+	// sizeGlobals lists, in _mslBufferSizes member order, the (group, binding)
+	// of each global with a runtime-sized array. naga reports the order; this
+	// records where to find each one's length at dispatch time.
+	sizeGlobals []sizeGlobalBinding
+}
+
+// sizeGlobalBinding locates the buffer whose byte length fills one member of
+// the _mslBufferSizes struct.
+type sizeGlobalBinding struct {
+	group   uint32
+	binding uint32
 }
 
 // Destroy releases the shader module.
@@ -205,6 +217,11 @@ type RenderPipeline struct {
 	frontFace     MTLWinding
 	icbCompatible bool
 
+	// sizeGlobals is copied from the shader modules so the encoder can fill
+	// _mslBufferSizes. Vertex and fragment stages have separate Metal argument
+	// tables, so the struct is bound to both.
+	sizeGlobals []sizeGlobalBinding
+
 	depthStencil    ID // id<MTLDepthStencilState>
 	depthBias       float32
 	depthSlopeScale float32
@@ -224,6 +241,10 @@ type ComputePipeline struct {
 	device        *Device
 	layout        *PipelineLayout // for SetBindGroup slot offset lookup
 	workgroupSize MTLSize         // workgroup size from shader
+
+	// sizeGlobals is copied from the shader module so the encoder can fill
+	// _mslBufferSizes without holding a reference to the module.
+	sizeGlobals []sizeGlobalBinding
 }
 
 // Destroy releases the compute pipeline.

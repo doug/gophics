@@ -797,11 +797,28 @@ existed to prevent. A bounds check comparing against unbound memory does not
 fault or warn; it quietly turns a correct read into a zero. That is worse than
 no check at all, which is why buffer checks are now off rather than left on.
 
-- [ ] **Follow-up: bind a real sizes buffer.** naga already reports
-      `RequiresSizesBuffer` and accepts a `SizesBuffer` slot per entry point;
-      the HAL needs to map each runtime-array global to its bound buffer's
-      length at dispatch time and write that small buffer. Then buffer bounds
-      checks can be turned back on and actually mean something.
+- [x] **Follow-up: bind a real sizes buffer.** Done — buffer bounds checks are
+      on again and now mean something. naga reports which globals have an entry
+      in `_mslBufferSizes` and in what order (`TranslationInfo.SizeGlobals`),
+      the HAL resolves each to its `(group, binding)`, records the bound length
+      at `SetBindGroup`, and writes the struct with `setBytes` before each
+      dispatch and draw.
+
+      Two things this turned up. Placing the slot through a `PerEntryPointMap`
+      entry looked natural and was wrong: supplying that map *replaces* naga's
+      automatic `(group, binding)` → Metal index assignment, and the fallback
+      for anything missing is the bare `@binding` number, which ignores the
+      group — so group 0 binding 0 and group 1 binding 0 both landed on buffer
+      0 and shaders stopped compiling. A dedicated `Options.SizesBufferSlot`
+      places the struct without touching resource mapping.
+
+      And the render path is wired but **unexercised**: the only render shader
+      with a runtime-sized array, `composite.wgsl`, is never built into a
+      pipeline. Halving the sizes there changes nothing, which is how that was
+      established. It is wired anyway, because the moment a render shader does
+      gain a runtime-sized array it would otherwise read an unbound slot and
+      reproduce this bug exactly. `TestResolveSizeGlobalsMatchesNagaOrder`
+      covers the join that cannot be seen at runtime.
 
 ---
 

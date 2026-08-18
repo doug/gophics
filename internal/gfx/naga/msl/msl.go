@@ -198,6 +198,12 @@ type Options struct {
 	// Defaults to Version2_1 if zero.
 	LangVersion Version
 
+	// SizesBufferSlot places the _mslBufferSizes struct at a fixed buffer slot
+	// without otherwise touching resource binding. Use this rather than a
+	// PerEntryPointMap entry that sets only SizesBuffer: supplying that map
+	// replaces the automatic (group, binding) -> index assignment entirely.
+	SizesBufferSlot *uint8
+
 	// PerEntryPointMap maps entry point names to their resource bindings.
 	// If nil, bindings are auto-generated.
 	PerEntryPointMap map[string]EntryPointResources
@@ -328,6 +334,12 @@ type TranslationInfo struct {
 	// RequiresSizesBuffer indicates if a sizes buffer is needed for
 	// runtime-sized arrays.
 	RequiresSizesBuffer bool
+
+	// SizeGlobals lists the global-variable handles with an entry in the
+	// _mslBufferSizes struct, in emission order: one uint each, so the handle
+	// at index i is at byte offset 4*i. A runtime filling that struct must
+	// agree with this list rather than recompute it.
+	SizeGlobals []uint32
 }
 
 // DefaultBoundsCheckPolicies returns conservative bounds check policies.
@@ -412,6 +424,7 @@ func toCodegenOptions(o Options) codegen.Options {
 			Minor: o.LangVersion.Minor,
 		},
 		PerEntryPointMap: perEntryPointMap,
+		SizesBufferSlot:  o.SizesBufferSlot,
 		InlineSamplers:   inlineSamplers,
 		BoundsCheckPolicies: codegen.BoundsCheckPolicies{
 			Index:        codegen.BoundsCheckPolicy(o.BoundsCheckPolicies.Index),
@@ -509,5 +522,6 @@ func fromCodegenTranslationInfo(ci codegen.TranslationInfo) TranslationInfo {
 	return TranslationInfo{
 		EntryPointNames:     ci.EntryPointNames,
 		RequiresSizesBuffer: ci.RequiresSizesBuffer,
+		SizeGlobals:         ci.SizeGlobals,
 	}
 }

@@ -531,37 +531,29 @@ func (d *Device) CreateShaderModule(desc *hal.ShaderModuleDescriptor) (hal.Shade
 		workgroupSizes := extractWorkgroupSizes(irModule)
 
 		// Compile IR to MSL
-		// Buffer bounds checks are disabled because the check they generate
-		// cannot work here, not because bounds do not matter.
+		// naga guards every storage-buffer access with a bound read from
+		// _mslBufferSizes, an argument it adds to each entry point that touches
+		// a runtime-sized array. Nothing used to bind that argument, so the
+		// checks compared against whatever happened to be in that memory —
+		// which does not fault or warn, it decides a valid index is out of
+		// range and yields zero. A safety mechanism silently corrupting the
+		// data it protects is worse than no check, so they were turned off.
 		//
-		// naga's ReadZeroSkipWrite policy guards a storage-buffer access with
-		// a bound computed from `_mslBufferSizes` — an extra argument it adds
-		// to every entry point that touches a runtime-sized array. Nothing in
-		// this HAL binds that argument: DefaultOptions sets no SizesBuffer
-		// slot, so the parameter is emitted without a [[buffer(N)]] attribute
-		// and never written. The checks therefore compare against whatever
-		// happens to be in that memory.
-		//
-		// The failure mode is silent and severe. A comparison against garbage
-		// does not fault or warn; it decides that a perfectly valid index is
-		// out of range and yields zero. In the vello compute pipeline that
-		// zeroed the tile metadata `path_tiling` reads for roughly half the
-		// tiles, so those tiles fell back to their backdrop and filled solid
-		// to the tile edge. Every one of the seven compute golden scenes now
-		// matches the CPU rasterizer exactly with this off, and none did with
-		// it on.
-		//
-		// Unchecked is strictly better than checked-against-garbage: it trades
-		// an unchecked access for a correct one. The real fix is to bind a
-		// real sizes buffer — naga already reports RequiresSizesBuffer and
-		// accepts a SizesBuffer slot per entry point — which needs the HAL to
-		// map each runtime-array global to its bound buffer's length at
-		// dispatch time. That is tracked in design/milestones.md under M11.
-		//
-		// Index checks stay on: those bound fixed-size arrays with static
-		// lengths and never consult _mslBufferSizes.
+		// They are on again because the buffer is now real: the slot is
+		// declared here, the members are filled at dispatch from the lengths
+		// of the actually-bound buffers, and naga reports which globals are in
+		// the struct and in what order so the two cannot drift.
+		sizesSlot := uint8(mslSizesBufferSlot)
 		mslOpts := msl.DefaultOptions()
-		mslOpts.BoundsCheckPolicies.Buffer = msl.BoundsCheckUnchecked
+
+		// SizesBufferSlot, not a PerEntryPointMap entry. Supplying that map
+		// replaces naga's automatic (group, binding) -> Metal index assignment
+		// with its contents, and the fallback for anything missing is the raw
+		// @binding number — which ignores the group, so group 0 binding 0 and
+		// group 1 binding 0 both land on buffer 0 and the shader fails to
+		// compile with "cannot reserve 'buffer' resource location at index 0".
+		// The automatic assignment is what this HAL's encoder already matches.
+		mslOpts.SizesBufferSlot = &sizesSlot
 		mslSource, info, err := msl.Compile(irModule, mslOpts)
 		if err != nil {
 			return nil, fmt.Errorf("metal: failed to compile to MSL: %w", err)
@@ -603,6 +595,7 @@ func (d *Device) CreateShaderModule(desc *hal.ShaderModuleDescriptor) (hal.Shade
 			device:          d,
 			workgroupSizes:  workgroupSizes,
 			entrypointNames: info.EntryPointNames,
+			sizeGlobals:     resolveSizeGlobals(irModule, info),
 		}, nil
 	}
 
@@ -850,10 +843,19 @@ func (d *Device) CreateRenderPipeline(desc *hal.RenderPipelineDescriptor) (hal.R
 	if pl, ok := desc.Layout.(*PipelineLayout); ok {
 		pipeLayout = pl
 	}
+	// Both stages compile from the same module in this renderer, but take the
+	// vertex module's list and fall back to the fragment's so a pipeline built
+	// from two modules still gets one.
+	sizeGlobals := vertexModule.sizeGlobals
+	if len(sizeGlobals) == 0 && fragmentModule != nil {
+		sizeGlobals = fragmentModule.sizeGlobals
+	}
+
 	return &RenderPipeline{
 		raw:           pipelineState,
 		device:        d,
 		layout:        pipeLayout,
+		sizeGlobals:   sizeGlobals,
 		cullMode:      cullModeToMTL(desc.Primitive.CullMode),
 		frontFace:     frontFaceToMTL(desc.Primitive.FrontFace),
 		icbCompatible: icbCompatible,
@@ -996,6 +998,7 @@ func (d *Device) CreateComputePipeline(desc *hal.ComputePipelineDescriptor) (hal
 		device:        d,
 		layout:        pipeLayout,
 		workgroupSize: workgroupSize,
+		sizeGlobals:   computeModule.sizeGlobals,
 	}, nil
 }
 
@@ -1348,4 +1351,38 @@ func extractWorkgroupSizes(module *ir.Module) map[string][3]uint32 {
 		return nil
 	}
 	return result
+}
+
+// mslSizesBufferSlot is the Metal buffer index the _mslBufferSizes struct is
+// bound at. Metal's argument table holds 31 buffers (0..30) and this HAL
+// assigns resource bindings from the low end, so the top slot stays clear.
+const mslSizesBufferSlot = 30
+
+// resolveSizeGlobals turns naga's list of size-carrying globals into the
+// (group, binding) pairs whose buffer lengths fill _mslBufferSizes.
+//
+// The order is naga's, not ours. Its struct emits one uint per entry in the
+// order it reports, so member i is at byte offset 4*i; recomputing which
+// globals qualify would be a second implementation of that rule, and a bounds
+// check reading the wrong member is indistinguishable from one reading garbage.
+func resolveSizeGlobals(module *ir.Module, info msl.TranslationInfo) []sizeGlobalBinding {
+	if len(info.SizeGlobals) == 0 {
+		return nil
+	}
+	out := make([]sizeGlobalBinding, 0, len(info.SizeGlobals))
+	for _, h := range info.SizeGlobals {
+		if int(h) >= len(module.GlobalVariables) {
+			continue
+		}
+		b := module.GlobalVariables[h].Binding
+		if b == nil {
+			// A runtime-sized array with no resource binding has no buffer to
+			// measure. Recorded as an unresolvable slot rather than skipped,
+			// so the remaining members keep their offsets.
+			out = append(out, sizeGlobalBinding{group: ^uint32(0), binding: ^uint32(0)})
+			continue
+		}
+		out = append(out, sizeGlobalBinding{group: b.Group, binding: b.Binding})
+	}
+	return out
 }

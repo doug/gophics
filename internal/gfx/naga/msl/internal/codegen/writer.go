@@ -1306,6 +1306,9 @@ func (w *Writer) resolveBufferSizesBinding(epName string) string {
 			}
 		}
 	}
+	if w.options.SizesBufferSlot != nil {
+		return fmt.Sprintf("[[buffer(%d)]]", *w.options.SizesBufferSlot)
+	}
 	if w.options.FakeMissingBindings {
 		return "[[user(fake0)]]"
 	}

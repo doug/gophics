@@ -7,7 +7,9 @@ package metal
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
+	"unsafe"
 
 	"github.com/doug/gophics/internal/gfx/gputypes"
 	"github.com/doug/gophics/internal/gfx/wgpu/hal"
@@ -492,6 +494,12 @@ type RenderPassEncoder struct {
 	indexFormat    gputypes.IndexFormat
 	indexOffset    uint64
 	pending        *renderPassPendingState
+
+	// boundBufferSizes records the byte length bound at each (group, binding)
+	// for _mslBufferSizes. composite.wgsl reads a runtime-sized storage array
+	// from a vertex and a fragment stage, so the render path needs this just as
+	// the compute path does.
+	boundBufferSizes map[sizeGlobalBinding]uint32
 }
 
 const (
@@ -702,6 +710,7 @@ func (e *RenderPassEncoder) applyBindGroup(index uint32, bg *BindGroup, offsets 
 	for _, entry := range bg.entries {
 		switch res := entry.Resource.(type) {
 		case gputypes.BufferBinding:
+			e.recordBufferSize(index, entry.Binding, res)
 			offset := uintptr(res.Offset)
 			// Apply dynamic offset if the layout entry has HasDynamicOffset.
 			if dynamicIdx < len(offsets) && bg.layout != nil {
@@ -826,8 +835,47 @@ func (e *RenderPassEncoder) SetStencilReference(ref uint32) {
 	_ = MsgSend(e.raw, Sel("setStencilReferenceValue:"), uintptr(ref))
 }
 
+// setBufferSizesArgument fills _mslBufferSizes and binds it to both stages.
+//
+// Vertex and fragment have independent argument tables in Metal, so the same
+// struct has to be set twice. Called before each draw because bind groups can
+// change between them.
+func (e *RenderPassEncoder) setBufferSizesArgument() {
+	if e.pipeline == nil || len(e.pipeline.sizeGlobals) == 0 {
+		return
+	}
+	sizes := make([]uint32, len(e.pipeline.sizeGlobals))
+	for i, g := range e.pipeline.sizeGlobals {
+		sizes[i] = e.boundBufferSizes[g]
+	}
+	ptr := uintptr(unsafe.Pointer(&sizes[0]))
+	n := uintptr(len(sizes) * 4)
+	_ = MsgSend(e.raw, Sel("setVertexBytes:length:atIndex:"), ptr, n, uintptr(mslSizesBufferSlot))
+	_ = MsgSend(e.raw, Sel("setFragmentBytes:length:atIndex:"), ptr, n, uintptr(mslSizesBufferSlot))
+	runtime.KeepAlive(sizes)
+}
+
+// recordBufferSize notes how many bytes are visible at a shader binding. See
+// the compute encoder's copy for why a zero binding size is resolved against
+// the buffer's own length.
+func (e *RenderPassEncoder) recordBufferSize(group, binding uint32, res gputypes.BufferBinding) {
+	size := res.Size
+	if size == 0 {
+		length := uint64(MsgSendUint(ID(res.Buffer), Sel("length")))
+		if length > res.Offset {
+			size = length - res.Offset
+		}
+	}
+	if e.boundBufferSizes == nil {
+		e.boundBufferSizes = make(map[sizeGlobalBinding]uint32)
+	}
+	//nolint:gosec // buffer sizes are bounded by MaxBufferSize
+	e.boundBufferSizes[sizeGlobalBinding{group: group, binding: binding}] = uint32(size)
+}
+
 // Draw draws primitives.
 func (e *RenderPassEncoder) Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) {
+	e.setBufferSizesArgument()
 	if !e.beginNative() {
 		return
 	}
@@ -837,6 +885,7 @@ func (e *RenderPassEncoder) Draw(vertexCount, instanceCount, firstVertex, firstI
 
 // DrawIndexed draws indexed primitives.
 func (e *RenderPassEncoder) DrawIndexed(indexCount, instanceCount, firstIndex uint32, baseVertex int32, firstInstance uint32) {
+	e.setBufferSizesArgument()
 	if e.indexBuffer == nil || !e.beginNative() {
 		return
 	}
@@ -853,6 +902,7 @@ func (e *RenderPassEncoder) DrawIndexed(indexCount, instanceCount, firstIndex ui
 
 // DrawIndirect draws primitives with GPU-generated parameters.
 func (e *RenderPassEncoder) DrawIndirect(buffer hal.Buffer, offset uint64, drawCount uint32) {
+	e.setBufferSizesArgument()
 	buf, ok := buffer.(*Buffer)
 	if !ok || buf == nil || drawCount == 0 {
 		return
@@ -877,6 +927,7 @@ func (e *RenderPassEncoder) DrawIndirect(buffer hal.Buffer, offset uint64, drawC
 // Metal exposes only the single-record indirect operation, so count is lowered
 // to consecutive 20-byte calls.
 func (e *RenderPassEncoder) DrawIndexedIndirect(buffer hal.Buffer, offset uint64, drawCount uint32) {
+	e.setBufferSizesArgument()
 	buf, ok := buffer.(*Buffer)
 	if !ok || buf == nil || e.indexBuffer == nil || drawCount == 0 {
 		return
@@ -928,6 +979,38 @@ type ComputePassEncoder struct {
 	device        *Device
 	pipeline      *ComputePipeline
 	currentLayout *PipelineLayout // set by SetPipeline for SetBindGroup slot offsets
+
+	// boundBufferSizes records the byte length bound at each (group, binding),
+	// so _mslBufferSizes can be filled at dispatch. Recorded here rather than
+	// read back later because a bind group is the only place the association
+	// between a shader binding and an actual buffer exists.
+	boundBufferSizes map[sizeGlobalBinding]uint32
+}
+
+// setBufferSizesArgument fills the _mslBufferSizes struct the shader reads its
+// bounds from, and binds it.
+//
+// Called before every dispatch because bind groups can change between them.
+// setBytes is the right tool: the struct is a handful of uints, far below
+// Metal's 4KB inline limit, so this costs no allocation and no buffer.
+//
+// A binding with no buffer bound leaves its member zero, which makes naga's
+// length computation yield zero and every access to that array fail its bounds
+// check. That is the safe direction: reads return zero and writes are skipped,
+// rather than indexing a buffer that is not there.
+func (e *ComputePassEncoder) setBufferSizesArgument() {
+	if e.pipeline == nil || len(e.pipeline.sizeGlobals) == 0 {
+		return
+	}
+	sizes := make([]uint32, len(e.pipeline.sizeGlobals))
+	for i, g := range e.pipeline.sizeGlobals {
+		sizes[i] = e.boundBufferSizes[g]
+	}
+	_ = MsgSend(e.raw, Sel("setBytes:length:atIndex:"),
+		uintptr(unsafe.Pointer(&sizes[0])),
+		uintptr(len(sizes)*4),
+		uintptr(mslSizesBufferSlot))
+	runtime.KeepAlive(sizes)
 }
 
 // End finishes the compute pass.
@@ -985,6 +1068,7 @@ func (e *ComputePassEncoder) SetBindGroup(index uint32, group hal.BindGroup, off
 			}
 			_ = MsgSend(e.raw, Sel("setBuffer:offset:atIndex:"), res.Buffer, offset, bufferSlot)
 			bufferSlot++
+			e.recordBufferSize(index, entry.Binding, res)
 
 		case gputypes.TextureViewBinding:
 			_ = MsgSend(e.raw, Sel("setTexture:atIndex:"), res.TextureView, textureSlot)
@@ -997,11 +1081,39 @@ func (e *ComputePassEncoder) SetBindGroup(index uint32, group hal.BindGroup, off
 	}
 }
 
+// recordBufferSize notes how many bytes are visible at a shader binding, which
+// is what _mslBufferSizes carries and what naga's bounds checks divide by the
+// array stride.
+//
+// A binding size of zero means "the rest of the buffer from the offset", so the
+// buffer's own length is queried and the offset subtracted. Taking the length
+// without that subtraction would overstate the array by exactly the offset — a
+// bounds check that is slightly too generous, which is the one kind of wrong
+// that never shows up in testing.
+func (e *ComputePassEncoder) recordBufferSize(group, binding uint32, res gputypes.BufferBinding) {
+	size := res.Size
+	if size == 0 {
+		length := uint64(MsgSendUint(ID(res.Buffer), Sel("length")))
+		if length > res.Offset {
+			size = length - res.Offset
+		}
+	}
+	if e.boundBufferSizes == nil {
+		e.boundBufferSizes = make(map[sizeGlobalBinding]uint32)
+	}
+	//nolint:gosec // buffer sizes are bounded by MaxBufferSize, well under 2^32 here
+	e.boundBufferSizes[sizeGlobalBinding{group: group, binding: binding}] = uint32(size)
+}
+
 // Dispatch dispatches compute workgroups.
 func (e *ComputePassEncoder) Dispatch(x, y, z uint32) {
 	if e.pipeline == nil {
 		return // No pipeline set
 	}
+
+	// Filled here rather than at SetBindGroup: the struct spans every group, so
+	// it is only complete once they have all been set.
+	e.setBufferSizesArgument()
 
 	threadgroupsPerGrid := MTLSize{Width: NSUInteger(x), Height: NSUInteger(y), Depth: NSUInteger(z)}
 	// Use pipeline's workgroup size instead of hardcoded value

@@ -208,6 +208,17 @@ type Options struct {
 
 	// PerEntryPointMap maps entry point names to their resource bindings.
 	// If nil, bindings are auto-generated.
+	// SizesBufferSlot places the _mslBufferSizes struct at a fixed buffer slot
+	// without otherwise affecting resource binding.
+	//
+	// Separate from PerEntryPointMap on purpose. Supplying that map replaces
+	// the automatic (group, binding) -> Metal index assignment with whatever it
+	// holds, so a caller wanting only to place the sizes buffer would silently
+	// lose the mapping for every other resource — and the fallback, the raw
+	// @binding number, ignores the group, so any shader with more than one bind
+	// group collides on index 0.
+	SizesBufferSlot *uint8
+
 	PerEntryPointMap map[string]EntryPointResources
 
 	// InlineSamplers defines constexpr samplers to be inlined into the code.
@@ -361,6 +372,17 @@ type TranslationInfo struct {
 	// RequiresSizesBuffer indicates if a sizes buffer is needed for
 	// runtime-sized arrays.
 	RequiresSizesBuffer bool
+
+	// SizeGlobals lists the global-variable handles that have an entry in the
+	// _mslBufferSizes struct, in the order their members are emitted — one
+	// uint each, so the handle at index i lives at byte offset 4*i.
+	//
+	// The runtime has to fill that struct, which means it has to agree with
+	// this backend about which globals are in it and in what order. Deriving
+	// that independently would be a second implementation of the same rule,
+	// and the two would drift; a bounds check reading the wrong member is
+	// indistinguishable from a bounds check reading garbage.
+	SizeGlobals []uint32
 }
 
 // Compile generates MSL source code from an IR module.
@@ -392,6 +414,7 @@ func CompileWithPipeline(module *ir.Module, options Options, pipeline PipelineOp
 	info := TranslationInfo{
 		EntryPointNames:     w.entryPointNames,
 		RequiresSizesBuffer: w.needsSizesBuffer,
+		SizeGlobals:         w.bufferSizeGlobals,
 	}
 
 	return w.String(), info, nil
