@@ -45,6 +45,10 @@ type VelloAccelerator struct {
 	// error that was thrown away. The degradation stays; the reason is kept.
 	computeErr error
 
+	// presenter composites a finished compute frame onto a texture view, so a
+	// GPU-direct target needs no readback. Created on first use.
+	presenter *velloPresenter
+
 	// wantStageCapture requests that the next render read its intermediate
 	// buffers back for comparison against the CPU port. Off on every normal
 	// frame — see DebugComputeStages.
@@ -95,6 +99,11 @@ func (a *VelloAccelerator) Close() {
 
 	a.pendingPaths = nil
 	a.pendingTarget = nil
+
+	if a.presenter != nil {
+		a.presenter.destroy()
+		a.presenter = nil
+	}
 
 	if a.dispatcher != nil {
 		a.dispatcher.Close()
@@ -367,24 +376,6 @@ func (a *VelloAccelerator) flushLocked(target gg.GPURenderTarget) error {
 		return nil
 	}
 
-	// This path renders into target.Data: it dispatches, reads the framebuffer
-	// back to host memory, and composites in a CPU loop. A GPU-direct target
-	// carries a texture view and no Data at all, and compositeOver would then
-	// skip every pixel and report success — a layer that renders blank with no
-	// error anywhere.
-	//
-	// That is reachable today. gpu_layers.go renders opacity layers into a
-	// view-only target and passes the pipeline mode through, and
-	// PipelineModeCompute is a documented public option. Falling back gives the
-	// caller correct pixels from another path; silence gives it nothing.
-	if !target.View.IsNil() && len(target.Data) == 0 {
-		slogger().Warn("vello-compute: target is GPU-direct (texture view, no CPU buffer) " +
-			"and this path can only composite into host memory — falling back")
-		a.pendingPaths = nil
-		a.pendingTarget = nil
-		return gg.ErrFallbackToCPU
-	}
-
 	// Take ownership of pending data and reset.
 	paths := a.pendingPaths
 	a.pendingPaths = nil
@@ -405,7 +396,32 @@ func (a *VelloAccelerator) flushLocked(target gg.GPURenderTarget) error {
 	// Dispatch the compute scene with a transparent background so that the
 	// result composites over the existing target content.
 	bgColor := [4]uint8{0, 0, 0, 0}
-	img, err := a.dispatchComputeScene(target.Width, target.Height, bgColor, paths)
+
+	// A GPU-direct target has a texture view and no CPU buffer, so the result
+	// is composited on the GPU and never leaves it. That is both the correct
+	// path — compositeOver has nothing to write into here, and used to skip
+	// every pixel while reporting success — and much the faster one, since it
+	// drops a full framebuffer readback per frame.
+	if !target.View.IsNil() {
+		w, h := target.ViewWidth, target.ViewHeight
+		if w == 0 || h == 0 {
+			//nolint:gosec // target dimensions are bounded by the surface size
+			w, h = uint32(target.Width), uint32(target.Height)
+		}
+		if a.presenter == nil {
+			a.presenter = &velloPresenter{device: a.device, queue: a.queue}
+		}
+		present := func(out *wgpu.Buffer) error {
+			return a.presenter.present(out, target, w, h)
+		}
+		if _, err := a.dispatchComputeScene(int(w), int(h), bgColor, paths, present); err != nil {
+			slogger().Warn("vello-compute: GPU present failed", "err", err)
+			return gg.ErrFallbackToCPU
+		}
+		return nil
+	}
+
+	img, err := a.dispatchComputeScene(target.Width, target.Height, bgColor, paths, nil)
 	if err != nil {
 		slogger().Warn("vello-compute: dispatch failed", "err", err)
 		return gg.ErrFallbackToCPU
@@ -528,7 +544,7 @@ func (a *VelloAccelerator) RenderSceneCompute(
 		return nil, fmt.Errorf("vello-compute: GPU not ready")
 	}
 
-	return a.dispatchComputeScene(width, height, bgColor, paths)
+	return a.dispatchComputeScene(width, height, bgColor, paths, nil)
 }
 
 // dispatchComputeScene runs the 8-stage compute pipeline on the given paths
@@ -547,6 +563,10 @@ func (a *VelloAccelerator) dispatchComputeScene(
 	width, height int,
 	bgColor [4]uint8,
 	paths []tilecompute.PathDef,
+	// present, when non-nil, receives the finished output buffer instead of it
+	// being read back to host memory. The buffer is only valid until this call
+	// returns, so the callback must submit its own work before doing so.
+	present func(out *wgpu.Buffer) error,
 ) (*image.RGBA, error) {
 	if len(paths) == 0 {
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -652,7 +672,19 @@ func (a *VelloAccelerator) dispatchComputeScene(
 		a.stageCapture = a.captureStages(bufs, config, totalPathTiles)
 	}
 
-	// Step 10: Readback output pixels.
+	// Step 10: hand the result to the presenter, or read it back.
+	//
+	// The readback is the expensive half of a compute frame — a full
+	// framebuffer copied to host memory — and it exists only because the
+	// result then had to be composited by a CPU loop. A caller that can take
+	// the buffer on the GPU skips both.
+	if present != nil {
+		if err := present(bufs.Output); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
 	outputSize := uint64(width) * uint64(height) * 4
 	resultBytes, err := a.readbackBuffer(bufs.Output, outputSize)
 	if err != nil {

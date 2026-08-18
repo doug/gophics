@@ -5,8 +5,13 @@ package gpu
 import (
 	"fmt"
 	"testing"
+	"unsafe"
 
+	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
+	"github.com/doug/gophics/internal/gfx/gpucontext"
+	"github.com/doug/gophics/internal/gfx/gputypes"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 )
 
 // BenchmarkComputeVsCPU measures the compute vector pipeline against the CPU
@@ -107,4 +112,82 @@ func BenchmarkComputeScaling(b *testing.B) {
 			}
 		})
 	}
+}
+
+// BenchmarkComputePresentVsReadback isolates what the GPU present is worth.
+//
+// Both arms run the identical compute pipeline over the identical scene. The
+// only difference is what happens to the result: "readback" copies the whole
+// framebuffer to host memory and composites it in a CPU loop, which is what
+// every compute frame used to do; "present" keeps it on the GPU and composites
+// with a blit.
+func BenchmarkComputePresentVsReadback(b *testing.B) {
+	a := &VelloAccelerator{}
+	if err := a.initGPU(); err != nil {
+		b.Skipf("GPU not available: %v", err)
+	}
+	defer a.Close()
+	if !a.CanCompute() {
+		b.Skip("compute pipeline not available")
+	}
+
+	bg := [4]uint8{255, 255, 255, 255}
+	for _, size := range []int{256, 512, 1024} {
+		size := size
+		scene := benchScene(size, 64)
+
+		b.Run(fmt.Sprintf("%dpx/readback", size), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				if _, err := a.RenderSceneCompute(size, size, bg, scene); err != nil {
+					b.Fatalf("render: %v", err)
+				}
+			}
+		})
+
+		b.Run(fmt.Sprintf("%dpx/gpu_present", size), func(b *testing.B) {
+			tex, view := benchTarget(b, a, uint32(size))
+			defer view.Release()
+			defer tex.Release()
+			target := gg.GPURenderTarget{
+				View: gpucontext.NewTextureView(unsafe.Pointer(view)),
+				//nolint:gosec // bounded test sizes
+				ViewWidth: uint32(size), ViewHeight: uint32(size),
+				ViewFormat: gputypes.TextureFormatRGBA8Unorm,
+				Width:      size, Height: size,
+			}
+			if a.presenter == nil {
+				a.presenter = &velloPresenter{device: a.device, queue: a.queue}
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				present := func(out *wgpu.Buffer) error {
+					return a.presenter.present(out, target, uint32(size), uint32(size))
+				}
+				if _, err := a.dispatchComputeScene(size, size, bg, scene, present); err != nil {
+					b.Fatalf("present: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func benchTarget(b *testing.B, a *VelloAccelerator, size uint32) (*wgpu.Texture, *wgpu.TextureView) {
+	b.Helper()
+	tex, err := a.device.CreateTexture(&wgpu.TextureDescriptor{
+		Label:         "bench_target",
+		Size:          wgpu.Extent3D{Width: size, Height: size, DepthOrArrayLayers: 1},
+		MipLevelCount: 1,
+		SampleCount:   1,
+		Dimension:     gputypes.TextureDimension2D,
+		Format:        gputypes.TextureFormatRGBA8Unorm,
+		Usage:         gputypes.TextureUsageRenderAttachment | gputypes.TextureUsageTextureBinding,
+	})
+	if err != nil {
+		b.Fatalf("create bench target: %v", err)
+	}
+	view, err := a.device.CreateTextureView(tex, nil)
+	if err != nil {
+		b.Fatalf("create bench view: %v", err)
+	}
+	return tex, view
 }

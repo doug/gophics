@@ -893,8 +893,33 @@ memory and cannot target a texture view — that is not a measurement problem,
 it is the answer to the measurement. The compute path has to write its output
 into the target view on the GPU before comparing it to a path that always has.
 
-- [ ] Make the compute path composite into `target.View` on the GPU instead of
-      reading back and looping on the CPU. Everything else here waits on it.
+- [x] **Make the compute path composite into `target.View` on the GPU.** Done.
+      The packed output is copied into a storage texture by a small compute
+      pass and blitted onto the target with premultiplied source-over, the same
+      operation the CPU loop performed. No readback, and a GPU-direct target
+      now renders rather than silently producing nothing.
+
+      Worth 1.7–1.9× on frame time, growing with size as a per-pixel transfer
+      would:
+
+      | | readback | GPU present | |
+      |---|---|---|---|
+      | 256px | 3.20ms | 1.88ms | 1.70× |
+      | 512px | 6.11ms | 3.56ms | 1.72× |
+      | 1024px | 17.97ms | 9.44ms | 1.90× |
+
+      A `CopyBufferToTexture` would have been the obvious way to move the
+      output and does not work: WebGPU requires the bytes-per-row of a
+      buffer-to-texture copy to be a multiple of 256, and the fine stage packs
+      its output tightly at `width*4` — 400 bytes for a 100px target. Padding
+      the rows would mean changing how that stage indexes its output, which is
+      the one part of this pipeline now verified stage by stage against the CPU
+      port. A compute pass has no such constraint.
+
+      `TestComputePresentsToGPUDirectTarget` renders into a real texture view
+      and reads it back to check the pixels arrived. The readback belongs to
+      the assertion, not the path under test — the path is only correct
+      because it never needs one.
 - [ ] Then build the offscreen harness that renders through both GPU pipelines
       without a surface and without a readback, and compare those.
 - [ ] Reuse buffers across frames instead of allocating per render.
