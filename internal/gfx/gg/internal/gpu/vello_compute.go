@@ -248,6 +248,11 @@ func (c VelloComputeConfig) toBytes() []byte {
 // Buffers are allocated once per frame and reused across stages. Each buffer
 // maps to one or more shader bindings across the 8 pipeline stages.
 type VelloComputeBuffers struct {
+	// zeroInit lists buffers that must be zeroed before the stages run —
+	// atomics and the PTCL command lists, whose terminator is a zero word.
+	// Cleared at the head of the dispatch encoder so it costs no extra submit.
+	zeroInit []*wgpu.Buffer
+
 	// Config is the uniform buffer containing VelloComputeConfig.
 	// Bound at group(0) binding(0) in all stages.
 	Config *wgpu.Buffer
@@ -883,6 +888,7 @@ func (d *VelloComputeDispatcher) AllocateBuffers(
 		{&bufs.BlendSpill, "vello_blend_spill", sz.blendSpill, storageZero, true}, // blend stack spill for deep clips
 	}
 
+	var toClear []*wgpu.Buffer
 	for _, s := range specs {
 		buf, err := d.createVelloBuffer(s.label, s.size, s.usage)
 		if err != nil {
@@ -891,15 +897,27 @@ func (d *VelloComputeDispatcher) AllocateBuffers(
 		}
 		*s.target = buf
 
-		// Zero-fill buffers that use atomics or require sentinel values.
 		if s.zeroInit && s.size > 0 {
-			zeros := make([]byte, s.size)
-			if err := d.queue.WriteBuffer(buf, 0, zeros); err != nil {
-				d.DestroyBuffers(bufs)
-				return nil, fmt.Errorf("vello compute: zero-fill %s: %w", s.label, err)
-			}
+			toClear = append(toClear, buf)
 		}
 	}
+
+	// Buffers holding atomics or relying on a zero sentinel are cleared at the
+	// head of the dispatch encoder rather than here.
+	//
+	// They used to be zeroed by allocating a Go byte slice the size of each
+	// buffer and uploading it — make([]byte, size) then WriteBuffer, once per
+	// frame. PTCL and the blend spill are 4MB each at 512px and 16MB each at
+	// 1024px, so a frame spent roughly 8MB of memset and 8MB of host-to-device
+	// transfer before drawing anything, 32MB at 1024px.
+	//
+	// Clearing on the GPU is the fix, but it has to ride along with the work.
+	// Doing it in its own encoder and submitting separately cost a flat 16.7ms
+	// per frame at every size — one display interval, exactly — because the
+	// extra submit introduced a synchronisation point the frame then waited
+	// on. One submit per frame is the property that matters; where the clear
+	// happens inside it does not.
+	bufs.zeroInit = toClear
 
 	globalTiles := config.WidthInTiles * config.HeightInTiles
 	slogger().Debug("vello compute: buffers allocated",
@@ -1148,6 +1166,13 @@ func (d *VelloComputeDispatcher) encodeComputeStages(
 	})
 	if err != nil {
 		return fmt.Errorf("vello compute: create command encoder: %w", err)
+	}
+
+	// Zero the atomics and the PTCL sentinel first. Commands in an encoder run
+	// in order, so this is a barrier-free prologue to the stages below and
+	// costs no additional submit.
+	for _, buf := range bufs.zeroInit {
+		encoder.ClearBuffer(buf, 0, buf.Size())
 	}
 
 	for _, sd := range stages {

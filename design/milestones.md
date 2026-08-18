@@ -1033,11 +1033,51 @@ at the edge of its PTCL budget, so some draws may be dropped; measured coverage
 is within 6% of render-pass and the ratio is identical to the non-overflowing
 64-path case, but that row should be read with care.
 
-- [ ] Bring down compute's fixed floor — ~10ms at 512px regardless of scene
-      content — before revisiting the default. That, not the per-scene work, is
-      what loses it every other cell.
-- [ ] Investigate the 1024px overlap-256 outlier (92.78ms against a ~15ms
-      trend).
+- [x] **Brought the floor down: zero buffers on the GPU, not from the CPU.**
+      The atomics and PTCL sentinel were zeroed by allocating a Go byte slice
+      the size of each buffer and uploading it — `make([]byte, size)` then
+      `WriteBuffer`, once per frame. PTCL and the blend spill are 4MB each at
+      512px and 16MB each at 1024px, so a frame spent roughly 8MB of memset and
+      8MB of host-to-device transfer before drawing anything, 32MB at 1024px.
+      None of it was GPU work, and it was most of the fixed cost.
+
+      **The obvious fix made it twice as slow, and the number said why.**
+      Clearing on the GPU in its own encoder and submitting separately cost a
+      flat **16.7ms per frame at every size** — one display interval, exactly.
+      The extra submit introduced a synchronisation point the frame then waited
+      on. One submit per frame is the property that matters; where the clear
+      sits inside it does not. Recorded because the failure looked like "GPU
+      clearing is slow" and was nothing of the kind.
+
+      Clearing at the head of the dispatch encoder instead:
+
+      | scene | render-pass | compute | was |
+      |---|---|---|---|
+      | 512px disjoint 2000 | 1.84 | 8.21 | 10.59 |
+      | **512px clipped 256** | **13.06** | **8.26** | 9.85 |
+      | 1024px disjoint 2000 | 2.04 | 9.03 | 15.17 |
+      | 1024px overlap 256 | 5.75 | 32.31 | 92.78 |
+      | 1024px clipped 256 | 13.63 | 16.68 | 35.32 |
+
+      The floor is ~8.2ms and no longer climbs much with resolution, which is
+      where the uploads were largest — 1024px scenes gained 40–65%. Compute's
+      one win widens to **1.58×** on 512px clip-heavy scenes, and the same
+      scene at 1024px goes from losing 2.6× to near parity.
+
+**The decision does not change.** Render-pass is still 2–13× ahead everywhere
+except clip-heavy scenes, and an 8.2ms floor is still most of a 16.7ms frame
+budget before any drawing. But the gap is now one problem — the floor — rather
+than a general deficit, and it moved 20% with a single change that had nothing
+to do with rasterization.
+
+- [ ] Find what is left in the ~8.2ms floor. It is flat across scene content
+      and nearly flat across resolution, so it is per-frame setup, not drawing:
+      the remaining candidates are the per-frame buffer allocation itself
+      (roughly a dozen buffers created and destroyed every frame) and pipeline
+      or bind-group construction.
+- [ ] The 1024px overlap-256 outlier survives at 32.31ms against a ~9ms trend
+      — 3.5× its neighbours. Whatever it is, it is specific to many
+      heavily-overlapping paths at high resolution.
 - [ ] Reuse buffers across frames instead of allocating per render.
 - [ ] Run the full `gophics_gpu` suite against both on Metal and on Vulkan (the
       Pixel), since a compute pipeline is where backends diverge most.
