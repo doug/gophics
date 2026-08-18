@@ -7,9 +7,23 @@ import "testing"
 func line10(n int) Line {
 	gs := make([]Glyph, n)
 	for i := range gs {
-		gs[i] = Glyph{Cluster: i, Advance: 10}
+		// X as well as Advance: a real shaped line positions every glyph, and
+		// CaretX reads those positions because summing advances stops working
+		// once bidi puts the glyphs in visual order.
+		gs[i] = Glyph{Cluster: i, X: float32(i) * 10, Advance: 10}
 	}
 	return Line{Glyphs: gs, Start: 0, End: n, Width: float32(n) * 10}
+}
+
+// rtlLine10 builds n clusters of an RTL run: laid out left to right on screen,
+// but with cluster indices descending, which is what UAX #9 rule L2 produces.
+// Cluster 0 — first in reading order — is therefore the rightmost glyph.
+func rtlLine10(n int) Line {
+	gs := make([]Glyph, n)
+	for i := range gs {
+		gs[i] = Glyph{Cluster: n - 1 - i, X: float32(i) * 10, Advance: 10}
+	}
+	return Line{Glyphs: gs, Start: 0, End: n, Width: float32(n) * 10, RTL: true}
 }
 
 // TestCaretXIsExact pins the caret's position to the sum of the advances before
@@ -68,9 +82,11 @@ func TestIndexAtInvertsCaretX(t *testing.T) {
 func TestCaretXWithLineOffset(t *testing.T) {
 	gs := make([]Glyph, 3)
 	for i := range gs {
-		gs[i] = Glyph{Cluster: 10 + i, Advance: 10} // this line starts at rune 10
+		// Clusters are absolute over the whole string; X is relative to this
+		// line's own origin, as a shaped wrapped line reports it.
+		gs[i] = Glyph{Cluster: 10 + i, X: float32(i) * 10, Advance: 10}
 	}
-	l := Line{Glyphs: gs, Start: 10, End: 13}
+	l := Line{Glyphs: gs, Start: 10, End: 13, Width: 30}
 
 	for i := 0; i <= 3; i++ {
 		if got, want := l.CaretX(i), float32(i*10); got != want {

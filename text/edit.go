@@ -218,18 +218,58 @@ func clampIdx(v, n int) int {
 	return v
 }
 
-// CaretX returns the x position of the caret placed before rune index idx,
-// as the summed advance of glyphs in earlier clusters. Correct for LTR
-// content; RTL caret geometry arrives with paragraph-direction support
-// .
+// CaretX returns the x position of the caret placed before rune index idx.
+//
+// Positions come from the glyphs' own X, not from summing advances. Summing
+// only works while glyph order matches logical order, which bidi breaks: after
+// reordering (UAX #9 rule L2) the glyphs are in *visual* order, so "every glyph
+// before this cluster" is no longer a contiguous run of pixels, and the total is
+// the width of a set of glyphs scattered across the line.
+//
+// In a right-to-left run the caret before a cluster sits at that glyph's right
+// edge, because "before" means earlier in reading order and reading runs the
+// other way. Getting this wrong puts the caret on the far side of the character
+// being typed, which is the usual symptom of an LTR-only implementation.
 func (l Line) CaretX(idx int) float32 {
-	var x float32
-	for _, g := range l.Glyphs {
-		if g.Cluster < l.Start+idx {
-			x += g.Advance
+	target := l.Start + idx
+	for i, g := range l.Glyphs {
+		if g.Cluster != target {
+			continue
 		}
+		if l.rtlAt(i) {
+			return g.X + g.Advance
+		}
+		return g.X
 	}
-	return x
+	// Past the last cluster: the caret belongs at the line's trailing edge,
+	// which is the left for an RTL line and the right for an LTR one.
+	if l.RTL {
+		return 0
+	}
+	return l.Width
+}
+
+// rtlAt reports whether the glyph at visual index i belongs to a right-to-left
+// run.
+//
+// Determined from the clusters of its visual neighbours rather than from stored
+// per-glyph state: glyphs adjacent in the slice are adjacent on screen, so
+// within a run the cluster index rises in LTR and falls in RTL. That makes the
+// direction a local property of the reordered line and needs nothing threaded
+// through from shaping.
+func (l Line) rtlAt(i int) bool {
+	if i+1 < len(l.Glyphs) && l.Glyphs[i+1].Cluster < l.Glyphs[i].Cluster {
+		return true
+	}
+	if i > 0 && l.Glyphs[i-1].Cluster > l.Glyphs[i].Cluster {
+		return true
+	}
+	// A run of one carries no local evidence, so fall back to the line's base
+	// direction — which is the right answer for a lone RTL word on an RTL line.
+	if len(l.Glyphs) == 1 {
+		return l.RTL
+	}
+	return false
 }
 
 // IndexAt returns the rune index whose caret position is nearest to x
