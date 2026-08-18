@@ -20,6 +20,7 @@ type Capabilities struct {
 	Haptic        shell.Haptic
 	Lifecycle     shell.Lifecycle
 	Links         shell.Links
+	Menus         shell.Menus
 	Notifier      shell.Notifier
 	Permissions   shell.Permissions
 	Preferences   shell.Preferences
@@ -74,6 +75,10 @@ func (c Ctx) Lifecycle() shell.Lifecycle { return c.el.owner.Lifecycle }
 // Links returns the platform Links capability (shell.Links), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Links() shell.Links { return c.el.owner.Links }
+
+// Menus returns the platform Menus capability (shell.Menus), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Menus() shell.Menus { return c.el.owner.Menus }
 
 // Notifier returns the platform Notifier capability (shell.Notifier), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

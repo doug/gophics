@@ -516,7 +516,7 @@ prerequisite — which is the main practical argument for this shape.
 
 ---
 
-## M8 — Native menus, exposed to apps
+## M8 — Native menus, exposed to apps ✅
 
 **Goal.** A gophics desktop app can have a real menu bar.
 
@@ -545,7 +545,27 @@ did for every other capability.
 - [ ] A demo in `examples/` — menus are the kind of thing that looks fine in a
       test and wrong on screen.
 
-**Exit.** An example app shows a native menu bar on macOS, Linux and Windows,
-with a working Quit and a custom item that invokes a Go callback.
+**Exit — met (2026-08-17).** `examples/menus` publishes a bar and Windows reports
+it back through `GetMenu`, structure intact:
+
+    BAR items=2
+    TOP|File|children=6
+      ITEM|New / Open… / — / Save As (submenu) / — / Quit
+    TOP|Format|children=4
+
+macOS builds it without complaint after the main-thread fix below; the visual
+check there still wants a human, since `osascript` needs assistive access this
+environment does not grant.
+
+**What the demo caught that the tests could not.** Building the bar from the UI
+goroutine raised an uncatchable `NSInternalInconsistencyException` — "Main menu
+contents may only be modified from the main thread". The conversion tests all
+passed; only running it found this.
+
+Worth keeping in mind next to `a11y_desktop.go`, which had `runOnMain` *removed*
+in the same session. The two look alike and want opposite things: an
+accessibility activation must reach widget state, so it belongs on the UI
+goroutine, while a menu belongs to AppKit and must be built where AppKit lives.
+Marshalling is not one hop that fits everywhere.
 
 ---

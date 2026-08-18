@@ -45,6 +45,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 		o.Audio = shell.PostedAudio(x.Audio(), o.Post)
 		o.Camera = shell.PostedCamera(x.Camera(), o.Post)
 	}
+	if x, ok := w.(shell.MenuWindow); ok {
+		o.Menus = shell.PostedMenus(x.Menus(), o.Post)
+	}
 	if x, ok := w.(shell.NotifyWindow); ok {
 		o.Notifier = shell.PostedNotifier(x.Notifier(), o.Post)
 	}

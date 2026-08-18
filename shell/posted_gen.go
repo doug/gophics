@@ -310,6 +310,32 @@ func (p postedLinks) OnLink(a0 func(url string)) {
 	p.inner.OnLink(w0)
 }
 
+// PostedMenus wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedMenus(inner Menus, post func(func())) Menus {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedMenus{inner, post}
+}
+
+type postedMenus struct {
+	inner Menus
+	post  func(func())
+}
+
+func (p postedMenus) SetBar(a0 []Menu, a1 func(id int)) {
+	f1 := a1
+	var w1 func(id int)
+	if f1 != nil {
+		w1 = func(c0 int) { p.post(func() { f1(c0) }) }
+	}
+	p.inner.SetBar(a0, w1)
+}
+
 // PostedNotifier wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
