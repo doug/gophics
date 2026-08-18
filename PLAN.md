@@ -268,9 +268,16 @@ top is a **2D vector renderer** with UI-grade quality:
    gradients, blitting tiles to a GPU texture. Correct, testable, and the
    reference the GPU path is diffed against. It is also the floor: it works
    anywhere, including headless CI and hosts with no WebGPU.
-2. **GPU vector backend** — still ahead. The target is a **sparse-strips
-   hybrid** design (CPU geometry and coverage in SIMD-friendly strips, plus
-   lightweight GPU compositing) rather than a pure-compute pipeline. The
+2. **GPU vector backend** — partly here, and the entry below understated it.
+   A traditional GPU vector renderer already runs: stencil path fills, convex
+   fills, SDF shapes, glyph-mask and MSDF text, textured quads, blending,
+   compositing, depth clip and backdrop blur are live pipelines, diffed against
+   the CPU reference by the `gophics_gpu` tests. What is still ahead is the
+   **sparse-strips** upgrade (CPU geometry and coverage in SIMD-friendly
+   strips, plus lightweight GPU compositing) rather than a pure-compute
+   pipeline. `strip.wgsl` and the tilecompute stage shaders are written; the
+   pipelines are stubs (`StubComputePipelineID`, "when wgpu is ready"), and
+   tilecompute is currently used only for CPU-side curve flattening. The
    field has spoken on this: Gio shipped a compute renderer derived from
    piet-gpu and **retired it in Jan 2025 as a failed experiment**, and
    Linebender is itself betting on sparse strips over the compute pipeline.
