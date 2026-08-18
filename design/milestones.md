@@ -424,8 +424,15 @@ what it perceived, so no speech output is needed.
 Untested: running a gophics window in that container. Xvfb covers the display
 and the `nogpu` pure-CPU tag exists (CI builds it), so an X11 window without
 Vulkan looks plausible; lavapipe is the fallback. Confirm before relying on it.
-- [ ] Wire macOS announcements, currently a documented no-op because AppKit
-      routes live-region speech through a C function rather than a method.
+- [x] macOS announcements now work. AppKit routes live-region speech through
+      NSAccessibilityPostNotificationWithUserInfo — a plain C function, so it
+      needs an FFI call interface rather than the objc_msgSend path everything
+      else in that file uses. The subtlety is that its notification name and
+      both userInfo keys are *data* symbols: dlsym yields the address of the
+      pointer, so each needs one dereference. Getting that wrong gives a
+      plausible non-nil value that is not a string, and AppKit silently ignores
+      the post — so a test asserts the resolved globals have non-zero NSString
+      length, not merely that they are non-nil.
 - [ ] Validate iOS on-device with VoiceOver — the one platform verified only
       in the simulator.
 

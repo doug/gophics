@@ -183,6 +183,9 @@ var (
 		numberWithBool               SEL
 		array                        SEL
 		addObject                    SEL
+		numberWithInteger            SEL
+		arrayWithObjectsCount        SEL
+		dictWithObjectsForKeys       SEL
 	}
 	a11ySelsOnce sync.Once
 )
@@ -202,6 +205,9 @@ func initA11ySelectors() {
 		a11ySels.numberWithBool = RegisterSelector("numberWithBool:")
 		a11ySels.array = RegisterSelector("array")
 		a11ySels.addObject = RegisterSelector("addObject:")
+		a11ySels.numberWithInteger = RegisterSelector("numberWithInteger:")
+		a11ySels.arrayWithObjectsCount = RegisterSelector("arrayWithObjects:count:")
+		a11ySels.dictWithObjectsForKeys = RegisterSelector("dictionaryWithObjects:forKeys:")
 	})
 }
 
@@ -271,19 +277,27 @@ func (w *Window) SetA11yTree(nodes []A11yNode, activate func(id int)) {
 	view.SendPtr(a11ySels.setAccessibilityRole, createNSString("AXGroup").Ptr())
 }
 
-// AnnounceA11y is not implemented on macOS yet, and says so rather than
-// pretending.
+// AnnounceA11y speaks message through VoiceOver without changing the tree —
+// the live-region idiom, for things a user must be told that are not part of
+// the UI's structure ("5 results", "upload failed").
 //
-// AppKit delivers live-region speech through NSAccessibilityPostNotification
-// WithUserInfo — a plain C function, not an Objective-C method, carrying an
-// NSDictionary of the text and a priority. Every other call in this file goes
-// through objc_msgSend, for which this package has a ready message-send path;
-// calling a bare C function means building an FFI call interface by hand. That
-// is worth doing, but it is separate work from the tree, and a half-wired
-// announcement channel that silently drops messages would be worse than one
-// that is documented as absent: the tree below is what lets a VoiceOver user
-// explore the app at all.
-func (w *Window) AnnounceA11y(message string, assertive bool) {}
+// AppKit routes these through NSAccessibilityPostNotificationWithUserInfo, a
+// plain C function rather than an Objective-C method, so the call is built with
+// an FFI interface instead of the objc_msgSend path everything else here uses.
+// See a11y_announce.go.
+//
+// Posted against the content view: the announcement needs an element that is
+// part of the accessibility hierarchy, and the view is the one object that is
+// always there whether or not a tree has been published.
+func (w *Window) AnnounceA11y(message string, assertive bool) {
+	w.mu.Lock()
+	view := w.contentView
+	w.mu.Unlock()
+	if view == 0 {
+		return
+	}
+	postAnnouncement(view, message, assertive)
+}
 
 // publishable reports whether a node is worth a step in a VoiceOver
 // traversal. A node that names nothing and does nothing is layout
