@@ -1,0 +1,2116 @@
+{
+  "version": 1,
+  "comment": "Curated feed catalog, verified end to end with `rssfeeds check`. The fulltext field records what the feed itself ships: full (>=4000 chars of body text), partial (800-3999), teaser (<800). Teaser and partial feeds rely on the extractor to fetch the article body; feeds where the summary IS the content (arXiv, bioRxiv) set \"extract\": false. The unavailable list records sources checked and found unusable, so the work is not repeated. The priority field (1 filler, 2 normal, 3 must-read) is the editorial weight used when an issue has less room than there is material; unrated feeds count as normal. Editions are named, right-sized issues with their own sources, lookback window and reading-time budget.",
+  "skip_titles": [
+    "^open thread",
+    "^open wire",
+    "^reading list",
+    "^links? (for|round)",
+    "^site update",
+    "^housekeeping",
+    "^quick links",
+    "^misc\\b",
+    "^(weekly|monthly) (roundup|round-up|links)",
+    "^this week in",
+    "^\\d+ links",
+    "^comment of the week",
+    "^(sunday|saturday) (links|reads)",
+    "^what('|’)s new",
+    "^newsletter:? ",
+    "^podcast:? ",
+    "^job (board|openings)"
+  ],
+  "feeds": [
+    {
+      "id": "arxiv-cs-ai",
+      "title": "arXiv cs.AI (API)",
+      "url": "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "preprint"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "notes": "Atom API rather than the RSS snapshot: the RSS feeds serve a single day and were returning empty channels. Abstracts are the unit of interest, so no extraction. arXiv asks for 3s between requests and answers 429 when pushed harder.",
+      "min_interval_seconds": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "arxiv-cs-lg",
+      "title": "arXiv cs.LG (API)",
+      "url": "http://export.arxiv.org/api/query?search_query=cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "preprint"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "notes": "Atom API rather than the RSS snapshot: the RSS feeds serve a single day and were returning empty channels. Abstracts are the unit of interest, so no extraction. arXiv asks for 3s between requests and answers 429 when pushed harder.",
+      "min_interval_seconds": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "arxiv-cs-cl",
+      "title": "arXiv cs.CL (API)",
+      "url": "http://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "preprint",
+        "nlp"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "min_interval_seconds": 3,
+      "notes": "Atom API rather than the RSS snapshot: the RSS feeds serve a single day and were returning empty channels. Abstracts are the unit of interest, so no extraction. arXiv asks for 3s between requests and answers 429 when pushed harder.",
+      "kind": "compounding"
+    },
+    {
+      "id": "arxiv-q-bio-bm",
+      "title": "arXiv q-bio.BM (API)",
+      "url": "http://export.arxiv.org/api/query?search_query=cat:q-bio.BM&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "ai4science",
+        "biology"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "min_interval_seconds": 3,
+      "notes": "Atom API rather than the RSS snapshot: the RSS feeds serve a single day and were returning empty channels. Abstracts are the unit of interest, so no extraction. arXiv asks for 3s between requests and answers 429 when pushed harder.",
+      "kind": "compounding"
+    },
+    {
+      "id": "arxiv-cond-mat-mtrl",
+      "title": "arXiv materials (API)",
+      "url": "http://export.arxiv.org/api/query?search_query=cat:cond-mat.mtrl-sci&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "ai4science",
+        "materials"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "min_interval_seconds": 3,
+      "notes": "Atom API rather than the RSS snapshot: the RSS feeds serve a single day and were returning empty channels. Abstracts are the unit of interest, so no extraction. arXiv asks for 3s between requests and answers 429 when pushed harder.",
+      "kind": "compounding"
+    },
+    {
+      "id": "deepmind",
+      "title": "Google DeepMind",
+      "url": "https://deepmind.google/blog/rss.xml",
+      "category": "ai",
+      "tags": [
+        "lab",
+        "ai4science"
+      ],
+      "fulltext": "teaser",
+      "priority": 2,
+      "kind": "current"
+    },
+    {
+      "id": "google-research",
+      "title": "Google Research",
+      "url": "https://research.google/blog/rss/",
+      "category": "ai",
+      "tags": [
+        "lab"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "openai-news",
+      "title": "OpenAI News",
+      "url": "https://openai.com/news/rss.xml",
+      "category": "ai",
+      "tags": [
+        "lab"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "microsoft-research",
+      "title": "Microsoft Research",
+      "url": "https://www.microsoft.com/en-us/research/feed/",
+      "category": "ai",
+      "tags": [
+        "lab",
+        "ai4science"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "huggingface-blog",
+      "title": "Hugging Face Blog",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "category": "ai",
+      "tags": [
+        "lab",
+        "opensource"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "bair",
+      "title": "Berkeley AI Research",
+      "url": "https://bair.berkeley.edu/blog/feed.xml",
+      "category": "ai",
+      "tags": [
+        "academic"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "ml-cmu",
+      "title": "Machine Learning @ CMU",
+      "url": "https://blog.ml.cmu.edu/feed/",
+      "category": "ai",
+      "tags": [
+        "academic"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "mit-news-ai",
+      "title": "MIT News: AI",
+      "url": "https://news.mit.edu/rss/topic/artificial-intelligence2",
+      "category": "ai",
+      "tags": [
+        "academic",
+        "ai4science"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "import-ai",
+      "title": "Import AI (Jack Clark)",
+      "url": "https://importai.substack.com/feed",
+      "category": "ai",
+      "tags": [
+        "newsletter",
+        "analysis"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "interconnects",
+      "title": "Interconnects (Nathan Lambert)",
+      "url": "https://www.interconnects.ai/feed",
+      "category": "ai",
+      "tags": [
+        "newsletter",
+        "analysis"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "ahead-of-ai",
+      "title": "Ahead of AI (Sebastian Raschka)",
+      "url": "https://magazine.sebastianraschka.com/feed",
+      "category": "ai",
+      "tags": [
+        "newsletter",
+        "technical"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "simon-willison",
+      "title": "Simon Willison",
+      "url": "https://simonwillison.net/atom/everything/",
+      "category": "ai",
+      "tags": [
+        "blog",
+        "practical"
+      ],
+      "fulltext": "partial",
+      "notes": "High volume: link blog plus long posts. Consider --min-words when building an issue.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "lil-log",
+      "title": "Lil'Log (Lilian Weng)",
+      "url": "https://lilianweng.github.io/index.xml",
+      "category": "ai",
+      "tags": [
+        "blog",
+        "technical"
+      ],
+      "fulltext": "teaser",
+      "notes": "Infrequent but each post is a deep survey. Needs extraction.",
+      "kind": "compounding"
+    },
+    {
+      "id": "semianalysis",
+      "title": "SemiAnalysis",
+      "url": "https://semianalysis.com/feed/",
+      "category": "ai",
+      "tags": [
+        "hardware",
+        "analysis"
+      ],
+      "fulltext": "full",
+      "enabled": false,
+      "notes": "Disabled: newest entry was ~11 months stale at catalog time. Much of it moved behind a paywall.",
+      "kind": "current"
+    },
+    {
+      "id": "the-gradient",
+      "title": "The Gradient",
+      "url": "https://thegradient.pub/rss/",
+      "category": "ai",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "full",
+      "enabled": false,
+      "notes": "Disabled: ~6 months stale at catalog time. Re-enable if it resumes.",
+      "kind": "current"
+    },
+    {
+      "id": "nature",
+      "title": "Nature",
+      "url": "https://www.nature.com/nature.rss",
+      "category": "science",
+      "tags": [
+        "journal"
+      ],
+      "fulltext": "teaser",
+      "notes": "RSS 1.0/RDF. Article bodies are paywalled; extraction yields the abstract and news pieces.",
+      "kind": "current"
+    },
+    {
+      "id": "nature-machine-intelligence",
+      "title": "Nature Machine Intelligence",
+      "url": "https://www.nature.com/natmachintell.rss",
+      "category": "science",
+      "tags": [
+        "journal",
+        "ai4science"
+      ],
+      "fulltext": "teaser",
+      "kind": "compounding"
+    },
+    {
+      "id": "nature-comput-sci",
+      "title": "Nature Computational Science",
+      "url": "https://www.nature.com/natcomputsci.rss",
+      "category": "science",
+      "tags": [
+        "journal",
+        "ai4science"
+      ],
+      "fulltext": "teaser",
+      "kind": "compounding"
+    },
+    {
+      "id": "nature-methods",
+      "title": "Nature Methods",
+      "url": "https://www.nature.com/nmeth.rss",
+      "category": "science",
+      "tags": [
+        "journal",
+        "ai4science"
+      ],
+      "fulltext": "teaser",
+      "kind": "compounding"
+    },
+    {
+      "id": "nature-communications",
+      "title": "Nature Communications",
+      "url": "https://www.nature.com/ncomms.rss",
+      "category": "science",
+      "tags": [
+        "journal",
+        "openaccess"
+      ],
+      "fulltext": "teaser",
+      "notes": "Open access, so extraction usually gets the real body.",
+      "kind": "compounding"
+    },
+    {
+      "id": "science-news",
+      "title": "Science (news)",
+      "url": "https://www.science.org/rss/news_current.xml",
+      "category": "science",
+      "tags": [
+        "journal",
+        "news"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "quanta",
+      "title": "Quanta Magazine",
+      "url": "https://api.quantamagazine.org/feed/",
+      "category": "science",
+      "tags": [
+        "magazine",
+        "longform"
+      ],
+      "fulltext": "teaser",
+      "notes": "Best-in-class science writing and fully open. Extraction is essential here.",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "plos-comp-bio",
+      "title": "PLOS Computational Biology",
+      "url": "https://journals.plos.org/ploscompbiol/feed/atom",
+      "category": "science",
+      "tags": [
+        "journal",
+        "openaccess",
+        "ai4science"
+      ],
+      "fulltext": "partial",
+      "kind": "compounding"
+    },
+    {
+      "id": "biorxiv-bioinformatics",
+      "title": "bioRxiv: Bioinformatics",
+      "url": "http://connect.biorxiv.org/biorxiv_xml.php?subject=bioinformatics",
+      "category": "science",
+      "tags": [
+        "preprint",
+        "ai4science"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "notes": "Abstracts only by design.",
+      "kind": "compounding"
+    },
+    {
+      "id": "eos",
+      "title": "Eos (AGU)",
+      "url": "https://eos.org/feed",
+      "category": "science",
+      "tags": [
+        "earth-science"
+      ],
+      "fulltext": "partial",
+      "kind": "compounding"
+    },
+    {
+      "id": "quantum-frontiers",
+      "title": "Quantum Frontiers",
+      "url": "https://quantumfrontiers.com/feed/",
+      "category": "science",
+      "tags": [
+        "physics",
+        "blog"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "owl-posting",
+      "title": "Owl Posting",
+      "url": "https://www.owlposting.com/feed",
+      "category": "science",
+      "tags": [
+        "ai4science",
+        "biology",
+        "longform"
+      ],
+      "fulltext": "full",
+      "notes": "Deep essays on ML applied to biology. Directly on-topic for AI for Science.",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "works-in-progress",
+      "title": "Works in Progress",
+      "url": "https://www.worksinprogress.news/feed",
+      "category": "science",
+      "tags": [
+        "magazine",
+        "longform",
+        "progress"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "phys-org",
+      "title": "Phys.org",
+      "url": "https://phys.org/rss-feed/",
+      "category": "science",
+      "tags": [
+        "news",
+        "aggregator"
+      ],
+      "fulltext": "teaser",
+      "notes": "High volume. Good for breadth, noisy; pair with --limit.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "nautilus",
+      "title": "Nautilus",
+      "url": "https://nautil.us/feed",
+      "category": "science",
+      "tags": [
+        "magazine",
+        "longform"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "hn-front-100",
+      "title": "Hacker News (100+ points)",
+      "url": "https://hnrss.org/frontpage?points=100",
+      "category": "tech",
+      "tags": [
+        "aggregator"
+      ],
+      "fulltext": "teaser",
+      "notes": "Score-filtered via hnrss. The <link> is the external article, not the HN thread, so extraction fetches the real content; the description carries the Points and Comments URL.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "lobsters",
+      "title": "Lobsters",
+      "url": "https://lobste.rs/rss",
+      "category": "tech",
+      "tags": [
+        "aggregator"
+      ],
+      "fulltext": "teaser",
+      "kind": "current"
+    },
+    {
+      "id": "lwn",
+      "title": "LWN.net",
+      "url": "https://lwn.net/headlines/newrss",
+      "category": "tech",
+      "tags": [
+        "linux",
+        "kernel"
+      ],
+      "fulltext": "teaser",
+      "kind": "compounding"
+    },
+    {
+      "id": "go-blog",
+      "title": "The Go Blog",
+      "url": "https://go.dev/blog/feed.atom",
+      "category": "tech",
+      "tags": [
+        "go"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "research-rsc",
+      "title": "research!rsc (Russ Cox)",
+      "url": "https://research.swtch.com/feed.atom",
+      "category": "tech",
+      "tags": [
+        "go",
+        "deep"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "jvns",
+      "title": "Julia Evans",
+      "url": "https://jvns.ca/atom.xml",
+      "category": "tech",
+      "tags": [
+        "blog",
+        "teaching"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "dan-luu",
+      "title": "Dan Luu",
+      "url": "https://danluu.com/atom.xml",
+      "category": "tech",
+      "tags": [
+        "blog",
+        "longform"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "marc-brooker",
+      "title": "Marc Brooker",
+      "url": "https://brooker.co.za/blog/rss.xml",
+      "category": "tech",
+      "tags": [
+        "distributed-systems"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "murat-buffalo",
+      "title": "Metadata (Murat Demirbas)",
+      "url": "https://muratbuffalo.blogspot.com/feeds/posts/default",
+      "category": "tech",
+      "tags": [
+        "distributed-systems",
+        "papers"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "brendan-gregg",
+      "title": "Brendan Gregg",
+      "url": "https://www.brendangregg.com/blog/rss.xml",
+      "category": "tech",
+      "tags": [
+        "performance"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "cloudflare",
+      "title": "Cloudflare Blog",
+      "url": "https://blog.cloudflare.com/rss/",
+      "category": "tech",
+      "tags": [
+        "engineering",
+        "networking"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "netflix-tech",
+      "title": "Netflix Tech Blog",
+      "url": "https://netflixtechblog.com/feed",
+      "category": "tech",
+      "tags": [
+        "engineering"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "xe-iaso",
+      "title": "Xe Iaso",
+      "url": "https://xeiaso.net/blog.rss",
+      "category": "tech",
+      "tags": [
+        "blog"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "registerspill",
+      "title": "Registerspill (Thorsten Ball)",
+      "url": "https://registerspill.thorstenball.com/feed",
+      "category": "tech",
+      "tags": [
+        "blog"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "antirez",
+      "title": "antirez",
+      "url": "https://antirez.com/rss",
+      "category": "tech",
+      "tags": [
+        "blog",
+        "systems"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "schneier",
+      "title": "Schneier on Security",
+      "url": "https://www.schneier.com/feed/atom/",
+      "category": "tech",
+      "tags": [
+        "security"
+      ],
+      "fulltext": "partial",
+      "kind": "compounding"
+    },
+    {
+      "id": "hillel-wayne",
+      "title": "Hillel Wayne",
+      "url": "https://buttondown.com/hillelwayne/rss",
+      "category": "tech",
+      "tags": [
+        "formal-methods"
+      ],
+      "fulltext": "partial",
+      "kind": "compounding"
+    },
+    {
+      "id": "ars-technica",
+      "title": "Ars Technica",
+      "url": "https://feeds.arstechnica.com/arstechnica/index",
+      "category": "tech",
+      "tags": [
+        "news"
+      ],
+      "fulltext": "partial",
+      "kind": "current"
+    },
+    {
+      "id": "ieee-spectrum",
+      "title": "IEEE Spectrum",
+      "url": "https://spectrum.ieee.org/feeds/feed.rss",
+      "category": "tech",
+      "tags": [
+        "magazine",
+        "engineering"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "rachel-by-the-bay",
+      "title": "Rachel by the bay",
+      "url": "https://rachelbythebay.com/w/atom.xml",
+      "category": "tech",
+      "tags": [
+        "blog",
+        "systems"
+      ],
+      "fulltext": "unknown",
+      "user_agent": "rss-reader/1.0 (personal feed reader; +https://github.com/dougfritz/rss)",
+      "notes": "Disabled: the host stopped answering entirely (connection timeout regardless of user agent) after previously returning 429. Retry occasionally.",
+      "enabled": false,
+      "kind": "current"
+    },
+    {
+      "id": "acm-queue",
+      "title": "ACM Queue",
+      "url": "https://queue.acm.org/rss/feeds/queuecontent.xml",
+      "category": "tech",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "marginal-revolution",
+      "title": "Marginal Revolution",
+      "url": "https://marginalrevolution.com/feed",
+      "category": "econ",
+      "tags": [
+        "blog",
+        "economics"
+      ],
+      "fulltext": "partial",
+      "notes": "Very high volume of short link posts. --min-words is useful.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "noahpinion",
+      "title": "Noahpinion",
+      "url": "https://www.noahpinion.blog/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "economics"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "construction-physics",
+      "title": "Construction Physics",
+      "url": "https://www.construction-physics.com/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "engineering",
+        "industry"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "brad-delong",
+      "title": "Brad DeLong: Grasping Reality",
+      "url": "https://braddelong.substack.com/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "economics",
+        "history"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "liberty-street",
+      "title": "Liberty Street Economics (NY Fed)",
+      "url": "https://libertystreeteconomics.newyorkfed.org/feed/",
+      "category": "econ",
+      "tags": [
+        "research",
+        "central-bank"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "the-overshoot",
+      "title": "The Overshoot",
+      "url": "https://theovershoot.co/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "macro"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "net-interest",
+      "title": "Net Interest",
+      "url": "https://www.netinterest.co/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "finance"
+      ],
+      "fulltext": "partial",
+      "kind": "compounding"
+    },
+    {
+      "id": "conversable-economist",
+      "title": "Conversable Economist",
+      "url": "https://conversableeconomist.com/feed/",
+      "category": "econ",
+      "tags": [
+        "blog",
+        "economics"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "klement",
+      "title": "Klement on Investing",
+      "url": "https://klementoninvesting.substack.com/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "finance"
+      ],
+      "fulltext": "partial",
+      "kind": "current"
+    },
+    {
+      "id": "fred-blog",
+      "title": "FRED Blog (St. Louis Fed)",
+      "url": "https://fredblog.stlouisfed.org/feed/",
+      "category": "econ",
+      "tags": [
+        "data",
+        "central-bank"
+      ],
+      "fulltext": "partial",
+      "kind": "compounding"
+    },
+    {
+      "id": "chartbook",
+      "title": "Chartbook (Adam Tooze)",
+      "url": "https://adamtooze.substack.com/feed",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "history",
+        "macro"
+      ],
+      "fulltext": "teaser",
+      "notes": "Partly paywalled; free posts extract fine.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "stratechery",
+      "title": "Stratechery",
+      "url": "https://stratechery.com/feed/",
+      "category": "econ",
+      "tags": [
+        "newsletter",
+        "tech-strategy"
+      ],
+      "fulltext": "teaser",
+      "notes": "Mostly subscriber-only. Free articles only.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "economist-finance",
+      "title": "The Economist: Finance & Economics",
+      "url": "https://www.economist.com/finance-and-economics/rss.xml",
+      "category": "econ",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "teaser",
+      "notes": "Teaser-only feed behind a paywall. Set cookie_file to a Netscape cookies.txt export from a logged-in browser session to extract full text with your subscription.",
+      "cookie_file": "~/.config/rss/cookies/economist.txt",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "aeon",
+      "title": "Aeon",
+      "url": "https://aeon.co/feed.rss",
+      "category": "longform",
+      "tags": [
+        "essays",
+        "philosophy"
+      ],
+      "fulltext": "teaser",
+      "kind": "leisure"
+    },
+    {
+      "id": "noema",
+      "title": "Noema Magazine",
+      "url": "https://www.noemamag.com/feed/",
+      "category": "longform",
+      "tags": [
+        "essays",
+        "politics",
+        "technology"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "palladium",
+      "title": "Palladium Magazine",
+      "url": "https://www.palladiummag.com/feed/",
+      "category": "longform",
+      "tags": [
+        "essays",
+        "governance"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "astral-codex-ten",
+      "title": "Astral Codex Ten",
+      "url": "https://www.astralcodexten.com/feed",
+      "category": "longform",
+      "tags": [
+        "essays",
+        "rationality"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "the-atlantic",
+      "title": "The Atlantic",
+      "url": "https://www.theatlantic.com/feed/all/",
+      "category": "longform",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "full",
+      "notes": "Ships full article text in RSS, so a subscription needs no cookies here.",
+      "kind": "leisure"
+    },
+    {
+      "id": "marginalian",
+      "title": "The Marginalian",
+      "url": "https://www.themarginalian.org/feed/",
+      "category": "longform",
+      "tags": [
+        "essays",
+        "literature"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "longreads",
+      "title": "Longreads",
+      "url": "https://longreads.com/feed/",
+      "category": "longform",
+      "tags": [
+        "curation"
+      ],
+      "fulltext": "partial",
+      "notes": "Mostly pointers to long pieces elsewhere; extraction follows through.",
+      "kind": "leisure"
+    },
+    {
+      "id": "new-yorker",
+      "title": "The New Yorker",
+      "url": "https://www.newyorker.com/feed/everything",
+      "category": "longform",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "lrb",
+      "title": "London Review of Books",
+      "url": "https://www.lrb.co.uk/feeds/rss",
+      "category": "longform",
+      "tags": [
+        "reviews",
+        "essays"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "psyche",
+      "title": "Psyche",
+      "url": "https://psyche.co/feed.rss",
+      "category": "longform",
+      "tags": [
+        "essays",
+        "psychology"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "public-domain-review",
+      "title": "The Public Domain Review",
+      "url": "https://publicdomainreview.org/rss.xml",
+      "category": "longform",
+      "tags": [
+        "history",
+        "art"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "ap-news",
+      "title": "AP News",
+      "url": "https://feedx.net/rss/ap.xml",
+      "category": "news",
+      "tags": [
+        "wire"
+      ],
+      "fulltext": "full",
+      "notes": "Third-party mirror. The AP retired its own public feeds; verify periodically.",
+      "kind": "current"
+    },
+    {
+      "id": "npr-news",
+      "title": "NPR News",
+      "url": "https://feeds.npr.org/1001/rss.xml",
+      "category": "news",
+      "tags": [
+        "radio"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "bbc-world",
+      "title": "BBC World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "category": "news",
+      "tags": [
+        "wire"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "guardian-world",
+      "title": "The Guardian: World",
+      "url": "https://www.theguardian.com/world/rss",
+      "category": "news",
+      "tags": [
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "al-jazeera",
+      "title": "Al Jazeera",
+      "url": "https://www.aljazeera.com/xml/rss/all.xml",
+      "category": "news",
+      "tags": [
+        "wire"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "nyt-home",
+      "title": "New York Times",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+      "category": "news",
+      "tags": [
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "csmonitor",
+      "title": "Christian Science Monitor",
+      "url": "https://rss.csmonitor.com/feeds/all",
+      "category": "news",
+      "tags": [
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "prairie-homestead",
+      "title": "The Prairie Homestead",
+      "url": "https://www.theprairiehomestead.com/feed",
+      "category": "homestead",
+      "tags": [
+        "homesteading",
+        "food"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "homesteading-family",
+      "title": "Homesteading Family",
+      "url": "https://homesteadingfamily.com/feed/",
+      "category": "homestead",
+      "tags": [
+        "homesteading"
+      ],
+      "fulltext": "full",
+      "kind": "compounding"
+    },
+    {
+      "id": "practical-self-reliance",
+      "title": "Practical Self Reliance",
+      "url": "https://practicalselfreliance.com/feed/",
+      "category": "homestead",
+      "tags": [
+        "homesteading",
+        "foraging",
+        "new-england"
+      ],
+      "fulltext": "full",
+      "notes": "Vermont-based; strong on New England foraging and preserving.",
+      "kind": "compounding"
+    },
+    {
+      "id": "modern-farmer",
+      "title": "Modern Farmer",
+      "url": "https://modernfarmer.com/feed/",
+      "category": "homestead",
+      "tags": [
+        "agriculture"
+      ],
+      "fulltext": "full",
+      "kind": "decision"
+    },
+    {
+      "id": "small-farmers-journal",
+      "title": "Small Farmer's Journal",
+      "url": "https://smallfarmersjournal.com/feed/",
+      "category": "homestead",
+      "tags": [
+        "agriculture",
+        "draft-animals"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "milkwood",
+      "title": "Milkwood",
+      "url": "https://www.milkwood.net/feed/",
+      "category": "homestead",
+      "tags": [
+        "permaculture"
+      ],
+      "fulltext": "full",
+      "enabled": false,
+      "notes": "Disabled: ~10 months stale at catalog time.",
+      "kind": "leisure"
+    },
+    {
+      "id": "lost-art-press",
+      "title": "Lost Art Press",
+      "url": "https://blog.lostartpress.com/feed/",
+      "category": "wood",
+      "tags": [
+        "hand-tools",
+        "furniture"
+      ],
+      "fulltext": "partial",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "paul-sellers",
+      "title": "Paul Sellers",
+      "url": "https://paulsellers.com/blog/rss/",
+      "category": "wood",
+      "tags": [
+        "hand-tools",
+        "teaching"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "popular-woodworking",
+      "title": "Popular Woodworking",
+      "url": "https://www.popularwoodworking.com/feed/",
+      "category": "wood",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "fine-woodworking",
+      "title": "Fine Woodworking",
+      "url": "https://www.finewoodworking.com/feed",
+      "category": "wood",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "teaser",
+      "notes": "Largely subscriber-only.",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "fine-homebuilding",
+      "title": "Fine Homebuilding",
+      "url": "https://www.finehomebuilding.com/feed",
+      "category": "wood",
+      "tags": [
+        "building"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "wood-and-shop",
+      "title": "Wood and Shop",
+      "url": "https://woodandshop.com/feed/",
+      "category": "wood",
+      "tags": [
+        "hand-tools",
+        "traditional"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "woodworking-masterclasses",
+      "title": "Woodworking Masterclasses",
+      "url": "https://woodworkingmasterclasses.com/feed/",
+      "category": "wood",
+      "tags": [
+        "video",
+        "teaching"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "sectionhiker",
+      "title": "SectionHiker",
+      "url": "https://sectionhiker.com/feed/",
+      "category": "outdoors",
+      "tags": [
+        "backpacking",
+        "gear",
+        "new-england"
+      ],
+      "fulltext": "teaser",
+      "notes": "New Hampshire-based; the best single source on White Mountains hiking.",
+      "priority": 3,
+      "kind": "decision"
+    },
+    {
+      "id": "mount-washington-obs",
+      "title": "Mount Washington Observatory",
+      "url": "https://mountwashington.org/feed/",
+      "category": "outdoors",
+      "tags": [
+        "weather",
+        "new-hampshire"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "decision"
+    },
+    {
+      "id": "amc-outdoors",
+      "title": "AMC Outdoors",
+      "url": "https://www.outdoors.org/feed/",
+      "category": "outdoors",
+      "tags": [
+        "hiking",
+        "new-england",
+        "conservation"
+      ],
+      "fulltext": "full",
+      "kind": "decision"
+    },
+    {
+      "id": "the-trek",
+      "title": "The Trek",
+      "url": "https://thetrek.co/feed/",
+      "category": "outdoors",
+      "tags": [
+        "thru-hiking"
+      ],
+      "fulltext": "teaser",
+      "notes": "Very high volume of hiker journals. Filter hard.",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "adventure-journal",
+      "title": "Adventure Journal",
+      "url": "https://www.adventure-journal.com/feed/",
+      "category": "outdoors",
+      "tags": [
+        "magazine",
+        "longform"
+      ],
+      "fulltext": "full",
+      "kind": "leisure"
+    },
+    {
+      "id": "outside-online",
+      "title": "Outside Online",
+      "url": "https://www.outsideonline.com/feed/",
+      "category": "outdoors",
+      "tags": [
+        "magazine"
+      ],
+      "fulltext": "full",
+      "kind": "leisure"
+    },
+    {
+      "id": "backpacker",
+      "title": "Backpacker",
+      "url": "https://www.backpacker.com/feed/",
+      "category": "outdoors",
+      "tags": [
+        "magazine",
+        "gear"
+      ],
+      "fulltext": "full",
+      "kind": "decision"
+    },
+    {
+      "id": "nh-bulletin",
+      "title": "New Hampshire Bulletin",
+      "url": "https://newhampshirebulletin.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "politics"
+      ],
+      "fulltext": "full",
+      "notes": "States Newsroom nonprofit; full text and no paywall.",
+      "priority": 3,
+      "kind": "decision"
+    },
+    {
+      "id": "indepthnh",
+      "title": "InDepthNH",
+      "url": "https://indepthnh.org/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "investigative"
+      ],
+      "fulltext": "partial",
+      "kind": "decision"
+    },
+    {
+      "id": "nhbr",
+      "title": "NH Business Review",
+      "url": "https://www.nhbr.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "business"
+      ],
+      "fulltext": "full",
+      "kind": "decision"
+    },
+    {
+      "id": "concord-monitor",
+      "title": "Concord Monitor",
+      "url": "https://www.concordmonitor.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "notes": "Feed carries titles and links only; entirely dependent on extraction.",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "union-leader",
+      "title": "NH Union Leader",
+      "url": "https://www.unionleader.com/search/?f=rss&t=article&c=news&l=25&s=start_time&sd=desc",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "min_interval_seconds": 5,
+      "notes": "Rate-limited: returns 429 when polled concurrently, 200 when spaced out.",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "keene-sentinel",
+      "title": "Keene Sentinel",
+      "url": "https://www.keenesentinel.com/search/?f=rss&t=article&l=25&s=start_time&sd=desc",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "min_interval_seconds": 5,
+      "notes": "Rate-limited: returns 429 when polled concurrently, 200 when spaced out.",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "granite-geek",
+      "title": "Granite Geek (David Brooks)",
+      "url": "https://granitegeek.concordmonitor.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "science"
+      ],
+      "fulltext": "partial",
+      "notes": "NH science and tech column. Publishes irregularly.",
+      "kind": "decision"
+    },
+    {
+      "id": "yankee",
+      "title": "Yankee Magazine",
+      "url": "https://newengland.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-england",
+        "culture",
+        "longform"
+      ],
+      "fulltext": "full",
+      "priority": 3,
+      "kind": "leisure"
+    },
+    {
+      "id": "vtdigger",
+      "title": "VTDigger",
+      "url": "https://vtdigger.org/feed/",
+      "category": "newengland",
+      "tags": [
+        "vermont",
+        "investigative"
+      ],
+      "fulltext": "full",
+      "kind": "current"
+    },
+    {
+      "id": "maine-morning-star",
+      "title": "Maine Morning Star",
+      "url": "https://mainemorningstar.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "maine",
+        "politics"
+      ],
+      "fulltext": "full",
+      "kind": "current"
+    },
+    {
+      "id": "bangor-daily",
+      "title": "Bangor Daily News",
+      "url": "https://www.bangordailynews.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "maine",
+        "newspaper"
+      ],
+      "fulltext": "partial",
+      "kind": "current"
+    },
+    {
+      "id": "wbur",
+      "title": "WBUR",
+      "url": "https://www.wbur.org/feed",
+      "category": "newengland",
+      "tags": [
+        "massachusetts",
+        "radio"
+      ],
+      "fulltext": "unknown",
+      "notes": "The documented /rss/news path 404s; /feed works.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "valley-news",
+      "title": "Valley News",
+      "url": "https://vnews.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "vermont",
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "notes": "Upper Valley (Hanover/Lebanon). Titles and links only.",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "arxiv-ml-materials",
+      "title": "arXiv: ML + materials science",
+      "url": "http://export.arxiv.org/api/query?search_query=abs:%22machine+learning%22+AND+cat:cond-mat.mtrl-sci&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "ai4science",
+        "materials"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "min_interval_seconds": 3,
+      "notes": "Query feed. The arXiv API accepts real search syntax, so an AI-for-Science slice is just a URL.",
+      "kind": "compounding"
+    },
+    {
+      "id": "arxiv-protein-ml",
+      "title": "arXiv: protein structure + ML",
+      "url": "http://export.arxiv.org/api/query?search_query=all:%22protein+structure%22+AND+cat:q-bio.BM&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "ai4science",
+        "biology"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "min_interval_seconds": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "arxiv-ml-weather",
+      "title": "arXiv: ML + atmospheric science",
+      "url": "http://export.arxiv.org/api/query?search_query=abs:%22machine+learning%22+AND+cat:physics.ao-ph&sortBy=submittedDate&sortOrder=descending&max_results=60",
+      "category": "ai",
+      "tags": [
+        "papers",
+        "ai4science",
+        "climate"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "min_interval_seconds": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "biorxiv-all",
+      "title": "bioRxiv (all subjects)",
+      "url": "http://connect.biorxiv.org/biorxiv_xml.php?subject=all",
+      "category": "science",
+      "tags": [
+        "preprint",
+        "ai4science"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "kind": "compounding"
+    },
+    {
+      "id": "medrxiv-all",
+      "title": "medRxiv (all subjects)",
+      "url": "http://connect.medrxiv.org/medrxiv_xml.php?subject=all",
+      "category": "science",
+      "tags": [
+        "preprint",
+        "medicine"
+      ],
+      "fulltext": "partial",
+      "extract": false,
+      "kind": "compounding"
+    },
+    {
+      "id": "hn-front-250",
+      "title": "Hacker News (250+ points)",
+      "url": "https://hnrss.org/frontpage?points=250",
+      "category": "tech",
+      "tags": [
+        "aggregator",
+        "high-signal"
+      ],
+      "fulltext": "teaser",
+      "notes": "Only the genuinely big threads; a handful of items a day.",
+      "kind": "current"
+    },
+    {
+      "id": "hn-show",
+      "title": "Hacker News: Show HN",
+      "url": "https://hnrss.org/show",
+      "category": "tech",
+      "tags": [
+        "aggregator",
+        "projects"
+      ],
+      "fulltext": "teaser",
+      "kind": "current"
+    },
+    {
+      "id": "hn-ask",
+      "title": "Hacker News: Ask HN",
+      "url": "https://hnrss.org/ask",
+      "category": "tech",
+      "tags": [
+        "aggregator",
+        "discussion"
+      ],
+      "fulltext": "teaser",
+      "extract": false,
+      "notes": "Ask HN posts have no external article; the question text is in the feed.",
+      "kind": "current"
+    },
+    {
+      "id": "atlantic-best-of",
+      "title": "The Atlantic: Best Of",
+      "url": "https://www.theatlantic.com/feed/best-of/",
+      "category": "longform",
+      "tags": [
+        "magazine",
+        "subscription",
+        "curation"
+      ],
+      "fulltext": "full",
+      "notes": "Subscriber content arrives as full text in the feed; no authentication needed.",
+      "kind": "leisure"
+    },
+    {
+      "id": "atlantic-science",
+      "title": "The Atlantic: Science",
+      "url": "https://www.theatlantic.com/feed/channel/science/",
+      "category": "longform",
+      "tags": [
+        "magazine",
+        "subscription",
+        "science"
+      ],
+      "fulltext": "full",
+      "notes": "Subscriber content arrives as full text in the feed; no authentication needed.",
+      "kind": "compounding"
+    },
+    {
+      "id": "atlantic-ideas",
+      "title": "The Atlantic: Ideas",
+      "url": "https://www.theatlantic.com/feed/channel/ideas/",
+      "category": "longform",
+      "tags": [
+        "magazine",
+        "subscription",
+        "essays"
+      ],
+      "fulltext": "full",
+      "notes": "Subscriber content arrives as full text in the feed; no authentication needed.",
+      "priority": 3,
+      "kind": "compounding"
+    },
+    {
+      "id": "atlantic-technology",
+      "title": "The Atlantic: Technology",
+      "url": "https://www.theatlantic.com/feed/channel/technology/",
+      "category": "longform",
+      "tags": [
+        "magazine",
+        "subscription",
+        "technology"
+      ],
+      "fulltext": "full",
+      "notes": "Subscriber content arrives as full text in the feed; no authentication needed.",
+      "kind": "leisure"
+    },
+    {
+      "id": "economist-latest",
+      "title": "The Economist: Latest",
+      "url": "https://www.economist.com/latest/rss.xml",
+      "category": "econ",
+      "tags": [
+        "magazine",
+        "subscription"
+      ],
+      "fulltext": "teaser",
+      "cookie_file": "~/.config/rss/cookies/economist.txt",
+      "notes": "Teaser-only feed behind a paywall. Set cookie_file to a Netscape cookies.txt export from a logged-in browser session to extract full text with your subscription.",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "economist-science-technology",
+      "title": "The Economist: Science & Technology",
+      "url": "https://www.economist.com/science-and-technology/rss.xml",
+      "category": "science",
+      "tags": [
+        "magazine",
+        "subscription"
+      ],
+      "fulltext": "teaser",
+      "cookie_file": "~/.config/rss/cookies/economist.txt",
+      "notes": "Teaser-only feed behind a paywall. Set cookie_file to a Netscape cookies.txt export from a logged-in browser session to extract full text with your subscription.",
+      "kind": "compounding"
+    },
+    {
+      "id": "economist-briefing",
+      "title": "The Economist: Briefing",
+      "url": "https://www.economist.com/briefing/rss.xml",
+      "category": "econ",
+      "tags": [
+        "magazine",
+        "subscription"
+      ],
+      "fulltext": "teaser",
+      "cookie_file": "~/.config/rss/cookies/economist.txt",
+      "notes": "Teaser-only feed behind a paywall. Set cookie_file to a Netscape cookies.txt export from a logged-in browser session to extract full text with your subscription.",
+      "kind": "compounding"
+    },
+    {
+      "id": "economist-business",
+      "title": "The Economist: Business",
+      "url": "https://www.economist.com/business/rss.xml",
+      "category": "econ",
+      "tags": [
+        "magazine",
+        "subscription"
+      ],
+      "fulltext": "teaser",
+      "cookie_file": "~/.config/rss/cookies/economist.txt",
+      "notes": "Teaser-only feed behind a paywall. Set cookie_file to a Netscape cookies.txt export from a logged-in browser session to extract full text with your subscription.",
+      "kind": "current"
+    },
+    {
+      "id": "patch-amherst",
+      "title": "Patch: Amherst NH",
+      "url": "https://patch.com/feeds/new-hampshire/amherst",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "amherst",
+        "hyperlocal"
+      ],
+      "fulltext": "teaser",
+      "notes": "The only working hyperlocal Amherst feed found. Town meetings, schools, police log.",
+      "priority": 3,
+      "kind": "decision"
+    },
+    {
+      "id": "patch-milford-nashua",
+      "title": "Patch: Nashua NH",
+      "url": "https://patch.com/feeds/new-hampshire/nashua",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "hyperlocal"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "patch-merrimack",
+      "title": "Patch: Merrimack NH",
+      "url": "https://patch.com/feeds/new-hampshire/merrimack",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "hyperlocal"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "decision"
+    },
+    {
+      "id": "nhpr-news",
+      "title": "NHPR: News",
+      "url": "https://www.nhpr.org/news.rss",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "radio"
+      ],
+      "fulltext": "full",
+      "notes": "Use the section feeds. The documented index.rss serves a permanently empty channel.",
+      "priority": 3,
+      "kind": "decision"
+    },
+    {
+      "id": "nhpr-politics",
+      "title": "NHPR: Politics",
+      "url": "https://www.nhpr.org/politics.rss",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "radio",
+        "politics"
+      ],
+      "fulltext": "partial",
+      "kind": "decision"
+    },
+    {
+      "id": "nhpr-environment",
+      "title": "NHPR: Environment",
+      "url": "https://www.nhpr.org/environment.rss",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "radio",
+        "environment"
+      ],
+      "fulltext": "full",
+      "kind": "decision"
+    },
+    {
+      "id": "wmur",
+      "title": "WMUR (NH)",
+      "url": "https://www.wmur.com/topstories-rss",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "tv"
+      ],
+      "fulltext": "teaser",
+      "priority": 1,
+      "kind": "current"
+    },
+    {
+      "id": "nh-journal",
+      "title": "NH Journal",
+      "url": "https://nhjournal.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "politics"
+      ],
+      "fulltext": "full",
+      "kind": "decision"
+    },
+    {
+      "id": "hippo-press",
+      "title": "Hippo Press",
+      "url": "https://hippopress.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "arts",
+        "events"
+      ],
+      "fulltext": "teaser",
+      "notes": "Manchester/Nashua arts, food and events listings.",
+      "priority": 1,
+      "kind": "leisure"
+    },
+    {
+      "id": "ledger-transcript",
+      "title": "Monadnock Ledger-Transcript",
+      "url": "https://www.ledgertranscript.com/feed/",
+      "category": "newengland",
+      "tags": [
+        "new-hampshire",
+        "newspaper"
+      ],
+      "fulltext": "teaser",
+      "notes": "Peterborough and the Monadnock region. Titles and links only; needs extraction.",
+      "priority": 1,
+      "kind": "decision"
+    }
+  ],
+  "unavailable": [
+    {
+      "source": "Anthropic",
+      "reason": "No public RSS feed; /rss.xml, /feed.xml and /news/rss.xml all 404."
+    },
+    {
+      "source": "Epoch AI",
+      "reason": "No feed found at rss.xml, feed.xml or blog/feed."
+    },
+    {
+      "source": "Gwern",
+      "reason": "index.xml and atom.xml return HTML, not a feed."
+    },
+    {
+      "source": "Northern Woodlands",
+      "reason": "No working feed found; articles/feed returns 200 with zero items. On-topic for NH/VT forestry, worth revisiting."
+    },
+    {
+      "source": "Mother Earth News",
+      "reason": "Feed endpoints return HTTP 500."
+    },
+    {
+      "source": "Chemistry World",
+      "reason": "All feed paths 404."
+    },
+    {
+      "source": "Reuters",
+      "reason": "Retired public RSS feeds entirely."
+    },
+    {
+      "source": "Boston Globe",
+      "reason": "No working public feed path found; paywalled."
+    },
+    {
+      "source": "Isomorphic Labs / AI2 / Meta AI",
+      "reason": "Feed URLs 404 or 400."
+    },
+    {
+      "source": "NHPR",
+      "reason": "index.rss serves a valid but permanently empty channel."
+    },
+    {
+      "source": "APS Physics, ChemRxiv, VoxEU, Chelsea Green",
+      "reason": "Block automated requests (403)."
+    },
+    {
+      "source": "Science Advances",
+      "reason": "HTTP 410 Gone."
+    },
+    {
+      "source": "REI Co-op Journal",
+      "reason": "TLS handshake failure."
+    },
+    {
+      "source": "Amherst Citizen",
+      "reason": "amherstcitizen.com does not resolve over HTTP or HTTPS."
+    },
+    {
+      "source": "Milford Cabinet / Cabinet Press",
+      "reason": "No feed at milfordcabinet.com or cabinet.com."
+    },
+    {
+      "source": "Nashua Telegraph",
+      "reason": "All feed paths 404."
+    },
+    {
+      "source": "Manchester Ink Link",
+      "reason": "All feed paths 404 despite the site being live."
+    },
+    {
+      "source": "alphaXiv / Emergent Mind / Papers with Code / arxiv-sanity",
+      "reason": "No working feeds; Papers with Code now redirects to Hugging Face."
+    },
+    {
+      "source": "OpenReview",
+      "reason": "No public RSS."
+    },
+    {
+      "source": "SAU 39 / Town of Amherst",
+      "reason": "No RSS on the town or school district sites."
+    },
+    {
+      "source": "NH Fish & Game, NH DES",
+      "reason": "Return 403 to automated requests."
+    },
+    {
+      "source": "Hugging Face Daily Papers",
+      "reason": "No official feed. The jamesg.blog/granary mirror returns HTTP 502."
+    }
+  ],
+  "editions": [
+    {
+      "id": "deep",
+      "title": "Deep Work",
+      "description": "Only sources that build durable models or skills. No announcements, no news, nothing perishable. This is the edition to read if you read only one.",
+      "kinds": [
+        "compounding"
+      ],
+      "since": "14d",
+      "minutes": 45,
+      "max_item_minutes": 30,
+      "per_feed": 1,
+      "max_category_share": 0.45,
+      "min_priority": 2,
+      "group_by": "category",
+      "exclude_tags": [
+        "papers",
+        "preprint"
+      ],
+      "min_words": 600
+    },
+    {
+      "id": "brief",
+      "title": "Local Brief",
+      "description": "New Hampshire and Amherst: zoning, schools, town meeting, weather. Perishable but actionable. World news is deliberately excluded — it is current-awareness, not improvement.",
+      "categories": [
+        "newengland"
+      ],
+      "since": "36h",
+      "minutes": 12,
+      "max_item_minutes": 12,
+      "per_feed": 2,
+      "max_category_share": 0.6,
+      "group_by": "category",
+      "kinds": [
+        "decision"
+      ]
+    },
+    {
+      "id": "longreads",
+      "title": "Long Reads",
+      "description": "The weekly sit-down: essays, science writing and analysis that keeps. Announcements and news are excluded by kind, not merely ranked lower.",
+      "categories": [
+        "longform",
+        "science",
+        "econ",
+        "ai",
+        "tech"
+      ],
+      "kinds": [
+        "compounding",
+        "leisure"
+      ],
+      "since": "7d",
+      "minutes": 60,
+      "max_item_minutes": 25,
+      "per_feed": 1,
+      "max_category_share": 0.4,
+      "min_priority": 2,
+      "group_by": "category",
+      "exclude_tags": [
+        "papers",
+        "preprint"
+      ],
+      "min_words": 600
+    },
+    {
+      "id": "papers",
+      "title": "Paper Scan",
+      "description": "Preprint abstracts as a single scan list. Skimmed for titles, not read.",
+      "tags": [
+        "papers",
+        "preprint"
+      ],
+      "since": "2d",
+      "allow_summary_only": true,
+      "layout": "scan",
+      "group_by": "feed"
+    },
+    {
+      "id": "workshop",
+      "title": "Workshop & Woods",
+      "description": "Weekend reading: woodworking, homesteading, and the outdoors.",
+      "categories": [
+        "wood",
+        "homestead",
+        "outdoors"
+      ],
+      "since": "7d",
+      "minutes": 30,
+      "max_item_minutes": 20,
+      "per_feed": 2,
+      "max_category_share": 0.5,
+      "group_by": "category",
+      "min_words": 300
+    },
+    {
+      "id": "skim",
+      "title": "World Skim",
+      "description": "Current-awareness in one bounded sitting, so it cannot expand to fill the week.",
+      "kinds": [
+        "current"
+      ],
+      "since": "2d",
+      "minutes": 10,
+      "max_item_minutes": 6,
+      "per_feed": 1,
+      "max_category_share": 0.5,
+      "group_by": "none"
+    }
+  ]
+}

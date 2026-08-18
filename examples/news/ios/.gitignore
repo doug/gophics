@@ -1,0 +1,5 @@
+# Paths are relative to this dir (examples/news/ios).
+# gomobile-bind artifact + generated Xcode project + build output.
+Newsmobile.xcframework/
+GophicsNews.xcodeproj/
+build/

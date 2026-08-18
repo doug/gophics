@@ -1,0 +1,28 @@
+name: GophicsNews
+options:
+  bundleIdPrefix: dev.gophics
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  GophicsNews:
+    type: application
+    platform: iOS
+    sources:
+      - GophicsNews
+    dependencies:
+      - framework: Newsmobile.xcframework
+        embed: true
+    info:
+      path: GophicsNews/Info.plist
+      properties:
+        CFBundleDisplayName: News
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gophics.news
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
