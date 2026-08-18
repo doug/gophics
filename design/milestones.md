@@ -427,3 +427,61 @@ Go callback. What remains for Linux is cosmetic rather than structural: the
 tree in these tests is published directly rather than by a running window under
 Xvfb. Windows and Narrator are untouched, though the UIA spike found the COM
 technique already proven in-repo.
+
+---
+
+## M6 — Lifecycle on mobile
+
+**Goal.** An app knows when it has been backgrounded, in time to save.
+
+**Why now.** `ctx.Lifecycle()` is nil on Android and iOS — `shell/mobile/
+lifecycle.go` returns nil with a TODO naming the exact host callbacks. That is
+the single most useful thing missing for mobile apps, because "persist state
+before the OS kills me" is what most people mean when they ask for background
+support, and it needs no scheduler at all.
+
+Small: an atomic and a callback list on the Go side, four one-line overrides per
+platform on the host side. Design in `design/mobile-background.md`.
+
+- [ ] Map `onResume`/`onPause`/`onStop` and the iOS scene callbacks onto the
+      existing three-state ladder. Do not reuse `Bridge.Focused` — it is window
+      focus, and fires for a dialog over the app.
+- [ ] Inbound `Bridge.SetAppState`, and a real `Bridge.Lifecycle()`.
+- [ ] Show it in `examples/capabilities`.
+
+**Exit.** State changes are observed on a device as the app is backgrounded and
+restored, and a demo persists on `StateBackground` and restores on relaunch.
+
+---
+
+## M7 — Background execution on mobile
+
+**Goal.** Deferred work runs when the app is not in front.
+
+**Why now.** Nothing in the tree touches WorkManager, JobScheduler,
+BGTaskScheduler or `beginBackgroundTask`, so a gophics goroutine lives only as
+long as the OS lets the process run.
+
+**Decide the fork first.** "Background task" is two unrelated things — a few
+seconds of grace to finish an upload, versus deferred periodic work — with
+different APIs, limits and review consequences. The first is much cheaper and
+covers the common case. See `design/mobile-background.md`; do not start until
+this is chosen, because the answer changes most of the work.
+
+The design also records why this cannot be an ordinary capability callback:
+when a background task runs there may be no frames, so the `Posted` wrapper
+every other capability relies on would never deliver. Background handlers get a
+`context.Context` and no access to the widget tree, and `RunBackgroundTask` is
+the one Bridge entry point that does not run on the UI goroutine.
+
+- [ ] Choose finish-what-you-started or deferred/periodic.
+- [ ] `shell/backgroundtask.go` so capgen generates the plumbing.
+- [ ] Host schedulers, following the MediaHost pattern.
+- [ ] CLI writes task identifiers into `Info.plist` and `AndroidManifest.xml` —
+      the piece most likely to be underestimated, since it is build-system work
+      rather than API work.
+- [ ] Record the device triggers (`adb shell cmd jobscheduler run`, the iOS
+      debugger incantation) in the packaging README.
+
+**Exit.** A demo schedules a task, is backgrounded, and the task is observed to
+run on a physical Android device and a physical iPhone.
