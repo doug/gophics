@@ -51,6 +51,31 @@ type SceneStats struct {
 //     (massively parallel tile-based processing)
 //   - Text-heavy: RenderPass (MSDF Text tier is specialized)
 //   - Default for medium complexity: Compute
+//
+// AutoSelectCompute controls whether PipelineModeAuto is allowed to choose the
+// compute pipeline. It is false because the compute pipeline does not yet
+// render correctly — not because it is unavailable.
+//
+// The distinction matters. Until the Metal codegen and storage-buffer-limit
+// fixes landed, the compute pipeline failed to build at all: CanCompute() was
+// false on every machine, auto-selection could never reach it, and its
+// wrongness was invisible and harmless. Making it buildable made it
+// selectable, and TestVelloComputeGolden — which had been skipping for exactly
+// the same reason — started running and failing, with tiles landing in the
+// wrong places and 12–29% of pixels off.
+//
+// So this holds the previous *behaviour* while keeping the fixes. Asking for
+// PipelineModeCompute explicitly still works, which is what the golden tests
+// do; the path has to stay reachable to be worked on. What must not happen is
+// a real app silently switching to it partway through a complex scene.
+//
+// This gates only the automatic choice, not the heuristic: SelectPipeline
+// stays a pure function of its inputs so its own tests keep describing the
+// policy we intend to return to.
+//
+// Flip to true when TestVelloComputeGolden passes.
+var AutoSelectCompute = false
+
 func SelectPipeline(stats SceneStats, hasComputeSupport bool) PipelineMode {
 	if !hasComputeSupport {
 		return PipelineModeRenderPass

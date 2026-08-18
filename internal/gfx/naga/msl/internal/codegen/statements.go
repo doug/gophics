@@ -1436,34 +1436,50 @@ func (w *Writer) computeDynamicArrayLength(baseHandle ir.ExpressionHandle, strid
 		return boundsCheckLength{kind: boundsLengthNone}
 	}
 	expr := &w.currentFunction.Expressions[baseHandle]
-	accessIdx, ok := expr.Kind.(ir.ExprAccessIndex)
-	if !ok {
+
+	// The runtime-sized array reaches us one of two ways. Either it is the
+	// last member of a struct — `var<storage> b: Buf` with `Buf { …, data:
+	// array<T> }`, an AccessIndex onto the global — or the global *is* the
+	// array, as `var<storage> tiles: array<Tile>`. Only the first was handled,
+	// so the second silently reported "no bound", which meant no bounds check
+	// was hoisted out of an atomic and the access guarded itself inside the
+	// `&` instead. That does not compile: the address of a ternary is not an
+	// lvalue. Every vello compute shader indexes storage arrays declared the
+	// second way.
+	var gv ir.ExprGlobalVariable
+	directArray := false
+	if accessIdx, ok := expr.Kind.(ir.ExprAccessIndex); ok {
+		if int(accessIdx.Base) >= len(w.currentFunction.Expressions) {
+			return boundsCheckLength{kind: boundsLengthNone}
+		}
+		gvExpr := &w.currentFunction.Expressions[accessIdx.Base]
+		gv, ok = gvExpr.Kind.(ir.ExprGlobalVariable)
+		if !ok {
+			return boundsCheckLength{kind: boundsLengthNone}
+		}
+	} else if g, ok := expr.Kind.(ir.ExprGlobalVariable); ok {
+		gv, directArray = g, true
+	} else {
 		return boundsCheckLength{kind: boundsLengthNone}
 	}
 
-	// The base of the AccessIndex should be a GlobalVariable.
-	if int(accessIdx.Base) >= len(w.currentFunction.Expressions) {
-		return boundsCheckLength{kind: boundsLengthNone}
-	}
-	gvExpr := &w.currentFunction.Expressions[accessIdx.Base]
-	gv, ok := gvExpr.Kind.(ir.ExprGlobalVariable)
-	if !ok {
-		return boundsCheckLength{kind: boundsLengthNone}
-	}
-
-	// Look up the buffer size index for this global variable.
-	bufSizeIdx := -1
-	for i, h := range w.bufferSizeGlobals {
+	// The _mslBufferSizes members are named for the global's handle
+	// (writer.go: "uint size%d", handle), so that handle is what the check has
+	// to reference — not this global's position in bufferSizeGlobals. The two
+	// coincide whenever every global before it also has a runtime array, which
+	// is why using the position went unnoticed.
+	known := false
+	for _, h := range w.bufferSizeGlobals {
 		if h == uint32(gv.Variable) {
-			bufSizeIdx = i
+			known = true
 			break
 		}
 	}
-	if bufSizeIdx < 0 {
+	if !known {
 		return boundsCheckLength{kind: boundsLengthNone}
 	}
+	bufSizeIdx := int(gv.Variable)
 
-	// Get the struct type to compute the fixed offset.
 	if int(gv.Variable) >= len(w.module.GlobalVariables) {
 		return boundsCheckLength{kind: boundsLengthNone}
 	}
@@ -1471,6 +1487,32 @@ func (w *Writer) computeDynamicArrayLength(baseHandle ir.ExpressionHandle, strid
 	if int(globalVar.Type) >= len(w.module.Types) {
 		return boundsCheckLength{kind: boundsLengthNone}
 	}
+
+	if directArray {
+		at, ok := w.module.Types[globalVar.Type].Inner.(ir.ArrayType)
+		if !ok || at.Size.Constant != nil {
+			return boundsCheckLength{kind: boundsLengthNone}
+		}
+		elementSize := w.typeSize(at.Base)
+		if elementSize == 0 {
+			elementSize = stride
+		}
+		effStride := at.Stride
+		if effStride == 0 {
+			effStride = stride
+		}
+		if effStride == 0 {
+			return boundsCheckLength{kind: boundsLengthNone}
+		}
+		return boundsCheckLength{
+			kind:          boundsLengthDynamic,
+			dynamicGlobal: uint32(bufSizeIdx),
+			memberOffset:  0,
+			elementSize:   elementSize,
+			stride:        effStride,
+		}
+	}
+
 	st, ok := w.module.Types[globalVar.Type].Inner.(ir.StructType)
 	if !ok {
 		return boundsCheckLength{kind: boundsLengthNone}

@@ -978,6 +978,15 @@ func (w *Writer) needsParens(child ir.ExpressionHandle) bool {
 			}
 		}
 		return true
+	case ir.ExprSelect:
+		// `?:` binds more loosely than every arithmetic and comparison
+		// operator, so an unparenthesised select as a binary operand is
+		// silently regrouped: `x + select(a, b, c)` came out as
+		// `x + c ? a : b`, which parses as `(x + c) ? a : b` and computes a
+		// different number. Metal only warns about it. The sibling helper
+		// needsParensInContext already listed Select; this one did not, and
+		// this is the one binary operands go through.
+		return true
 	case ir.ExprArrayLength:
 		// ArrayLength expands to "1 + ..." which contains a binary operator.
 		// Matches Rust naga: ArrayLength uses is_scoped wrapping.
@@ -1669,6 +1678,11 @@ func (w *Writer) writeSelect(sel ir.ExprSelect) error {
 	// Scalar bool: ternary operator. Matches Rust naga: condition ? accept : reject
 	// Rust naga passes is_scoped=false for the condition sub-expression, which adds
 	// parens around binary operations. We check explicitly and wrap if needed.
+	//
+	// The ternary as a whole is deliberately *not* wrapped here, matching Rust:
+	// at statement level `x = cond ? a : b` needs no parens, and adding them
+	// diverges from the reference output. A select nested inside a larger
+	// expression is parenthesised by its parent instead — see needsParens.
 	needCondParens := w.needsParensInContext(sel.Condition)
 	if needCondParens {
 		w.write("(")

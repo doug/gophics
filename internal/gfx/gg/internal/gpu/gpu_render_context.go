@@ -1599,7 +1599,8 @@ func (rc *GPURenderContext) effectivePipelineMode() gg.PipelineMode {
 	mode := rc.pipelineMode
 	if mode == gg.PipelineModeAuto {
 		rc.shared.mu.Lock()
-		hasCompute := rc.shared.velloAccel != nil && rc.shared.velloAccel.CanCompute()
+		hasCompute := gg.AutoSelectCompute &&
+			rc.shared.velloAccel != nil && rc.shared.velloAccel.CanCompute()
 		rc.shared.mu.Unlock()
 		mode = gg.SelectPipeline(rc.sceneStats, hasCompute)
 	}

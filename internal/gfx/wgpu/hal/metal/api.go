@@ -124,17 +124,27 @@ func (i *Instance) EnumerateAdapters(surfaceHint hal.Surface) []hal.ExposedAdapt
 					MaxDynamicStorageBuffersPerPipelineLayout: 4,
 					MaxSampledTexturesPerShaderStage:          128,
 					MaxSamplersPerShaderStage:                 16,
-					MaxStorageBuffersPerShaderStage:           8,
-					MaxStorageTexturesPerShaderStage:          8,
-					MaxUniformBuffersPerShaderStage:           12,
-					MaxUniformBufferBindingSize:               maxBuf,
-					MaxStorageBufferBindingSize:               maxBuf,
-					MinUniformBufferOffsetAlignment:           256,
-					MinStorageBufferOffsetAlignment:           256,
-					MaxVertexBuffers:                          maxVertexBuffers,
-					MaxBufferSize:                             maxBuf,
-					MaxVertexAttributes:                       31,
-					MaxVertexBufferArrayStride:                2048,
+					// Metal's buffer argument table is 31 slots per stage, and
+					// bind-group entries are assigned into it sequentially, so
+					// nothing here capped at 8 but this number: it was the
+					// WebGPU baseline rather than anything Metal reports. The
+					// cost of under-reporting is not a slower path, it is a
+					// missing one — a compute stage binding 9 storage buffers
+					// fails layout validation outright, which is why the whole
+					// vello coarse-rasterization pass could never be created on
+					// macOS. Matches wgpu-rs, which reports 31 for Apple
+					// families.
+					MaxStorageBuffersPerShaderStage:  31,
+					MaxStorageTexturesPerShaderStage: 8,
+					MaxUniformBuffersPerShaderStage:  12,
+					MaxUniformBufferBindingSize:      maxBuf,
+					MaxStorageBufferBindingSize:      maxBuf,
+					MinUniformBufferOffsetAlignment:  256,
+					MinStorageBufferOffsetAlignment:  256,
+					MaxVertexBuffers:                 maxVertexBuffers,
+					MaxBufferSize:                    maxBuf,
+					MaxVertexAttributes:              31,
+					MaxVertexBufferArrayStride:       2048,
 
 					MaxInterStageShaderVariables:      60,
 					MaxColorAttachments:               8,

@@ -22,7 +22,13 @@ func fineDevice(t *testing.T) (*wgpu.Device, *wgpu.Queue) {
 	if err != nil {
 		t.Skipf("no adapter: %v", err)
 	}
-	dev, err := ad.RequestDevice(&wgpu.DeviceDescriptor{Label: "gpu_fine_dispatch_test"})
+	// Ask for the adapter's own limits, as VelloAccelerator.initGPU does. The
+	// WebGPU default caps a compute stage at 8 storage buffers, and the coarse
+	// stage binds 9 — a device on defaults cannot create that pipeline at all.
+	dev, err := ad.RequestDevice(&wgpu.DeviceDescriptor{
+		Label:          "gpu_fine_dispatch_test",
+		RequiredLimits: ad.Limits(),
+	})
 	if err != nil {
 		t.Skipf("no device: %v", err)
 	}
