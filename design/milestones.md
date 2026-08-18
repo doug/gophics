@@ -605,13 +605,121 @@ and visible enough that its absence is felt on first use.
 - [ ] **Autocomplete** — a text field with a filtered suggestion list.
 - [ ] **System tray** — a desktop app that keeps running when its window closes
       has nowhere to live without it.
-- [ ] **Desktop geolocation** — the last capability that is web-only.
-      CoreLocation, geoclue over D-Bus, and the Windows Location API; the
-      heaviest of the six, and the reason it was deferred from M4.
+- [ ] **Desktop geolocation** — still open, and deliberately not written blind.
+      `ctx.Geolocation()` is nil on desktop today, which is the honest answer;
+      the risk is replacing it with code that returns nil for a different,
+      invisible reason.
+
+      Each backend needs something this environment cannot provide, established
+      by trying rather than assumed:
+
+      - **macOS / CoreLocation** — `CLLocationManager` needs a bundled app with
+        `NSLocationUsageDescription` in its Info.plist, a delegate object, and a
+        run loop. A `go run` binary is denied before it starts, so the happy
+        path cannot be exercised without packaging first. The delegate itself is
+        tractable: the a11y bridge already builds an Objective-C class with Go
+        methods.
+      - **Linux / geoclue** — reachable with the D-Bus client that already
+        exists (`dbus_linux.go`, extended for AT-SPI), but `org.freedesktop.
+        GeoClue2` lives on the **system** bus, needs the daemon and an agent,
+        and needs a real location source. Installing geoclue in a container
+        leaves it not activatable, which was checked.
+      - **Windows** — no classic Win32 API; `Windows.Devices.Geolocation` is
+        WinRT, so it needs `RoActivateInstance` and WinRT's own type system on
+        top of the COM work the UIA provider already does.
+
+      The lesson from the UIA bounding rectangle applies directly: platform code
+      that cannot be observed working is code that looks right and silently is
+      not. Whoever takes this on should start by arranging one verifiable
+      target — a signed macOS bundle, or a Linux box with geoclue actually
+      running — and implement against that rather than all three at once.
 - [ ] **RTL caret geometry** — multi-line landed, but the caret still assumes
       left-to-right, so editing Arabic or Hebrew puts it in the wrong place.
 
 **Exit.** Each is demonstrated in an example and covered by tests that do not
 need a device.
 
+**Status (2026-08-18).** Five of six done: Tree, Autocomplete, Reorderable,
+draggable scrollbars and RTL caret geometry, plus the system tray with a macOS
+backend. Geolocation remains, blocked on verification rather than on effort —
+see above.
+
 ---
+
+---
+
+## M10 — Sparse strips, part 1: one pipeline, end to end
+
+**Goal.** One stubbed compute pipeline made real, holding the CPU reference.
+
+**Why this shape.** The sparse-strips work is not research from nothing, which
+is what PLAN implied before it was checked. `strip.wgsl` is written, the
+tilecompute stage shaders exist (`pathtag_reduce`, `pathtag_scan`, `flatten`,
+`coarse`, `fine`, `path_count`, `path_tiling`), and a traditional GPU vector
+renderer already runs beside them. What is missing is that the pipelines are
+stubs — `StubComputePipelineID(1)`, with a comment deferring to "when wgpu is
+ready", which it now is.
+
+So the first milestone is a vertical slice, not a survey: take the strip
+rasterizer alone, give it a real `CreateComputePipeline`, run it, and diff the
+result against the CPU rasterizer. Everything after that is repetition; this is
+the one that proves the approach and the harness together.
+
+- [ ] Replace `createStripPipeline`'s stub with a real compute pipeline and
+      bind-group layout (the layout is already described in its comments).
+- [ ] Feed it strips from one simple filled path and read the texture back.
+- [ ] Diff against the CPU rasterizer with `TestGPUMatchesCPU`'s tolerance, and
+      add the case to the `gophics_gpu` suite that CI now runs.
+- [ ] Record the cost against the CPU path. `BenchmarkDraw_FillRect/1000x1000`
+      is 9.8ms on an M1 Ultra, against a 16.7ms frame — that number is the
+      reason for the whole project, and it should move.
+
+**Exit.** A filled path rasterizes through the strip pipeline, matches the CPU
+reference within tolerance, and the benchmark is recorded both ways.
+
+**Risk to watch.** The stub returns success, so a half-wired pipeline will look
+like it works and quietly draw nothing — the same shape as the GL entry points
+that returned zero. Assert on pixels, not on error returns.
+
+---
+
+## M11 — Sparse strips, part 2: the pipeline stages
+
+**Goal.** The remaining tilecompute stages made real, in dependency order.
+
+Each stage is the same exercise as M10 with a different shader, so they can land
+independently and be diffed independently. Order follows the data: geometry
+before coverage, coverage before compositing.
+
+- [ ] `pathtag_reduce` and `pathtag_scan` — the prefix scan over path tags.
+- [ ] `flatten` — curves to line segments on the GPU. Today `tilecompute.
+      FlattenFill` does this on the CPU, which makes it a good first comparison:
+      the same input has a known-good output.
+- [ ] `path_count` and `path_tiling` — binning segments into tiles.
+- [ ] `coarse` and `fine` — per-tile rasterization.
+- [ ] Keep the CPU path working at every step. It is the reference; a stage that
+      only works when the whole pipeline is enabled cannot be diffed.
+
+**Exit.** A scene of filled and stroked paths renders entirely through the
+compute pipeline and matches the CPU reference.
+
+---
+
+## M12 — Sparse strips, part 3: make it the default, or do not
+
+**Goal.** Decide on evidence whether the new path replaces the current one.
+
+**Why a milestone.** A second renderer that is not the default is a maintenance
+cost with no user. The decision needs numbers and a correctness record, and
+those only exist after M10 and M11.
+
+- [ ] Benchmark both paths on the same scenes: large fills, gradients, text,
+      blurred backdrops, and a scrolling list — the cases that hurt today.
+- [ ] Run the full `gophics_gpu` suite against both on Metal and on Vulkan (the
+      Pixel), since a compute pipeline is where backends diverge most.
+- [ ] Decide: default, opt-in behind a tag, or removed. Removing is a real
+      option and a better outcome than carrying an unused second renderer.
+- [ ] Whichever way it goes, update PLAN §5 to say what was measured.
+
+**Exit.** A decision recorded with the numbers behind it, and one renderer that
+is clearly the default.
