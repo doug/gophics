@@ -14,6 +14,8 @@ on:
 #                     their tests blocks; running them does not, since the
 #                     GPU / Metal-toolchain / interactive-display cases depend
 #                     on the machine and self-skip when prerequisites are absent.
+#                     This job also runs the framework's own gophics_gpu-tagged
+#                     tests, which no other job does.
 
 jobs:
   lint:
@@ -106,3 +108,18 @@ jobs:
       - name: substrate tests (GPU/toolchain tests self-skip)
         continue-on-error: true
         run: go test -count=1 ./internal/...
+
+      # The framework's GPU correctness tests live behind the gophics_gpu tag,
+      # so nothing was running them: GPU-vs-CPU equivalence, gradient
+      # interpolation, flat and nested opacity groups, shadows, backdrop blur
+      # and readback. They pass on Metal and are cheap; a regression in any of
+      # them would otherwise surface as a visual bug on someone's screen.
+      #
+      # Safe to block on: each self-skips when no headless adapter is available,
+      # so the worst case on a runner without one is the silence we had before.
+      # The verbose output makes it visible which of the two happened.
+      # Verbose so the log shows which tests ran and which skipped — the
+      # difference between a GPU actually being exercised and this quietly
+      # doing nothing.
+      - name: framework GPU tests (self-skip without an adapter)
+        run: go test -tags gophics_gpu -count=1 -v ./app/ ./paint/

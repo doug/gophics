@@ -197,6 +197,15 @@ in total. CI's lint job runs the same script, so a failure here is a failure
 there. Run it directly any time with `./scripts/gates.sh`, and bypass it in an
 emergency with `git push --no-verify`.
 
+Some tests need a GPU and are behind a build tag, so `go test ./...` does not
+run them:
+
+```sh
+go test -tags gophics_gpu ./app/ ./paint/    # GPU-vs-CPU equivalence, blur, readback
+```
+
+They self-skip when no headless adapter is available. CI runs them on macOS.
+
 ## Learn more
 
 - **[PLAN.md](PLAN.md)** — the vision, architecture, and roadmap (the thesis for building this in Go).
