@@ -15,8 +15,6 @@
 
 package platform
 
-import "sort"
-
 // AT-SPI object paths. The application object lives at .../accessible/root and
 // every node hangs beneath it by ID.
 const (
@@ -188,62 +186,4 @@ func atspiStates(n A11yNode) []uint32 {
 		set(stateSelected)
 	}
 	return bits[:]
-}
-
-// a11yTree is a snapshot of the published nodes, indexed for the lookups
-// AT-SPI makes: by ID, and parent → ordered children.
-type a11yTree struct {
-	nodes []A11yNode
-	byID  map[int]A11yNode
-	kids  map[int][]int
-	roots []int // nodes whose parent is -1; normally exactly one
-}
-
-// buildTree indexes a flat node list. Order within a parent follows the order
-// the nodes were published, which is creation order — the order the app draws
-// them, and so the order they should be read in.
-func buildTree(nodes []A11yNode) *a11yTree {
-	t := &a11yTree{
-		nodes: nodes,
-		byID:  make(map[int]A11yNode, len(nodes)),
-		kids:  make(map[int][]int),
-	}
-	for _, n := range nodes {
-		t.byID[n.ID] = n
-	}
-	for _, n := range nodes {
-		if n.ParentID == -1 {
-			t.roots = append(t.roots, n.ID)
-			continue
-		}
-		// A node whose parent was not published would otherwise vanish; treat
-		// it as a root so it stays reachable.
-		if _, ok := t.byID[n.ParentID]; !ok {
-			t.roots = append(t.roots, n.ID)
-			continue
-		}
-		t.kids[n.ParentID] = append(t.kids[n.ParentID], n.ID)
-	}
-	sort.Ints(t.roots)
-	return t
-}
-
-// children returns the ordered child IDs of a node.
-func (t *a11yTree) children(id int) []int { return t.kids[id] }
-
-// indexInParent is what AT-SPI uses to walk back up and to order siblings.
-func (t *a11yTree) indexInParent(id int) int32 {
-	n, ok := t.byID[id]
-	if !ok {
-		return -1
-	}
-	if n.ParentID == -1 {
-		return 0 // the sole child of the application object
-	}
-	for i, sib := range t.kids[n.ParentID] {
-		if sib == id {
-			return int32(i)
-		}
-	}
-	return -1
 }

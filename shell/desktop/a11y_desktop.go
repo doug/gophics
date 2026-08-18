@@ -54,16 +54,17 @@ func (a desktopA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
 			Selected: n.Selected, Checkable: n.Checkable, Checked: n.Checked,
 		}
 	}
-	// Activation arrives on the platform's UI thread. gophics widget state is
-	// owned by the UI goroutine, so the callback is queued rather than run
-	// where the OS happened to call us.
-	var onActivate func(int)
-	if activate != nil {
-		onActivate = func(id int) {
-			a.w.runOnMain(func() { activate(id) })
-		}
-	}
-	a.w.app.SetAccessibilityTree(out, onActivate)
+	// activate is passed straight through. It arrives on whichever thread the
+	// platform calls us from, but the marshalling is already handled one layer
+	// up: Accessibility gained a callback parameter when SetTree was added, so
+	// capgen now wraps it in PostedAccessibility, which delivers on the UI
+	// goroutine.
+	//
+	// This used to wrap it in runOnMain as well. That was the wrong hop even
+	// before the wrapper existed — runOnMain marshals to the AppKit *main
+	// thread*, which matters for NSOpenPanel and not at all for widget state —
+	// and with the wrapper in place it queued the callback twice.
+	a.w.app.SetAccessibilityTree(out, activate)
 }
 
 func (a desktopA11y) Announce(message string, assertive bool) {

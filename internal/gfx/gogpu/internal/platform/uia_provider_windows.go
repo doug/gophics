@@ -237,7 +237,7 @@ func (p *uiaProvider) windowRect() (left, top, width, height float64) {
 // SetTree publishes a new tree.
 func (p *uiaProvider) SetTree(nodes []A11yNode, activate func(id int)) {
 	p.mu.Lock()
-	p.tree = buildTreeWin(nodes)
+	p.tree = buildTree(nodes)
 	p.activate = activate
 	p.mu.Unlock()
 }

@@ -253,56 +253,8 @@ type uiaProvider struct {
 	hwnd windows.HWND
 
 	mu       sync.RWMutex
-	tree     *a11yTreeWin
+	tree     *a11yTree
 	activate func(id int)
-}
-
-// a11yTreeWin indexes a published node list. It mirrors the Linux a11yTree but
-// is declared separately because that one is behind a linux build tag.
-type a11yTreeWin struct {
-	nodes []A11yNode
-	byID  map[int]A11yNode
-	kids  map[int][]int
-	roots []int
-}
-
-func buildTreeWin(nodes []A11yNode) *a11yTreeWin {
-	t := &a11yTreeWin{byID: make(map[int]A11yNode, len(nodes)), kids: map[int][]int{}, nodes: nodes}
-	for _, n := range nodes {
-		t.byID[n.ID] = n
-	}
-	for _, n := range nodes {
-		if n.ParentID == -1 {
-			t.roots = append(t.roots, n.ID)
-			continue
-		}
-		if _, ok := t.byID[n.ParentID]; !ok {
-			t.roots = append(t.roots, n.ID)
-			continue
-		}
-		t.kids[n.ParentID] = append(t.kids[n.ParentID], n.ID)
-	}
-	return t
-}
-
-// siblings returns the ordered sibling list containing id, and id's position.
-func (t *a11yTreeWin) siblings(id int) ([]int, int) {
-	n, ok := t.byID[id]
-	if !ok {
-		return nil, -1
-	}
-	list := t.roots
-	if n.ParentID != -1 {
-		if _, ok := t.byID[n.ParentID]; ok {
-			list = t.kids[n.ParentID]
-		}
-	}
-	for i, s := range list {
-		if s == id {
-			return list, i
-		}
-	}
-	return list, -1
 }
 
 // newElem allocates an element and registers it as live. Every element starts
@@ -334,7 +286,7 @@ func (e *uiaElem) node() (A11yNode, bool) {
 	return n, ok
 }
 
-func (e *uiaElem) tree() *a11yTreeWin {
+func (e *uiaElem) tree() *a11yTree {
 	e.prov.mu.RLock()
 	defer e.prov.mu.RUnlock()
 	return e.prov.tree
