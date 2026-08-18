@@ -571,8 +571,11 @@ entirely: native menus exist in the substrate and are not reachable from an app.
    pull-to-refresh, tree views, autocomplete.
 7. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
    geometry and full UBA have not.
-8. **Message catalog and plural rules** in `intl` — formatting is done,
-   translation lookup is not.
+8. ~~**Message catalog and plural rules** in `intl`~~ — done. `Catalog` keys by
+   language rather than locale (pt-BR and pt share grammar), and `PluralFor`
+   implements CLDR's cardinal categories for the rule families that differ from
+   English. What remains is loading catalogs from a file format, which is an
+   app's choice more than the framework's.
 9. **Remaining platform gaps** — system tray, multi-window, desktop and mobile
    geolocation, and the mobile battery/gamepad bridges. Desktop battery and
    gamepad are done on all three platforms.
