@@ -54,7 +54,7 @@ func TestComputeStagesProperty(t *testing.T) {
 
 	accel := &VelloAccelerator{}
 	if err := accel.initGPU(); err != nil {
-		t.Skipf("GPU not available: %v", err)
+		requireGPU(t, err, "GPU not available")
 	}
 	defer accel.Close()
 	if !accel.CanCompute() {

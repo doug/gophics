@@ -43,7 +43,7 @@ func newOffscreenHarness(tb testing.TB, size uint32) *offscreenHarness {
 	err := shared.initGPU()
 	shared.mu.Unlock()
 	if err != nil {
-		tb.Skipf("GPU not available: %v", err)
+		requireGPU(tb, err, "GPU not available")
 	}
 
 	dev := shared.Device()

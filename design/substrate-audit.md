@@ -155,10 +155,22 @@ Recorded together because the pattern cost more than any individual instance,
 and because each one looked entirely healthy from the outside.
 
 - **`PipelineCache` and its nine `Stub*ID` types** (`internal/gpu/pipeline.go`)
-  are constructed nowhere but their own `renderer_test.go`. M10 was written to
-  "replace `createStripPipeline`'s stub with a real compute pipeline"; doing so
-  would have produced a working pipeline that nothing calls, and the tests
-  asserting `GetStripPipeline() != 0` would have passed either way.
+  are unreachable. `PipelineCache` is held by `GPUSceneRenderer`, which is
+  built by `Backend.RenderScene`, and `gpu.NewBackend()` is called nowhere in
+  production — only in a doc comment. M10 was written to "replace
+  `createStripPipeline`'s stub with a real compute pipeline"; doing so would
+  have produced a working pipeline that nothing calls, and the tests asserting
+  `GetStripPipeline() != 0` would have passed either way.
+
+  **It cannot simply be deleted, and that is worth knowing before trying.**
+  Removing `backend.go`, `renderer.go` and `pipeline.go` fails to compile:
+  `memory.go`, `atlas.go`, `commands.go` and `command_encoder.go` all reference
+  `Backend` or the `Stub*ID` types. Removing those in turn fails on
+  `gpu_texture.go` (`MemoryManager`, `Backend`) and — decisively —
+  `text_pipeline.go`, which uses `RenderPass` from the same cluster and is very
+  much live: it draws glyphs. So the stub abstraction layer is not a severable
+  dead subtree. It is entangled with working code, and disentangling it is a
+  refactor rather than a deletion.
 
 - **Three embedded shaders are never compiled into a pipeline**: `blend.wgsl`,
   `strip.wgsl` and `composite.wgsl`. Each has a `Get…ShaderSource()` accessor,
@@ -180,7 +192,11 @@ worked were the ones that assert on an outcome rather than a return value: a
 test that demands a real device, a diff against an independent implementation,
 a benchmark with a second contestant.
 
-**Not deleted here.** Removal is right for at least `PipelineCache`, but it is a
-decision about direction rather than a cleanup, and M12 is where the
-sparse-strips direction is being settled. Deleting `strip.wgsl` while that is
-open would foreclose it by accident.
+**Not deleted here.** Removal is right for at least `PipelineCache`, but the
+entanglement above makes it a refactor with a real chance of breaking glyph
+rendering, and M12 is where the sparse-strips direction is being settled.
+Deleting `strip.wgsl` while that is open would foreclose it by accident.
+
+The three dead shaders are the cheap part: `blend.wgsl`, `strip.wgsl` and
+`composite.wgsl` have no dependents at all beyond their own accessors, so those
+come out whenever the direction is settled.

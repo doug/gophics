@@ -29,7 +29,7 @@ import (
 func TestComputePresentsToGPUDirectTarget(t *testing.T) {
 	a := &VelloAccelerator{}
 	if err := a.initGPU(); err != nil {
-		t.Skipf("GPU not available: %v", err)
+		requireGPU(t, err, "GPU not available")
 	}
 	defer a.Close()
 	if !a.CanCompute() {

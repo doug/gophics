@@ -115,7 +115,7 @@ func TestPathTilingFillsEveryReservedSegment(t *testing.T) {
 func TestComputeUnavailabilityHasAReason(t *testing.T) {
 	a := &VelloAccelerator{}
 	if err := a.InitStandalone(); err != nil {
-		t.Skipf("no GPU: %v", err)
+		requireGPU(t, err, "no GPU")
 	}
 	defer a.Close()
 

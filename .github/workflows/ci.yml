@@ -131,3 +131,39 @@ jobs:
       # doing nothing.
       - name: framework GPU tests (self-skip without an adapter)
         run: go test -tags gophics_gpu -count=1 -v ./app/ ./paint/
+
+  # The GPU compute pipeline has only ever run on Metal. Everything that made
+  # it work — a select-parens fix and a runtime-array bound in naga's MSL
+  # backend, Metal's storage-buffer limit, and the _mslBufferSizes wiring — is
+  # MSL-specific, and the SPIR-V path shares none of it. This project targets
+  # Vulkan, Metal and CPU, so "works on Metal" is a third of the claim.
+  #
+  # lavapipe is Mesa's software Vulkan implementation: slow, but a real Vulkan
+  # driver exercising the real SPIR-V path.
+  test-vulkan:
+    name: test (compute on Vulkan/lavapipe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: install a software Vulkan driver
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            mesa-vulkan-drivers vulkan-tools libvulkan1
+          vulkaninfo --summary || true
+
+      # GOPHICS_REQUIRE_GPU turns "no adapter" from a skip into a failure.
+      # Without it this job would install a driver, find nothing, skip every
+      # test and report success — which is exactly how the compute pipeline
+      # stayed broken on Metal for months while its tests quietly skipped.
+      - name: compute pipeline on Vulkan
+        env:
+          GOPHICS_REQUIRE_GPU: "1"
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          go test -count=1 -v -timeout 20m \
+            -run 'TestVelloComputeInitialisesOnRealDevice|TestVelloComputeGolden|TestComputeStagesMatchCPU|TestComputePresentsToGPUDirectTarget|TestOffscreenHarnessDrivesBothPipelines' \
+            ./internal/gfx/gg/internal/gpu/
