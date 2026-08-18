@@ -346,7 +346,9 @@ func (c *Context) Load(getProcAddr ProcAddressFunc) error {
 	// Indexed string query (GL 3.0+ / ES 3.0+)
 	c.glGetStringi = getProcAddr("glGetStringi")
 
-	return nil
+	// Fail here rather than at the first draw. An unresolved name is silently
+	// zero, and calling it is an access violation with PC=0 and no stack.
+	return c.Validate()
 }
 
 // --- GL Function Wrappers ---
