@@ -8,8 +8,7 @@ This document is the architecture rationale — the *why* behind the pipeline
 and the decisions that shaped the API. It began as a plan and is kept as
 reasoning. **Status: built.** The pipeline described here works on all listed
 targets; §7 tracks what is done and what is not. Read this for design
-reasoning, `docs/rsc-readiness-review.md` for an outside critique, and the git
-history for the current state.
+reasoning and the git history for the current state.
 
 A note on lineage, stated once: the rendering pipeline here — immutable widget
 descriptions diffed into a retained element tree, which owns a render tree

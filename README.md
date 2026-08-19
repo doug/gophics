@@ -209,7 +209,7 @@ They self-skip when no headless adapter is available. CI runs them on macOS.
 ## Learn more
 
 - **[PLAN.md](PLAN.md)** — the vision, architecture, and roadmap (the thesis for building this in Go).
-- **[design/](design/)** — design notes and decision records: [positioning](design/positioning.md), the [roadmap](design/roadmap.md), ADRs (`design/adr/`), and engineering write-ups (GPU opacity layers, substrate consolidation).
+- **[design/](design/)** — design notes and decision records: the [roadmap](design/roadmap.md), ADRs (`design/adr/`), and engineering write-ups (GPU opacity layers, substrate consolidation).
 - **[docs/](docs/)** — the docs site (live demos + guides), deployed to GitHub Pages.
 
 ---

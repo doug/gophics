@@ -20,8 +20,7 @@ import (
 // scrolling back to an image is instant. Supports png, jpeg, gif, webp.
 //
 // W/H set the drawn size (zero uses the image's pixel size). The M-HN media
-// archetype (design/comparison-and-gaps) needs this. Rounded/circular clipping
-// is a follow-up.
+// archetype needs this. Rounded/circular clipping is a follow-up.
 type NetworkImage struct {
 	URL         string
 	W, H        float32

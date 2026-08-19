@@ -174,10 +174,10 @@ both libs report `0x4000`:
 **Goal.** Battery, gamepad and geolocation return real data, or are honestly
 absent, on every platform.
 
-**Why now.** The capability layer is a headline claim in
-`design/positioning.md` — "every platform service is a plain `ctx.<Cap>()` that
-degrades cleanly" — and three of them degrading to silence undercuts it. Each
-is small and independent, so this milestone lands in pieces.
+**Why now.** The capability layer is a headline claim — every platform
+service is a plain `ctx.<Cap>()` that degrades cleanly — and three of them
+degrading to silence undercuts it. Each is small and independent, so this
+milestone lands in pieces.
 
 Two corrections to this entry as first written: there are six `TODO(platform)`
 markers, not nine, and **web already implements all three** — `battery_web.go`,
