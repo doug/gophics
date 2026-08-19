@@ -516,3 +516,70 @@ func TestShaderSourceLineCount(t *testing.T) {
 		})
 	}
 }
+
+// The three tests below were kept when renderer_test.go was deleted with the
+// placeholder pipeline cluster: BlendModeToShader, ShaderToBlendMode,
+// BlendParams and StripParams all live in shaders.go and survive.
+func TestBlendModeMapping(t *testing.T) {
+	tests := []struct {
+		mode      scene.BlendMode
+		shaderVal uint32
+	}{
+		{scene.BlendNormal, ShaderBlendNormal},
+		{scene.BlendMultiply, ShaderBlendMultiply},
+		{scene.BlendScreen, ShaderBlendScreen},
+		{scene.BlendOverlay, ShaderBlendOverlay},
+		{scene.BlendSourceOver, ShaderBlendSourceOver},
+		{scene.BlendXor, ShaderBlendXor},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.mode.String(), func(t *testing.T) {
+			got := BlendModeToShader(tt.mode)
+			if got != tt.shaderVal {
+				t.Errorf("BlendModeToShader(%v) = %d, want %d", tt.mode, got, tt.shaderVal)
+			}
+
+			// Test reverse mapping
+			back := ShaderToBlendMode(tt.shaderVal)
+			if back != tt.mode {
+				t.Errorf("ShaderToBlendMode(%d) = %v, want %v", tt.shaderVal, back, tt.mode)
+			}
+		})
+	}
+}
+func TestBlendParams(t *testing.T) {
+	params := BlendParams{
+		Mode:    ShaderBlendMultiply,
+		Alpha:   0.75,
+		Padding: [2]float32{0, 0},
+	}
+
+	if params.Mode != 1 {
+		t.Errorf("Mode should be 1, got %d", params.Mode)
+	}
+
+	if params.Alpha != 0.75 {
+		t.Errorf("Alpha should be 0.75, got %f", params.Alpha)
+	}
+}
+func TestStripParams(t *testing.T) {
+	params := StripParams{
+		Color:        [4]float32{1.0, 0.5, 0.25, 1.0},
+		TargetWidth:  800,
+		TargetHeight: 600,
+		StripCount:   100,
+	}
+
+	if params.Color[0] != 1.0 {
+		t.Errorf("Color[0] should be 1.0, got %f", params.Color[0])
+	}
+
+	if params.TargetWidth != 800 {
+		t.Errorf("TargetWidth should be 800, got %d", params.TargetWidth)
+	}
+
+	if params.StripCount != 100 {
+		t.Errorf("StripCount should be 100, got %d", params.StripCount)
+	}
+}

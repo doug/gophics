@@ -3,12 +3,10 @@
 package gpu
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/doug/gophics/internal/gfx/gg"
-	"github.com/doug/gophics/internal/gfx/gg/scene"
 	"github.com/doug/gophics/internal/gfx/gputypes"
 	"github.com/doug/gophics/internal/gfx/wgpu"
 )
@@ -158,55 +156,6 @@ func (b *Backend) NewRenderer(width, height int) gg.Renderer {
 	}
 
 	return newGPURenderer(b, width, height)
-}
-
-// RenderScene renders a scene to the target pixmap using retained mode.
-// This method is optimized for complex scenes with many draw operations.
-//
-// The implementation uses GPUSceneRenderer for tessellation, strip
-// rasterization, and layer compositing on the GPU. When wgpu texture
-// readback is fully implemented, results will be downloaded to the target
-// pixmap. Currently, data flows through the GPU pipeline as stubs.
-func (b *Backend) RenderScene(target *gg.Pixmap, s *scene.Scene) error {
-	b.mu.RLock()
-	initialized := b.initialized
-	b.mu.RUnlock()
-
-	if !initialized {
-		return ErrNotInitialized
-	}
-
-	if target == nil {
-		return ErrNilTarget
-	}
-
-	if s == nil {
-		return ErrNilScene
-	}
-
-	// Create GPU scene renderer for this frame
-	renderer, err := NewGPUSceneRenderer(b, GPUSceneRendererConfig{
-		Width:  target.Width(),
-		Height: target.Height(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create GPU renderer: %w", err)
-	}
-	defer renderer.Close()
-
-	// Render the scene to GPU
-	if err := renderer.RenderToPixmap(target, s); err != nil {
-		// ErrTextureReadbackNotSupported is expected until wgpu implements readback
-		// In this case, the GPU pipeline was executed but we can't retrieve results
-		if errors.Is(err, ErrTextureReadbackNotSupported) {
-			// Log for debugging but don't fail - GPU ops were executed
-			slogger().Debug("RenderScene completed on GPU", "note", "readback pending wgpu support")
-			return nil
-		}
-		return fmt.Errorf("GPU render failed: %w", err)
-	}
-
-	return nil
 }
 
 // IsInitialized returns true if the backend has been initialized.

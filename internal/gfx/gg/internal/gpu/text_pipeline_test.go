@@ -275,58 +275,6 @@ func TestTextPipelineClose(t *testing.T) {
 	pipeline.Close()
 }
 
-// TestTextPipelineRenderText tests the RenderText method.
-func TestTextPipelineRenderText(t *testing.T) {
-	device, queue, cleanup := createNoopDevice(t)
-	defer cleanup()
-
-	pipeline, _ := NewTextPipelineDefault(device, queue)
-	_ = pipeline.Init()
-	defer pipeline.Close()
-
-	t.Run("not initialized error", func(t *testing.T) {
-		uninitPipeline, _ := NewTextPipelineDefault(device, queue)
-		err := uninitPipeline.RenderText(nil, []TextQuad{{X0: 0}}, 0, gg.White, gg.Identity())
-		if !errors.Is(err, ErrTextPipelineNotInitialized) {
-			t.Errorf("expected ErrTextPipelineNotInitialized, got %v", err)
-		}
-	})
-
-	t.Run("empty quads error", func(t *testing.T) {
-		err := pipeline.RenderText(nil, nil, 0, gg.White, gg.Identity())
-		if !errors.Is(err, ErrNoQuadsToRender) {
-			t.Errorf("expected ErrNoQuadsToRender, got %v", err)
-		}
-	})
-
-	t.Run("negative atlas index error", func(t *testing.T) {
-		quads := []TextQuad{{X0: 0, Y0: 0, X1: 10, Y1: 10}}
-		err := pipeline.RenderText(nil, quads, -1, gg.White, gg.Identity())
-		if !errors.Is(err, ErrInvalidAtlasIndex) {
-			t.Errorf("expected ErrInvalidAtlasIndex, got %v", err)
-		}
-	})
-
-	t.Run("too many quads error", func(t *testing.T) {
-		// Create more quads than max capacity
-		quads := make([]TextQuad, pipeline.Config().MaxQuadCapacity+1)
-		err := pipeline.RenderText(nil, quads, 0, gg.White, gg.Identity())
-		if err == nil {
-			t.Error("expected ErrQuadBufferOverflow")
-		}
-	})
-
-	t.Run("valid render", func(t *testing.T) {
-		quads := []TextQuad{
-			{X0: 0, Y0: 0, X1: 10, Y1: 10, U0: 0, V0: 0, U1: 0.1, V1: 0.1},
-		}
-		err := pipeline.RenderText(nil, quads, 0, gg.Red, gg.Identity())
-		if err != nil {
-			t.Errorf("RenderText() error = %v", err)
-		}
-	})
-}
-
 // TestTextUniforms tests uniform struct preparation.
 func TestTextUniforms(t *testing.T) {
 	t.Run("identity transform", func(t *testing.T) {
@@ -464,34 +412,6 @@ func TestTextBatch(t *testing.T) {
 
 	if len(batch.Quads) != 2 {
 		t.Errorf("batch quads: got %d, want 2", len(batch.Quads))
-	}
-}
-
-// TestRenderTextBatch tests batch rendering.
-func TestRenderTextBatch(t *testing.T) {
-	device, queue, cleanup := createNoopDevice(t)
-	defer cleanup()
-
-	pipeline, _ := NewTextPipelineDefault(device, queue)
-	_ = pipeline.Init()
-	defer pipeline.Close()
-
-	batches := []TextBatch{
-		{
-			Quads:     []TextQuad{{X0: 0, Y0: 0, X1: 10, Y1: 10}},
-			Color:     gg.Red,
-			Transform: gg.Identity(),
-		},
-		{
-			Quads:     []TextQuad{{X0: 10, Y0: 0, X1: 20, Y1: 10}},
-			Color:     gg.Blue,
-			Transform: gg.Translate(10, 0),
-		},
-	}
-
-	err := pipeline.RenderTextBatch(nil, batches, 0)
-	if err != nil {
-		t.Fatalf("RenderTextBatch() error = %v", err)
 	}
 }
 

@@ -16,11 +16,9 @@
 // Key components:
 //
 //   - Backend: Main entry point for GPU rendering
-//   - GPUSceneRenderer: Scene-to-GPU pipeline with HybridPipeline rasterization
 //   - HybridPipeline: 3-stage path rasterization (Flatten, Coarse, Fine)
 //   - MemoryManager: GPU texture memory with LRU eviction (configurable budget)
 //   - TextureAtlas: Shelf-packing for efficient GPU memory usage
-//   - PipelineCache: Pre-compiled GPU pipelines for all 29 blend modes
 //   - ShaderModules: WGSL compute shaders for tile rasterization and blending
 //
 // # HybridPipeline (vello-style)
@@ -65,29 +63,12 @@
 //	}
 //	defer b.Close()
 //
-// # Rendering Scenes
-//
-// Build and render a scene:
-//
-//	builder := scene.NewSceneBuilder()
-//	builder.FillRect(0, 0, 800, 600, scene.SolidBrush(gg.White))
-//	builder.FillCircle(400, 300, 100, scene.SolidBrush(gg.Red))
-//	s := builder.Build()
-//
-//	pm := gg.NewPixmap(800, 600)
-//	if err := b.RenderScene(pm, s); err != nil {
-//	    log.Printf("Render error: %v", err)
-//	}
-//
 // # Memory Management
 //
 // The backend uses an LRU-based memory manager with configurable budget:
 //
-//	config := GPUSceneRendererConfig{
-//	    Width:          1920,
-//	    Height:         1080,
-//	    MaxLayers:      16,
-//	    MemoryBudgetMB: 256,
+//	config := MemoryManagerConfig{
+//	    BudgetMB: 256,
 //	}
 //
 // When memory budget is exceeded, least-recently-used textures are evicted.
@@ -100,7 +81,7 @@
 //
 // # Thread Safety
 //
-// Backend and GPUSceneRenderer are safe for concurrent use from multiple
+// Backend is safe for concurrent use from multiple
 // goroutines. Internal synchronization is handled via mutexes.
 //
 // # Error Handling
@@ -112,8 +93,6 @@
 //   - ErrDeviceLost: GPU device was lost (requires re-initialization)
 //   - ErrNilTarget: Target pixmap is nil
 //   - ErrNilScene: Scene is nil
-//   - ErrRendererClosed: Renderer has been closed
-//   - ErrEmptyScene: Scene contains no draw commands
 //
 // # Benchmarking
 //

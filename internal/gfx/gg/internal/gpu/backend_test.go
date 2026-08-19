@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/internal/gfx/gg"
-	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
 // TestBackendName verifies the backend name.
@@ -176,57 +175,6 @@ func TestBackendNewRendererInvalidDimensions(t *testing.T) {
 				t.Errorf("NewRenderer(%d, %d) = %v, want nil", tt.width, tt.height, r)
 			}
 		})
-	}
-}
-
-// TestBackendRenderScene tests scene rendering.
-func TestBackendRenderScene(t *testing.T) {
-	b := NewBackend()
-
-	// RenderScene on uninitialized backend should return error
-	err := b.RenderScene(nil, nil)
-	if !errors.Is(err, ErrNotInitialized) {
-		t.Errorf("RenderScene() on uninitialized backend: got %v, want %v", err, ErrNotInitialized)
-	}
-
-	// Initialize
-	if err := b.Init(); err != nil {
-		t.Logf("Init() returned error (expected in test environment): %v", err)
-		return
-	}
-	defer b.Close()
-
-	// Test nil target
-	err = b.RenderScene(nil, scene.NewScene())
-	if !errors.Is(err, ErrNilTarget) {
-		t.Errorf("RenderScene(nil, scene) = %v, want %v", err, ErrNilTarget)
-	}
-
-	// Test nil scene
-	target := gg.NewPixmap(100, 100)
-	err = b.RenderScene(target, nil)
-	if !errors.Is(err, ErrNilScene) {
-		t.Errorf("RenderScene(target, nil) = %v, want %v", err, ErrNilScene)
-	}
-
-	// Test with valid scene (empty scene returns ErrEmptyScene)
-	s := scene.NewScene()
-	err = b.RenderScene(target, s)
-	// Empty scene should return ErrEmptyScene from GPUSceneRenderer
-	if err == nil {
-		t.Log("RenderScene() with empty scene succeeded (GPU pipeline working)")
-	} else {
-		t.Logf("RenderScene() with empty scene: %v (expected for empty scene)", err)
-	}
-
-	// Test with non-empty scene
-	s = scene.NewScene()
-	rect := scene.NewRectShape(10, 10, 80, 80)
-	s.Fill(scene.FillNonZero, scene.IdentityAffine(), scene.SolidBrush(gg.Red), rect)
-	err = b.RenderScene(target, s)
-	// Should succeed (GPU pipeline runs, readback may fail which is OK)
-	if err != nil {
-		t.Logf("RenderScene() = %v (may be expected until full GPU support)", err)
 	}
 }
 
