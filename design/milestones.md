@@ -1222,51 +1222,43 @@ by up to 2×, so those margins are indicative, not decisive.
       Compared against the CPU port of its own algorithm, it was exact, and the
       remaining difference had to be somewhere else.
 
-- [ ] **Overlapping clip groups diverge. Narrowed hard, not yet fixed.**
-      Everything below is measured against `RasterizeSceneDefPTCL`, the CPU
-      implementation of the same algorithm.
+- [x] **Fixed, and it was not a clip bug at all.** `path_tiling` was dispatched
+      for `n_lines * 4` records — the same heuristic `computeBufferSizes` calls
+      out as wrong and had already replaced with the DDA bound, `n_lines *
+      (width_in_tiles + height_in_tiles)`. The buffer was fixed; the dispatch
+      was not. So any scene producing more segment records than the dispatch
+      covered silently lost the remainder, leaving tiles pointing at segments
+      nothing had written.
 
-      **What is exact:** one clip group with any number of draws (1, 2, 4, 8 →
-      0.0%). Any number of clip groups whose regions are **disjoint** (1, 2, 4
-      → 0.0%). So `clip_leaf`, the pairing fixup, and the single-layer path are
-      all correct.
+      The invariant added while chasing the earlier fill bleed named it
+      outright: **reserved=414, written=256** — one workgroup's worth. Fixing
+      the bound gives 414/414 and takes the compute path to **0 differing
+      pixels against the CPU port** at 1, 2, 4 and 8 overlapping clip groups.
 
-      **What breaks:** clip groups whose regions **overlap**, from the third
-      onward. Concentric rectangles, one draw each:
+      **It was never clip-specific.** Clips only made it reachable: more paths
+      means more segment records, and overlapping clips put several paths in
+      one tile. Any scene past ~256 records lost segments the same way. The
+      golden scenes are 100px and stay under the threshold, which is why they
+      never caught it — and why the bug survived the stage differ, the
+      generated sweep and both backends.
 
-      | groups | difference | max channel delta |
-      |---|---|---|
-      | 1 | 0.0% | 0 |
-      | 2 | 0.0% | 0 |
-      | 3 | 5.8% | 30 |
-      | 4 | 16.8% | 200 |
-      | 5 | 19.6% | 200 |
+      The narrowing that led there is worth keeping: exact for one clip group
+      with any number of draws, exact for any number of *disjoint* groups,
+      wrong from the third *overlapping* group, and identical on Metal and
+      Vulkan — which ruled out `clip_leaf`, the blend stack, quantisation and
+      codegen in turn, and pointed at something shared and size-dependent.
 
-      **Ruled out.** It is not `BLEND_STACK_SPLIT` — that is 4 and the break is
-      at 3, and sequential groups never take `fine`'s blend depth above 1. It
-      is not 8-bit quantisation in `blend_stack`: a max channel delta of 200 is
-      not rounding. It is not backend codegen — the Pixel's Vulkan/SPIR-V path
-      shows the same curve (0, 0, 8.9%, 18.7%, 28.6%, same max delta), so it is
-      algorithmic and shared. And `coarse`'s PTCL for a fully-covered centre
-      tile is structurally right: `BEGIN_CLIP, SOLID, COLOR, SOLID, END_CLIP`
-      per group, repeated exactly as many times as there are groups. The
-      `clip_depth`/`clip_zero_depth` bookkeeping in `coarse` also matches the
-      CPU's line for line on inspection.
+      Compute now handles clipped draws: `computeClipSupported` is consulted
+      again at the four compute branches. `TestClippedComputeMatchesCPU` pins
+      it against the CPU port, which is the right oracle — rectangular clips
+      go to a hard-edged scissor on the render-pass path and are antialiased
+      on the compute path, so those two differ at clip edges by design and
+      comparing them proves nothing.
 
-      **Where to look next.** A centre tile is fully covered by every clip, so
-      its coverage is `CMD_SOLID` and it composites cleanly — which fits the
-      fact that the errors are large but affect a minority of pixels. The
-      suspicion is therefore tiles at a clip *boundary*, where coverage is a
-      `CMD_FILL` with partial area and `coarse`'s EndClip branch both reads and
-      overwrites `tiles[].segment_count_or_ix`. The next concrete step is to
-      dump PTCL and the segment ranges for a boundary tile and diff them
-      against the CPU's, which needs the stage differ extended to PTCL — the
-      same technique that settled `path_tiling`.
-
-      Clipped draws stay on render-pass until then.
-      `computeClipSupported` is written and unconsulted; flipping the condition
-      at the four compute branches re-enables it.
-
+- [ ] Re-verify the clip fix on the Pixel. The bug reproduced identically on
+      Vulkan before the fix and the fix is a dispatch count in Go rather than
+      anything backend-specific, but the device was unplugged before it could
+      be re-run.
 ### Earlier Metal-only decision, kept for the record
 
 **Decision: render-pass stays the default; compute stays available, not

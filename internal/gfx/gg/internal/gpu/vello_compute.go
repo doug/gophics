@@ -1163,10 +1163,24 @@ func (d *VelloComputeDispatcher) Dispatch(bufs *VelloComputeBuffers, config Vell
 
 	totalTiles := config.WidthInTiles * config.HeightInTiles
 
-	// path_tiling element count: use estimated segment count (n_lines * 4).
-	// The shader itself checks against atomicLoad(&bump.seg_counts) and
-	// returns early for excess threads, so over-dispatching is safe.
-	pathTilingElements := config.NumLines * 4
+	// path_tiling runs one invocation per SegmentCount record, so the dispatch
+	// has to cover every record path_count can produce. The bound is the DDA
+	// one — a line crosses at most width+height tiles — which is exactly what
+	// computeBufferSizes uses to size the seg_counts buffer.
+	//
+	// This used to estimate n_lines*4, the same heuristic the buffer sizing
+	// calls out as wrong. The buffer was fixed and the dispatch was not, so
+	// any scene producing more records than the dispatch covered silently lost
+	// the remainder: a 256px scene with four overlapping clips reserved 414
+	// segment slots and filled 256 — one workgroup's worth — leaving tiles
+	// pointing at segments nothing had written. It showed up as clip coverage
+	// failing at clip boundaries, and it is not clip-specific: any scene past
+	// that threshold loses segments. The golden scenes are 100px and stay
+	// under it, which is why they never caught it.
+	//
+	// Over-dispatching stays safe: the shader checks each invocation against
+	// atomicLoad(&bump.seg_counts) and returns early.
+	pathTilingElements := config.NumLines * (config.WidthInTiles + config.HeightInTiles)
 
 	stages := [VelloStageCount]stageDispatch{
 		{VelloStagePathtagReduce, nTagWords, 0},

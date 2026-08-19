@@ -959,7 +959,7 @@ func (rc *GPURenderContext) FillPath(target gg.GPURenderTarget, path *gg.Path, p
 	rc.sceneStats.ShapeCount++
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
+	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()
@@ -1008,7 +1008,7 @@ func (rc *GPURenderContext) StrokePath(target gg.GPURenderTarget, path *gg.Path,
 	rc.sceneStats.ShapeCount++
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
+	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()
@@ -1057,7 +1057,7 @@ func (rc *GPURenderContext) FillShape(target gg.GPURenderTarget, shape gg.Detect
 	rc.sceneStats.ShapeCount++
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
+	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()
@@ -1101,7 +1101,7 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 	}
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
+	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()

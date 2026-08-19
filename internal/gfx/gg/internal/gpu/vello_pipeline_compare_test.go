@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/gg/internal/gpu/tilecompute"
 	"github.com/doug/gophics/internal/gfx/gpucontext"
 	"github.com/doug/gophics/internal/gfx/gputypes"
 	"github.com/doug/gophics/internal/gfx/wgpu"
@@ -545,49 +546,96 @@ func readHarnessPixels(t *testing.T, h *offscreenHarness, size uint32) []byte {
 	return out
 }
 
-// TestClippedOutputAgreesAcrossPipelines checks the two pipelines now produce
-// the same clipped picture.
+// TestClippedComputeMatchesCPU checks the compute pipeline's clipping against
+// the CPU implementation of the same algorithm.
 //
-// They used to differ on ~44% of inked pixels, because the compute path was
-// handed only the path and the paint and rendered without any clip at all.
-// This is the test that says the discrepancy is gone rather than merely
-// smaller, and it needs the cross-pipeline comparison to say it: the
-// confinement property in TestRectClipPathClipsToItsRect proves a clip is
-// applied, not that it is applied in the same place.
-func TestClippedOutputAgreesAcrossPipelines(t *testing.T) {
-	const size = 256
-	scene := harnessClipScene(size, 32)
-
-	var imgs [2][]byte
-	for i, mode := range []gg.PipelineMode{gg.PipelineModeRenderPass, gg.PipelineModeCompute} {
-		h := newOffscreenHarness(t, size)
-		if err := h.renderOnce(mode, scene); err != nil {
-			h.close()
-			t.Fatalf("render: %v", err)
-		}
-		imgs[i] = readHarnessPixels(t, h, size)
-		h.close()
+// The CPU port is the right oracle here, and the render-pass path is not.
+// Rectangular clips were deliberately rerouted to a scissor rect, which has
+// hard edges where the compute path antialiases the clip boundary — so the two
+// pipelines differ by design wherever a clip edge crosses a pixel, and a
+// scene with many clip edges differs by several percent for reasons that are
+// correct. Comparing against the algorithm's own CPU implementation asks the
+// question that has a right answer.
+//
+// This is what caught the dispatch bug behind the clip failures: path_tiling
+// was dispatched for n_lines*4 records rather than the DDA bound, so scenes
+// past one workgroup's worth silently lost segments.
+func TestClippedComputeMatchesCPU(t *testing.T) {
+	a := &VelloAccelerator{}
+	if err := a.initGPU(); err != nil {
+		requireGPU(t, err, "GPU not available")
+	}
+	defer a.Close()
+	if !a.CanCompute() {
+		t.Skip("compute pipeline not available")
 	}
 
-	var diff, inked int
-	for i := 0; i+3 < len(imgs[0]) && i+3 < len(imgs[1]); i += 4 {
-		if imgs[0][i+3] != 0 || imgs[1][i+3] != 0 {
-			inked++
+	const size = 256
+	bg := [4]uint8{0, 0, 0, 0}
+
+	for _, n := range []int{1, 2, 4, 8} {
+		els := concentricClipScene(size, n)
+		cpu := tilecompute.NewRasterizer(size, size).RasterizeSceneDefPTCL(bg, els)
+		gpu, err := a.dispatchComputeScene(size, size, bg, els, nil)
+		if err != nil {
+			t.Fatalf("n=%d: %v", n, err)
 		}
-		for c := 0; c < 4; c++ {
-			d := int(imgs[0][i+c]) - int(imgs[1][i+c])
-			if d < -8 || d > 8 {
-				diff++
-				break
+
+		var diff, ink int
+		for y := 0; y < size; y++ {
+			for x := 0; x < size; x++ {
+				cr, cg, cb, ca := cpu.At(x, y).RGBA()
+				gr, gg2, gb, ga := gpu.At(x, y).RGBA()
+				if ca>>8 != 0 || ga>>8 != 0 {
+					ink++
+				}
+				if cr>>8 != gr>>8 || cg>>8 != gg2>>8 || cb>>8 != gb>>8 {
+					diff++
+				}
 			}
 		}
+		if ink == 0 {
+			t.Fatalf("n=%d drew nothing", n)
+		}
+		if diff != 0 {
+			t.Errorf("%d overlapping clip groups: %d of %d inked pixels differ from the CPU port",
+				n, diff, ink)
+		}
 	}
-	if inked == 0 {
-		t.Fatal("neither pipeline drew anything — the comparison would be vacuous")
+}
+
+// concentricClipScene builds n nested clip groups sharing tiles, each with one
+// draw. Overlapping clip regions are what exposed the lost segments: disjoint
+// ones stayed exact at every count.
+func concentricClipScene(size, n int) []tilecompute.SceneElement {
+	rect := func(x0, y0, x1, y1 float64) *gg.Path {
+		p := &gg.Path{}
+		p.MoveTo(x0, y0)
+		p.LineTo(x1, y0)
+		p.LineTo(x1, y1)
+		p.LineTo(x0, y1)
+		p.Close()
+		return p
 	}
-	// The two rasterise independently, so edge pixels differ; a clip applied
-	// to the wrong region is not a few-percent effect.
-	if pct := 100 * float64(diff) / float64(inked); pct > 5 {
-		t.Errorf("clipped output differs on %.1f%% of inked pixels (%d of %d)", pct, diff, inked)
+
+	var els []tilecompute.SceneElement
+	for i := 0; i < n; i++ {
+		in := float64(10 + i*6)
+		els = append(els,
+			tilecompute.SceneElement{
+				Type:      tilecompute.ElementBeginClip,
+				Lines:     velloClipLines(rect(in, in, float64(size)-in, float64(size)-in)),
+				BlendMode: velloSimpleClipBlend,
+				Alpha:     1.0,
+			},
+			tilecompute.SceneElement{
+				Type:     tilecompute.ElementDraw,
+				Lines:    convertPathToPathDef(rect(20, 20, float64(size)-20, float64(size)-20), gg.NewPaint()).Lines,
+				Color:    [4]uint8{uint8(40 + i*30), 60, 200, 255},
+				FillRule: tilecompute.FillRuleNonZero,
+			},
+			tilecompute.SceneElement{Type: tilecompute.ElementEndClip},
+		)
 	}
+	return els
 }
