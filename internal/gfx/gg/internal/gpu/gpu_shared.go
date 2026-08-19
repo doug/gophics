@@ -280,8 +280,8 @@ func (s *GPUShared) SetDeviceProvider(provider gpucontext.DeviceProvider) error 
 
 	s.gpuReady = true
 
-	// Initialize internal VelloAccelerator with the shared device.
-	s.initVelloAccelerator(s.device, s.queue)
+	// The compute accelerator is built on first demand; see
+	// ensureVelloAcceleratorLocked for why it is not built here.
 
 	slogger().Info("gpu-shared: switched to shared GPU device",
 		"strategy", s.strategy.String(),
@@ -308,7 +308,8 @@ func (s *GPUShared) CanRenderDirect() bool {
 func (s *GPUShared) CanCompute() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.velloAccel != nil && s.velloAccel.CanCompute()
+	va := s.ensureVelloAcceleratorLocked()
+	return va != nil && va.CanCompute()
 }
 
 // SetTexturePoolBudget sets the maximum memory budget for the texture pool
@@ -530,8 +531,8 @@ func (s *GPUShared) initGPU() error {
 
 	s.gpuReady = true
 
-	// Initialize internal VelloAccelerator for compute routing.
-	s.initVelloAccelerator(s.device, s.queue)
+	// The compute accelerator is built on first demand; see
+	// ensureVelloAcceleratorLocked for why it is not built here.
 
 	slogger().Info("gpu-shared: GPU initialized",
 		"strategy", s.strategy.String(),
@@ -540,6 +541,38 @@ func (s *GPUShared) initGPU() error {
 		"softwareMode", s.softwareMode,
 	)
 	return nil
+}
+
+// ensureVelloAcceleratorLocked builds the compute accelerator on first demand.
+// Caller must hold s.mu.
+//
+// This is deliberately not called from init. Building it compiles ten WGSL
+// modules and creates ten compute pipelines -- measured at 9.8ms -- and
+// SelectPipeline returns RenderPass for every scene, so on the default path
+// that work is never used. It is not a one-time cost either: SetDeviceProvider
+// runs again on every surface recreation, which on Android means every rotation
+// and every background-to-foreground return.
+//
+// Anything that actually routes to compute goes through here first, so asking
+// for PipelineModeCompute still works -- it just pays for itself instead of
+// charging every app that never asks.
+func (s *GPUShared) ensureVelloAcceleratorLocked() *VelloAccelerator {
+	if s.velloAccel != nil {
+		return s.velloAccel
+	}
+	if !s.gpuReady || s.device == nil || s.queue == nil {
+		return nil
+	}
+	s.initVelloAccelerator(s.device, s.queue)
+	return s.velloAccel
+}
+
+// velloAcceleratorForCompute returns the compute accelerator, building it if
+// this is the first request. Returns nil when the GPU is not ready.
+func (s *GPUShared) velloAcceleratorForCompute() *VelloAccelerator {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ensureVelloAcceleratorLocked()
 }
 
 func (s *GPUShared) initVelloAccelerator(device *wgpu.Device, queue *wgpu.Queue) {

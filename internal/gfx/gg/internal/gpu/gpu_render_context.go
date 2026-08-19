@@ -420,9 +420,7 @@ func (rc *GPURenderContext) computeClipSupported() bool {
 	if !ok {
 		return false
 	}
-	rc.shared.mu.Lock()
-	va := rc.shared.velloAccel
-	rc.shared.mu.Unlock()
+	va := rc.shared.velloAcceleratorForCompute()
 	if va == nil {
 		return false
 	}
@@ -961,7 +959,7 @@ func (rc *GPURenderContext) FillPath(target gg.GPURenderTarget, path *gg.Path, p
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
-		va := rc.shared.velloAccel
+		va := rc.shared.velloAcceleratorForCompute()
 		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
@@ -1010,7 +1008,7 @@ func (rc *GPURenderContext) StrokePath(target gg.GPURenderTarget, path *gg.Path,
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
-		va := rc.shared.velloAccel
+		va := rc.shared.velloAcceleratorForCompute()
 		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
@@ -1059,7 +1057,7 @@ func (rc *GPURenderContext) FillShape(target gg.GPURenderTarget, shape gg.Detect
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
-		va := rc.shared.velloAccel
+		va := rc.shared.velloAcceleratorForCompute()
 		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
@@ -1103,7 +1101,7 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
 		rc.shared.mu.Lock()
-		va := rc.shared.velloAccel
+		va := rc.shared.velloAcceleratorForCompute()
 		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
@@ -1709,6 +1707,10 @@ func shapeToPath(shape gg.DetectedShape) *gg.Path {
 // flushed only when the mode actually routes paths there.
 func (rc *GPURenderContext) flushVello(target gg.GPURenderTarget) error {
 	effectiveMode := rc.effectivePipelineMode()
+	// Plain read, deliberately not velloAcceleratorForCompute: this runs on
+	// every flush, and building the accelerator here would make lazy init
+	// eager again on frame one. If anything actually routed draws to compute,
+	// that path built it already and this read finds it.
 	rc.shared.mu.Lock()
 	va := rc.shared.velloAccel
 	rc.shared.mu.Unlock()
