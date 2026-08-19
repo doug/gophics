@@ -163,7 +163,7 @@ func BenchmarkComputePresentVsReadback(b *testing.B) {
 				present := func(out *wgpu.Buffer) error {
 					return a.presenter.present(out, target, uint32(size), uint32(size))
 				}
-				if _, err := a.dispatchComputeScene(size, size, bg, scene, present); err != nil {
+				if _, err := a.dispatchComputeScene(size, size, bg, drawElements(scene), present); err != nil {
 					b.Fatalf("present: %v", err)
 				}
 			}

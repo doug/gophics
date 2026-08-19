@@ -351,6 +351,19 @@ func (rc *GPURenderContext) hasActiveClip() bool {
 	return rc.clipRect != nil || rc.clipRRect != nil || rc.clipPath != nil
 }
 
+// Why compute cannot take clipped draws yet: the GPU pipeline has no clip
+// stage. Its nine stages are pathtag_reduce, pathtag_scan, draw_reduce,
+// draw_leaf, path_count, backdrop, coarse, path_tiling and fine — none of
+// which resolves clip layers. The CPU port has clip_leaf.go; there is no
+// clip_leaf.wgsl.
+//
+// Encoding clips into the scene is necessary but not sufficient, and that was
+// worth finding out by trying: with BeginClip/EndClip elements emitted and
+// routed to compute, output differed from render-pass on 95% of inked pixels,
+// because coarse consumes clip bounding boxes that nothing produces. The scene
+// encoder (EncodeSceneDef) and coarse's CMD_BEGIN_CLIP/CMD_END_CLIP handling
+// are both already in place; the missing piece is the stage between them.
+
 // ClearClipPath removes the arbitrary clip path, restoring full rendering.
 func (rc *GPURenderContext) ClearClipPath() {
 	rc.clipPath = nil

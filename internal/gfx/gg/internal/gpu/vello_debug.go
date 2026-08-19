@@ -162,7 +162,7 @@ func (a *VelloAccelerator) DebugComputeStages(
 	a.stageCapture = nil
 	defer func() { a.wantStageCapture = false }()
 
-	_, err := a.dispatchComputeScene(width, height, bgColor, paths, nil)
+	_, err := a.dispatchComputeScene(width, height, bgColor, drawElements(paths), nil)
 	snap := a.stageCapture
 	a.mu.Unlock()
 

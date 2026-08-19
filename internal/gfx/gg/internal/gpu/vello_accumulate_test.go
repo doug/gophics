@@ -196,7 +196,7 @@ func TestVelloAccelerator_StrokeAlwaysUsesEvenOdd(t *testing.T) {
 			if a.PendingCount() != 1 {
 				t.Fatalf("expected 1 pending, got %d", a.PendingCount())
 			}
-			if got := a.pendingPaths[0].FillRule; got != tilecompute.FillRuleEvenOdd {
+			if got := a.pendingElements[0].FillRule; got != tilecompute.FillRuleEvenOdd {
 				t.Errorf("%s: fill rule = %v, want EvenOdd", tc.name, got)
 			}
 		})
@@ -220,7 +220,7 @@ func TestVelloAccelerator_StrokeShapeUsesEvenOdd(t *testing.T) {
 	if a.PendingCount() != 1 {
 		t.Fatalf("expected 1 pending, got %d", a.PendingCount())
 	}
-	if got := a.pendingPaths[0].FillRule; got != tilecompute.FillRuleEvenOdd {
+	if got := a.pendingElements[0].FillRule; got != tilecompute.FillRuleEvenOdd {
 		t.Errorf("StrokeShape fill rule = %v, want EvenOdd", got)
 	}
 }

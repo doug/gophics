@@ -63,7 +63,15 @@ type VelloAccelerator struct {
 
 	// Scene accumulation for Tier 5 compute pipeline.
 	// Paths are accumulated via FillPath/StrokePath/FillShape and dispatched on Flush.
-	pendingPaths  []tilecompute.PathDef
+	pendingElements []tilecompute.SceneElement
+
+	// pendingClip is the clip requested for subsequent draws.
+	pendingClip *gg.Path
+
+	// openClip is the clip path currently pushed as a BeginClip element, or
+	// nil when no clip is open. Compared by pointer, matching how the
+	// render-pass path groups clips.
+	openClip      *gg.Path
 	pendingTarget *gg.GPURenderTarget // target for the pending scene (nil if empty)
 
 	// antiAlias controls whether paths are rendered with anti-aliasing.
@@ -97,7 +105,8 @@ func (a *VelloAccelerator) Close() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.pendingPaths = nil
+	a.pendingElements = nil
+	a.openClip = nil
 	a.pendingTarget = nil
 
 	if a.presenter != nil {
@@ -249,7 +258,7 @@ func (a *VelloAccelerator) FillPath(target gg.GPURenderTarget, path *gg.Path, pa
 		return nil
 	}
 
-	a.pendingPaths = append(a.pendingPaths, pathDef)
+	a.appendDrawLocked(pathDef)
 	targetCopy := target
 	a.pendingTarget = &targetCopy
 	return nil
@@ -318,7 +327,7 @@ func (a *VelloAccelerator) FillShape(target gg.GPURenderTarget, shape gg.Detecte
 		return gg.ErrFallbackToCPU
 	}
 
-	a.pendingPaths = append(a.pendingPaths, pathDef)
+	a.appendDrawLocked(pathDef)
 	targetCopy := target
 	a.pendingTarget = &targetCopy
 	return nil
@@ -354,6 +363,61 @@ func (a *VelloAccelerator) StrokeShape(target gg.GPURenderTarget, shape gg.Detec
 	return a.StrokePath(target, path, paint)
 }
 
+// SetClipPath sets the clip applied to subsequent draws, or clears it with nil.
+//
+// The compute path used to receive only the geometry and the paint, so every
+// clipped scene rendered unclipped — a full-canvas shape under a centred clip
+// came out with 49,152 pixels outside it, exactly the count from having no
+// clip at all. Clips are now encoded into the scene as BeginClip/EndClip
+// elements, which is what coarse.wgsl's CMD_BEGIN_CLIP and CMD_END_CLIP were
+// already written to consume.
+func (a *VelloAccelerator) SetClipPath(clip *gg.Path) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pendingClip = clip
+}
+
+// appendDrawLocked adds a draw, opening or closing clip layers as the clip
+// changes between draws. The caller holds a.mu.
+func (a *VelloAccelerator) appendDrawLocked(pathDef tilecompute.PathDef) {
+	if a.pendingClip != a.openClip {
+		if a.openClip != nil {
+			a.pendingElements = append(a.pendingElements,
+				tilecompute.SceneElement{Type: tilecompute.ElementEndClip})
+		}
+		if a.pendingClip != nil {
+			lines := velloClipLines(a.pendingClip)
+			if len(lines) > 0 {
+				a.pendingElements = append(a.pendingElements, tilecompute.SceneElement{
+					Type:      tilecompute.ElementBeginClip,
+					Lines:     lines,
+					BlendMode: velloSimpleClipBlend,
+					Alpha:     1.0,
+				})
+			}
+		}
+		a.openClip = a.pendingClip
+	}
+
+	a.pendingElements = append(a.pendingElements, tilecompute.SceneElement{
+		Type:     tilecompute.ElementDraw,
+		Lines:    pathDef.Lines,
+		Color:    pathDef.Color,
+		FillRule: pathDef.FillRule,
+	})
+}
+
+// velloSimpleClipBlend is the blend mode a plain clip layer uses — Vello's
+// "clip" mix mode with source-over compositing.
+const velloSimpleClipBlend = 0x8003
+
+// velloClipLines flattens a clip path into the line soup the scene encoder
+// expects. PathIx is assigned later from the element's position.
+func velloClipLines(clip *gg.Path) []tilecompute.LineSoup {
+	pd := convertPathToPathDef(clip, gg.NewPaint())
+	return pd.Lines
+}
+
 // Flush dispatches all accumulated paths through the 9-stage compute pipeline
 // and writes the result to the target pixel buffer. Returns nil if there are
 // no pending paths. After Flush, the accumulated scene is cleared.
@@ -367,18 +431,25 @@ func (a *VelloAccelerator) Flush(target gg.GPURenderTarget) error {
 func (a *VelloAccelerator) PendingCount() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return len(a.pendingPaths)
+	return len(a.pendingElements)
 }
 
 // flushLocked dispatches the accumulated scene. Must be called with a.mu held.
 func (a *VelloAccelerator) flushLocked(target gg.GPURenderTarget) error {
-	if len(a.pendingPaths) == 0 {
+	if len(a.pendingElements) == 0 {
 		return nil
 	}
 
 	// Take ownership of pending data and reset.
-	paths := a.pendingPaths
-	a.pendingPaths = nil
+	// Close any clip left open by the last draw, so the scene is balanced.
+	if a.openClip != nil {
+		a.pendingElements = append(a.pendingElements,
+			tilecompute.SceneElement{Type: tilecompute.ElementEndClip})
+		a.openClip = nil
+	}
+	elements := a.pendingElements
+	a.pendingElements = nil
+	a.openClip = nil
 	a.pendingTarget = nil
 
 	// Lazy GPU initialization if no external device was provided.
@@ -414,14 +485,14 @@ func (a *VelloAccelerator) flushLocked(target gg.GPURenderTarget) error {
 		present := func(out *wgpu.Buffer) error {
 			return a.presenter.present(out, target, w, h)
 		}
-		if _, err := a.dispatchComputeScene(int(w), int(h), bgColor, paths, present); err != nil {
+		if _, err := a.dispatchComputeScene(int(w), int(h), bgColor, elements, present); err != nil {
 			slogger().Warn("vello-compute: GPU present failed", "err", err)
 			return gg.ErrFallbackToCPU
 		}
 		return nil
 	}
 
-	img, err := a.dispatchComputeScene(target.Width, target.Height, bgColor, paths, nil)
+	img, err := a.dispatchComputeScene(target.Width, target.Height, bgColor, elements, nil)
 	if err != nil {
 		slogger().Warn("vello-compute: dispatch failed", "err", err)
 		return gg.ErrFallbackToCPU
@@ -558,7 +629,22 @@ func (a *VelloAccelerator) RenderSceneCompute(
 		return nil, fmt.Errorf("vello-compute: GPU not ready")
 	}
 
-	return a.dispatchComputeScene(width, height, bgColor, paths, nil)
+	return a.dispatchComputeScene(width, height, bgColor, drawElements(paths), nil)
+}
+
+// drawElements wraps plain paths as draw-only scene elements, for callers that
+// have no clips to express.
+func drawElements(paths []tilecompute.PathDef) []tilecompute.SceneElement {
+	out := make([]tilecompute.SceneElement, len(paths))
+	for i, pd := range paths {
+		out[i] = tilecompute.SceneElement{
+			Type:     tilecompute.ElementDraw,
+			Lines:    pd.Lines,
+			Color:    pd.Color,
+			FillRule: pd.FillRule,
+		}
+	}
+	return out
 }
 
 // dispatchComputeScene runs the 8-stage compute pipeline on the given paths
@@ -576,13 +662,13 @@ func (a *VelloAccelerator) RenderSceneCompute(
 func (a *VelloAccelerator) dispatchComputeScene(
 	width, height int,
 	bgColor [4]uint8,
-	paths []tilecompute.PathDef,
+	elements []tilecompute.SceneElement,
 	// present, when non-nil, receives the finished output buffer instead of it
 	// being read back to host memory. The buffer is only valid until this call
 	// returns, so the callback must submit its own work before doing so.
 	present func(out *wgpu.Buffer) error,
 ) (*image.RGBA, error) {
-	if len(paths) == 0 {
+	if len(elements) == 0 {
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
 		bg := color.RGBA{R: bgColor[0], G: bgColor[1], B: bgColor[2], A: bgColor[3]}
 		for y := 0; y < height; y++ {
@@ -594,14 +680,22 @@ func (a *VelloAccelerator) dispatchComputeScene(
 	}
 
 	// Step 1: Encode and pack scene.
-	enc := tilecompute.EncodeScene(paths)
+	//
+	// EncodeSceneDef gives every element exactly one path index in order — a
+	// draw and a clip-begin contribute their geometry, and a clip-end
+	// contributes a dummy path that carries none. So an element's position is
+	// its PathIx, which is what the line collection below relies on.
+	enc := tilecompute.EncodeSceneDef(elements)
 	scene := tilecompute.PackScene(enc)
 
 	// Step 2: Collect all lines with correct PathIx.
 	var allLines []tilecompute.LineSoup
-	for pathIx, pd := range paths {
-		for _, line := range pd.Lines {
+	fillRules := make([]tilecompute.FillRule, len(elements))
+	for pathIx, el := range elements {
+		fillRules[pathIx] = el.FillRule
+		for _, line := range el.Lines {
 			allLines = append(allLines, tilecompute.LineSoup{
+				//nolint:gosec // element count is bounded
 				PathIx: uint32(pathIx),
 				P0:     line.P0,
 				P1:     line.P1,
@@ -626,7 +720,7 @@ func (a *VelloAccelerator) dispatchComputeScene(
 	heightInTiles := uint32((height + tilecompute.TileHeight - 1) / tilecompute.TileHeight)
 
 	pathsU32, pathStylesU32, totalPathTiles := buildPathMetadata(
-		paths, allLines, width, height, widthInTiles, heightInTiles,
+		fillRules, allLines, width, height, widthInTiles, heightInTiles,
 	)
 
 	// Step 5: Compute config.
@@ -721,12 +815,12 @@ func (a *VelloAccelerator) dispatchComputeScene(
 // the required size of the flat Tiles buffer. This is NOT the same as
 // widthInTiles*heightInTiles (the global tile grid).
 func buildPathMetadata(
-	paths []tilecompute.PathDef,
+	fillRules []tilecompute.FillRule,
 	allLines []tilecompute.LineSoup,
 	widthPx, heightPx int,
 	widthInTiles, heightInTiles uint32,
 ) (pathsU32 []uint32, pathStylesU32 []uint32, totalPathTiles uint32) {
-	numPaths := len(paths)
+	numPaths := len(fillRules)
 	pathsU32 = make([]uint32, numPaths*5)
 	pathStylesU32 = make([]uint32, numPaths)
 
@@ -765,7 +859,7 @@ func buildPathMetadata(
 
 		// Style flags: bit 1 = even-odd.
 		var styleFlags uint32
-		if paths[pathIx].FillRule == tilecompute.FillRuleEvenOdd {
+		if fillRules[pathIx] == tilecompute.FillRuleEvenOdd {
 			styleFlags = 0x02
 		}
 		pathStylesU32[pathIx] = styleFlags

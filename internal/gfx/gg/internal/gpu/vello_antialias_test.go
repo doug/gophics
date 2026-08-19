@@ -103,7 +103,7 @@ func TestVelloAccelerator_NoAA_SnapsPath(t *testing.T) {
 	}
 
 	// Check first pending path has fractional coords (line endpoints).
-	firstPath := a.pendingPaths[0]
+	firstPath := a.pendingElements[0]
 	hasNonInteger := false
 	for _, line := range firstPath.Lines {
 		if math.Floor(float64(line.P0[0])) != float64(line.P0[0]) ||
@@ -117,7 +117,7 @@ func TestVelloAccelerator_NoAA_SnapsPath(t *testing.T) {
 	}
 
 	// Now disable AA and add another path.
-	a.pendingPaths = nil
+	a.pendingElements = nil
 	a.SetAntiAlias(false)
 
 	err = a.FillPath(target, path, paint)
@@ -129,7 +129,7 @@ func TestVelloAccelerator_NoAA_SnapsPath(t *testing.T) {
 	}
 
 	// Check second pending path has integer coords (all snapped).
-	secondPath := a.pendingPaths[0]
+	secondPath := a.pendingElements[0]
 	for i, line := range secondPath.Lines {
 		if math.Round(float64(line.P0[0])) != float64(line.P0[0]) ||
 			math.Round(float64(line.P0[1])) != float64(line.P0[1]) ||

@@ -1153,10 +1153,31 @@ by up to 2×, so those margins are indicative, not decisive.
       timing says so — it took a correctness property, not a faster number, to
       notice.
 
-- [ ] **Encode clips in the compute pipeline.** `coarse.wgsl` already has
-      `CMD_BEGIN_CLIP`/`CMD_END_CLIP` and the config carries `NumClips`, so the
-      machinery is partly there and simply is not fed. Until then compute
-      cannot be compared on clipped content at all, which is most of a real UI.
+- [ ] **Encode clips in the compute pipeline — started, and the gap is now
+      exact.** The scene side is done: the accelerator accumulates
+      `tilecompute.SceneElement`s rather than bare `PathDef`s, tracks the open
+      clip, and emits `BeginClip`/`EndClip` around draws as it changes.
+      `EncodeSceneDef` encodes them, and the draw-only path is unchanged —
+      every golden scene still matches the CPU rasterizer exactly.
+
+      **That is necessary and not sufficient, which was worth learning by
+      trying.** Routed to compute with clips encoded, output differed from
+      render-pass on **95% of inked pixels**. The reason is structural: the GPU
+      pipeline has **no clip stage**. Its nine stages are `pathtag_reduce`,
+      `pathtag_scan`, `draw_reduce`, `draw_leaf`, `path_count`, `backdrop`,
+      `coarse`, `path_tiling`, `fine` — none resolves clip layers. The CPU port
+      has `clip_leaf.go`; there is no `clip_leaf.wgsl`. `coarse` consumes clip
+      bounding boxes that nothing produces.
+
+      So the remaining work is a new compute stage, not a wiring change: port
+      `clip_leaf` (and its reduce) to WGSL, allocate the clip bbox and stack
+      buffers, and dispatch it between `draw_leaf` and `path_count`. The CPU
+      implementation is a working oracle for it, and the stage differ can be
+      extended to compare its output directly — the same method that made
+      `path_tiling` tractable.
+
+      Until then clipped draws go to render-pass, which is correct, and compute
+      still cannot be benchmarked on clipped content.
 
 ### Earlier Metal-only decision, kept for the record
 
