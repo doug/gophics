@@ -988,6 +988,7 @@ func (d *VelloComputeDispatcher) DestroyBuffers(bufs *VelloComputeBuffers) {
 	destroyBuf(bufs.PTCL)
 	destroyBuf(bufs.BumpAlloc)
 	destroyBuf(bufs.TilePTCLOffsets)
+	destroyBuf(bufs.ClipInps)
 	destroyBuf(bufs.PathStyles)
 	destroyBuf(bufs.Output)
 	destroyBuf(bufs.BlendSpill)

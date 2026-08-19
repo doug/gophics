@@ -1255,10 +1255,58 @@ by up to 2×, so those margins are indicative, not decisive.
       on the compute path, so those two differ at clip edges by design and
       comparing them proves nothing.
 
-- [ ] Re-verify the clip fix on the Pixel. The bug reproduced identically on
-      Vulkan before the fix and the fix is a dispatch count in Go rather than
-      anything backend-specific, but the device was unplugged before it could
-      be re-run.
+- [x] **Verified on the Pixel.** The whole compute package suite passes on
+      Vulkan, twice consecutively — goldens, stage differ, 400-scene generated
+      sweep, clip tests, GPU presentation. Metal is clean too, along with the
+      framework suite, the `gophics_gpu` suites, `nogpu`, gates, and every
+      cross-compile target except `android/arm64`, which fails in
+      `internal/audio` (`undefined: defaultDriver`) — confirmed identical at
+      this session's base commit, so pre-existing and unrelated.
+
+      **The device run found a leak nothing else did.** The clip stage's
+      `ClipInps` buffer was never added to `DestroyBuffers`, so every frame
+      leaked one until a GC finaliser reclaimed it — visible only as
+      `wgpu: Buffer released by GC (missing explicit Release)`, in a log that
+      is off by default, on a run nobody does locally. Fixed, and
+      `TestDestroyBuffersReleasesEveryBuffer` now derives the expectation from
+      the struct so the two cannot drift.
+
+      That guard took two attempts, which is the more useful half of the story.
+      The first version asserted the buffer fields were nil after
+      `DestroyBuffers` returned — it passed, and kept passing with the fix
+      removed, because `destroyBuf` takes the buffer by value and never clears
+      the field. A runtime check had nothing to observe. Reading the function's
+      source and comparing the identifiers it references against the struct's
+      fields is what actually fails when a field is forgotten.
+
+**Final numbers, with compute clipping correctly.** Metal, milliseconds per
+frame:
+
+| scene | render-pass | compute |
+|---|---|---|
+| 512px disjoint 256 | 0.62 | 3.44 |
+| 512px disjoint 2000 | 1.78 | 7.63 |
+| 512px overlap 256 | 3.20 | 7.66 |
+| 512px clipped 64 | 0.89 | 6.29 |
+| 512px clipped 256 | 2.06 | 10.96 |
+| 1024px disjoint 2000 | 2.01 | 7.54 |
+| 1024px overlap 256 | 7.19 | 10.34 |
+| 1024px clipped 256 | 4.63 | 19.35 |
+
+**Render-pass wins every cell**, by 1.4× to 7×. The clip-heavy cases it once
+lost are now its strongest: 2.06ms against 10.96ms at 512px/256 clips, where
+compute previously appeared 4.8× *ahead* on mobile — because it was not
+clipping at all.
+
+The Pixel agrees on direction and cannot be quoted to a figure. Repeated runs
+of the same cells vary by 2–3× — `512px clipped256/renderpass` measured 26.7,
+23.4 and 59.3ms across three runs — so only the consistent finding survives:
+render-pass ahead in every cell measured, clip-heavy included. Thermal state
+and screen wakefulness both move these numbers materially.
+
+- [ ] `SelectPipeline` still switches on shape count, which every measurement
+      on both backends contradicts. It is unreachable while
+      `gg.AutoSelectCompute` is false, so this is tidying rather than a bug.
 ### Earlier Metal-only decision, kept for the record
 
 **Decision: render-pass stays the default; compute stays available, not
