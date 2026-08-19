@@ -1222,17 +1222,48 @@ by up to 2×, so those margins are indicative, not decisive.
       Compared against the CPU port of its own algorithm, it was exact, and the
       remaining difference had to be somewhere else.
 
-- [ ] **Multiple clip *groups* still diverge, and it is not `clip_leaf`.** One
-      group with many draws is exact; sequential Begin/Draw/End groups are not:
-      0.0% at one group, 2.1% at two, 21.3% at four, 23.0% at eight, measured
-      against the CPU port. Since `clip_leaf` is exact for the single-group
-      case and the CPU runs the same pairing algorithm, the fault is in the
-      existing clip-layer handling — `coarse`'s `CMD_BEGIN_CLIP`/`CMD_END_CLIP`
-      emission and `fine`'s blend stack. The jump at four groups is suggestive:
-      `BLEND_STACK_SPLIT` is 4, the point where `fine` spills the blend stack
-      to `blend_spill`.
+- [ ] **Overlapping clip groups diverge. Narrowed hard, not yet fixed.**
+      Everything below is measured against `RasterizeSceneDefPTCL`, the CPU
+      implementation of the same algorithm.
 
-      Clipped draws stay on render-pass until that is fixed.
+      **What is exact:** one clip group with any number of draws (1, 2, 4, 8 →
+      0.0%). Any number of clip groups whose regions are **disjoint** (1, 2, 4
+      → 0.0%). So `clip_leaf`, the pairing fixup, and the single-layer path are
+      all correct.
+
+      **What breaks:** clip groups whose regions **overlap**, from the third
+      onward. Concentric rectangles, one draw each:
+
+      | groups | difference | max channel delta |
+      |---|---|---|
+      | 1 | 0.0% | 0 |
+      | 2 | 0.0% | 0 |
+      | 3 | 5.8% | 30 |
+      | 4 | 16.8% | 200 |
+      | 5 | 19.6% | 200 |
+
+      **Ruled out.** It is not `BLEND_STACK_SPLIT` — that is 4 and the break is
+      at 3, and sequential groups never take `fine`'s blend depth above 1. It
+      is not 8-bit quantisation in `blend_stack`: a max channel delta of 200 is
+      not rounding. It is not backend codegen — the Pixel's Vulkan/SPIR-V path
+      shows the same curve (0, 0, 8.9%, 18.7%, 28.6%, same max delta), so it is
+      algorithmic and shared. And `coarse`'s PTCL for a fully-covered centre
+      tile is structurally right: `BEGIN_CLIP, SOLID, COLOR, SOLID, END_CLIP`
+      per group, repeated exactly as many times as there are groups. The
+      `clip_depth`/`clip_zero_depth` bookkeeping in `coarse` also matches the
+      CPU's line for line on inspection.
+
+      **Where to look next.** A centre tile is fully covered by every clip, so
+      its coverage is `CMD_SOLID` and it composites cleanly — which fits the
+      fact that the errors are large but affect a minority of pixels. The
+      suspicion is therefore tiles at a clip *boundary*, where coverage is a
+      `CMD_FILL` with partial area and `coarse`'s EndClip branch both reads and
+      overwrites `tiles[].segment_count_or_ix`. The next concrete step is to
+      dump PTCL and the segment ranges for a boundary tile and diff them
+      against the CPU's, which needs the stage differ extended to PTCL — the
+      same technique that settled `path_tiling`.
+
+      Clipped draws stay on render-pass until then.
       `computeClipSupported` is written and unconsulted; flipping the condition
       at the four compute branches re-enables it.
 
