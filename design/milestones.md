@@ -1084,11 +1084,49 @@ count is the signal that predicts the winner on both.**
       on Metal, including the clip-heavy ones that were compute's only
       advantage there.
 
-- [ ] Re-measure on the Pixel. The mobile numbers are what motivated this —
-      312ms for 256 clips at 1024px — and they are the ones that decide whether
-      compute still has a case. The device was unplugged before this could be
-      run, so the mobile column above is *pre-fix* and should not be read as
-      current.
+- [x] **Route rectangular clip paths to the scissor rect.** The buffer fixes
+      above halved the cost on Metal and did almost nothing on mobile, so the
+      dominant cost was elsewhere. Isolating it: 256 shapes under **256 clip
+      groups** cost 110.6ms on the Pixel, and the same shapes over the same
+      clipped area under **one** clip group cost 14.8ms. **7.5× from group
+      count alone** — the cost is per clip group (two pipeline switches and two
+      stencil draws each, inside the shared render pass), not per clipped
+      pixel. A tile-based GPU pays dearly for interleaving stencil
+      read-modify-write with colour draws hundreds of times.
+
+      The clips in question were axis-aligned rectangles, which need no stencil
+      geometry at all — that is what a scissor rect is. `DetectShape` already
+      recognised `ShapeRect` and `SetClipRect` already did scissor clipping;
+      the two were simply never connected. Restricted to *integer-aligned*
+      rectangles, because a scissor has hard edges where the stencil path
+      antialiases, and UI clips — scroll containers, cards, layout bounds — are
+      integer-aligned in device space anyway.
+
+      | 256 clips | before | buffers fixed | +scissor |
+      |---|---|---|---|
+      | Metal 512px | 13.06 | 6.70 | **2.29** |
+      | Pixel 512px | 178.3 | 110.6 | **19.0** |
+      | Pixel 1024px | 312.2 | 277.2 | **61.7** |
+
+      Metal is 5.7× faster overall, the Pixel 9.4× at 512px and 4.5× at
+      1024px. On Metal `clipped256` (2.29ms) now matches `oneclip256` (2.35ms),
+      which is the check that the per-group cost is genuinely gone rather than
+      merely reduced.
+
+      `TestRectClipPathClipsToItsRect` guards it with an oracle-free property:
+      draw a shape larger than the clip, and no pixel outside the rectangle may
+      be touched. Disabling the clip makes it fail with 49,152 leaked pixels.
+
+**Where this leaves the pipeline choice.** Render-pass wins every cell on Metal
+again. On the Pixel it now wins 512px/256 clips (19.0 vs 29.3) where compute
+led 4.8× before, while compute still leads the 64-clip cases and 1024px/256
+(34.3 vs 61.7) — by 1.7-2.8× rather than 8.2×. Mobile numbers vary run to run
+by up to 2×, so those margins are indicative, not decisive.
+
+- [ ] **The two pipelines disagree on clipped output by ~44% of inked pixels**,
+      and it predates all of this: 43.7% with the scissor fast path disabled,
+      41.6% with it on. One of them clips wrongly. That is a correctness bug
+      and it outranks any further tuning here.
 
 ### Earlier Metal-only decision, kept for the record
 

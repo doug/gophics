@@ -216,6 +216,37 @@ func harnessClipScene(size, n int) []harnessShape {
 	return out
 }
 
+// harnessOneClipScene draws n shapes under a single shared clip path object.
+//
+// Same shape count and same clipped area as harnessClipScene, but one clip
+// group instead of n, because drawClipEqual compares clip paths by pointer.
+// The difference between the two isolates what clipping actually costs: if
+// this is fast and the per-shape version is not, the cost is per clip group —
+// pipeline switches and stencil round-trips — rather than per clipped pixel.
+func harnessOneClipScene(size, n int) []harnessShape {
+	c := float64(size) / 2
+	inset := 10.0
+	clip := &gg.Path{}
+	clip.MoveTo(inset, inset)
+	clip.LineTo(float64(size)-inset, inset)
+	clip.LineTo(float64(size)-inset, float64(size)-inset)
+	clip.LineTo(inset, float64(size)-inset)
+	clip.Close()
+
+	out := make([]harnessShape, 0, n)
+	for i := 0; i < n; i++ {
+		r := float64(size) * 0.35
+		dx := float64((i%11)-5) * 4
+		p := &gg.Path{}
+		p.MoveTo(c-r+dx, c-r)
+		p.LineTo(c+r+dx, c)
+		p.LineTo(c-r+dx, c+r)
+		p.Close()
+		out = append(out, harnessShape{path: p, paint: solidPaint(i), clip: clip})
+	}
+	return out
+}
+
 // TestOffscreenHarnessDrivesBothPipelines checks the harness itself before any
 // timing is read from it.
 //
@@ -283,6 +314,7 @@ func BenchmarkPipelineOffscreen(b *testing.B) {
 		{"overlap256", harnessOverlapScene, 256},
 		{"clipped", harnessClipScene, 64},
 		{"clipped256", harnessClipScene, 256},
+		{"oneclip256", harnessOneClipScene, 256},
 	}
 
 	for _, size := range []int{512, 1024} {
@@ -371,4 +403,125 @@ func countHarnessInk(t *testing.T, h *offscreenHarness, size uint32) int {
 		}
 	}
 	return ink
+}
+
+// TestRectClipPathClipsToItsRect checks that a rectangular clip path actually
+// clips, now that such paths are rerouted from stencil geometry to a scissor
+// rect.
+//
+// The property is oracle-free and exactly what the optimisation must preserve:
+// draw a shape deliberately larger than the clip, and no pixel outside the
+// clip rectangle may be touched. A faulty fast path — wrong rectangle, wrong
+// coordinate space, silently no clip at all — fails this immediately, and none
+// of those would be caught by counting ink.
+//
+// Deliberately not a cross-pipeline comparison. The render-pass and compute
+// paths disagree on roughly 44% of inked pixels for clipped scenes, and that
+// predates this change: measured at 43.7% with the fast path disabled against
+// 41.6% with it on. One of them clips wrongly and it is worth finding out
+// which, but it is a separate defect and a comparison against it would be
+// measuring the wrong thing.
+func TestRectClipPathClipsToItsRect(t *testing.T) {
+	const size = 256
+	const inset = 64.0
+
+	clip := &gg.Path{}
+	clip.MoveTo(inset, inset)
+	clip.LineTo(size-inset, inset)
+	clip.LineTo(size-inset, size-inset)
+	clip.LineTo(inset, size-inset)
+	clip.Close()
+
+	// A shape covering the whole canvas, so every pixel outside the clip is a
+	// pixel the clip alone is responsible for rejecting.
+	shape := &gg.Path{}
+	shape.MoveTo(0, 0)
+	shape.LineTo(size, 0)
+	shape.LineTo(size, size)
+	shape.LineTo(0, size)
+	shape.Close()
+
+	h := newOffscreenHarness(t, size)
+	defer h.close()
+	if err := h.renderOnce(gg.PipelineModeRenderPass, []harnessShape{
+		{path: shape, paint: solidPaint(1), clip: clip},
+	}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	px := readHarnessPixels(t, h, size)
+	var inside, outside int
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			if px[(y*size+x)*4+3] == 0 {
+				continue
+			}
+			if float64(x) >= inset && float64(x) < size-inset &&
+				float64(y) >= inset && float64(y) < size-inset {
+				inside++
+			} else {
+				outside++
+			}
+		}
+	}
+
+	if inside == 0 {
+		t.Fatal("nothing drawn inside the clip — the clip rejected everything")
+	}
+	// A one-pixel boundary allowance: the rectangle is integer-aligned, but
+	// coverage at the very edge is a rounding question, not a clipping one.
+	if allowed := 4 * size; outside > allowed {
+		t.Errorf("%d pixels drawn outside the clip rectangle (allowing %d for the boundary) — "+
+			"the rectangular clip path is not clipping", outside, allowed)
+	}
+}
+
+// readHarnessPixels reads the offscreen target back as raw RGBA rows.
+func readHarnessPixels(t *testing.T, h *offscreenHarness, size uint32) []byte {
+	t.Helper()
+	dev := h.shared.Device()
+	bytesPerRow := (size*4 + 255) / 256 * 256
+	staging, err := dev.CreateBuffer(&wgpu.BufferDescriptor{
+		Label: "harness_pixels",
+		Size:  uint64(bytesPerRow) * uint64(size),
+		Usage: gputypes.BufferUsageMapRead | gputypes.BufferUsageCopyDst,
+	})
+	if err != nil {
+		t.Fatalf("readback buffer: %v", err)
+	}
+	defer staging.Release()
+
+	enc, err := dev.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{Label: "harness_pixels"})
+	if err != nil {
+		t.Fatalf("encoder: %v", err)
+	}
+	enc.CopyTextureToBuffer(h.tex, staging, []wgpu.BufferTextureCopy{{
+		BufferLayout: wgpu.ImageDataLayout{BytesPerRow: bytesPerRow, RowsPerImage: size},
+		TextureBase:  wgpu.ImageCopyTexture{Texture: h.tex},
+		Size:         wgpu.Extent3D{Width: size, Height: size, DepthOrArrayLayers: 1},
+	}})
+	cmd, err := enc.Finish()
+	if err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	if _, err := h.shared.Queue().Submit(cmd); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	total := uint64(bytesPerRow) * uint64(size)
+	if err := staging.Map(context.Background(), wgpu.MapModeRead, 0, total); err != nil {
+		t.Fatalf("map: %v", err)
+	}
+	rng, err := staging.MappedRange(0, total)
+	if err != nil {
+		t.Fatalf("mapped range: %v", err)
+	}
+	out := make([]byte, 0, int(size)*int(size)*4)
+	data := rng.Bytes()
+	for y := uint32(0); y < size; y++ {
+		out = append(out, data[y*bytesPerRow:y*bytesPerRow+size*4]...)
+	}
+	if err := staging.Unmap(); err != nil {
+		t.Logf("unmap: %v", err)
+	}
+	return out
 }

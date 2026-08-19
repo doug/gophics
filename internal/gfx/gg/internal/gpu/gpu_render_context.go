@@ -4,6 +4,7 @@ package gpu
 
 import (
 	"fmt"
+	"math"
 	"unsafe"
 
 	"github.com/doug/gophics/internal/gfx/gg"
@@ -274,7 +275,63 @@ func (rc *GPURenderContext) ClearClipRRect() {
 // and rendered to the depth buffer before content; content fragments test against
 // the clip depth so only pixels within the clipped region pass.
 func (rc *GPURenderContext) SetClipPath(path *gg.Path) {
+	// An axis-aligned rectangle is a scissor rect, not stencil work.
+	//
+	// The general path clip costs two pipeline switches and two stencil draws
+	// per clip group, inside the shared render pass. That is cheap enough on a
+	// desktop GPU and brutal on a tile-based one: on a Pixel, 256 distinct
+	// rectangular clips cost 110ms against 15ms for the same shapes and the
+	// same clipped area under a single clip — 7.5x, entirely from group count.
+	// A scissor rect costs a state change.
+	//
+	// Only integer-aligned rectangles take this path. A scissor has hard edges
+	// while the stencil clip antialiases, so a fractional rectangle keeps the
+	// general path rather than silently losing edge quality. UI clips —
+	// scroll containers, cards, layout bounds — are integer-aligned in device
+	// space, which is the case worth catching.
+	if r, ok := clipPathAsPixelRect(path); ok {
+		rc.SetClipRect(r[0], r[1], r[2], r[3])
+		rc.clipPath = nil
+		return
+	}
 	rc.clipPath = path
+}
+
+// clipPathAsPixelRect reports whether the path is an axis-aligned rectangle on
+// integer pixel bounds, and returns it as a scissor rect.
+func clipPathAsPixelRect(path *gg.Path) ([4]uint32, bool) {
+	if path == nil {
+		return [4]uint32{}, false
+	}
+	shape := gg.DetectShape(path)
+	if shape.Kind != gg.ShapeRect {
+		return [4]uint32{}, false
+	}
+
+	x0 := shape.CenterX - shape.Width/2
+	y0 := shape.CenterY - shape.Height/2
+	x1 := shape.CenterX + shape.Width/2
+	y1 := shape.CenterY + shape.Height/2
+
+	// Reject anything off the pixel grid, and anything with a negative origin:
+	// a scissor cannot express either.
+	const eps = 1e-6
+	for _, v := range []float64{x0, y0, x1, y1} {
+		if math.Abs(v-math.Round(v)) > eps {
+			return [4]uint32{}, false
+		}
+	}
+	if x0 < 0 || y0 < 0 || x1 <= x0 || y1 <= y0 {
+		return [4]uint32{}, false
+	}
+
+	//nolint:gosec // bounds are non-negative and checked above
+	return [4]uint32{
+		uint32(math.Round(x0)),
+		uint32(math.Round(y0)),
+		uint32(math.Round(x1 - x0)),
+		uint32(math.Round(y1 - y0)),
+	}, true
 }
 
 // ClearClipPath removes the arbitrary clip path, restoring full rendering.
