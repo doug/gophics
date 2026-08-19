@@ -441,23 +441,42 @@ func TestRectClipPathClipsToItsRect(t *testing.T) {
 	shape.LineTo(0, size)
 	shape.Close()
 
-	h := newOffscreenHarness(t, size)
+	for _, mode := range []struct {
+		name string
+		mode gg.PipelineMode
+	}{
+		{"renderpass", gg.PipelineModeRenderPass},
+		{"compute", gg.PipelineModeCompute},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			checkClipConfinement(t, size, inset, shape, clip, mode.mode)
+		})
+	}
+}
+
+// checkClipConfinement asserts nothing is drawn outside the clip rectangle.
+func checkClipConfinement(t *testing.T, size int, inset float64, shape, clip *gg.Path, mode gg.PipelineMode) {
+	t.Helper()
+
+	//nolint:gosec // bounded test size
+	h := newOffscreenHarness(t, uint32(size))
 	defer h.close()
-	if err := h.renderOnce(gg.PipelineModeRenderPass, []harnessShape{
+	if err := h.renderOnce(mode, []harnessShape{
 		{path: shape, paint: solidPaint(1), clip: clip},
 	}); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 
-	px := readHarnessPixels(t, h, size)
+	//nolint:gosec // bounded test size
+	px := readHarnessPixels(t, h, uint32(size))
 	var inside, outside int
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
 			if px[(y*size+x)*4+3] == 0 {
 				continue
 			}
-			if float64(x) >= inset && float64(x) < size-inset &&
-				float64(y) >= inset && float64(y) < size-inset {
+			if float64(x) >= inset && float64(x) < float64(size)-inset &&
+				float64(y) >= inset && float64(y) < float64(size)-inset {
 				inside++
 			} else {
 				outside++
@@ -524,4 +543,51 @@ func readHarnessPixels(t *testing.T, h *offscreenHarness, size uint32) []byte {
 		t.Logf("unmap: %v", err)
 	}
 	return out
+}
+
+// TestClippedOutputAgreesAcrossPipelines checks the two pipelines now produce
+// the same clipped picture.
+//
+// They used to differ on ~44% of inked pixels, because the compute path was
+// handed only the path and the paint and rendered without any clip at all.
+// This is the test that says the discrepancy is gone rather than merely
+// smaller, and it needs the cross-pipeline comparison to say it: the
+// confinement property in TestRectClipPathClipsToItsRect proves a clip is
+// applied, not that it is applied in the same place.
+func TestClippedOutputAgreesAcrossPipelines(t *testing.T) {
+	const size = 256
+	scene := harnessClipScene(size, 32)
+
+	var imgs [2][]byte
+	for i, mode := range []gg.PipelineMode{gg.PipelineModeRenderPass, gg.PipelineModeCompute} {
+		h := newOffscreenHarness(t, size)
+		if err := h.renderOnce(mode, scene); err != nil {
+			h.close()
+			t.Fatalf("render: %v", err)
+		}
+		imgs[i] = readHarnessPixels(t, h, size)
+		h.close()
+	}
+
+	var diff, inked int
+	for i := 0; i+3 < len(imgs[0]) && i+3 < len(imgs[1]); i += 4 {
+		if imgs[0][i+3] != 0 || imgs[1][i+3] != 0 {
+			inked++
+		}
+		for c := 0; c < 4; c++ {
+			d := int(imgs[0][i+c]) - int(imgs[1][i+c])
+			if d < -8 || d > 8 {
+				diff++
+				break
+			}
+		}
+	}
+	if inked == 0 {
+		t.Fatal("neither pipeline drew anything — the comparison would be vacuous")
+	}
+	// The two rasterise independently, so edge pixels differ; a clip applied
+	// to the wrong region is not a few-percent effect.
+	if pct := 100 * float64(diff) / float64(inked); pct > 5 {
+		t.Errorf("clipped output differs on %.1f%% of inked pixels (%d of %d)", pct, diff, inked)
+	}
 }

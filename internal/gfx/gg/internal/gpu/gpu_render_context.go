@@ -334,6 +334,23 @@ func clipPathAsPixelRect(path *gg.Path) ([4]uint32, bool) {
 	}, true
 }
 
+// hasActiveClip reports whether any clip is in force.
+//
+// The compute path is handed only the path and the paint — FillPath(target,
+// path, paint) — so clipRect, clipRRect and clipPath never reach it and it
+// renders unclipped. That is not a small discrepancy: a full-canvas shape
+// under a centred clip came out with 49,152 pixels outside the clip, exactly
+// the count produced by removing the clip altogether, and it is most of why
+// the two pipelines disagreed on 44% of inked pixels for clipped scenes.
+//
+// Until the compute path encodes clips into its scene, a clipped draw goes
+// through the render-pass path, which honours them. It also makes the earlier
+// clip benchmarks comparable again: compute was winning those partly by
+// skipping the clipping.
+func (rc *GPURenderContext) hasActiveClip() bool {
+	return rc.clipRect != nil || rc.clipRRect != nil || rc.clipPath != nil
+}
+
 // ClearClipPath removes the arbitrary clip path, restoring full rendering.
 func (rc *GPURenderContext) ClearClipPath() {
 	rc.clipPath = nil
@@ -850,7 +867,7 @@ func (rc *GPURenderContext) FillPath(target gg.GPURenderTarget, path *gg.Path, p
 	rc.sceneStats.ShapeCount++
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute {
+	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()
@@ -899,7 +916,7 @@ func (rc *GPURenderContext) StrokePath(target gg.GPURenderTarget, path *gg.Path,
 	rc.sceneStats.ShapeCount++
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute {
+	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()
@@ -948,7 +965,7 @@ func (rc *GPURenderContext) FillShape(target gg.GPURenderTarget, shape gg.Detect
 	rc.sceneStats.ShapeCount++
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute {
+	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()
@@ -992,7 +1009,7 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 	}
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
-	if rc.pipelineMode == gg.PipelineModeCompute {
+	if rc.pipelineMode == gg.PipelineModeCompute && !rc.hasActiveClip() {
 		rc.shared.mu.Lock()
 		va := rc.shared.velloAccel
 		rc.shared.mu.Unlock()

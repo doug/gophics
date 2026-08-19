@@ -1123,10 +1123,40 @@ led 4.8× before, while compute still leads the 64-clip cases and 1024px/256
 (34.3 vs 61.7) — by 1.7-2.8× rather than 8.2×. Mobile numbers vary run to run
 by up to 2×, so those margins are indicative, not decisive.
 
-- [ ] **The two pipelines disagree on clipped output by ~44% of inked pixels**,
-      and it predates all of this: 43.7% with the scissor fast path disabled,
-      41.6% with it on. One of them clips wrongly. That is a correctness bug
-      and it outranks any further tuning here.
+- [x] **Found and fixed it: the compute path ignored clips entirely.**
+      `GPURenderContext.FillPath` hands the compute path only the target, the
+      path and the paint — `clipRect`, `clipRRect` and `clipPath` never reach
+      it — so it rendered every clipped scene unclipped.
+
+      An oracle-free property settled which pipeline was wrong in one run: draw
+      a shape larger than the clip and count pixels outside it. Render-pass
+      passed; compute drew **49,152 pixels outside the clip, exactly the count
+      produced by removing the clip altogether**. Until compute encodes clips
+      into its scene, a clipped draw goes through the render-pass path.
+      Cross-pipeline agreement on clipped scenes went from ~44% differing to
+      under 5%.
+
+      **This invalidates the clip benchmarks above, and they should be struck
+      rather than trusted.** Compute's 4.8× win at 512px/256 clips and 8.2× at
+      1024px/256 clips on the Pixel were measured against a pipeline that was
+      not doing the clipping. With the fix, both arms of every clipped case
+      route to render-pass and report the same time — 1.89ms against 1.97ms at
+      512px/256 clips on Metal — which is the confirmation that the comparison
+      is now vacuous rather than favourable.
+
+      What survives from that work is the render-pass clip optimisation itself,
+      which is measured against its own earlier self and unaffected: 13.06ms →
+      2.29ms on Metal, 312ms → 61.7ms on the Pixel.
+
+      The lesson is the one this whole milestone keeps teaching. A benchmark
+      arm that silently does less work reports a win, and nothing about the
+      timing says so — it took a correctness property, not a faster number, to
+      notice.
+
+- [ ] **Encode clips in the compute pipeline.** `coarse.wgsl` already has
+      `CMD_BEGIN_CLIP`/`CMD_END_CLIP` and the config carries `NumClips`, so the
+      machinery is partly there and simply is not fed. Until then compute
+      cannot be compared on clipped content at all, which is most of a real UI.
 
 ### Earlier Metal-only decision, kept for the record
 
