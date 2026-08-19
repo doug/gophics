@@ -78,6 +78,9 @@ const depthClipUniformSize = 16
 //	  Phase 1: reuses stencil fill pipeline (IncrWrap/DecrWrap, no depth write)
 //	  Phase 2: depthCoverPipeline (stencil NotEqual, depth write, stencil zero)
 type DepthClipPipeline struct {
+	// bufPool holds vertex buffers reused across clip groups and frames.
+	bufPool []*wgpu.Buffer
+
 	device      *wgpu.Device
 	queue       *wgpu.Queue
 	sampleCount uint32 // MSAA sample count (4 or 1), from GPUShared
@@ -298,12 +301,13 @@ func (p *DepthClipPipeline) ensurePipeline() error { //nolint:funlen // GPU pipe
 // Contains both the fan tessellation vertices (Phase 1: stencil fill) and
 // the cover quad vertices (Phase 2: depth write).
 type DepthClipResources struct {
-	vertBuf    *wgpu.Buffer    // fan triangle vertices for stencil fill
-	coverBuf   *wgpu.Buffer    // bounding box quad vertices for cover pass
-	bindGroup  *wgpu.BindGroup // uniform bind group (viewport)
-	vertCount  uint32          // number of fan vertices (Phase 1)
-	coverCount uint32          // number of cover quad vertices (Phase 2, always 6)
-	owned      bool            // if true, vertBuf and coverBuf are per-call (must be released)
+	pool       *DepthClipPipeline // returns buffers on Release; nil means free them
+	vertBuf    *wgpu.Buffer       // fan triangle vertices for stencil fill
+	coverBuf   *wgpu.Buffer       // bounding box quad vertices for cover pass
+	bindGroup  *wgpu.BindGroup    // uniform bind group (viewport)
+	vertCount  uint32             // number of fan vertices (Phase 1)
+	coverCount uint32             // number of cover quad vertices (Phase 2, always 6)
+	owned      bool               // if true, vertBuf and coverBuf are per-call (must be released)
 }
 
 // Release frees per-call GPU buffers if owned.
@@ -311,12 +315,22 @@ func (r *DepthClipResources) Release() {
 	if r == nil || !r.owned {
 		return
 	}
+	// Returned to the owning pipeline's pool when there is one, so the next
+	// frame reuses them instead of allocating again.
 	if r.vertBuf != nil {
-		r.vertBuf.Release()
+		if r.pool != nil {
+			r.pool.releaseBuffer(r.vertBuf)
+		} else {
+			r.vertBuf.Release()
+		}
 		r.vertBuf = nil
 	}
 	if r.coverBuf != nil {
-		r.coverBuf.Release()
+		if r.pool != nil {
+			r.pool.releaseBuffer(r.coverBuf)
+		} else {
+			r.coverBuf.Release()
+		}
 		r.coverBuf = nil
 	}
 }
@@ -339,16 +353,13 @@ func (p *DepthClipPipeline) BuildClipResources(
 		return nil, nil //nolint:nilnil // empty clip path, nothing to draw
 	}
 
-	// Upload fan vertices (Phase 1: stencil fill).
-	if err := p.uploadFanVertices(); err != nil {
-		return nil, err
-	}
-
-	// Upload cover quad vertices (Phase 2: depth write via stencil test).
-	if err := p.uploadCoverQuad(); err != nil {
-		return nil, err
-	}
-
+	// The fan and cover vertices used to be uploaded to pipeline-level buffers
+	// here as well, described as staging that the owned buffers were copied
+	// from. There was no copy: the owned buffers below are written straight
+	// from the tessellator, and nothing ever bound the pipeline-level ones. So
+	// each clip group paid two full buffer uploads, plus their grow-on-demand
+	// reallocation, for data no draw could read.
+	//
 	// Upload uniforms (viewport dimensions).
 	if err := p.uploadUniforms(w, h); err != nil {
 		return nil, err
@@ -369,46 +380,42 @@ func (p *DepthClipPipeline) BuildClipResources(
 		p.bindGroup = bg
 	}
 
-	// Create per-call vertex buffers so multiple groups don't overwrite each other.
-	// The pipeline-level buffers (p.vertBuf, p.coverBuf) are staging — copy to owned buffers.
-	ownedVertBuf, err := p.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "depth_clip_fan_owned",
-		Size:  uint64(len(p.tessellator.Vertices())) * 4, //nolint:gosec // bounded
-		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
-	})
+	// Each group needs its own vertex data live at once, so the buffers cannot
+	// be shared within a frame — but they can be reused across frames. Creating
+	// and destroying two per group meant 512 buffer creations for a 256-clip
+	// scene, every frame, which is most of what made clip-heavy content
+	// expensive on a tile-based GPU.
+	ownedVertBuf, err := p.acquireBuffer(uint64(len(p.tessellator.Vertices())) * 4) //nolint:gosec // bounded
 	if err != nil {
-		return nil, fmt.Errorf("create owned fan buffer: %w", err)
+		return nil, fmt.Errorf("acquire fan buffer: %w", err)
 	}
 	fanData := make([]byte, len(p.tessellator.Vertices())*4)
 	for i, v := range p.tessellator.Vertices() {
 		binary.LittleEndian.PutUint32(fanData[i*4:], math.Float32bits(v))
 	}
 	if wErr := p.queue.WriteBuffer(ownedVertBuf, 0, fanData); wErr != nil {
-		ownedVertBuf.Release()
+		p.releaseBuffer(ownedVertBuf)
 		return nil, fmt.Errorf("write owned fan buffer: %w", wErr)
 	}
 
 	coverQuad := p.tessellator.CoverQuad()
-	ownedCoverBuf, err := p.device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label: "depth_clip_cover_owned",
-		Size:  12 * 4,
-		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
-	})
+	ownedCoverBuf, err := p.acquireBuffer(12 * 4)
 	if err != nil {
-		ownedVertBuf.Release()
-		return nil, fmt.Errorf("create owned cover buffer: %w", err)
+		p.releaseBuffer(ownedVertBuf)
+		return nil, fmt.Errorf("acquire cover buffer: %w", err)
 	}
 	coverData := make([]byte, 12*4)
 	for i, v := range coverQuad {
 		binary.LittleEndian.PutUint32(coverData[i*4:], math.Float32bits(v))
 	}
 	if wErr := p.queue.WriteBuffer(ownedCoverBuf, 0, coverData); wErr != nil {
-		ownedVertBuf.Release()
-		ownedCoverBuf.Release()
+		p.releaseBuffer(ownedVertBuf)
+		p.releaseBuffer(ownedCoverBuf)
 		return nil, fmt.Errorf("write owned cover buffer: %w", wErr)
 	}
 
 	return &DepthClipResources{
+		pool:       p,
 		vertBuf:    ownedVertBuf,
 		coverBuf:   ownedCoverBuf,
 		bindGroup:  p.bindGroup,
@@ -558,6 +565,7 @@ func (p *DepthClipPipeline) RecordDraw(rp *wgpu.RenderPassEncoder, res *DepthCli
 
 // Destroy releases all GPU resources held by the depth clip pipeline.
 func (p *DepthClipPipeline) Destroy() {
+	p.destroyBufPool()
 	if p.bindGroup != nil {
 		p.bindGroup.Release()
 		p.bindGroup = nil
@@ -596,4 +604,67 @@ func (p *DepthClipPipeline) Destroy() {
 		p.shader.Release()
 		p.shader = nil
 	}
+}
+
+// bufPool is a free list of vertex buffers reused across clip groups and
+// frames.
+//
+// Clip resources cannot share a buffer within a frame — every group's vertices
+// have to be live at once — but they need not be reallocated each time. A
+// 256-clip scene was creating and destroying 512 buffers per frame, and on a
+// tile-based GPU that dominated the cost of clipped content.
+//
+// Buffers are matched by capacity, smallest that fits, and never shrink. Clip
+// fans are small and their sizes repeat frame to frame, so the list stays
+// short in practice.
+const depthClipMinBufSize = 4096
+
+// acquireBuffer returns a pooled buffer of at least size bytes, or a new one.
+func (p *DepthClipPipeline) acquireBuffer(size uint64) (*wgpu.Buffer, error) {
+	if size < depthClipMinBufSize {
+		size = depthClipMinBufSize
+	}
+
+	best := -1
+	for i, b := range p.bufPool {
+		if b.Size() < size {
+			continue
+		}
+		if best < 0 || b.Size() < p.bufPool[best].Size() {
+			best = i
+		}
+	}
+	if best >= 0 {
+		buf := p.bufPool[best]
+		p.bufPool = append(p.bufPool[:best], p.bufPool[best+1:]...)
+		return buf, nil
+	}
+
+	return p.device.CreateBuffer(&wgpu.BufferDescriptor{
+		Label: "depth_clip_verts",
+		Size:  size,
+		Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
+	})
+}
+
+// releaseBuffer returns a buffer to the pool.
+func (p *DepthClipPipeline) releaseBuffer(buf *wgpu.Buffer) {
+	if buf == nil {
+		return
+	}
+	// Bounded so a pathological frame cannot pin memory indefinitely.
+	const maxPooled = 512
+	if len(p.bufPool) >= maxPooled {
+		buf.Release()
+		return
+	}
+	p.bufPool = append(p.bufPool, buf)
+}
+
+// destroyBufPool frees every pooled buffer.
+func (p *DepthClipPipeline) destroyBufPool() {
+	for _, b := range p.bufPool {
+		b.Release()
+	}
+	p.bufPool = nil
 }

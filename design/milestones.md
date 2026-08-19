@@ -1056,9 +1056,39 @@ count is the signal that predicts the winner on both.**
 
 - [ ] Reweight `SelectPipeline` around clip depth and clip count rather than
       shape count, and re-enable `gg.AutoSelectCompute` behind it.
-- [ ] Investigate render-pass's clip cost directly: 312ms for 256 clips at
-      1024px on mobile is pathological, and fixing it may be worth more than
-      the pipeline choice.
+- [x] **Fixed render-pass's clip cost.** It was worth more than the pipeline
+      choice, as suspected. Two problems in `DepthClipPipeline.BuildClipResources`,
+      which runs once per clip group:
+
+      **Two of the three uploads were dead.** `uploadFanVertices` and
+      `uploadCoverQuad` wrote the tessellated geometry into pipeline-level
+      buffers described as "staging — copy to owned buffers". There is no copy:
+      the owned buffers are written straight from the tessellator, and nothing
+      ever bound the staging ones. So every clip group paid two full buffer
+      uploads, plus their grow-on-demand reallocation, for data no draw could
+      read.
+
+      **And the per-group buffers were created and destroyed every frame.** Two
+      per group, so 512 buffer creations per frame for a 256-clip scene. They
+      cannot be shared within a frame — each group's vertices must be live at
+      once — but they can be pooled across frames, which is what
+      `acquireBuffer`/`releaseBuffer` now do.
+
+      On Metal, measured in isolation: 512px 256 clips **13.06ms → 6.70ms**,
+      1024px 256 clips **13.63ms → 7.58ms**, and the 64-clip cases about 1.6×.
+      A full-matrix run reports 8.0ms and 9.3ms for the same two cells —
+      run-to-run variance on a shared machine is real, so treat these as
+      "roughly halved" rather than to two decimals.
+
+      **This flips the Metal conclusion back.** Render-pass now wins every cell
+      on Metal, including the clip-heavy ones that were compute's only
+      advantage there.
+
+- [ ] Re-measure on the Pixel. The mobile numbers are what motivated this —
+      312ms for 256 clips at 1024px — and they are the ones that decide whether
+      compute still has a case. The device was unplugged before this could be
+      run, so the mobile column above is *pre-fix* and should not be read as
+      current.
 
 ### Earlier Metal-only decision, kept for the record
 
