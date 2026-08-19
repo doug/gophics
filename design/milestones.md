@@ -1203,11 +1203,38 @@ by up to 2×, so those margins are indicative, not decisive.
       `computeClipSupported` is written and unconsulted; flipping the condition
       at the four compute branches is the whole of re-enabling it.
 
-- [ ] Find why a clip group containing several draws renders wrongly. Start
-      with two disjoint squares under one clip and read the PTCL the coarse
-      stage emits for a tile each square occupies — the stage differ can be
-      extended to `clip_inps` and the fixed-up draw monoids, which is where the
-      CPU oracle (`clipLeafScan`) applies directly.
+- [x] **That "several draws" symptom was my wiring, and the stage is correct.**
+      Comparing against `RasterizeSceneDefPTCL` — the CPU implementation of the
+      same algorithm, clips included — rather than against the render-pass
+      path settled it in one run. Feeding elements straight to
+      `dispatchComputeScene`: **0.0% difference at 1, 2, 4 and 8 draws under
+      one clip.** The GPU clip stage matches its oracle exactly.
+
+      The divergence was in `computeClipPath`, which rebuilt the rectangle
+      **on every draw** for a scissor clip. The accelerator groups draws by
+      clip-path *identity*, so a fresh pointer each time wrapped every draw in
+      its own BeginClip/EndClip — one clip layer became eight. Caching the
+      converted path took the harness path to 0.0% as well. The pipeline was
+      never wrong; the wiring built a different scene than intended.
+
+      Choosing the right oracle is the whole lesson here. Compared against
+      render-pass, this looked like "compute clips wrongly with several draws".
+      Compared against the CPU port of its own algorithm, it was exact, and the
+      remaining difference had to be somewhere else.
+
+- [ ] **Multiple clip *groups* still diverge, and it is not `clip_leaf`.** One
+      group with many draws is exact; sequential Begin/Draw/End groups are not:
+      0.0% at one group, 2.1% at two, 21.3% at four, 23.0% at eight, measured
+      against the CPU port. Since `clip_leaf` is exact for the single-group
+      case and the CPU runs the same pairing algorithm, the fault is in the
+      existing clip-layer handling — `coarse`'s `CMD_BEGIN_CLIP`/`CMD_END_CLIP`
+      emission and `fine`'s blend stack. The jump at four groups is suggestive:
+      `BLEND_STACK_SPLIT` is 4, the point where `fine` spills the blend stack
+      to `blend_spill`.
+
+      Clipped draws stay on render-pass until that is fixed.
+      `computeClipSupported` is written and unconsulted; flipping the condition
+      at the four compute branches re-enables it.
 
 ### Earlier Metal-only decision, kept for the record
 

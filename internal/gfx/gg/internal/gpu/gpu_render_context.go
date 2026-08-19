@@ -75,6 +75,11 @@ type drawCommand struct {
 	clipRRect *ClipParams // analytic RRect clip; nil = no RRect clip
 	clipPath  *gg.Path    // arbitrary clip path for depth clipping; nil = no clip
 
+	// clipRectPath caches the path form of clipRect for the compute path,
+	// which groups draws by clip-path identity.
+	clipRectPath    *gg.Path
+	clipRectPathFor [4]uint32
+
 	// Layer group markers (drawCmdPushLayer / drawCmdPopLayer). PushLayer opens
 	// an offscreen opacity/blend group (Skia saveLayer); PopLayer composites it.
 	// The Flush-time layer driver partitions pendingDraws on these markers.
@@ -138,6 +143,13 @@ func drawClipEqual(a, b *drawCommand) bool {
 // GPURenderContext references the shared GPUShared for device, pipelines,
 // and atlas engines but never owns them.
 type GPURenderContext struct {
+	// clipRectPath caches the path form of clipRect for the compute path,
+	// which groups draws by clip-path identity. Rebuilding it per draw handed
+	// the accelerator a fresh pointer each time and split one clip layer into
+	// many.
+	clipRectPath    *gg.Path
+	clipRectPathFor [4]uint32
+
 	shared *GPUShared // reference to shared resources (NOT owned)
 
 	// Per-context render session (owns frame textures: MSAA, depth, resolve).
@@ -374,7 +386,17 @@ func (rc *GPURenderContext) computeClipPath() (*gg.Path, bool) {
 		return nil, true
 	}
 
-	r := rc.clipRect
+	// Cached, because the accelerator groups draws by clip-path *identity*.
+	// Rebuilding the rectangle each call handed it a fresh pointer per draw,
+	// so every draw was wrapped in its own BeginClip/EndClip instead of
+	// sharing one clip layer. The output was correct for one or two draws and
+	// wrong from four — the pipeline was fine, the wiring produced a different
+	// scene than intended.
+	r := *rc.clipRect
+	if rc.clipRectPath != nil && rc.clipRectPathFor == r {
+		return rc.clipRectPath, true
+	}
+
 	x0, y0 := float64(r[0]), float64(r[1])
 	x1, y1 := x0+float64(r[2]), y0+float64(r[3])
 	p := gg.NewPath()
@@ -383,6 +405,7 @@ func (rc *GPURenderContext) computeClipPath() (*gg.Path, bool) {
 	p.LineTo(x1, y1)
 	p.LineTo(x0, y1)
 	p.Close()
+	rc.clipRectPath, rc.clipRectPathFor = p, r
 	return p, true
 }
 
