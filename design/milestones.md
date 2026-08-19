@@ -1304,9 +1304,25 @@ of the same cells vary by 2–3× — `512px clipped256/renderpass` measured 26.
 render-pass ahead in every cell measured, clip-heavy included. Thermal state
 and screen wakefulness both move these numbers materially.
 
-- [ ] `SelectPipeline` still switches on shape count, which every measurement
-      on both backends contradicts. It is unreachable while
-      `gg.AutoSelectCompute` is false, so this is tidying rather than a bug.
+- [x] `SelectPipeline` switched on shape count, which every measurement on both
+      backends contradicts. It was unreachable while `gg.AutoSelectCompute` was
+      false, but "wrong and currently unreachable" is one edit away from "wrong
+      and shipping", and the flag was documented as an opt-in — so the way to
+      turn it on was also the way to make every Auto caller slower.
+
+      `SelectPipeline` now returns `PipelineModeRenderPass` for every scene, and
+      `gg.AutoSelectCompute` is gone: it gated nothing once the policy was
+      correct, and an exported knob whose only effect is to select the slower
+      path is a footgun rather than a feature. `effectivePipelineMode` passes
+      `hasComputeSupport = false` and no longer takes `shared.mu` on each flush
+      to probe an accelerator whose answer it ignores.
+
+      Compute stays reachable through `PipelineModeCompute`, which is how the
+      golden tests and benchmarks already drive it; `TestVelloComputeGolden`
+      still passes pixel-exact on Metal and on the Pixel. Two mutation checks
+      confirm the guards bite: reintroducing the shape-count threshold fails
+      the `gg` tests, and rewiring `effectivePipelineMode` past a correct
+      `SelectPipeline` fails the `gpu` test — neither layer alone catches both.
 ### Earlier Metal-only decision, kept for the record
 
 **Decision: render-pass stays the default; compute stays available, not

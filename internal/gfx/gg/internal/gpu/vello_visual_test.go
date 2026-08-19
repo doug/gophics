@@ -503,10 +503,10 @@ func scaleImage(img image.Image, scale int) *image.RGBA {
 }
 
 // TestVelloGoldenComparison is deprecated.
-// Use TestVelloAgainstGolden in golden_test.go instead.
+// Use TestVelloComputeGolden in golden_test.go instead.
 // This test is kept for backward compatibility but skipped.
 func TestVelloGoldenComparison(t *testing.T) {
-	t.Skip("Deprecated: use TestVelloAgainstGolden instead (see golden_test.go)")
+	t.Skip("Deprecated: use TestVelloComputeGolden instead (see golden_test.go)")
 }
 
 // TestVelloSmokeSquare replicates Vello's smoke test: filled_square

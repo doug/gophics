@@ -446,12 +446,14 @@ func TestVelloComputeGolden(t *testing.T) {
 		t.Skip("compute pipeline not available")
 	}
 
-	// Deliberately NOT gated on gg.AutoSelectCompute. Whether the compute path
-	// is correct and whether it is fast enough to be chosen automatically are
-	// different questions, and tying the correctness check to the performance
-	// policy is how this pipeline hid four bugs behind each other: it would not
-	// build, so CanCompute() was false, so these cases skipped, so nobody
-	// learned it did not build. The gate now is availability alone.
+	// Deliberately NOT gated on the pipeline-selection policy. Whether the
+	// compute path is correct and whether it is fast enough to be chosen
+	// automatically are different questions, and tying the correctness check to
+	// the performance policy is how this pipeline hid four bugs behind each
+	// other: it would not build, so CanCompute() was false, so these cases
+	// skipped, so nobody learned it did not build. SelectPipeline now returns
+	// RenderPass for every scene, which makes that coupling worse, not better:
+	// it would skip these cases permanently. The gate is availability alone.
 
 	tests := computeGoldenTests()
 

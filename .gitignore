@@ -59,3 +59,7 @@ docs/source/
 # gomobile bind output. These were tracked and reached ~200 MB across their
 # versions before being purged from history; package/ios.sh regenerates them.
 examples/*/ios/*.xcframework/
+
+# Untracked debug dumps from TestVelloComputeGolden (regenerated each run).
+# Other files under internal/gfx/gg/tmp/ are tracked golden references.
+internal/gfx/gg/tmp/compute_*.png

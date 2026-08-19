@@ -1764,11 +1764,11 @@ func (rc *GPURenderContext) uploadPixmapToView(target gg.GPURenderTarget) error 
 func (rc *GPURenderContext) effectivePipelineMode() gg.PipelineMode {
 	mode := rc.pipelineMode
 	if mode == gg.PipelineModeAuto {
-		rc.shared.mu.Lock()
-		hasCompute := gg.AutoSelectCompute &&
-			rc.shared.velloAccel != nil && rc.shared.velloAccel.CanCompute()
-		rc.shared.mu.Unlock()
-		mode = gg.SelectPipeline(rc.sceneStats, hasCompute)
+		// SelectPipeline returns RenderPass for every scene; its comment
+		// carries the measurements. Compute is reached only by asking for
+		// PipelineModeCompute explicitly, so Auto no longer probes the
+		// accelerator -- that probe took shared.mu on every flush.
+		mode = gg.SelectPipeline(rc.sceneStats, false)
 	}
 	return mode
 }

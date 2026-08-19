@@ -67,66 +67,62 @@ func TestWithPipelineMode(t *testing.T) {
 	}
 }
 
-func TestSelectPipelineNoCompute(t *testing.T) {
-	// Without compute support, always returns RenderPass regardless of stats.
-	stats := SceneStats{ShapeCount: 100, ClipDepth: 10, OverlapFactor: 0.9}
-	got := SelectPipeline(stats, false)
-	if got != PipelineModeRenderPass {
-		t.Errorf("SelectPipeline(complex, noCompute) = %v, want RenderPass", got)
+// SelectPipeline returns RenderPass for every scene. These cases are the ones
+// that used to return Compute — >50 shapes, deep clips, high overlap, medium
+// complexity — kept as cases precisely because they are where the old
+// shape-count heuristic diverged. The cross-pipeline benchmark in
+// pipeline_mode.go measured render-pass ahead in all of them.
+func TestSelectPipelineAlwaysRenderPass(t *testing.T) {
+	tests := []struct {
+		name  string
+		stats SceneStats
+	}{
+		{"simple", SceneStats{ShapeCount: 5, ClipDepth: 1}},
+		{"complex 60 shapes", SceneStats{ShapeCount: 60}},
+		{"deep clips", SceneStats{ShapeCount: 20, ClipDepth: 5}},
+		{"high overlap", SceneStats{ShapeCount: 30, OverlapFactor: 0.7}},
+		{"text heavy", SceneStats{ShapeCount: 10, TextCount: 20}},
+		{"medium complexity", SceneStats{ShapeCount: 30, PathCount: 10, ClipDepth: 2}},
+		{"zero", SceneStats{}},
+	}
+
+	for _, tt := range tests {
+		for _, hasCompute := range []bool{false, true} {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := SelectPipeline(tt.stats, hasCompute); got != PipelineModeRenderPass {
+					t.Errorf("SelectPipeline(%+v, hasCompute=%v) = %v, want RenderPass",
+						tt.stats, hasCompute, got)
+				}
+			})
+		}
 	}
 }
 
-func TestSelectPipelineSimpleScene(t *testing.T) {
-	// < 10 shapes and shallow clips -> RenderPass
-	stats := SceneStats{ShapeCount: 5, ClipDepth: 1}
-	got := SelectPipeline(stats, true)
-	if got != PipelineModeRenderPass {
-		t.Errorf("SelectPipeline(simple) = %v, want RenderPass", got)
-	}
-}
-
-func TestSelectPipelineComplexScene(t *testing.T) {
-	// > 50 shapes -> Compute
-	stats := SceneStats{ShapeCount: 60}
-	got := SelectPipeline(stats, true)
-	if got != PipelineModeCompute {
-		t.Errorf("SelectPipeline(60 shapes) = %v, want Compute", got)
-	}
-}
-
-func TestSelectPipelineDeepClips(t *testing.T) {
-	// ClipDepth > 3 -> Compute
-	stats := SceneStats{ShapeCount: 20, ClipDepth: 5}
-	got := SelectPipeline(stats, true)
-	if got != PipelineModeCompute {
-		t.Errorf("SelectPipeline(deep clips) = %v, want Compute", got)
-	}
-}
-
-func TestSelectPipelineHighOverlap(t *testing.T) {
-	// OverlapFactor > 0.5 -> Compute
-	stats := SceneStats{ShapeCount: 30, OverlapFactor: 0.7}
-	got := SelectPipeline(stats, true)
-	if got != PipelineModeCompute {
-		t.Errorf("SelectPipeline(high overlap) = %v, want Compute", got)
-	}
-}
-
-func TestSelectPipelineTextHeavy(t *testing.T) {
-	// TextRatio > 0.6 -> RenderPass (MSDF Text tier)
-	stats := SceneStats{ShapeCount: 10, TextCount: 20}
-	got := SelectPipeline(stats, true)
-	if got != PipelineModeRenderPass {
-		t.Errorf("SelectPipeline(text heavy) = %v, want RenderPass", got)
-	}
-}
-
-func TestSelectPipelineMediumComplexity(t *testing.T) {
-	// 10-50 shapes, no text, moderate clips -> Compute (default)
-	stats := SceneStats{ShapeCount: 30, PathCount: 10, ClipDepth: 2}
-	got := SelectPipeline(stats, true)
-	if got != PipelineModeCompute {
-		t.Errorf("SelectPipeline(medium) = %v, want Compute", got)
+// Auto must never route to compute. The table above names specific scenes; this
+// sweeps the whole input space the heuristic used to branch on, so a threshold
+// reintroduced anywhere in that space fails here rather than silently costing
+// every user of PipelineModeAuto a 1.4x-7x slowdown.
+func TestSelectPipelineNeverSelectsCompute(t *testing.T) {
+	for _, shapes := range []int{0, 1, 9, 10, 49, 50, 51, 500, 100000} {
+		for _, clips := range []int{0, 1, 3, 4, 64} {
+			for _, text := range []int{0, 1, 1000} {
+				for _, overlap := range []float64{0, 0.5, 0.51, 1} {
+					for _, hasCompute := range []bool{false, true} {
+						stats := SceneStats{
+							ShapeCount:    shapes,
+							PathCount:     shapes / 2,
+							TextCount:     text,
+							ClipDepth:     clips,
+							OverlapFactor: overlap,
+						}
+						if got := SelectPipeline(stats, hasCompute); got != PipelineModeRenderPass {
+							t.Fatalf("SelectPipeline(%+v, hasCompute=%v) = %v, want RenderPass",
+								stats, hasCompute, got)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
