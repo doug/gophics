@@ -66,6 +66,9 @@ func (d *Device) CreateBuffer(desc *BufferDescriptor) (*Buffer, error) {
 	if desc == nil {
 		return nil, fmt.Errorf("wgpu: buffer descriptor is nil")
 	}
+	defer func(t0 time.Time) {
+		recordResource(ResourceBuffer, desc.Label, desc.Size, time.Since(t0))
+	}(time.Now())
 
 	gpuDesc := &gputypes.BufferDescriptor{
 		Label:            desc.Label,
@@ -109,6 +112,9 @@ func (d *Device) CreateTexture(desc *TextureDescriptor) (*Texture, error) {
 	if desc == nil {
 		return nil, fmt.Errorf("wgpu: texture descriptor is nil")
 	}
+	defer func(t0 time.Time) {
+		recordResource(ResourceTexture, desc.Label, 0, time.Since(t0))
+	}(time.Now())
 
 	halDevice := d.halDevice()
 	if halDevice == nil {
@@ -219,6 +225,9 @@ func (d *Device) CreateShaderModule(desc *ShaderModuleDescriptor) (*ShaderModule
 	if desc == nil {
 		return nil, fmt.Errorf("wgpu: shader module descriptor is nil")
 	}
+	defer func(t0 time.Time) {
+		recordResource(ResourceShaderModule, desc.Label, 0, time.Since(t0))
+	}(time.Now())
 
 	halDevice := d.halDevice()
 	if halDevice == nil {
@@ -355,6 +364,9 @@ func (d *Device) CreateBindGroup(desc *BindGroupDescriptor) (*BindGroup, error) 
 	if desc == nil {
 		return nil, fmt.Errorf("wgpu: bind group descriptor is nil")
 	}
+	defer func(t0 time.Time) {
+		recordResource(ResourceBindGroup, desc.Label, 0, time.Since(t0))
+	}(time.Now())
 
 	halDevice := d.halDevice()
 	if halDevice == nil {
@@ -491,6 +503,9 @@ func (d *Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (*RenderPi
 	if desc == nil {
 		return nil, fmt.Errorf("wgpu: render pipeline descriptor is nil")
 	}
+	defer func(t0 time.Time) {
+		recordResource(ResourceRenderPipeline, desc.Label, 0, time.Since(t0))
+	}(time.Now())
 
 	halDevice := d.halDevice()
 	if halDevice == nil {
@@ -593,6 +608,9 @@ func (d *Device) CreateComputePipeline(desc *ComputePipelineDescriptor) (*Comput
 	if desc == nil {
 		return nil, fmt.Errorf("wgpu: compute pipeline descriptor is nil")
 	}
+	defer func(t0 time.Time) {
+		recordResource(ResourceComputePipeline, desc.Label, 0, time.Since(t0))
+	}(time.Now())
 
 	halDevice := d.halDevice()
 	if halDevice == nil {
