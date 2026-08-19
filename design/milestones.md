@@ -1169,15 +1169,45 @@ by up to 2×, so those margins are indicative, not decisive.
       has `clip_leaf.go`; there is no `clip_leaf.wgsl`. `coarse` consumes clip
       bounding boxes that nothing produces.
 
-      So the remaining work is a new compute stage, not a wiring change: port
-      `clip_leaf` (and its reduce) to WGSL, allocate the clip bbox and stack
-      buffers, and dispatch it between `draw_leaf` and `path_count`. The CPU
-      implementation is a working oracle for it, and the stage differ can be
-      extended to compare its output directly — the same method that made
-      `path_tiling` tractable.
+      **The stage now exists.** `clip_leaf.wgsl` matches BeginClip/EndClip pairs
+      and fixes up their draw monoids so an end knows its partner's path and
+      scene offset; `draw_leaf.wgsl` gained a `clip_inps` output to feed it,
+      and the dispatcher gained the buffer, layout and a dispatch between
+      `draw_leaf` and `path_count`. It is one invocation walking a stack rather
+      than Vello's parallel bicyclic-semigroup scan — the CPU port does the
+      same, clip counts are small, and the parallel formulation is a known
+      answer if it ever matters.
 
-      Until then clipped draws go to render-pass, which is correct, and compute
-      still cannot be benchmarked on clipped content.
+      Draw-only scenes are untouched: every golden scene still matches the CPU
+      rasterizer exactly, with the stage in the pipeline.
+
+      **It clips, and it is not yet right.** Routed to compute, the confinement
+      property passes — a shape larger than its clip no longer escapes, which
+      it did before — and a single draw under a clip matches render-pass within
+      edge-AA tolerance (3.8%). More than one draw under a clip does not:
+
+      | scene | difference |
+      |---|---|
+      | 1 shape, 1 clip | 3.8% |
+      | 2 shapes, 2 clips | 4.8% |
+      | 8 shapes, 1 clip | 31.5% |
+      | 8 shapes, 8 clips | 28.6% |
+      | 8 **disjoint** shapes, 1 clip | 40.1% |
+
+      The variable is draw count, not clip count, and disjoint shapes are the
+      worst case — which rules out overlap and compositing order, the obvious
+      suspects. Something more basic is wrong with more than one draw inside a
+      clip group.
+
+      Clipped draws therefore still take the render-pass path.
+      `computeClipSupported` is written and unconsulted; flipping the condition
+      at the four compute branches is the whole of re-enabling it.
+
+- [ ] Find why a clip group containing several draws renders wrongly. Start
+      with two disjoint squares under one clip and read the PTCL the coarse
+      stage emits for a tile each square occupies — the stage differ can be
+      extended to `clip_inps` and the fixed-up draw monoids, which is where the
+      CPU oracle (`clipLeafScan`) applies directly.
 
 ### Earlier Metal-only decision, kept for the record
 

@@ -351,8 +351,64 @@ func (rc *GPURenderContext) hasActiveClip() bool {
 	return rc.clipRect != nil || rc.clipRRect != nil || rc.clipPath != nil
 }
 
-// Why compute cannot take clipped draws yet: the GPU pipeline has no clip
-// stage. Its nine stages are pathtag_reduce, pathtag_scan, draw_reduce,
+// computeClipPath expresses the active clip as a path the compute pipeline can
+// encode, reporting false when it cannot.
+//
+// A clip path passes through unchanged. A scissor rect becomes the rectangle
+// it describes, which is necessary because SetClipPath converts integer-aligned
+// rectangles to scissors — so a rectangular clip never arrives as a path. A
+// rounded rect has no equivalent yet and still falls back.
+func (rc *GPURenderContext) computeClipPath() (*gg.Path, bool) {
+	if rc.clipRRect != nil {
+		return nil, false
+	}
+	if rc.clipPath != nil {
+		if rc.clipRect != nil {
+			// Both at once needs an intersection; applying one silently would
+			// be worse than declining.
+			return nil, false
+		}
+		return rc.clipPath, true
+	}
+	if rc.clipRect == nil {
+		return nil, true
+	}
+
+	r := rc.clipRect
+	x0, y0 := float64(r[0]), float64(r[1])
+	x1, y1 := x0+float64(r[2]), y0+float64(r[3])
+	p := gg.NewPath()
+	p.MoveTo(x0, y0)
+	p.LineTo(x1, y0)
+	p.LineTo(x1, y1)
+	p.LineTo(x0, y1)
+	p.Close()
+	return p, true
+}
+
+// computeClipSupported reports whether the compute path can honour the active
+// clip, pushing it to the accelerator when it can.
+//
+// Not currently consulted: clipped draws take the render-pass path while the
+// clip stage is finished. Flipping the condition at the four compute branches
+// back to this is the whole of re-enabling it.
+func (rc *GPURenderContext) computeClipSupported() bool {
+	clip, ok := rc.computeClipPath()
+	if !ok {
+		return false
+	}
+	rc.shared.mu.Lock()
+	va := rc.shared.velloAccel
+	rc.shared.mu.Unlock()
+	if va == nil {
+		return false
+	}
+	va.SetClipPath(clip)
+	return true
+}
+
+// Historical note on why this took a stage rather than wiring: the GPU
+// pipeline had no clip stage. Its nine stages are pathtag_reduce, pathtag_scan, draw_reduce,
 // draw_leaf, path_count, backdrop, coarse, path_tiling and fine — none of
 // which resolves clip layers. The CPU port has clip_leaf.go; there is no
 // clip_leaf.wgsl.

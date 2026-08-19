@@ -41,6 +41,8 @@ struct Config {
 const WG_SIZE: u32 = 256u;
 const DRAWTAG_NOP: u32 = 0u;
 const DRAWTAG_COLOR: u32 = 0x44u;
+const DRAWTAG_BEGIN_CLIP: u32 = 0x9u;
+const DRAWTAG_END_CLIP: u32 = 0x21u;
 
 // --- Bindings ---
 
@@ -49,6 +51,17 @@ const DRAWTAG_COLOR: u32 = 0x44u;
 @group(0) @binding(2) var<storage, read> draw_reduced: array<DrawMonoid>;
 @group(0) @binding(3) var<storage, read_write> draw_monoids: array<DrawMonoid>;
 @group(0) @binding(4) var<storage, read_write> info: array<u32>;
+
+// clip_inps records one entry per clip element, indexed by the running
+// clip_ix the draw monoid already carries. BeginClip stores its path index;
+// EndClip stores the bitwise complement of its own draw index, which is how
+// clip_leaf tells the two apart and how it recovers the draw to fix up.
+@group(0) @binding(5) var<storage, read_write> clip_inps: array<ClipInp>;
+
+struct ClipInp {
+    ix: u32,
+    path_ix: i32,
+}
 
 // --- Workgroup shared memory ---
 
@@ -143,6 +156,12 @@ fn main(
             // SceneOffset is the cumulative offset into draw data.
             let scene_off = config.drawdata_base + result.scene_offset;
             info[result.info_offset] = scene[scene_off];
+        } else if tag == DRAWTAG_BEGIN_CLIP {
+            clip_inps[result.clip_ix] = ClipInp(ix, i32(result.path_ix));
+        } else if tag == DRAWTAG_END_CLIP {
+            // ~ix marks an end, and carries the draw index clip_leaf must
+            // write the matched path and scene offset back into.
+            clip_inps[result.clip_ix] = ClipInp(ix, ~i32(ix));
         }
     }
 }

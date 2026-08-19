@@ -38,6 +38,9 @@ var shaderDrawReduce string
 //go:embed tilecompute/shaders/draw_leaf.wgsl
 var shaderDrawLeaf string
 
+//go:embed tilecompute/shaders/clip_leaf.wgsl
+var shaderClipLeaf string
+
 //go:embed tilecompute/shaders/path_count.wgsl
 var shaderPathCount string
 
@@ -101,6 +104,10 @@ const (
 	// Input: scene + draw_reduced. Output: draw_monoids + info.
 	VelloStageDrawLeaf
 
+	// VelloStageClipLeaf matches BeginClip/EndClip pairs and fixes up their
+	// draw monoids so an EndClip knows its partner's path and draw data.
+	VelloStageClipLeaf
+
 	// VelloStagePathCount performs DDA tile walk, backdrop computation, and segment counting.
 	// Input: lines + paths. Output: tiles (backdrop + segment counts via atomics).
 	VelloStagePathCount
@@ -139,6 +146,8 @@ func (s VelloComputeStage) String() string {
 		return "draw_reduce"
 	case VelloStageDrawLeaf:
 		return "draw_leaf"
+	case VelloStageClipLeaf:
+		return "clip_leaf"
 	case VelloStagePathCount:
 		return "path_count"
 	case VelloStageBackdrop:
@@ -330,6 +339,11 @@ type VelloComputeBuffers struct {
 	// PathStyles holds style flags per path (bit 1 = even-odd fill rule).
 	// Size: n_paths * sizeof(u32).
 	// Read by coarse.
+	// ClipInps records one entry per clip element: which draw it belongs to,
+	// and either its path index (begin) or the complement of its own draw
+	// index (end). Written by draw_leaf, read by clip_leaf.
+	ClipInps *wgpu.Buffer
+
 	PathStyles *wgpu.Buffer
 
 	// Output holds the output pixel buffer (packed RGBA u32 per pixel).
@@ -415,6 +429,7 @@ func NewVelloComputeDispatcher(device *wgpu.Device, queue *wgpu.Queue) *VelloCom
 		VelloStagePathtagScan:   shaderPathtagScan,
 		VelloStageDrawReduce:    shaderDrawReduce,
 		VelloStageDrawLeaf:      shaderDrawLeaf,
+		VelloStageClipLeaf:      shaderClipLeaf,
 		VelloStagePathCount:     shaderPathCount,
 		VelloStageBackdrop:      shaderBackdrop,
 		VelloStageCoarse:        shaderVelloCoarse,
@@ -485,6 +500,15 @@ func stageBindGroupLayoutEntries(stage VelloComputeStage) []gputypes.BindGroupLa
 		// @binding(4) storage(read_write) info
 		return []gputypes.BindGroupLayoutEntry{
 			configUniform, storageRO(1), storageRO(2), storageRW(3), storageRW(4),
+			storageRW(5),
+		}
+
+	case VelloStageClipLeaf:
+		// @binding(0) uniform config
+		// @binding(1) storage(read) clip_inps
+		// @binding(2) storage(read_write) draw_monoids
+		return []gputypes.BindGroupLayoutEntry{
+			configUniform, storageRO(1), storageRW(2),
 		}
 
 	case VelloStagePathCount:
@@ -733,6 +757,7 @@ type velloBufSizes struct {
 	ptcl            uint64
 	bumpAlloc       uint64
 	tilePTCLOffsets uint64
+	clipInps        uint64
 	pathStyles      uint64
 	output          uint64
 	blendSpill      uint64
@@ -795,9 +820,12 @@ func (d *VelloComputeDispatcher) computeBufferSizes(
 		ptcl:            uint64(globalTiles) * velloPTCLMaxPerTile * 4,
 		bumpAlloc:       16,
 		tilePTCLOffsets: uint64(globalTiles) * 4,
-		pathStyles:      uint64(config.NumPaths) * 4,
-		output:          uint64(config.TargetWidth) * uint64(config.TargetHeight) * 4,
-		blendSpill:      blendSpillSize,
+		// Two u32 per clip element. Never zero: a bind group cannot hold a
+		// zero-sized buffer, and a scene with no clips still binds this.
+		clipInps:   maxU64(uint64(config.NumClips)*8, 8),
+		pathStyles: uint64(config.NumPaths) * 4,
+		output:     uint64(config.TargetWidth) * uint64(config.TargetHeight) * 4,
+		blendSpill: blendSpillSize,
 	}
 }
 
@@ -883,6 +911,7 @@ func (d *VelloComputeDispatcher) AllocateBuffers(
 		{&bufs.PTCL, "vello_ptcl", sz.ptcl, storageZero, true},                                               // CMD_END=0 sentinel
 		{&bufs.BumpAlloc, "vello_bump_alloc", sz.bumpAlloc, storageZero | gputypes.BufferUsageCopySrc, true}, // atomicAdd in path_count
 		{&bufs.TilePTCLOffsets, "vello_tile_ptcl_offsets", sz.tilePTCLOffsets, storageZero, true},            // coarse write positions
+		{&bufs.ClipInps, "vello_clip_inps", sz.clipInps, storageZero, true},
 		{&bufs.PathStyles, "vello_path_styles", sz.pathStyles, storageCPU, false},
 		{&bufs.Output, "vello_output", sz.output, storageOut, false},
 		{&bufs.BlendSpill, "vello_blend_spill", sz.blendSpill, storageZero, true}, // blend stack spill for deep clips
@@ -1009,6 +1038,14 @@ func stageBindGroupEntries(stage VelloComputeStage, bufs *VelloComputeBuffers) [
 			entry(2, bufs.DrawReduced),
 			entry(3, bufs.DrawMonoids),
 			entry(4, bufs.Info),
+			entry(5, bufs.ClipInps),
+		}
+
+	case VelloStageClipLeaf:
+		return []wgpu.BindGroupEntry{
+			entry(0, bufs.Config),
+			entry(1, bufs.ClipInps),
+			entry(2, bufs.DrawMonoids),
 		}
 
 	case VelloStagePathCount:
@@ -1136,6 +1173,8 @@ func (d *VelloComputeDispatcher) Dispatch(bufs *VelloComputeBuffers, config Vell
 		{VelloStagePathtagScan, nTagWords, 0},
 		{VelloStageDrawReduce, config.NumDrawObj, 0},
 		{VelloStageDrawLeaf, config.NumDrawObj, 0},
+		// A single invocation walking the clip stack; see clip_leaf.wgsl.
+		{VelloStageClipLeaf, 1, 0},
 		{VelloStagePathCount, config.NumLines, 0},
 		{VelloStageBackdrop, config.NumPaths, 0},
 		{VelloStageCoarse, totalTiles, 0},
@@ -1264,4 +1303,12 @@ func (d *VelloComputeDispatcher) submitAndWait(res *dispatchResources) error {
 	slogger().Debug("vello compute: all stages dispatched successfully",
 		"stages", int(VelloStageCount))
 	return nil
+}
+
+// maxU64 returns the larger of two sizes.
+func maxU64(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
 }
