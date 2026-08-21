@@ -22,6 +22,9 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
+// rectPx is the canvas's position and size on screen, in CSS pixels.
+type rectPx struct{ left, top, w, h float32 }
+
 // wheelLineHeight is the logical pixels a single line-mode wheel step scrolls.
 // Browsers that report deltaMode=1 give deltas in lines; ~40px per line matches
 // the amount Chrome synthesizes for an equivalent notch in pixel mode.
@@ -70,22 +73,31 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	// inset by other content, the page being scrolled, a CSS size that differs
 	// from the logical size, even a CSS transform — because the rect is what
 	// the user is actually touching.
+	// The rect is cached rather than read per event: getBoundingClientRect
+	// forces the browser to flush pending layout, and pointermove fires on
+	// every frame of a drag, so reading it there would mean a synchronous
+	// layout per move. It is refreshed whenever the canvas can have moved --
+	// on resize, on scroll, and at the start of each gesture, which is cheap
+	// because presses are rare and a drag cannot begin without one.
+	refreshRect := func() {
+		r := canvas.Call("getBoundingClientRect")
+		w.rect = rectPx{
+			left: float32(r.Get("left").Float()), top: float32(r.Get("top").Float()),
+			w: float32(r.Get("width").Float()), h: float32(r.Get("height").Float()),
+		}
+	}
+	refreshRect()
+
 	pos := func(e js.Value) geom.Pt {
 		cx := float32(e.Get("clientX").Float())
 		cy := float32(e.Get("clientY").Float())
-
-		r := canvas.Call("getBoundingClientRect")
-		rw := float32(r.Get("width").Float())
-		rh := float32(r.Get("height").Float())
-		if rw <= 0 || rh <= 0 { // detached or display:none — nothing sensible to map to
+		r := w.rect
+		if r.w <= 0 || r.h <= 0 { // detached or display:none — nothing to map to
 			return geom.Pt{X: cx, Y: cy}
 		}
-
-		x := cx - float32(r.Get("left").Float())
-		y := cy - float32(r.Get("top").Float())
 		return geom.Pt{
-			X: x * w.logical.W / rw,
-			Y: y * w.logical.H / rh,
+			X: (cx - r.left) * w.logical.W / r.w,
+			Y: (cy - r.top) * w.logical.H / r.h,
 		}
 	}
 	// Pointer Events unify mouse/touch/pen and carry pointerType, so gestures
@@ -104,6 +116,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: pos(e), Source: src(e)})
 	})
 	listen(canvas, "pointerdown", func(e js.Value) {
+		refreshRect()
 		// Capture the pointer so drags keep delivering move/up even if the
 		// finger/cursor leaves the canvas.
 		if id := e.Get("pointerId"); !id.IsUndefined() {
@@ -159,10 +172,12 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	})
 	onResize := func(js.Value) {
 		w.resize()
+		refreshRect()
 		h.Event(w, shell.Resize{Size: w.logical, Scale: float32(w.dpr)})
 		w.Invalidate()
 	}
 	listen(js.Global(), "resize", onResize)
+	listen(doc, "scroll", func(js.Value) { refreshRect() })
 	// Mobile browsers grow and shrink the visible area as the address bar
 	// hides and reveals, and raise the on-screen keyboard over it. Those change
 	// visualViewport without reliably firing a window resize, so without this
@@ -244,6 +259,8 @@ type window struct {
 	aud         *webAudio          // lazily created audio capability
 
 	logical geom.Size
+	// rect is the canvas's on-screen box, cached; see refreshRect.
+	rect rectPx
 	// design is Config.Size when Config.ScaleToFit asked for it: the size this
 	// app was laid out for. When set, the app always sees exactly this logical
 	// size and the canvas is scaled to fit the viewport, letterboxed. When
