@@ -90,9 +90,22 @@ func (rc *GPURenderContext) resolveLayers(target gg.GPURenderTarget) {
 	rc.prevLayerReleases = rc.prevLayerReleases[:0]
 
 	w, h := rc.layerDims(target)
-	if w == 0 || h == 0 {
-		// No usable dimensions — flatten markers away (draw at full opacity)
-		// rather than leaving them for the group builder to choke on.
+
+	// rasterAtlas cannot render into a layer texture at all. On that strategy
+	// shapes are rasterized into a CPU pixmap and the pixmap is uploaded to the
+	// target — but a layer target is a bare texture with no pixmap behind it,
+	// so uploadPixmapToView finds nothing to upload and returns success having
+	// written nothing. The caller then gets a freshly created, still-black
+	// texture and composites it as though it were the group's contents or the
+	// backdrop, which is how a frosted card becomes an opaque slab: a
+	// translucent white surface over black is flat grey.
+	//
+	// Better to have no frost and no group isolation than a black rectangle
+	// where the UI should be.
+	if w == 0 || h == 0 || rc.shared.strategy == strategyRasterAtlas {
+		// No usable layer target — flatten markers away (draw at full opacity)
+		// and drop backdrop blurs rather than leaving them for the group
+		// builder to choke on.
 		rc.pendingDraws = stripLayerMarkers(rc.pendingDraws)
 		return
 	}
@@ -328,11 +341,18 @@ func (rc *GPURenderContext) resampleTexture(src gpucontext.TextureView, w, h uin
 }
 
 // stripLayerMarkers drops PushLayer/PopLayer markers, leaving the group's draws
-// inline (full opacity). Fallback when no offscreen target is possible.
+// inline (full opacity), and drops backdrop blurs. Fallback when no offscreen
+// target is possible.
+//
+// A backdrop blur has to go too, not just the group markers: it is resolved by
+// rendering the backdrop into an offscreen and compositing it back, so with no
+// offscreen available the command has nothing to draw and would otherwise be
+// handed to the group builder unresolved.
 func stripLayerMarkers(src []drawCommand) []drawCommand {
 	out := src[:0]
 	for i := range src {
-		if src[i].kind == drawCmdPushLayer || src[i].kind == drawCmdPopLayer {
+		switch src[i].kind {
+		case drawCmdPushLayer, drawCmdPopLayer, drawCmdBackdropBlur:
 			continue
 		}
 		out = append(out, src[i])
