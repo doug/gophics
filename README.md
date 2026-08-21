@@ -140,6 +140,17 @@ Because Gophics draws every pixel itself, the *same* widget tree renders the *sa
 | **Android** — native | Vulkan, `gomobile bind` into a thin host | ✅ GPU present, verified on device |
 | **Terminal** — incl. over SSH | rendered via the kitty graphics protocol | ✅ the same UI, in your terminal |
 
+The SSH demo lives in `examples/ssh`, which is **its own module** so that the
+SSH server dependency stays out of gophics core. That means `go run
+./examples/ssh` from here fails with "main module does not contain package" —
+run it from inside instead, and connect from a terminal that speaks the kitty
+graphics protocol:
+
+```sh
+cd examples/ssh && go run .
+ssh -p 2222 localhost          # needs a PTY; -T is refused with a hint
+```
+
 ## How it fits together
 
 Layered like a modern UI pipeline, as Go packages (arrows point down):
