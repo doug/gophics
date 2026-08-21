@@ -25,6 +25,7 @@ export GOPHICS_THUMB_SCALE=2
 specs=(
   "canvas     2 "
   "gallery    2 "
+  "ledger     2 "
   "todo       2 "
   "notes      2 "
   "epub       1 "
@@ -36,6 +37,7 @@ specs=(
   "2048        2 "
   "sudoku      1 "
   "drummachine 1 "
+  "luminaria   3 "
   "whiteboard  1 "
   "solitaire  8 "
   "hn        10 1"   # networked — realtime so the fetch completes

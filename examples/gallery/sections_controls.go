@@ -152,7 +152,11 @@ func (s *formState) Build(ctx widget.Ctx) widget.Widget {
 		groupLabel("Switch"),
 		widget.Row(
 			widget.Expand(theme.Body("Enable notifications")),
-			theme.Switch{On: s.notify, OnChange: func(v bool) { s.SetState(func() { s.notify = v }) }},
+			theme.Switch{
+				On:       s.notify,
+				Label:    "Enable notifications",
+				OnChange: func(v bool) { s.SetState(func() { s.notify = v }) },
+			},
 		),
 		widget.Sized{H: 10},
 		switchState,

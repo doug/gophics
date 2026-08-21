@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 
 # The featured set (kept lean — each Go/WASM binary is multiple MB even stripped;
 # GitHub Pages serves them gzipped so a click costs ~1/3 of the on-disk size).
-demos=(counter hn gallery canvas flowfield flocking particles match3 solitaire roguelike todo notes health 2048 sudoku drummachine whiteboard epub capabilities)
+demos=(counter hn gallery canvas flowfield flocking particles match3 solitaire roguelike todo notes health ledger 2048 sudoku drummachine luminaria whiteboard epub capabilities)
 
 mkdir -p docs/demos
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/demos/wasm_exec.js

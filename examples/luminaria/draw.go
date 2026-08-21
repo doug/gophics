@@ -101,43 +101,82 @@ func (s *lum) drawNode(c paint.Canvas, x, y int, step float32) {
 	disc(c, cx, cy, r, mix(nodeCol.WithAlpha(0.55), paint.RGB(1, 1, 1), f*0.8))
 }
 
-// drawTurn draws the rotation glyph: an open arc with a head on it, clockwise
+// drawTurn stamps the rotation glyph: an open arc with a head on it, clockwise
 // or not. It is handedness, not heading — a turn cell rotates whichever way a
 // crawler happens to enter, which is what lets four of them close any
 // rectangle into a loop.
+//
+// The glyph is authored once in a unit square and mapped onto each cell with a
+// transform, rather than rebuilt per cell per frame. Paths are retained by the
+// display list, so a single mutated path would leave every glyph drawing
+// whatever shape was written last; caching two of them sidesteps that and the
+// per-frame allocation at the same time.
 func (s *lum) drawTurn(c paint.Canvas, x, y int, step float32, cw bool) {
-	cx, cy := s.center(x, y, step)
-	col := ccwCol
-	dir := float64(-1)
-	if cw {
-		col, dir = cwCol, 1
+	s.buildGlyphs(step)
+	i := 0
+	col := cwCol
+	if !cw {
+		i, col = 1, ccwCol
 	}
-	r := float64(step) * 0.26
-	w := step * 0.075
+	cell := geom.RectXYWH(s.area.Min.X+float32(x)*step, s.area.Min.Y+float32(y)*step, step, step)
+	c.PushTransform(paint.MapRect(geom.RectXYWH(0, 0, 1, 1), cell))
+	c.StrokePath(s.glyphArc[i], glyphStroke, col)
+	c.FillPath(s.glyphHead[i], col)
+	c.PopTransform()
+}
 
-	// A 250° arc, drawn as a polyline; the gap is where the head goes.
-	const segs = 14
-	start, sweep := -0.4, dir*4.36 // radians
-	var prev geom.Pt
-	for i := 0; i <= segs; i++ {
-		a := start + sweep*float64(i)/segs
-		p := geom.Pt{X: cx + float32(r*math.Cos(a)), Y: cy + float32(r*math.Sin(a))}
-		if i > 0 {
-			c.Line(prev, p, w, col)
+// glyphStroke is the arc's width in the unit square the glyph is authored in;
+// the cell transform scales it up with everything else.
+const glyphStroke = 0.058
+
+// buildGlyphs (re)builds the two rotation glyphs. They are scale-free, so this
+// runs once — the guard is only here because the state starts empty.
+func (s *lum) buildGlyphs(float32) {
+	if s.glyphArc[0] != nil {
+		return
+	}
+	for i, dir := range []float64{1, -1} {
+		const (
+			segs    = 22
+			radius  = 0.24
+			sweep   = 4.36 // 250°, leaving room for the head
+			headLen = 0.15
+		)
+		// The two glyphs are exact mirrors, which means the anticlockwise one
+		// starts from the mirrored angle (x → −x maps a → π − a) rather than
+		// from the same place; sweeping the other way from a shared start would
+		// leave the pair with their gaps in different corners.
+		start := -0.5 // radians; puts the gap across the top
+		if dir < 0 {
+			start = math.Pi + 0.5
 		}
-		prev = p
-	}
+		arc := paint.NewPath()
+		var tip geom.Pt
+		for j := 0; j <= segs; j++ {
+			a := start + dir*sweep*float64(j)/segs
+			tip = geom.Pt{X: 0.5 + float32(radius*math.Cos(a)), Y: 0.5 + float32(radius*math.Sin(a))}
+			if j == 0 {
+				arc.MoveTo(tip)
+			} else {
+				arc.LineTo(tip)
+			}
+		}
+		s.glyphArc[i] = arc
 
-	// The head: two short strokes swept back from the arc's end.
-	end := start + sweep
-	tan := end + dir*math.Pi/2
-	h := float64(step) * 0.16
-	for _, spread := range []float64{2.6, -2.6} {
-		a := tan + dir*spread
-		c.Line(prev, geom.Pt{
-			X: prev.X + float32(h*math.Cos(a)),
-			Y: prev.Y + float32(h*math.Sin(a)),
-		}, w, col)
+		// The head is a barb on the arc's end, pointing the way the arc travels.
+		head := start + dir*sweep + dir*math.Pi/2
+		p := paint.NewPath().MoveTo(geom.Pt{
+			X: tip.X + float32(headLen*math.Cos(head)),
+			Y: tip.Y + float32(headLen*math.Sin(head)),
+		})
+		for _, spread := range []float64{2.3, -2.3} {
+			a := head + spread
+			p.LineTo(geom.Pt{
+				X: tip.X + float32(headLen*0.95*math.Cos(a)),
+				Y: tip.Y + float32(headLen*0.95*math.Sin(a)),
+			})
+		}
+		s.glyphHead[i] = p.Close()
 	}
 }
 

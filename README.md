@@ -122,6 +122,7 @@ Every example runs on the desktop, most compile to the browser, and all are test
 | `notes` | a local-first Markdown editor (text editing, state-as-data) |
 | `canvas` | the custom-paint escape hatch — draw shapes/paths/text every frame |
 | `solitaire`, `match3`, `roguelike` | games — drag, sprites, sound, animation |
+| `drummachine`, `luminaria` | audio synthesized in Go — a step sequencer, and a Tenori-On-style matrix instrument |
 | `gallery` | a tour of the widget catalog |
 | `capabilities` | a live inspector of every platform bridge — connectivity, battery, file picker, share, notifications, clipboard, secure storage, IME, web view… |
 

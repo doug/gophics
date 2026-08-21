@@ -294,10 +294,9 @@ func TestTapCyclesCell(t *testing.T) {
 
 	// Centre of cell (4,6), in window coordinates: the canvas sits inside the
 	// root padding, and the matrix is centred within the canvas.
-	const pad = 18
 	p := geom.Pt{
-		X: pad + s.area.Min.X + (4+0.5)*s.step,
-		Y: pad + s.area.Min.Y + (6+0.5)*s.step,
+		X: pagePad + s.area.Min.X + (4+0.5)*s.step,
+		Y: pagePad + s.area.Min.Y + (6+0.5)*s.step,
 	}
 	for _, want := range []cell{node, turnCW, turnCCW, empty} {
 		h.Tap(p)
@@ -341,6 +340,35 @@ func TestCrawlerCapIsHonoured(t *testing.T) {
 	}
 	if len(s.crawlers) != maxCrawlers {
 		t.Errorf("got %d crawlers, want the cap of %d", len(s.crawlers), maxCrawlers)
+	}
+}
+
+// TestLayoutFollowsTheWindow checks both shapes the page takes: side by side on
+// a desktop, where the matrix is squeezed by the fixed-width panel, and stacked
+// on a phone, where it gets the full width and the panel scrolls beneath it. A
+// matrix that stayed beside the panel at phone widths would collapse to a few
+// pixels a cell and paint nothing at all.
+func TestLayoutFollowsTheWindow(t *testing.T) {
+	h, s := newApp(t)
+	wide := s.area
+	if wide.Dx() != wide.Dy() {
+		t.Errorf("matrix is %v, not square", wide.Size())
+	}
+	if room := float32(1040 - panelW - 3*pagePad); wide.Dx() > room {
+		t.Errorf("matrix is %.0f wide, past the %.0f the panel leaves", wide.Dx(), room)
+	}
+
+	h.Resize(geom.Size{W: 420, H: 860})
+	h.Render()
+	narrow := s.area
+	if narrow.Dx() != narrow.Dy() {
+		t.Errorf("stacked matrix is %v, not square", narrow.Size())
+	}
+	if want := float32(420 - 2*pagePad); narrow.Dx() < want-cols {
+		t.Errorf("stacked matrix is %.0f wide, want about %.0f — the full page width", narrow.Dx(), want)
+	}
+	if s.step < 6 {
+		t.Errorf("cell is %.1fpx; the matrix would paint nothing", s.step)
 	}
 }
 

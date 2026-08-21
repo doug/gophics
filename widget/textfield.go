@@ -82,7 +82,11 @@ type textFieldState struct {
 	ed      text.Editor
 	ctx     Ctx // captured at Init, for blink scheduling and teardown
 	focused bool
-	scrollX float32
+	// imeText/imeSelA/imeSelB are what the platform IME was last told the
+	// field contains; see syncIME.
+	imeText          string
+	imeSelA, imeSelB int
+	scrollX          float32
 	// blink is seconds since the caret last moved or the field gained focus.
 	// The caret shows for the first half of each period, so it stays solid
 	// right after any activity, then blinks. It is advanced by the flip timer
@@ -408,7 +412,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		s.SetState(nil)
 	}
 
-	return Interactive{
+	view := Interactive{
 		Handler: Handler{
 			OnPress: func(p geom.Pt) {
 				s.activity()
@@ -442,6 +446,10 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		},
 		Child: fieldView{state: s},
 	}
+	// Anything that could have moved the text or the selection has happened by
+	// now, so this is where the IME's copy is brought back in step.
+	s.syncIME(ctx)
+	return view
 }
 
 // softKeyboard raises or dismisses the platform on-screen keyboard as the field
@@ -499,9 +507,40 @@ func (s *textFieldState) softKeyboard(
 			onKey(shell.Key{Kind: shell.KeyPress, Code: code})
 		},
 	})
-	// Give the IME the surrounding text so composition and prediction have
-	// something to work against.
-	ti.SetText(s.ed.Text(), s.ed.Caret(), s.ed.Caret())
+	// Give the IME the surrounding text and the real selection so composition,
+	// prediction and select-all have something to work against. Caret twice
+	// would claim there is never a selection.
+	s.imeText = ""
+	s.syncIME(ctx)
+}
+
+// syncIME keeps the platform IME's view of the field in step with the editor.
+//
+// The IME needs the surrounding text and the selection range to do its job:
+// autocorrect replaces the word behind the caret, predictive text reads what
+// precedes it, and selection replacement needs to know what is selected. Told
+// once when the field was focused, that view goes stale on the first
+// keystroke, and the keyboard then operates on text the field no longer has --
+// selection in particular behaves as though nothing is ever selected.
+//
+// It is called on every build, which is when anything that could change the
+// text or the selection has already happened, and sends nothing when neither
+// moved.
+func (s *textFieldState) syncIME(ctx Ctx) {
+	if !s.focused {
+		return
+	}
+	ti := ctx.TextInput()
+	if ti == nil {
+		return
+	}
+	text := s.ed.Text()
+	a, b := s.ed.Selection()
+	if text == s.imeText && a == s.imeSelA && b == s.imeSelB {
+		return
+	}
+	s.imeText, s.imeSelA, s.imeSelB = text, a, b
+	ti.SetText(text, a, b)
 }
 
 func sanitize(t string) string {

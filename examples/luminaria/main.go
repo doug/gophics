@@ -2,11 +2,11 @@
 // Iwai's Electroplankton and the Tenori-On: a 16×16 matrix that crawlers walk
 // across, lighting nodes and playing them.
 //
-// Tap a cell to cycle it — a node, then a clockwise turn, then a widdershins
-// turn, then empty again — and drag to paint. Crawlers advance one cell per
-// beat, wrap at the edges, and rotate when they hit a turn. A node they cross
-// lights up, rings out, and pushes a note into the mixer: pitch from its row,
-// stereo pan from its column.
+// Tap a cell to cycle it — a node, then a clockwise turn, then a
+// counter-clockwise turn, then empty again — and drag to paint. Crawlers
+// advance one cell per beat, wrap at the edges, and rotate when they hit a
+// turn. A node they cross lights up, rings out, and pushes a note into the
+// mixer: pitch from its row, stereo pan from its column.
 //
 // It is the driver example for *melodic* synthesis (examples/drummachine is the
 // percussive one): synth.go builds Karplus-Strong, FM, and detuned-pad voices in
@@ -47,6 +47,7 @@ const (
 
 	maxCrawlers = 6
 	panelW      = 268
+	pagePad     = 18
 )
 
 // cell is what a grid square holds. Tapping cycles through them in this order,
@@ -152,11 +153,15 @@ type lum struct {
 
 	area geom.Rect // the matrix's rect inside the canvas, cached at paint
 	step float32   // one cell's side, cached with it
-	seq  int64     // seeds the noise-excited voices, so playback is repeatable
+
+	// The two rotation glyphs, authored once in a unit square (see drawTurn).
+	glyphArc  [2]*paint.Path
+	glyphHead [2]*paint.Path
+	seq       int64 // seeds the noise-excited voices, so playback is repeatable
 }
 
 var octaveNames = []string{"Low", "Mid", "High"}
-var octaveRoots = []int{45, 57, 69} // MIDI A2 / A3 / A5
+var octaveRoots = []int{45, 57, 69} // MIDI A2 / A3 / A4
 
 // stateHook, if set, receives the state on mount — for tests to drive input.
 var stateHook func(*lum)
@@ -403,26 +408,60 @@ func (s *lum) Build(ctx widget.Ctx) widget.Widget {
 	// following the platform scheme, and app.Config paints the same colour
 	// behind it in both.
 	th := theme.Dark()
-	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: bg, Child: widget.Padding{All: 18,
-		Child: widget.Flex{
-			Axis:       layout.Horizontal,
-			CrossAlign: layout.CrossStretch,
-			Children: []widget.Widget{
-				widget.Expand(widget.Interactive{
-					Handler: widget.Handler{
-						OnKey:      s.onKey,
-						OnPress:    s.onPress,
-						OnDrag:     s.onDrag,
-						DragAxis:   widget.DragAny,
-						OnPressEnd: func() { s.painting = false },
-					},
-					Child: widget.Canvas{Clip: true, Draw: s.draw},
-				}),
-				widget.Sized{W: 18},
-				widget.Sized{W: panelW, Child: s.panel(ctx, th)},
+	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: bg,
+		Child: widget.Padding{All: pagePad, Child: widget.LayoutBuilder{
+			Build: func(cs layout.Constraints) widget.Widget {
+				if cs.BoundedW() && cs.Max.W < panelW*2.4 {
+					return s.stacked(ctx, th)
+				}
+				return s.sideBySide(ctx, th)
 			},
+		}},
+	}}
+}
+
+// sideBySide is the desktop shape: the matrix takes everything the fixed-width
+// panel doesn't.
+func (s *lum) sideBySide(ctx widget.Ctx, th theme.Theme) widget.Widget {
+	return widget.Flex{
+		Axis:       layout.Horizontal,
+		CrossAlign: layout.CrossStretch,
+		Children: []widget.Widget{
+			widget.Expand(s.matrix()),
+			widget.Sized{W: pagePad},
+			widget.Sized{W: panelW, Child: widget.Scroll{Child: s.panel(ctx, th)}},
 		},
-	}}}
+	}
+}
+
+// stacked is the phone shape: a square matrix across the top with the panel
+// under it, the whole page scrolling. The matrix keeps its own drag — the
+// gesture arena hands a drag to the deepest handler whose axis matches, and the
+// Canvas is deeper than the Scroll — so painting a pattern doesn't scroll the
+// page out from under the finger.
+func (s *lum) stacked(ctx widget.Ctx, th theme.Theme) widget.Widget {
+	return widget.Scroll{Child: widget.Flex{
+		Axis:       layout.Vertical,
+		CrossAlign: layout.CrossStretch,
+		Children: []widget.Widget{
+			widget.AspectRatio{Ratio: 1, Child: s.matrix()},
+			widget.Sized{H: pagePad},
+			s.panel(ctx, th),
+		},
+	}}
+}
+
+func (s *lum) matrix() widget.Widget {
+	return widget.Interactive{
+		Handler: widget.Handler{
+			OnKey:      s.onKey,
+			OnPress:    s.onPress,
+			OnDrag:     s.onDrag,
+			DragAxis:   widget.DragAny,
+			OnPressEnd: func() { s.painting = false },
+		},
+		Child: widget.Canvas{Clip: true, Draw: s.draw},
+	}
 }
 
 func (s *lum) panel(ctx widget.Ctx, th theme.Theme) widget.Widget {
@@ -430,13 +469,13 @@ func (s *lum) panel(ctx widget.Ctx, th theme.Theme) widget.Widget {
 	if s.playing {
 		playLabel = "Pause"
 	}
-	return widget.Scroll{Child: widget.Flex{
+	return widget.Flex{
 		Axis:       layout.Vertical,
 		CrossAlign: layout.CrossStretch,
 		Children: []widget.Widget{
 			widget.Text{S: "Luminaria", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
 			widget.Sized{H: 4},
-			widget.Text{S: "Tap to cycle a cell: node, turn ↻, turn ↺, empty. Drag to paint.",
+			widget.Text{S: "Tap a cell to cycle it: node, turn right, turn left, empty. Drag to paint.",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true},
 			widget.Sized{H: 16},
 
@@ -481,7 +520,7 @@ func (s *lum) panel(ctx widget.Ctx, th theme.Theme) widget.Widget {
 			widget.Text{S: "Space play · A crawler · C clear · R reseed",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true},
 		},
-	}}
+	}
 }
 
 // group is a section label with the spacing above it that separates controls.

@@ -88,6 +88,16 @@ func touchTarget(child widget.Widget) widget.Widget {
 	return widget.Sized{W: MinTouchTarget, H: MinTouchTarget, Child: widget.Center(child)}
 }
 
+// touchTargetH raises a control to at least MinTouchTarget tall without
+// constraining its width.
+//
+// A labeled checkbox or radio is already wide enough to hit; it is the height
+// that falls short, at the 20pt of the box itself. touchTarget pins both axes,
+// which suits a bare switch track but would clip a label, so rows use this.
+func touchTargetH(child widget.Widget) widget.Widget {
+	return widget.Sized{H: MinTouchTarget, Child: widget.Center(child)}
+}
+
 // Checkbox is a labeled boolean box. Controlled via Checked/OnChange.
 type Checkbox struct {
 	Checked  bool
@@ -121,7 +131,7 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 				cb.OnChange(!cb.Checked)
 			}
 		}},
-		Child: child,
+		Child: touchTargetH(child),
 	}
 }
 
@@ -219,6 +229,6 @@ func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 				rd.OnSelect()
 			}
 		}},
-		Child: child,
+		Child: touchTargetH(child),
 	}
 }
