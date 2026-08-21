@@ -798,10 +798,21 @@ func writeDevSnapshot(path string, snap widget.StateSnapshot) error {
 	return os.Rename(tmp, path)
 }
 
-// TextInputActive reports whether a widget currently accepts keyboard
-// input — embedded hosts use it to show/hide the on-screen keyboard.
+// TextInputActive reports whether a widget currently accepts typed text —
+// embedded hosts poll it and raise or dismiss the on-screen keyboard as it
+// changes.
+//
+// The test is OnText, not focus. A widget becomes focusable by handling OnText
+// *or* OnKey, so a button that responds to Enter and a list that responds to
+// the arrow keys both take focus without wanting a keyboard — and something
+// focusable is usually mounted from the first frame, because a focusable
+// widget mounted while nothing has focus takes it. Reporting focus therefore
+// answered "yes" before any field existed and kept answering it, so the host
+// saw no transition and never raised the keyboard: a field that could be
+// tapped, showed a caret, and could not be typed into.
 func (h *shellHandler) TextInputActive() bool {
-	return h.core.Owner.KeyboardTarget != nil
+	t := h.core.Owner.KeyboardTarget
+	return t != nil && t.OnText != nil
 }
 
 // Accessibility bridge methods (embedded hosts type-assert the handler).

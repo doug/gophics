@@ -51,7 +51,7 @@ func Note(v Voice, freq, sustain float64, seed int64) sound.Source {
 type pluck struct {
 	buf  []float32
 	idx  int
-	gain float32 // per-sample loop gain, tuned to reach silence at `sustain`
+	gain float32 // per-period loop gain, tuned to reach silence at `sustain`
 	rem  int     // samples left before the voice retires
 }
 
@@ -69,12 +69,12 @@ func newPluck(freq, sustain float64, seed int64) *pluck {
 	for i := 0; i < n/8; i++ {
 		buf[n-1-i] *= float32(i) / float32(n/8)
 	}
-	// The loop runs freq times a second; solve g^(freq*sustain) = 1e-3 for the
-	// per-period gain, then spread it across the period's samples.
-	g := math.Exp(math.Log(1e-3) / (freq * sustain))
+	// Each slot in the delay line is rewritten once per trip around the loop,
+	// not once per sample — so the gain applied there is the *per-period* one.
+	// The loop runs freq times a second: solve g^(freq*sustain) = 1e-3.
 	return &pluck{
 		buf:  buf,
-		gain: float32(math.Pow(g, 1/float64(n))),
+		gain: float32(math.Exp(math.Log(1e-3) / (freq * sustain))),
 		rem:  int(sustain * sr),
 	}
 }
