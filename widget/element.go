@@ -95,6 +95,21 @@ func (o *Owner) RemoveTicker(t Ticker) {
 	}
 }
 
+// TickerCount reports how many tickers are currently registered.
+//
+// It exists to make one specific leak testable. A State that calls
+// ctx.AddTicker in Init and has no matching RemoveTicker in Dispose leaves its
+// controller registered after the widget is gone: it is ticked on every
+// animated frame forever, and it keeps requesting frames, so a list that
+// scrolls tappable rows in and out grows this slice without bound and pins the
+// frame loop awake. Nothing about that is visible in the output — the UI looks
+// right while the cost climbs.
+//
+// Mount a widget, unmount it, and assert this returns to the count you started
+// with. TestTickersAreReleasedOnUnmount does exactly that for the catalog, and
+// the same three lines work for a widget defined outside this repo.
+func (o *Owner) TickerCount() int { return len(o.tickers) }
+
 // TickAll advances all tickers and reports whether any is still running.
 func (o *Owner) TickAll(dt float64) bool {
 	active := false
