@@ -13,6 +13,7 @@ type Capabilities struct {
 	Audio         shell.Audio
 	Battery       shell.Battery
 	Camera        shell.Camera
+	CameraPreview shell.CameraPreview
 	Connectivity  shell.Connectivity
 	FilePicker    shell.FilePicker
 	Gamepads      shell.Gamepads
@@ -21,6 +22,7 @@ type Capabilities struct {
 	Lifecycle     shell.Lifecycle
 	Links         shell.Links
 	Menus         shell.Menus
+	Microphone    shell.Microphone
 	Notifier      shell.Notifier
 	Permissions   shell.Permissions
 	Preferences   shell.Preferences
@@ -48,6 +50,10 @@ func (c Ctx) Battery() shell.Battery { return c.el.owner.Battery }
 // Camera returns the platform Camera capability (shell.Camera), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Camera() shell.Camera { return c.el.owner.Camera }
+
+// CameraPreview returns the platform CameraPreview capability (shell.CameraPreview), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) CameraPreview() shell.CameraPreview { return c.el.owner.CameraPreview }
 
 // Connectivity returns the platform Connectivity capability (shell.Connectivity), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
@@ -80,6 +86,10 @@ func (c Ctx) Links() shell.Links { return c.el.owner.Links }
 // Menus returns the platform Menus capability (shell.Menus), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Menus() shell.Menus { return c.el.owner.Menus }
+
+// Microphone returns the platform Microphone capability (shell.Microphone), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Microphone() shell.Microphone { return c.el.owner.Microphone }
 
 // Notifier returns the platform Notifier capability (shell.Notifier), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

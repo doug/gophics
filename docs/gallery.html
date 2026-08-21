@@ -29,6 +29,12 @@
       <div class="links"><a href="demo.html?demo=health">▶ run live</a><a href="source/health.html">source</a></div>
     </div></div>
 
+    <div class="card"><img class="thumb" src="thumbs/telemetry.png" alt="telemetry request explorer screenshot" loading="lazy"><div class="body">
+      <h3>Fleet &mdash; 100,000 spans</h3>
+      <p>A live request explorer over a rolling window of 100,000 spans. A goroutine serves a synthetic fleet at ~1,400 req/s; the dashboard re-filters and re-sorts the whole window several times a second and draws stat tiles, three charts, and a virtualized table from one pass &mdash; and shows how long that pass took. Loads real <strong>OpenTelemetry OTLP/JSON</strong> exports, with a sample capture built in.</p>
+      <div class="links"><a href="demo.html?demo=telemetry">&#9654; run live</a><a href="source/telemetry.html">source</a></div>
+    </div></div>
+
     <div class="card"><img class="thumb" src="thumbs/ledger.png" alt="ledger finance dashboard screenshot" loading="lazy"><div class="body">
       <h3>Ledger</h3>
       <p>A local-first personal-finance dashboard, and the driver app for the built-in <code>chart</code> package: a balance area chart against a budget rule, a spending donut, and a weekly bar chart, all animating in on mount from one sample dataset. Offline, no network.</p>
@@ -87,6 +93,12 @@
       <h3>Sudoku</h3>
       <p>Puzzles generated with a guaranteed-unique solution (backtracking solver). Tap or arrow-key a cell and type 1&ndash;9, toggle pencil-mark Notes, with live conflict highlighting. Keyboard on desktop, on-screen keypad on touch.</p>
       <div class="links"><a href="demo.html?demo=sudoku">▶ run live</a><a href="source/sudoku.html">source</a></div>
+    </div></div>
+
+    <div class="card"><img class="thumb" src="thumbs/mirror.png" alt="voice-reactive mirror screenshot" loading="lazy"><div class="body">
+      <h3>Mirror</h3>
+      <p>Your camera, warped every frame by what the microphone hears: columns of the image rise with the energy in their part of the spectrum, rows slide on a wave that grows with loudness, and the colour channels split as you get louder. The driver for the live-capture capabilities &mdash; frames arrive as <code>*image.RGBA</code> and the warp is a plain Go pixel loop, no shader. Needs camera and microphone permission; without them it runs on a drawn stand-in and says so.</p>
+      <div class="links"><a href="demo.html?demo=mirror">&#9654; run live</a><a href="source/mirror.html">source</a></div>
     </div></div>
 
     <div class="card"><img class="thumb" src="thumbs/drummachine.png" alt="drum machine screenshot" loading="lazy"><div class="body">

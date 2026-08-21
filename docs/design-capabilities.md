@@ -168,7 +168,8 @@ below; desktop/mobile = compile-verified on the targets noted, not device-run),
 | Capability | Web | Desktop | Mobile | Notes |
 |---|---|---|---|---|
 | Clipboard, OpenURL, SafeInsets, Input, DarkMode | ✅ | ✅ | ✅ | pre-existing core |
-| Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge |
+| Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge; still capture + clip recording |
+| **CameraPreview, Microphone** (live capture) | ✅ | — | — | getUserMedia → canvas readback for frames, AnalyserNode for the spectrum; a separate capability from Camera/Audio because streaming and one-shot capture are independent. Native shells unwired, so `ctx.*` is nil there |
 | **FilePicker** | ✅ | ✅ macOS / stub | stub | macOS = real NSOpenPanel/NSSavePanel via zero-CGo objc; linux/windows TODO |
 | **Preferences** (settings) | ✅ | ✅ all | stub | desktop = JSON under os.UserConfigDir; distinct from SecureStorage (never prompts) |
 | Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native share sheet/notifications/keychain TODO |

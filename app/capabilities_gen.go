@@ -41,6 +41,10 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.LinksWindow); ok {
 		o.Links = shell.PostedLinks(x.Links(), o.Post)
 	}
+	if x, ok := w.(shell.LiveMediaWindow); ok {
+		o.CameraPreview = shell.PostedCameraPreview(x.CameraPreview(), o.Post)
+		o.Microphone = shell.PostedMicrophone(x.Microphone(), o.Post)
+	}
 	if x, ok := w.(shell.MediaWindow); ok {
 		o.Audio = shell.PostedAudio(x.Audio(), o.Post)
 		o.Camera = shell.PostedCamera(x.Camera(), o.Post)

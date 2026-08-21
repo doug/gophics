@@ -7,9 +7,8 @@ import (
 	"github.com/doug/gophics/paint"
 )
 
-// AreaMark fills the region between a line series and the zero baseline. It is
-// drawn as thin vertical columns sampled along the line, so it needs no path
-// primitive; set Line to also stroke the top edge.
+// AreaMark fills the region between a line series and the zero baseline as a
+// single filled polygon; set Line to also stroke the top edge.
 type AreaMark struct {
 	Data  []Datum
 	Name  string      // legend label (optional)
@@ -50,26 +49,21 @@ func (a AreaMark) draw(p plot) {
 		defer p.Canvas.PopClip()
 	}
 
-	const step = float32(2)
-	x0, xN := p.px(a.Data[0].X), p.px(a.Data[len(a.Data)-1].X)
-	seg := 0
-	for x := x0; x <= xN; x += step {
-		for seg < len(a.Data)-2 && p.px(a.Data[seg+1].X) < x {
-			seg++
-		}
-		ax, ay := p.px(a.Data[seg].X), p.py(a.Data[seg].Y)
-		bx, by := p.px(a.Data[seg+1].X), p.py(a.Data[seg+1].Y)
-		t := float32(0)
-		if bx > ax {
-			t = (x - ax) / (bx - ax)
-		}
-		y := ay + (by-ay)*t
-		top, bot := y, y0
-		if top > bot {
-			top, bot = bot, top
-		}
-		p.Canvas.FillRect(geom.RectXYWH(x, top, step+0.6, bot-top), fill)
+	// The area is one polygon — forward along the series, back along the
+	// baseline — filled in a single pass. It used to be sampled into a run of
+	// overlapping translucent columns, which can't composite cleanly: every
+	// shared edge is either double-covered (a dark seam) or partly covered (a
+	// light one), and a wide chart turned into a picket fence. A series that
+	// crosses the baseline still fills correctly, because FillPath uses
+	// non-zero winding and the sub-loop below the baseline simply winds the
+	// other way.
+	poly := paint.NewPath()
+	poly.MoveTo(geom.Pt{X: p.px(a.Data[0].X), Y: y0})
+	for _, d := range a.Data {
+		poly.LineTo(geom.Pt{X: p.px(d.X), Y: p.py(d.Y)})
 	}
+	poly.LineTo(geom.Pt{X: p.px(a.Data[len(a.Data)-1].X), Y: y0})
+	p.Canvas.FillPath(poly.Close(), fill)
 
 	if a.Line > 0 {
 		for i := 1; i < len(a.Data); i++ {

@@ -19,13 +19,19 @@ export GOPHICS_THUMB_SIZE=760x565   # logical render size (gallery card aspect)
 export GOPHICS_THUMB_OUT=760x565    # downscaled from SCALE× for crisp AA
 export GOPHICS_THUMB_SCALE=2
 
-# name  settle_seconds  realtime(1|"")
+# name  settle_seconds  realtime(1|"")  render_size(WxH|"")
 #   settle = max animation seconds to step before capture (one-shot intros like
 #   the solitaire deal stop early; continuous scenes run the full budget).
+#   render_size overrides the logical size an example lays out at. It exists for
+#   apps that switch layout on width: telemetry drops to its phone columns below
+#   900pt, so rendering it at the card's own 760 would thumbnail the wrong UI.
+#   Keep the aspect ratio equal to GOPHICS_THUMB_OUT or the downscale distorts.
 specs=(
   "canvas     2 "
   "gallery    2 "
   "ledger     2 "
+  "telemetry  2 '' 1500x1115"
+  "mirror     5 "
   "todo       2 "
   "notes      2 "
   "epub       1 "
@@ -45,13 +51,15 @@ specs=(
 
 want=("$@")
 for spec in "${specs[@]}"; do
-  read -r name settle realtime <<<"$spec"
+  read -r name settle realtime size <<<"$spec"
+  [ "$realtime" = "''" ] && realtime=""
   if [ ${#want[@]} -gt 0 ] && ! printf '%s\n' "${want[@]}" | grep -qx "$name"; then
     continue
   fi
   echo "== $name =="
   env GOPHICS_THUMB="$OUT/$name.png" \
       GOPHICS_THUMB_SETTLE="$settle" \
+      ${size:+GOPHICS_THUMB_SIZE=$size} \
       ${realtime:+GOPHICS_THUMB_REALTIME=1} \
       go run "./examples/$name"
 done

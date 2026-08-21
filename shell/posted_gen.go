@@ -150,6 +150,41 @@ func (p postedCamera) Capture(a0 CaptureOptions, a1 func(img image.Image, err er
 	p.inner.Capture(a0, w1)
 }
 
+// PostedCameraPreview wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedCameraPreview(inner CameraPreview, post func(func())) CameraPreview {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedCameraPreview{inner, post}
+}
+
+type postedCameraPreview struct {
+	inner CameraPreview
+	post  func(func())
+}
+
+func (p postedCameraPreview) Authorize(a0 func(Permission)) {
+	f0 := a0
+	var w0 func(Permission)
+	if f0 != nil {
+		w0 = func(c0 Permission) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.Authorize(w0)
+}
+
+func (p postedCameraPreview) Start(a0 PreviewOptions, a1 func(Frames, error)) {
+	f1 := a1
+	var w1 func(Frames, error)
+	if f1 != nil {
+		w1 = func(c0 Frames, c1 error) { p.post(func() { f1(c0, c1) }) }
+	}
+	p.inner.Start(a0, w1)
+}
+
 // PostedConnectivity wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -334,6 +369,41 @@ func (p postedMenus) SetBar(a0 []Menu, a1 func(id int)) {
 		w1 = func(c0 int) { p.post(func() { f1(c0) }) }
 	}
 	p.inner.SetBar(a0, w1)
+}
+
+// PostedMicrophone wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedMicrophone(inner Microphone, post func(func())) Microphone {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedMicrophone{inner, post}
+}
+
+type postedMicrophone struct {
+	inner Microphone
+	post  func(func())
+}
+
+func (p postedMicrophone) Authorize(a0 func(Permission)) {
+	f0 := a0
+	var w0 func(Permission)
+	if f0 != nil {
+		w0 = func(c0 Permission) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.Authorize(w0)
+}
+
+func (p postedMicrophone) Listen(a0 func(Monitor, error)) {
+	f0 := a0
+	var w0 func(Monitor, error)
+	if f0 != nil {
+		w0 = func(c0 Monitor, c1 error) { p.post(func() { f0(c0, c1) }) }
+	}
+	p.inner.Listen(w0)
 }
 
 // PostedNotifier wraps inner so every callback it (or anything it hands out)

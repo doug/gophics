@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"math/bits"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ const (
 	colService
 	colRoute
 	colHost
+	colTrace
 	colStatus
 	colLatency
 	colBytes
@@ -69,8 +71,8 @@ type Result struct {
 	P99       int32
 	Hist      [len(histLabels)]int32
 	PerSec    [ThroughputSecs]int32
-	SvcP95    [len(services)]int32
-	SvcCount  [len(services)]int32
+	SvcP95    []int32 // per service, indexed by dictionary id
+	SvcCount  []int32
 	Elapsed   time.Duration
 	SortedRow bool // whether this rebuild had to sort (see Run)
 }
@@ -84,11 +86,15 @@ func Run(rows []Span, now int32, q Query) Result {
 	// a bitset per dictionary. After this the 100,000-row scan is integer
 	// lookups — it never touches a string, which is what keeps a filter over the
 	// whole window off the frame budget.
-	svcHit, routeHit, hostHit, tracePfx, traceBits, hasText := compile(q.Text)
+	f := compile(q.Text)
+
+	nsvc := svcDict.Len()
+	res.SvcP95 = make([]int32, nsvc)
+	res.SvcCount = make([]int32, nsvc)
 
 	view := make([]int32, 0, len(rows))
 	var fine [200]int32
-	var svcFine [len(services)][200]int32
+	svcFine := make([][200]int32, nsvc)
 
 	for i := range rows {
 		sp := rows[i]
@@ -109,8 +115,7 @@ func Run(rows []Span, now int32, q Query) Result {
 				continue
 			}
 		}
-		if hasText && !(svcHit[sp.Svc] || routeHit[sp.Route] || hostHit[sp.Host] ||
-			(traceBits > 0 && sp.Trace>>(32-traceBits) == tracePfx)) {
+		if f.on && !f.match(sp) {
 			continue
 		}
 
@@ -135,8 +140,8 @@ func Run(rows []Span, now int32, q Query) Result {
 	res.P50 = percentile(&fine, res.Matching, 0.50)
 	res.P95 = percentile(&fine, res.Matching, 0.95)
 	res.P99 = percentile(&fine, res.Matching, 0.99)
-	for s := range services {
-		res.SvcP95[s] = percentile(&svcFine[s], int(res.SvcCount[s]), 0.95)
+	for i := range svcFine {
+		res.SvcP95[i] = percentile(&svcFine[i], int(res.SvcCount[i]), 0.95)
 	}
 	for b, n := range fine {
 		if n > 0 {
@@ -170,11 +175,13 @@ func sortView(view []int32, rows []Span, q Query) bool {
 		var d int
 		switch q.SortCol {
 		case colService:
-			d = strings.Compare(services[x.Svc], services[y.Svc])
+			d = strings.Compare(svcDict.Name(x.Svc), svcDict.Name(y.Svc))
 		case colRoute:
-			d = strings.Compare(routes[x.Route], routes[y.Route])
+			d = strings.Compare(routeDict.Name(x.Route), routeDict.Name(y.Route))
 		case colHost:
-			d = strings.Compare(hosts[x.Host], hosts[y.Host])
+			d = strings.Compare(hostDict.Name(x.Host), hostDict.Name(y.Host))
+		case colTrace:
+			d = bytes.Compare(x.Trace[:], y.Trace[:])
 		case colStatus:
 			d = int(x.Code) - int(y.Code)
 		case colLatency:
@@ -194,46 +201,91 @@ func sortView(view []int32, rows []Span, q Query) bool {
 	return true
 }
 
-// compile turns the search text into per-dictionary bitsets plus an optional
-// trace-ID prefix. Matching a hex prefix is done on the number — the query's
-// nibbles compared against the ID's high nibbles — so no span ever has to be
-// formatted to be searched.
-func compile(text string) (svc [len(services)]bool, route [len(routes)]bool, host []bool, tracePfx uint32, traceBits uint, has bool) {
-	host = make([]bool, len(hosts))
-	q := strings.ToLower(strings.TrimSpace(text))
-	if q == "" {
-		return svc, route, host, 0, 0, false
-	}
-	for i, s := range services {
-		svc[i] = strings.Contains(s, q)
-	}
-	for i, r := range routes {
-		route[i] = strings.Contains(strings.ToLower(r), q)
-	}
-	for i, h := range hosts {
-		host[i] = strings.Contains(h, q)
-	}
-	if len(q) <= 8 {
-		if v, ok := parseHex(q); ok {
-			tracePfx, traceBits = v, uint(len(q))*4
-		}
-	}
-	return svc, route, host, tracePfx, traceBits, true
+// filter is a compiled search: one bitset per dictionary plus an optional trace
+// prefix. Matching a hex prefix is done on the raw bytes — the query's nibbles
+// against the ID's leading ones — so no span is ever formatted to be searched.
+type filter struct {
+	on    bool
+	svc   []bool
+	route []bool
+	host  []bool
+
+	tracePfx  [16]byte
+	traceNibs int // how many leading hex digits of the query to honour
 }
 
-func parseHex(s string) (uint32, bool) {
-	var v uint32
-	for _, c := range s {
-		switch {
+// match tests one span. It is the innermost thing in the scan, so it is nothing
+// but slice indexing and, at most, a 16-byte compare.
+func (f *filter) match(sp Span) bool {
+	if f.svc[sp.Svc] || f.route[sp.Route] || f.host[sp.Host] {
+		return true
+	}
+	if f.traceNibs == 0 {
+		return false
+	}
+	whole := f.traceNibs / 2
+	if !bytes.Equal(sp.Trace[:whole], f.tracePfx[:whole]) {
+		return false
+	}
+	if f.traceNibs%2 == 1 { // an odd query length ends on a half byte
+		return sp.Trace[whole]>>4 == f.tracePfx[whole]>>4
+	}
+	return true
+}
+
+// compile resolves the search text against the dictionaries once, up front.
+// After this the 100,000-row scan is integer lookups — it never touches a
+// string, which is what keeps a filter over the whole window off the frame
+// budget however fast someone types.
+func compile(text string) filter {
+	f := filter{
+		svc:   make([]bool, svcDict.Len()),
+		route: make([]bool, routeDict.Len()),
+		host:  make([]bool, hostDict.Len()),
+	}
+	q := strings.ToLower(strings.TrimSpace(text))
+	if q == "" {
+		return f
+	}
+	f.on = true
+	for i, n := range svcDict.Names() {
+		f.svc[i] = strings.Contains(strings.ToLower(n), q)
+	}
+	for i, n := range routeDict.Names() {
+		f.route[i] = strings.Contains(strings.ToLower(n), q)
+	}
+	for i, n := range hostDict.Names() {
+		f.host[i] = strings.Contains(strings.ToLower(n), q)
+	}
+	if len(q) <= 32 {
+		if nibs, ok := parseNibbles(q, f.tracePfx[:]); ok {
+			f.traceNibs = nibs
+		}
+	}
+	return f
+}
+
+// parseNibbles writes q's hex digits into dst, high nibble first, and reports
+// how many it wrote. It fails on any non-hex character, which is how a search
+// for "search" is treated as a name and one for "4afb" as a trace prefix.
+func parseNibbles(q string, dst []byte) (int, bool) {
+	for i := 0; i < len(q); i++ {
+		var v byte
+		switch c := q[i]; {
 		case c >= '0' && c <= '9':
-			v = v<<4 | uint32(c-'0')
+			v = c - '0'
 		case c >= 'a' && c <= 'f':
-			v = v<<4 | uint32(c-'a'+10)
+			v = c - 'a' + 10
 		default:
 			return 0, false
 		}
+		if i%2 == 0 {
+			dst[i/2] = v << 4
+		} else {
+			dst[i/2] |= v
+		}
 	}
-	return v, true
+	return len(q), true
 }
 
 // latBucket maps microseconds to one of ~200 log-spaced buckets with integer

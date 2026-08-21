@@ -123,7 +123,9 @@ Every example runs on the desktop, most compile to the browser, and all are test
 | `canvas` | the custom-paint escape hatch — draw shapes/paths/text every frame |
 | `solitaire`, `match3`, `roguelike` | games — drag, sprites, sound, animation |
 | `drummachine`, `luminaria` | audio synthesized in Go — a step sequencer, and a Tenori-On-style matrix instrument |
+| `telemetry` | 100,000 live rows: a virtualized table, charts, filter/sort, and an OpenTelemetry OTLP/JSON loader |
 | `gallery` | a tour of the widget catalog |
+| `mirror` | live camera + microphone capture, warped per-frame in a Go pixel loop |
 | `capabilities` | a live inspector of every platform bridge — connectivity, battery, file picker, share, notifications, clipboard, secure storage, IME, web view… |
 
 ## Platforms — one widget tree, everywhere

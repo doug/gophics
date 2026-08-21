@@ -1,5 +1,13 @@
 # Spec — media capture shell + Journal app
 
+> **Status note (2026-08-21).** The Journal app this spec is named for has been
+> removed. It served its purpose — the `shell.Camera` / `shell.Audio` interfaces
+> below shipped and are unchanged — but as a *demo* it was weak on the web,
+> where camera capture is a file picker rather than a camera. The capabilities
+> are now driven by [`examples/mirror`](../examples/mirror), which uses the
+> newer live-capture pair (`shell.CameraPreview`, `shell.Microphone`) alongside
+> them. Everything below still describes the shipped still/clip API.
+
 A capability-driving project: the **Journal** app (a private, local Day One) is the
 forcing function; the real deliverable is a **reusable camera + audio-in + audio-out
 layer in the `shell` platform interface**. Build web-first to nail the Go-side API,

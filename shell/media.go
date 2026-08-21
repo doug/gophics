@@ -12,7 +12,8 @@ import (
 // same interfaces are the contract the mobile (gomobile) and desktop shells
 // will satisfy. All callbacks fire on the UI goroutine.
 //
-// See design/spec-media-journal.md.
+// See design/spec-media-journal.md for the still/clip half, and the live
+// capture section at the bottom of this file for the streaming one.
 
 // MediaWindow is implemented by a Window that can capture media. The app runner
 // type-asserts the Window to it and, when present, publishes Camera()/Audio()
@@ -95,4 +96,93 @@ type Audio interface {
 	// Play decodes and plays clip; the Playback control arrives on the callback
 	// once playback starts.
 	Play(Clip, func(Playback, error))
+}
+
+// --- Live capture ------------------------------------------------------------
+
+// Live capture is a separate capability from MediaWindow on purpose. Camera
+// takes one still and Audio records one clip; both are one-shot transactions
+// that end with a result. A preview and a microphone monitor are neither — they
+// are continuous, they retain nothing, and a platform can perfectly well offer
+// one pair and not the other. Splitting them means the shells that haven't
+// implemented streaming yet simply don't publish it, and ctx.CameraPreview()
+// is nil, instead of every shell carrying a method that returns "unsupported".
+
+// LiveMediaWindow is implemented by a Window that can stream live capture. The
+// app runner type-asserts the Window to it and, when present, publishes
+// CameraPreview()/Microphone() to the widget tree.
+type LiveMediaWindow interface {
+	// CameraPreview returns live camera capture, or nil if unavailable.
+	CameraPreview() CameraPreview
+	// Microphone returns live input monitoring, or nil if unavailable.
+	Microphone() Microphone
+}
+
+// PreviewOptions configures a live camera preview.
+type PreviewOptions struct {
+	Facing Facing
+	// Width is the requested frame width in pixels (0 → a platform default).
+	// It is a hint: the camera picks the nearest mode it has, and the frames
+	// that arrive may be any size — read it off the image, don't assume it.
+	//
+	// It is worth setting. Every frame is copied out of the platform's buffer
+	// into Go memory, so the cost of a preview scales with its area: a 1280-wide
+	// frame is four times the copy of a 640-wide one, every frame, forever.
+	Width int
+}
+
+// CameraPreview is live camera capture — a stream of frames an app can draw
+// each time it paints, as opposed to Camera's single still.
+type CameraPreview interface {
+	// Authorize requests capture permission, reporting the outcome.
+	Authorize(func(Permission))
+	// Start opens the camera; the Frames handle arrives on the callback once
+	// the stream is live (permission may prompt first). Stop it when done —
+	// the camera stays on, and lit, until you do.
+	Start(PreviewOptions, func(Frames, error))
+}
+
+// Frames is a running camera preview. Poll it whenever you draw.
+type Frames interface {
+	// Frame returns the most recent camera frame, or nil before the first one
+	// has arrived. Polling faster than the camera produces frames is free: the
+	// same image comes back until there is genuinely a new one.
+	//
+	// Successive frames are distinct image values — implementations rotate a
+	// small pool of buffers rather than repainting one in place. That is not an
+	// implementation detail to rely on loosely: the scene compares images by
+	// identity, so a canvas handed the same *image.RGBA with different pixels
+	// inside it would never repaint. Because they rotate, a frame's memory is
+	// reused after a few more; draw or copy it now, don't retain it.
+	Frame() *image.RGBA
+	// Stop ends the preview and releases the camera.
+	Stop()
+}
+
+// Microphone is live input monitoring: the analysis half of recording, with
+// nothing kept, so it can run for as long as a visualization needs it to.
+type Microphone interface {
+	// Authorize requests microphone permission, reporting the outcome.
+	Authorize(func(Permission))
+	// Listen opens the microphone; the Monitor arrives on the callback once
+	// input is live (permission may prompt first).
+	Listen(func(Monitor, error))
+}
+
+// Monitor is a running microphone monitor. Poll it whenever you draw.
+type Monitor interface {
+	// Level is the current input level, 0..1 — the peak of the most recent
+	// block, the same quantity Recorder.Level reports.
+	Level() float32
+	// Bands fills dst with the input spectrum, lowest frequency first, as
+	// magnitudes in 0..1, and returns how many it wrote (at most len(dst)).
+	//
+	// The caller's slice length *is* the band count: the implementation folds
+	// its own analysis resolution onto whatever is asked for, grouping
+	// logarithmically so the bands are musically even rather than linear in
+	// hertz. A visualization therefore never has to know or care about the FFT
+	// size behind it — ask for as many bars as you intend to draw.
+	Bands(dst []float32) int
+	// Stop ends monitoring and releases the microphone.
+	Stop()
 }
