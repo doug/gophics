@@ -845,6 +845,14 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// computed for it — see RecordSceneGPU.
 	tgt := f.Target()
 	changed, damage, ok := h.recordFrame(f, tgt)
+	// recordFrame builds, and a Build is where a control starts the animation
+	// that reacts to its own new state. TickAll above ran before that, so it
+	// could not have seen it; without this the animation never gets a second
+	// frame on a device that produces no hover events, and it sits frozen at
+	// its start value while the rest of the UI shows the new state.
+	if h.core.Owner.TickersActive() {
+		w.Invalidate()
+	}
 	if !ok {
 		// Layout or paint panicked: drop this frame, keep the previous one on
 		// screen, and keep the app alive (mirrors safeBuild's isolation policy

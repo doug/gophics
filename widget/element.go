@@ -110,6 +110,28 @@ func (o *Owner) RemoveTicker(t Ticker) {
 // the same three lines work for a widget defined outside this repo.
 func (o *Owner) TickerCount() int { return len(o.tickers) }
 
+// TickersActive reports whether any registered ticker is mid-animation,
+// without advancing anything.
+//
+// The frame pipeline ticks animations before it builds, so an animation that a
+// Build starts — which is the normal way a control reacts to its own state
+// changing — is invisible to the tick that already ran. On a device with no
+// hover events nothing then asks for another frame, and the animation sits at
+// its start value while the rest of the UI shows the new state: a switch whose
+// dependent content updates but whose knob never slides. Asking again after
+// the build is what closes that gap.
+//
+// Tickers that do not report their state are assumed idle; anim.Controller,
+// which is what animates the widget catalog, reports it.
+func (o *Owner) TickersActive() bool {
+	for _, t := range o.tickers {
+		if r, ok := t.(interface{ Running() bool }); ok && r.Running() {
+			return true
+		}
+	}
+	return false
+}
+
 // TickAll advances all tickers and reports whether any is still running.
 func (o *Owner) TickAll(dt float64) bool {
 	active := false

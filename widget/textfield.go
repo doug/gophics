@@ -433,6 +433,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			OnFocus: func(v bool) {
 				s.focused = v
 				s.activity() // caret solid on focus, then blinks
+				s.softKeyboard(ctx, v, f, onText, onKey, onComposition)
 				if f.OnFocus != nil {
 					f.OnFocus(v)
 				}
@@ -441,6 +442,66 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		},
 		Child: fieldView{state: s},
 	}
+}
+
+// softKeyboard raises or dismisses the platform on-screen keyboard as the field
+// gains and loses focus, routing what it produces into the same handlers a
+// hardware keyboard feeds.
+//
+// gophics draws its own editor, so there is no native text field for the
+// platform to focus and nothing raises the keyboard on its own. Without this a
+// phone shows a caret in a field that cannot be typed into: the field takes
+// focus, blinks, and no keyboard ever appears. Desktop shells report no
+// TextInput capability because a hardware keyboard already delivers key events,
+// so this is a no-op there.
+func (s *textFieldState) softKeyboard(
+	ctx Ctx,
+	focused bool,
+	_ TextField,
+	onText func(string),
+	onKey func(shell.Key),
+	onComposition func(shell.Composition),
+) {
+	ti := ctx.TextInput()
+	if ti == nil {
+		return // desktop, or a shell without the capability
+	}
+	if !focused {
+		ti.Hide()
+		return
+	}
+
+	// TextField exposes no keyboard-type or password hints yet, so ask for the
+	// default layout with autocorrect on. Adding those knobs is a separate
+	// change to its API, not something to infer here.
+	ti.Show(shell.TextInputOptions{Autocorrect: true}, shell.TextInputHandler{
+		OnText: onText,
+		OnComposing: func(pre string) {
+			onComposition(shell.Composition{Kind: shell.CompositionUpdate, Preedit: pre, Cursor: len([]rune(pre))})
+		},
+		// The IME reports editing keys separately from text; the editor already
+		// knows how to apply them, so they are forwarded as the key presses it
+		// would have received from hardware.
+		OnEditKey: func(k shell.EditKey) {
+			var code shell.KeyCode
+			switch k {
+			case shell.EditBackspace:
+				code = shell.KeyBackspace
+			case shell.EditEnter:
+				code = shell.KeyEnter
+			case shell.EditLeft:
+				code = shell.KeyLeft
+			case shell.EditRight:
+				code = shell.KeyRight
+			default:
+				return
+			}
+			onKey(shell.Key{Kind: shell.KeyPress, Code: code})
+		},
+	})
+	// Give the IME the surrounding text so composition and prediction have
+	// something to work against.
+	ti.SetText(s.ed.Text(), s.ed.Caret(), s.ed.Caret())
 }
 
 func sanitize(t string) string {
