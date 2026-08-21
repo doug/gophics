@@ -26,6 +26,13 @@ docs/source/
 # Stray example binaries from `go build ./examples/<x>` without -o.
 # One entry per example (regenerate with: ls examples/ | grep -v build).
 # CI's tracked-binary guard catches any that slip through.
+# Compiled example binaries. `go build ./examples/<name>` drops an
+# extensionless binary here named after the example, and this list is
+# maintained by hand — so every new example is unignored until someone
+# remembers to add a line. That is how a 19MB luminaria binary reached the
+# index; the pre-push size gate is what caught it.
+/luminaria
+/telemetry
 /2048
 /canvas
 /drummachine

@@ -175,34 +175,10 @@ func TestFeedHeroNavigation(t *testing.T) {
 	}
 }
 
-func TestFeedPullToRefresh(t *testing.T) {
-	h, nav, _ := startHome(t)
-	st := openFeed(t, h, nav)
-	first := st.cards[0].id
-
-	h.Move(geom.Pt{X: 210, Y: 220})
-	h.DragTo(geom.Pt{X: 210, Y: 220}, geom.Pt{X: 210, Y: 470})
-	h.Release(geom.Pt{X: 210, Y: 470})
-	settle(h)
-
-	if st.cards[0].id == first {
-		t.Fatalf("pull-to-refresh should reshuffle the feed (still id=%d)", first)
-	}
-}
-
-func TestFeedSwipeDismiss(t *testing.T) {
-	h, nav, _ := startHome(t)
-	st := openFeed(t, h, nav)
-	before := len(st.cards)
-
-	h.DragTo(geom.Pt{X: 120, Y: 220}, geom.Pt{X: 380, Y: 220})
-	h.Release(geom.Pt{X: 380, Y: 220})
-	settle(h)
-
-	if len(st.cards) != before-1 {
-		t.Fatalf("swipe should remove one card: %d → %d", before, len(st.cards))
-	}
-}
+// Pull-to-refresh and swipe-to-dismiss moved out of the feed into their own
+// sections, so the feed no longer demonstrates them; those behaviours are
+// covered against the sections that now own them, in gestures_split_test.go.
+// The feed keeps what only it can show: a push transition with a Hero.
 
 func TestDetailSelectableBody(t *testing.T) {
 	h, nav, _ := startHome(t)

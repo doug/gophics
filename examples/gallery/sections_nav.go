@@ -1,11 +1,16 @@
 package main
 
-// This file holds the Navigation & gestures section — the one section that is a
-// full page of its own rather than a scrolling demo list. It folds in the good
-// parts of the original gallery: a Navigator with Hero shared-element
-// transitions, a LazyList with pull-to-refresh, Dismissible swipe-to-remove,
-// SelectableText, and an AnimateFloat like button. It is also the only section
-// that needs the procedural-image helpers (kept here as content, not chrome).
+// Navigator with Hero shared-element transitions.
+//
+// This is the one section that is a full page of its own rather than a
+// scrolling demo list, and it earns that: a push transition cannot be shown
+// inside a list, because the transition *is* the page changing. The Hero swatch
+// flies from the row into the detail header, which is the whole point.
+//
+// Pull-to-refresh and swipe-to-dismiss used to be tangled into this same feed;
+// they are their own sections now (sections_gestures.go), so each demo has one
+// subject. The procedural-image helpers stay here as content, not chrome — the
+// gesture sections share them.
 
 import (
 	"fmt"
@@ -195,22 +200,15 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	list := widget.LazyList{
 		Count:           len(s.cards),
 		EstimatedExtent: 96,
-		Refreshing:      s.refreshing,
-		OnRefresh:       func() { s.refresh(ctx) },
 		Build: func(i int) widget.Widget {
 			c := s.cards[i]
-			row := widget.Interactive{
+			return widget.Interactive{
 				Handler: widget.Handler{OnTap: func() { nav.Push(detailPage{card: c}) }},
 				Child:   cardTile(th, c),
 			}
-			return widget.WithKey{Key: c.id, Child: widget.Dismissible{
-				OnDismissed: func() { s.remove(c.id) },
-				Background:  dismissPanel(th),
-				Child:       row,
-			}}
 		},
 	}
-	return scaffold(ctx, "Navigation & gestures", "pull to refresh · swipe a card away", widget.Expand(list))
+	return scaffold(ctx, "Navigator & Hero", "tap a row — the swatch flies into the detail page", widget.Expand(list))
 }
 
 func cardTile(th theme.Theme, c card) widget.Widget {

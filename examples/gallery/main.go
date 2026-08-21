@@ -130,8 +130,8 @@ type section struct {
 
 // sections returns the catalog in display order. Each page factory returns a
 // self-contained widget; most wrap their demo in sectionPage (adds the scaffold
-// chrome + a scrolling body), while Navigation & gestures pushes its own
-// full-page feed.
+// chrome + a scrolling body), while Navigator & Hero pushes its own full-page
+// feed — a push transition cannot be demonstrated inside a scrolling list.
 func sections() []section {
 	sp := func(title, subtitle string, body widget.Widget) func() widget.Widget {
 		return func() widget.Widget { return sectionPage{title: title, subtitle: subtitle, body: body} }
@@ -159,8 +159,12 @@ func sections() []section {
 			sp("Layout", "The core layout primitives, live", layoutSection{})},
 		{"Animations", "AnimateColor, AnimateFloat, Scale, Rotation",
 			sp("Animations", "Implicit animations you can trigger", animationsSection{})},
-		{"Navigation & gestures", "Navigator + Hero, pull-to-refresh, swipe",
+		{"Navigator & Hero", "Push a page; the swatch flies with it",
 			func() widget.Widget { return feedPage{} }},
+		{"Pull to refresh", "Drag a list down to reload it",
+			sp("Pull to refresh", "LazyList with Refreshing / OnRefresh", refreshSection{})},
+		{"Swipe to dismiss", "Swipe a row aside to remove it",
+			sp("Swipe to dismiss", "Dismissible rows, keyed so the right one goes", dismissSection{})},
 	}
 }
 

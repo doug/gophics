@@ -292,12 +292,25 @@ func (s *cardsState) Build(ctx widget.Ctx) widget.Widget {
 	if s.faded {
 		alpha = 0.25
 	}
+	// Deliberately a filled, high-contrast panel rather than a plain Card. In a
+	// light theme a Card is a white surface on an off-white page — about six
+	// levels of contrast at full opacity, and none at all once it is faded to a
+	// quarter. The demo then looks broken rather than dimmed, which is exactly
+	// how it was reported. Fading has to be visible for a fade to be the point.
 	fadeTarget := widget.AnimateFloat(alpha, 200*time.Millisecond, func(a float32) widget.Widget {
-		return widget.Opacity{Alpha: a, Child: theme.Card{Child: widget.Column(
-			widget.Text{S: "Grouped opacity", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
-			widget.Sized{H: 6},
-			theme.Body("The whole card fades as one group, not shape by shape."),
-		)}}
+		return widget.Opacity{Alpha: a, Child: widget.Decorated{
+			Color:  th.Primary,
+			Radius: th.Radius,
+			Child: widget.Padding{All: 16, Child: widget.Column(
+				widget.Text{S: "Grouped opacity", Font: theme.FontBold, Size: th.Type.Heading, Color: th.OnPrimary},
+				widget.Sized{H: 6},
+				widget.Text{
+					S:     "The whole panel fades as one group, not shape by shape.",
+					Size:  th.Type.Body,
+					Color: th.OnPrimary,
+				},
+			)},
+		}}
 	})
 
 	return sectionColumn(
