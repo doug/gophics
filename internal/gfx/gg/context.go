@@ -1969,14 +1969,27 @@ func (c *Context) setGPUClipRect() func() {
 		return c.setGPUClipPath()
 	}
 
+	// Clamp to the target before converting. A clip that starts off the left or
+	// top edge is ordinary -- a card scrolled part-way off, or a transient
+	// during a window resize -- but converting a negative float to uint32 wraps
+	// it to about 4.29e9. That makes x1 <= x0 below, which silently drops the
+	// clip for that draw rather than clipping to nothing, and the drawing then
+	// spills over whatever is beside it. Clamping keeps an off-screen edge
+	// meaning "start at zero", which is what it means everywhere else.
 	bounds := c.clipStack.Bounds()
-	x0 := uint32(math.Floor(bounds.X))
-	y0 := uint32(math.Floor(bounds.Y))
-	x1 := uint32(math.Ceil(bounds.X + bounds.W))
-	y1 := uint32(math.Ceil(bounds.Y + bounds.H))
-	if x1 <= x0 || y1 <= y0 {
+	fx0 := math.Max(0, math.Floor(bounds.X))
+	fy0 := math.Max(0, math.Floor(bounds.Y))
+	fx1 := math.Ceil(bounds.X + bounds.W)
+	fy1 := math.Ceil(bounds.Y + bounds.H)
+	if w, h := float64(c.pixmap.Width()), float64(c.pixmap.Height()); w > 0 && h > 0 {
+		fx1 = math.Min(fx1, w)
+		fy1 = math.Min(fy1, h)
+	}
+	if fx1 <= fx0 || fy1 <= fy0 {
 		return func() {}
 	}
+	x0, y0 := uint32(fx0), uint32(fy0)
+	x1, y1 := uint32(fx1), uint32(fy1)
 
 	// Per-context path (GPURenderContext available)
 	if rc := c.gpuCtxOps(); rc != nil {
