@@ -146,3 +146,93 @@ func imagesEqual(a, b []byte) bool {
 	}
 	return true
 }
+
+// nested buries the button several containers deep, which is what a real tree
+// looks like. SemNode carries Children, so helpers that walk only the roots
+// find nothing here — the first version of this package had exactly that bug,
+// and the flat counter above was too shallow to expose it.
+type nested struct{}
+
+func (nested) CreateState() widget.State { return &nestedState{} }
+
+type nestedState struct {
+	widget.StateBase[nested]
+	tapped bool
+}
+
+func (s *nestedState) Build(widget.Ctx) widget.Widget {
+	return widget.Column(
+		widget.Padding{All: 4, Child: widget.Column(
+			widget.Padding{All: 4, Child: widget.Column(
+				theme.Button{
+					Label: "Deep",
+					OnTap: func() { s.SetState(func() { s.tapped = true }) },
+				},
+			)},
+		)},
+	)
+}
+
+func TestFindsDeeplyNestedWidgets(t *testing.T) {
+	a := apptest.New(t, nested{}, apptest.Size(200, 120))
+
+	if !a.HasLabel("Deep") {
+		t.Fatalf("a button nested in containers was not found — semantics is a "+
+			"tree and the helpers must flatten it. Labels seen: %v", a.Labels())
+	}
+
+	a.TapLabel("Deep")
+	if !a.HasLabel("Deep") {
+		t.Error("button vanished after tapping it")
+	}
+}
+
+// A semantic node that contains another semantic node is the case flattening
+// exists for: CollectSemantics keeps structural children ("buttons inside a
+// group") nested rather than hoisting them. Walking only the roots misses them.
+func TestNodesFlattensNestedSemantics(t *testing.T) {
+	// A Tappable wrapping a Button: both carry semantics, so the Button
+	// becomes a child of the Tappable rather than a sibling.
+	a := apptest.New(t, theme.Tappable{
+		OnTap: func() {},
+		Child: widget.Column(theme.Button{Label: "Inner", OnTap: func() {}}),
+	}, apptest.Size(200, 120))
+
+	flat := a.Nodes()      // renders, then flattens
+	roots := a.Semantics() // same frame, roots only
+
+	nestedChildren := 0
+	for _, r := range roots {
+		nestedChildren += len(r.Children)
+	}
+	if nestedChildren == 0 {
+		t.Skip("this tree did not nest; nothing to flatten here")
+	}
+
+	if len(flat) <= len(roots) {
+		t.Errorf("Nodes() returned %d and there are %d roots holding %d children — "+
+			"the tree is not being flattened", len(flat), len(roots), nestedChildren)
+	}
+}
+
+// Exact and substring matching are different tools: a label assembled from
+// pieces is found by substring, and a label that must not drift is asserted
+// exactly. Both must work, and neither should quietly do the other's job.
+func TestExactAndSubstringMatching(t *testing.T) {
+	a := apptest.New(t, counter{}, apptest.Size(200, 120))
+
+	if !a.HasLabel("count 0") {
+		t.Fatalf("exact match failed. Labels: %v", a.Labels())
+	}
+	if a.HasLabel("count") {
+		t.Error("HasLabel matched a prefix — it must be exact")
+	}
+	if !a.HasText("count") {
+		t.Error("HasText did not match a substring")
+	}
+
+	a.TapText("Increm") // partial label
+	if !a.HasLabel("count 1") {
+		t.Errorf("TapText did not tap the button. Labels: %v", a.Labels())
+	}
+}

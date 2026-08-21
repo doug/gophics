@@ -1,14 +1,13 @@
 package theme_test
 
 import (
-	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/apptest"
 	"github.com/doug/gophics/geom"
-	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -42,37 +41,17 @@ func (s *ddState) Build(widget.Ctx) widget.Widget {
 	}}
 }
 
-func ddHarness(t *testing.T) (*app.Headless, *ddState) {
+func ddHarness(t *testing.T) (*apptest.App, *ddState) {
 	t.Helper()
 	var st *ddState
-	h, err := app.NewHeadless(ddApp{hook: func(s *ddState) { st = s }}, app.Config{
-		Size: geom.Size{W: 400, H: 400}, Font: goregular.TTF,
-	}, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.Render()
-	return h, st
-}
-
-func hasLabel(h *app.Headless, sub string) bool {
-	for _, n := range layout.FlattenSemantics(h.Semantics()) {
-		if strings.Contains(n.Label, sub) {
-			return true
-		}
-	}
-	return false
-}
-
-// tapLabel taps the center of the first semantic node whose label contains sub.
-func tapLabel(h *app.Headless, sub string) bool {
-	for _, n := range layout.FlattenSemantics(h.Semantics()) {
-		if strings.Contains(n.Label, sub) {
-			h.Tap(geom.Pt{X: n.Rect.Min.X + n.Rect.Dx()/2, Y: n.Rect.Min.Y + n.Rect.Dy()/2})
-			return true
-		}
-	}
-	return false
+	a := apptest.New(t, ddApp{hook: func(s *ddState) { st = s }},
+		apptest.WithConfig(app.Config{
+			Size: geom.Size{W: 400, H: 400}, Font: goregular.TTF,
+		}),
+		apptest.Scale(2),
+	)
+	a.Render()
+	return a, st
 }
 
 // TestDropdownConstruct is the lightweight logic check: at rest it shows the
@@ -82,10 +61,10 @@ func TestDropdownConstruct(t *testing.T) {
 	if st.selected != -1 {
 		t.Fatalf("initial selection = %d, want -1", st.selected)
 	}
-	if !hasLabel(h, "Pick a size") {
+	if !h.HasText("Pick a size") {
 		t.Fatal("placeholder not shown at rest")
 	}
-	if hasLabel(h, "Medium") {
+	if h.HasText("Medium") {
 		t.Fatal("options should not be visible before opening")
 	}
 }
@@ -96,17 +75,13 @@ func TestDropdownConstruct(t *testing.T) {
 func TestDropdownOpensAndSelects(t *testing.T) {
 	h, st := ddHarness(t)
 
-	if !tapLabel(h, "Pick a size") {
-		t.Fatal("closed dropdown not found")
-	}
+	h.TapText("Pick a size")
 	h.Render()
-	if !hasLabel(h, "Medium") {
+	if !h.HasText("Medium") {
 		t.Fatal("popup did not open (options not visible)")
 	}
 
-	if !tapLabel(h, "Medium") {
-		t.Fatal("option row not found in open popup")
-	}
+	h.TapText("Medium")
 	h.Render()
 
 	if st.picked != 1 {
@@ -116,10 +91,10 @@ func TestDropdownOpensAndSelects(t *testing.T) {
 		t.Fatalf("selected index = %d, want 1 (Medium)", st.selected)
 	}
 	// Popup closed: the other options are gone again.
-	if hasLabel(h, "Large") {
+	if h.HasText("Large") {
 		t.Fatal("popup did not close after selection")
 	}
-	if !hasLabel(h, "Medium") {
+	if !h.HasText("Medium") {
 		t.Fatal("control should now show the selected value")
 	}
 }
@@ -128,17 +103,15 @@ func TestDropdownOpensAndSelects(t *testing.T) {
 // clear of the menu); the popup closes without firing OnChange.
 func TestDropdownOutsideTapDismisses(t *testing.T) {
 	h, st := ddHarness(t)
-	if !tapLabel(h, "Pick a size") {
-		t.Fatal("closed dropdown not found")
-	}
+	h.TapText("Pick a size")
 	h.Render()
-	if !hasLabel(h, "Small") {
+	if !h.HasText("Small") {
 		t.Fatal("popup did not open")
 	}
 	// Bottom-right corner: on the scrim, clear of the top-left-anchored menu.
 	h.Tap(geom.Pt{X: 390, Y: 390})
 	h.Render()
-	if hasLabel(h, "Small") {
+	if h.HasText("Small") {
 		t.Fatal("outside tap did not dismiss the popup")
 	}
 	if st.picked != 0 {

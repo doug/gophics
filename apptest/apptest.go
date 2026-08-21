@@ -111,17 +111,27 @@ func New(tb testing.TB, root widget.Widget, opts ...Option) *App {
 	return &App{Headless: h, tb: tb, opts: o}
 }
 
-// Node returns the first semantics node whose Label equals label, or nil.
+// Nodes returns every semantics node in the tree, flattened, in tree order.
 //
-// Semantics is the tree assistive technology sees, so asserting on it checks
-// the thing a screen-reader user gets rather than an implementation detail —
-// and unlike pixel coordinates it survives restyling.
+// Semantics is what assistive technology sees, so asserting on it checks the
+// thing a screen-reader user gets rather than an implementation detail — and
+// unlike pixel coordinates it survives restyling.
+//
+// The flattening is the whole point: SemNode carries Children, so a widget
+// nested inside any container is invisible to code that walks only the roots.
+// That is most widgets in a real tree.
+func (a *App) Nodes() []layout.SemNode {
+	a.Render() // semantics are produced during layout
+	return layout.FlattenSemantics(a.Semantics())
+}
+
+// Node returns the first semantics node whose Label equals label, or nil.
 func (a *App) Node(label string) *layout.SemNode {
 	a.tb.Helper()
-	a.Render() // semantics are produced during layout
-	for i, n := range a.Semantics() {
-		if n.Label == label {
-			return &a.Semantics()[i]
+	nodes := a.Nodes()
+	for i := range nodes {
+		if nodes[i].Label == label {
+			return &nodes[i]
 		}
 	}
 	return nil
@@ -142,14 +152,26 @@ func (a *App) MustNode(label string) layout.SemNode {
 
 // Labels lists every non-empty semantics label in the tree, in tree order.
 func (a *App) Labels() []string {
-	a.Render()
 	var out []string
-	for _, n := range a.Semantics() {
+	for _, n := range a.Nodes() {
 		if n.Label != "" {
 			out = append(out, n.Label)
 		}
 	}
 	return out
+}
+
+// Role returns the first node with this role, or nil. Useful where a widget
+// has no stable label — the only button on a screen, say.
+func (a *App) Role(r layout.Role) *layout.SemNode {
+	a.tb.Helper()
+	nodes := a.Nodes()
+	for i := range nodes {
+		if nodes[i].Role == r {
+			return &nodes[i]
+		}
+	}
+	return nil
 }
 
 // TapLabel taps the centre of the widget labelled label.
@@ -162,10 +184,53 @@ func (a *App) TapLabel(label string) {
 	a.Tap(centerOf(n.Rect))
 }
 
-// HasLabel reports whether a node with this label is present.
+// HasLabel reports whether a node with this exact label is present.
 func (a *App) HasLabel(label string) bool {
 	a.tb.Helper()
 	return a.Node(label) != nil
+}
+
+// NodeContaining returns the first node whose label contains sub, or nil.
+//
+// Exact matching is the better default — it fails when a label changes, which
+// is usually what you want — but labels are often assembled from several
+// pieces, and a node labelled "Sort by: Newest" is most naturally found by
+// "Sort by". Both forms exist so a test can say which it means.
+func (a *App) NodeContaining(sub string) *layout.SemNode {
+	a.tb.Helper()
+	nodes := a.Nodes()
+	for i := range nodes {
+		if strings.Contains(nodes[i].Label, sub) {
+			return &nodes[i]
+		}
+	}
+	return nil
+}
+
+// HasText reports whether any node's label contains sub.
+func (a *App) HasText(sub string) bool {
+	a.tb.Helper()
+	return a.NodeContaining(sub) != nil
+}
+
+// TapText taps the centre of the first node whose label contains sub.
+func (a *App) TapText(sub string) {
+	a.tb.Helper()
+	n := a.NodeContaining(sub)
+	if n == nil {
+		a.tb.Fatalf("apptest: no node whose label contains %q. Present labels: %s",
+			sub, formatLabels(a.Labels()))
+	}
+	a.Tap(centerOf(n.Rect))
+}
+
+// AssertText fails the test unless some node's label contains sub.
+func (a *App) AssertText(sub string) {
+	a.tb.Helper()
+	if !a.HasText(sub) {
+		a.tb.Errorf("apptest: expected a node whose label contains %q. Present labels: %s",
+			sub, formatLabels(a.Labels()))
+	}
 }
 
 // AssertLabel fails the test unless a node with this label is present.
