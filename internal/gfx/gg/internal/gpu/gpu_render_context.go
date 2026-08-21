@@ -1288,6 +1288,33 @@ func (rc *GPURenderContext) Flush(target gg.GPURenderTarget) error { //nolint:cy
 	return err
 }
 
+// drawCategory returns which of a ScissorGroup's buckets a command renders
+// through, or 0 for commands that render nothing (layer markers, base layer).
+//
+// A group renders its buckets in a fixed order — SDF shapes, then convex and
+// stencil paths, then images, then text and glyph masks — so two commands may
+// share a group only when they land in the same bucket. Put a card's fill and
+// the pips of the card beneath it in one group and the pips are drawn last,
+// over the card that covers them, whatever order they were queued in.
+func drawCategory(k drawCommandKind) int {
+	switch k {
+	case drawCmdFillShape, drawCmdStrokeShape:
+		return 1
+	case drawCmdFillPath, drawCmdStrokePath:
+		return 2
+	case drawCmdImage:
+		return 3
+	case drawCmdGPUTexture:
+		return 4
+	case drawCmdText:
+		return 5
+	case drawCmdGlyphMaskText:
+		return 6
+	default:
+		return 0
+	}
+}
+
 // buildScissorGroupsFromDraws converts backend-agnostic drawCommands into
 // ScissorGroups using per-draw clip state (ADR-051 Phase 1.1 + Phase 2).
 //
@@ -1305,24 +1332,41 @@ func (rc *GPURenderContext) buildScissorGroupsFromDraws() []ScissorGroup {
 
 	var groups []ScissorGroup
 	groupStart := 0
+	// The bucket the current group is accumulating into; 0 until a command
+	// that actually renders is seen.
+	groupCat := drawCategory(rc.pendingDraws[0].kind)
 
 	for i := 1; i <= len(rc.pendingDraws); i++ {
-		// Detect clip boundary: either end-of-slice or clip changed.
-		clipChanged := i < len(rc.pendingDraws) &&
-			!drawClipEqual(&rc.pendingDraws[i], &rc.pendingDraws[groupStart])
 		atEnd := i == len(rc.pendingDraws)
 
-		if clipChanged || atEnd {
-			end := i
-			if clipChanged {
-				end = i // commands [groupStart, i) share the same clip
+		split := atEnd
+		var nextCat int
+		if !atEnd {
+			nextCat = drawCategory(rc.pendingDraws[i].kind)
+			switch {
+			case !drawClipEqual(&rc.pendingDraws[i], &rc.pendingDraws[groupStart]):
+				// Clip boundary: commands [groupStart, i) share the same clip.
+				split = true
+			case nextCat != 0 && groupCat != 0 && nextCat != groupCat:
+				// Bucket boundary. A group draws its buckets in a fixed order,
+				// so mixing buckets inside one group reorders the draws within
+				// it. Splitting keeps the sequence, because groups themselves
+				// render in order.
+				split = true
 			}
+		}
 
-			// Build one ScissorGroup from draws [groupStart, end).
-			g := rc.drawsToScissorGroup(rc.pendingDraws[groupStart:end])
+		if split {
+			// Build one ScissorGroup from draws [groupStart, i).
+			g := rc.drawsToScissorGroup(rc.pendingDraws[groupStart:i])
 			groups = append(groups, g)
 
 			groupStart = i
+			groupCat = nextCat
+			continue
+		}
+		if groupCat == 0 {
+			groupCat = nextCat
 		}
 	}
 
