@@ -512,7 +512,13 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 					continue
 				}
 			}
-			drawCard(c, b.Tableaus[j][k], col[k])
+			// A card with another on top of it shows only a strip, so it is
+			// drawn without the back's inset frame -- see drawCardFanned.
+			if k < len(col)-1 {
+				drawCardFanned(c, b.Tableaus[j][k], col[k])
+			} else {
+				drawCard(c, b.Tableaus[j][k], col[k])
+			}
 		}
 	}
 

@@ -69,6 +69,24 @@ func drawCard(c paint.Canvas, r geom.Rect, card klondike.Card) {
 	drawCardBody(c, r, card)
 }
 
+// drawCardFanned paints a card that is mostly hidden under the next one in a
+// fan, showing only a strip at the top.
+//
+// It exists because the back's inset frame is a decoration for a card you can
+// see all of. On a strip a few pixels tall only its top edge and two severed
+// legs survive, and a column of those reads as loose outlines lying over the
+// cards rather than as a deck. Real stacked cards show their pattern and their
+// edge, so that is what this draws.
+func drawCardFanned(c paint.Canvas, r geom.Rect, card klondike.Card) {
+	sz := r.Dx()
+	paint.DropShadow(c, r, sz*0.08, geom.Pt{Y: sz * 0.02}, sz*0.05, colShadow)
+	if !card.Up {
+		drawCardBackNoFrame(c, r, sz*0.08)
+		return
+	}
+	drawCardBody(c, r, card)
+}
+
 // drawCardBody paints the card without a shadow (used for the many win-cascade
 // trail stamps, where per-card shadows would be too costly).
 func drawCardBody(c paint.Canvas, r geom.Rect, card klondike.Card) {
@@ -119,6 +137,15 @@ func drawCardBody(c paint.Canvas, r geom.Rect, card klondike.Card) {
 // lattice is a rotated square grid clipped to the card's rounded rect, so the
 // squares read as diamonds and the pattern runs edge to edge like a real deck.
 func drawCardBack(c paint.Canvas, r geom.Rect, rad float32) {
+	drawCardBackNoFrame(c, r, rad)
+	sz := r.Dx()
+	m := sz * 0.06
+	c.StrokeRRect(geom.RectXYWH(r.Min.X+m, r.Min.Y+m, r.Dx()-2*m, r.Dy()-2*m), rad*0.7, 1, colBackFrame)
+}
+
+// drawCardBackNoFrame paints the back's gradient and lattice without the inset
+// frame; see drawCardFanned for why a fanned card omits it.
+func drawCardBackNoFrame(c paint.Canvas, r geom.Rect, rad float32) {
 	sz := r.Dx()
 	c.FillRRectGradient(r, rad, colBack1, colBack2, false)
 
@@ -141,9 +168,6 @@ func drawCardBack(c paint.Canvas, r geom.Rect, rad float32) {
 	}
 	c.PopTransform()
 	c.PopClip()
-
-	m := sz * 0.06
-	c.StrokeRRect(geom.RectXYWH(r.Min.X+m, r.Min.Y+m, r.Dx()-2*m, r.Dy()-2*m), rad*0.7, 1, colBackFrame)
 }
 
 // drawCorner paints the top-left rank index over a small pip. Kept compact so a
