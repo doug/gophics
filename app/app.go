@@ -31,6 +31,12 @@ type Config struct {
 	// conventional; empty falls back to the executable's name.
 	AppID string
 	Size  geom.Size // initial logical window size
+	// ScaleToFit treats Size as a fixed design size: the app lays out at
+	// exactly Size and the shell scales the result to fit the display,
+	// letterboxed, preserving aspect ratio. Set it for a layout that does not
+	// reflow -- a fixed grid of pads, a board -- so it shrinks whole on a small
+	// screen instead of being cropped. Leave it false for anything responsive.
+	ScaleToFit bool
 	// Background is the colour behind the widget tree. It is filled every
 	// frame, so it shows wherever the tree paints nothing.
 	//
@@ -732,7 +738,7 @@ func Run(root widget.Widget, cfg Config) error {
 	if renderer == shell.RendererCPU {
 		paint.UseCPU()
 	}
-	return desktopRun(h, shell.Config{Title: cfg.Title, AppID: cfg.AppID, Size: cfg.Size, Resizable: true, Renderer: renderer})
+	return desktopRun(h, shell.Config{Title: cfg.Title, AppID: cfg.AppID, Size: cfg.Size, ScaleToFit: cfg.ScaleToFit, Resizable: true, Renderer: renderer})
 }
 
 // NewHandler builds the app's shell.Handler without attaching a shell —

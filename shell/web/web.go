@@ -14,6 +14,8 @@ package web
 
 import (
 	"errors"
+	"fmt"
+	"math"
 	"syscall/js"
 
 	"github.com/doug/gophics/geom"
@@ -40,6 +42,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	doc.Get("body").Call("appendChild", canvas)
 
 	w := &window{canvas: canvas, doc: doc, handler: h, renderer: cfg.Renderer}
+	if cfg.ScaleToFit {
+		w.design = cfg.Size
+	}
 	w.resize()
 	w.watchDarkMode()
 	w.pres = newPresenter(w)
@@ -51,10 +56,36 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		}))
 	}
 
+	// Map a viewport-relative event position into the canvas's logical
+	// coordinates.
+	//
+	// clientX/Y are relative to the viewport, not to the canvas, and the
+	// canvas's displayed size is not necessarily its logical size. Passing
+	// clientX/Y straight through assumes the canvas fills the viewport
+	// exactly, starting at its top-left corner. When that assumption breaks
+	// the input silently lands somewhere other than where it was aimed, which
+	// is worse than a crash: everything still works, just not where you touch.
+	//
+	// Going through getBoundingClientRect covers all of it — the canvas being
+	// inset by other content, the page being scrolled, a CSS size that differs
+	// from the logical size, even a CSS transform — because the rect is what
+	// the user is actually touching.
 	pos := func(e js.Value) geom.Pt {
+		cx := float32(e.Get("clientX").Float())
+		cy := float32(e.Get("clientY").Float())
+
+		r := canvas.Call("getBoundingClientRect")
+		rw := float32(r.Get("width").Float())
+		rh := float32(r.Get("height").Float())
+		if rw <= 0 || rh <= 0 { // detached or display:none — nothing sensible to map to
+			return geom.Pt{X: cx, Y: cy}
+		}
+
+		x := cx - float32(r.Get("left").Float())
+		y := cy - float32(r.Get("top").Float())
 		return geom.Pt{
-			X: float32(e.Get("clientX").Float()),
-			Y: float32(e.Get("clientY").Float()),
+			X: x * w.logical.W / rw,
+			Y: y * w.logical.H / rh,
 		}
 	}
 	// Pointer Events unify mouse/touch/pen and carry pointerType, so gestures
@@ -126,11 +157,20 @@ func Run(h shell.Handler, cfg shell.Config) error {
 			h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: code, Mods: mods})
 		}
 	})
-	listen(js.Global(), "resize", func(js.Value) {
+	onResize := func(js.Value) {
 		w.resize()
 		h.Event(w, shell.Resize{Size: w.logical, Scale: float32(w.dpr)})
 		w.Invalidate()
-	})
+	}
+	listen(js.Global(), "resize", onResize)
+	// Mobile browsers grow and shrink the visible area as the address bar
+	// hides and reveals, and raise the on-screen keyboard over it. Those change
+	// visualViewport without reliably firing a window resize, so without this
+	// the canvas keeps the size it had when the bar was in its other state.
+	if vv := js.Global().Get("visualViewport"); vv.Truthy() {
+		listen(vv, "resize", onResize)
+		listen(vv, "scroll", onResize)
+	}
 
 	h.Event(w, shell.Resize{Size: w.logical, Scale: float32(w.dpr)})
 	w.Invalidate()
@@ -203,7 +243,16 @@ type window struct {
 	cam         *webCamera         // lazily created still-capture capability
 	aud         *webAudio          // lazily created audio capability
 
-	logical    geom.Size
+	logical geom.Size
+	// design is Config.Size when Config.ScaleToFit asked for it: the size this
+	// app was laid out for. When set, the app always sees exactly this logical
+	// size and the canvas is scaled to fit the viewport, letterboxed. When
+	// zero, the app fills the viewport and lays out responsively instead.
+	design geom.Size
+	// dpr is the effective device scale: devicePixelRatio, multiplied by the
+	// fit factor when a design size is in play. Everything downstream derives
+	// the backing store from logical*dpr, so folding fit in here is all that is
+	// needed to render the scaled view crisply.
 	dpr        float64
 	rafPending bool
 	rafFunc    js.Func
@@ -232,11 +281,52 @@ func (w *window) watchDarkMode() {
 func (w *window) resize() {
 	win := js.Global()
 	w.dpr = win.Get("devicePixelRatio").Float()
+
+	// Prefer visualViewport: on mobile it reports the area actually visible,
+	// which innerHeight also does, but visualViewport keeps reporting it
+	// correctly while the on-screen keyboard is up and during pinch-zoom.
 	lw := win.Get("innerWidth").Float()
 	lh := win.Get("innerHeight").Float()
-	w.logical = geom.Size{W: float32(lw), H: float32(lh)}
-	w.canvas.Set("width", int(lw*w.dpr))
-	w.canvas.Set("height", int(lh*w.dpr))
+	if vv := win.Get("visualViewport"); vv.Truthy() {
+		if vw, vh := vv.Get("width").Float(), vv.Get("height").Float(); vw > 0 && vh > 0 {
+			lw, lh = vw, vh
+		}
+	}
+
+	// cssW/cssH are the size the canvas occupies on screen. They equal the
+	// logical size unless a design size is being scaled to fit.
+	cssW, cssH := lw, lh
+
+	if w.design.W > 0 && w.design.H > 0 {
+		// Scale the design size to fit, preserving its aspect ratio. A layout
+		// built for a wide window stays usable on a phone held upright: it is
+		// shown smaller and letterboxed rather than clipped, which is what
+		// "fits on the screen" has to mean for a fixed layout.
+		dw, dh := float64(w.design.W), float64(w.design.H)
+		fit := math.Min(lw/dw, lh/dh)
+		w.logical = w.design
+		w.dpr *= fit
+		cssW, cssH = dw*fit, dh*fit
+	} else {
+		w.logical = geom.Size{W: float32(lw), H: float32(lh)}
+	}
+
+	w.canvas.Set("width", int(float64(w.logical.W)*w.dpr))
+	w.canvas.Set("height", int(float64(w.logical.H)*w.dpr))
+
+	// Pin the displayed size explicitly. The stylesheet asks for 100vw/100vh,
+	// and on mobile 100vh is the *large* viewport — the height with the address
+	// bar hidden — while the measurement above is the height visible right now.
+	// Those differ by roughly the address bar, so the browser stretches a frame
+	// drawn for the smaller height across the taller box, and every touch lands
+	// further from where it was aimed the further down the screen it is.
+	// Horizontally nothing goes wrong, because 100vw and innerWidth agree —
+	// which is exactly the reported symptom.
+	style := w.canvas.Get("style")
+	style.Set("width", fmt.Sprintf("%gpx", cssW))
+	style.Set("height", fmt.Sprintf("%gpx", cssH))
+	// Centre the letterbox. Harmless when the canvas fills the viewport.
+	style.Set("margin", fmt.Sprintf("%gpx %gpx", math.Max(0, (lh-cssH)/2), math.Max(0, (lw-cssW)/2)))
 	if w.pres != nil {
 		w.pres.onResize()
 	}

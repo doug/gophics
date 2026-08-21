@@ -328,8 +328,11 @@ func main() {
 	}
 
 	if err := app.Run(App{Mixer: mixer}, app.Config{
-		Title:      "Drum Machine",
+		Title: "Drum Machine",
+		// The pad grid is a fixed layout, not a reflowing one, so on a narrow
+		// screen it is scaled down whole rather than cropped.
 		Size:       geom.Size{W: 760, H: 424},
+		ScaleToFit: true,
 		Background: bg,
 		Font:       goregular.TTF,
 	}); err != nil {

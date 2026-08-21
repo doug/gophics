@@ -92,6 +92,13 @@ pre.code, .code { background: #100d08; border: 1px solid var(--line); border-rad
 /* home hero: the program on the left, what it draws on the right */
 .showcase { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start;
   width: 100%; max-width: 1040px; margin: 30px auto 0; text-align: left; }
+/* Grid and flex children default to min-width:auto, which is min-content — for
+   a column holding a <pre>, that is the longest unwrapped line. The column then
+   refuses to shrink below it and the whole page scrolls sideways on a phone,
+   taking the stage with it: stage.clientWidth reads wider than the screen, so
+   the live counter is scaled too large as well. min-width:0 lets the column
+   shrink and hands the overflow back to the pre's own overflow-x. */
+.showcase > * { min-width: 0; }
 .showcase-code pre.code { margin: 0; height: 100%; font-size: 12.5px; line-height: 1.55; overflow-x: auto; }
 .showcase-shot { margin: 0; }
 /* The stage holds the still and, once it is genuinely painting, the live app

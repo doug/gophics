@@ -79,6 +79,18 @@ type Config struct {
 	// Size is the initial logical size. Zero means a platform default.
 	Size      geom.Size
 	Resizable bool
+	// ScaleToFit treats Size as a fixed design size rather than an initial
+	// one: the app always lays out at exactly Size, and the shell scales the
+	// result to fit the display, letterboxed, preserving aspect ratio.
+	//
+	// Set it for a layout that genuinely does not reflow — a drum machine whose
+	// pads are a fixed grid, a board game. Such an app on a phone held upright
+	// is otherwise cropped or crushed, and shrinking it whole is the honest
+	// answer. Leave it false for anything responsive: a list or a form should
+	// use the space it is given, and scaling it down would only make it small.
+	//
+	// Currently honoured by the web shell.
+	ScaleToFit bool
 	// Renderer selects the rasterization backend (default Auto: GPU with CPU
 	// fallback). Shells resolve GPU availability at runtime.
 	Renderer RendererMode
