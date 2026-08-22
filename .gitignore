@@ -3,6 +3,13 @@
 
 # gophics CLI build output
 /build/
+
+# Go test binaries. `go test -c` and a failed `go test -o` drop these in the
+# package directory; they are ~20MB each and the per-name list below cannot
+# anticipate them.
+*.test
+*.test.exe
+
 examples/build/
 
 # Example web/app build artifacts
