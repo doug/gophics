@@ -932,6 +932,29 @@ func solidColorFromPaint(paint *Paint) (RGBA, bool) {
 // Uses source-over compositing for proper alpha blending.
 // When clipFn is non-nil, each pixel's alpha is multiplied by the clip coverage.
 // When maskFn is non-nil, each pixel's alpha is multiplied by the mask coverage.
+// clipXRange returns the horizontal pixel range the analytic blend loops may
+// write, intersecting the pixmap with Layer A's clip rectangle.
+//
+// The AnalyticFiller clamps Y to the clip (it skips whole scanlines) but not X:
+// it stores clipLeft/clipRight and never reads them. X was therefore enforced
+// only by the paint's ClipCoverage closure, so a clip that skipped the closure
+// as redundant — which a rect on whole pixels does — let a stroke run the full
+// width of the canvas. Doing it here costs one comparison per run rather than
+// the closure's ~8ns per pixel.
+func (r *SoftwareRenderer) clipXRange(width int) (lo, hi int) {
+	lo, hi = 0, width
+	if !r.hasClip {
+		return lo, hi
+	}
+	if r.clipLeft > lo {
+		lo = r.clipLeft
+	}
+	if r.clipRight < hi {
+		hi = r.clipRight
+	}
+	return lo, hi
+}
+
 func (r *SoftwareRenderer) blendAlphaRunsFromCoreRuns(pixmap *Pixmap, y int, runs *raster.AlphaRuns, color RGBA,
 	clipFn func(x, y float64) byte, maskFn func(x, y int) uint8,
 	clipMask []uint8, clipMaskW, clipMaskX, clipMaskY int,
@@ -940,11 +963,15 @@ func (r *SoftwareRenderer) blendAlphaRunsFromCoreRuns(pixmap *Pixmap, y int, run
 	if y < 0 || y >= pixmap.Height() {
 		return
 	}
+	if r.hasClip && (y < r.clipTop || y >= r.clipBottom) {
+		return
+	}
+	xlo, xhi := r.clipXRange(pixmap.Width())
 
 	// Non-SourceOver: dispatch via blend function.
 	if bfn != nil {
 		for x, alpha := range runs.Iter() {
-			if alpha == 0 || x < 0 || x >= pixmap.Width() {
+			if alpha == 0 || x < xlo || x >= xhi {
 				continue
 			}
 			alpha = applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, alpha)
@@ -965,7 +992,7 @@ func (r *SoftwareRenderer) blendAlphaRunsFromCoreRuns(pixmap *Pixmap, y int, run
 		if alpha == 0 {
 			continue
 		}
-		if x < 0 || x >= pixmap.Width() {
+		if x < xlo || x >= xhi {
 			continue
 		}
 
@@ -1019,11 +1046,15 @@ func (r *SoftwareRenderer) blendAlphaRunsFromCoreRunsPaint(pixmap *Pixmap, y int
 	if y < 0 || y >= pixmap.Height() {
 		return
 	}
+	if r.hasClip && (y < r.clipTop || y >= r.clipBottom) {
+		return
+	}
+	xlo, xhi := r.clipXRange(pixmap.Width())
 
 	// Non-SourceOver: dispatch via blend function.
 	if bfn != nil {
 		for x, alpha := range runs.Iter() {
-			if alpha == 0 || x < 0 || x >= pixmap.Width() {
+			if alpha == 0 || x < xlo || x >= xhi {
 				continue
 			}
 			alpha = applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, alpha)
@@ -1045,7 +1076,7 @@ func (r *SoftwareRenderer) blendAlphaRunsFromCoreRunsPaint(pixmap *Pixmap, y int
 		if alpha == 0 {
 			continue
 		}
-		if x < 0 || x >= pixmap.Width() {
+		if x < xlo || x >= xhi {
 			continue
 		}
 
