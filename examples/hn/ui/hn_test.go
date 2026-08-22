@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"image/png"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +20,7 @@ import (
 // fakeAPI serves a deterministic HN corpus instantly.
 type fakeAPI struct{ stories, commentsPer int }
 
-func (f fakeAPI) TopStories() ([]int, error) {
+func (f fakeAPI) TopStories(context.Context) ([]int, error) {
 	ids := make([]int, f.stories)
 	for i := range ids {
 		ids[i] = 1_000_000 + i
@@ -26,7 +28,7 @@ func (f fakeAPI) TopStories() ([]int, error) {
 	return ids, nil
 }
 
-func (f fakeAPI) Item(id int) (Item, error) {
+func (f fakeAPI) Item(_ context.Context, id int) (Item, error) {
 	if id >= 1_000_000 {
 		i := id - 1_000_000
 		kids := make([]int, f.commentsPer)
@@ -58,12 +60,15 @@ func harness(t *testing.T) (*app.Headless, *feedState) {
 	}
 	h.Render()
 	deadline := time.Now().Add(5 * time.Second)
-	for st.loading && time.Now().Before(deadline) {
+	for !st.feed.done && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 		h.Render()
 	}
-	if st.loading {
+	if !st.feed.done {
 		t.Fatal("feed never loaded")
+	}
+	if st.feed.err != nil {
+		t.Fatalf("feed load failed: %v", st.feed.err)
 	}
 	return h, st
 }
@@ -94,8 +99,8 @@ func hasLabel(h *app.Headless, substr string) bool {
 
 func TestFeedLoadsAndScrolls(t *testing.T) {
 	h, st := harness(t)
-	if len(st.stories) != 500 {
-		t.Fatalf("stories = %d", len(st.stories))
+	if len(st.feed.items) != 500 {
+		t.Fatalf("stories = %d", len(st.feed.items))
 	}
 	if out := os.Getenv("GOPHICS_RENDER_FEED"); out != "" {
 		img := h.Render()
@@ -181,5 +186,70 @@ func TestParseSpans(t *testing.T) {
 	}
 	if domain("https://www.example.com/a/b") != "example.com" {
 		t.Fatal("domain extraction")
+	}
+}
+
+// countingAPI records how many items were fetched and can cancel mid-walk.
+type countingAPI struct {
+	fakeAPI
+	mu     sync.Mutex
+	items  int
+	cancel context.CancelFunc
+	after  int
+}
+
+func (c *countingAPI) Item(ctx context.Context, id int) (Item, error) {
+	c.mu.Lock()
+	c.items++
+	n := c.items
+	c.mu.Unlock()
+	if n == c.after && c.cancel != nil {
+		c.cancel() // the reader closed the thread at this point
+	}
+	return c.fakeAPI.Item(ctx, id)
+}
+
+func (c *countingAPI) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.items
+}
+
+// Walking a comment tree is the expensive part of opening a thread: 80 items,
+// one request each. Closing the thread has to stop the walk, or every abandoned
+// thread keeps fetching to the end against a page nobody is looking at.
+func TestLoadCommentsStopsWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	api := &countingAPI{fakeAPI: fakeAPI{stories: 20, commentsPer: 20}, cancel: cancel, after: 5}
+	story, err := api.Item(context.Background(), 1_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := api.count()
+
+	loadComments(ctx, api, story, 80)
+
+	if got := api.count() - before; got > 8 {
+		t.Errorf("kept fetching after cancellation: %d items past the cancel at 5, "+
+			"want the walk to stop promptly", got)
+	}
+}
+
+// The guard must not truncate an ordinary load: an uncancelled walk still
+// returns the comments it was asked for.
+func TestLoadCommentsCompletesWhenNotCancelled(t *testing.T) {
+	api := &countingAPI{fakeAPI: fakeAPI{stories: 20, commentsPer: 20}}
+	story, err := api.Item(context.Background(), 1_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fixture's comments have no children, so a story with commentsPer=20
+	// yields exactly 20 however high the limit goes.
+	got := loadComments(context.Background(), api, story, 40)
+	if len(got) != 20 {
+		t.Errorf("loaded %d comments, want all 20 the fixture has — the "+
+			"cancellation guard is firing on a live context", len(got))
 	}
 }

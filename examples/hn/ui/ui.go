@@ -135,12 +135,22 @@ type feedPage struct {
 
 func (f feedPage) CreateState() widget.State { return &feedState{} }
 
+// feed is the result of one load. Grouping the three values means they move
+// together: there is no assignment that leaves an error showing beside stale
+// stories, or a spinner running after the items arrived. The zero value is the
+// initial state — no items, no error, not yet loaded.
+type feed struct {
+	items []Item
+	err   error
+	done  bool
+}
+
 type feedState struct {
 	widget.StateBase[feedPage]
-	stories    []Item
-	loading    bool
+	feed feed
+	// refreshing is presentation, not result: it says the load was triggered by
+	// a pull rather than by opening the page, and so shows a different spinner.
 	refreshing bool
-	err        string
 }
 
 // stateHook lets tests observe the mounted feed state.
@@ -150,47 +160,53 @@ func (s *feedState) Init(ctx widget.Ctx) {
 	if stateHook != nil {
 		stateHook(s)
 	}
-	s.loading = true
 	s.fetch(ctx)
 }
 
 // fetch loads the top stories on a background goroutine and swaps them in.
 // Used for the initial load and for pull-to-refresh.
-func (s *feedState) fetch(ctx widget.Ctx) {
-	post := ctx.Post()
-	api := widget.MustOf[API](ctx)
+//
+// The context comes from the widget, so leaving the page stops the load: the
+// per-item walk below is the expensive part, and without cancellation a feed
+// that is closed a moment after opening keeps fetching every one of them.
+func (s *feedState) fetch(wctx widget.Ctx) {
+	ctx := wctx.Context()
+	api := widget.MustOf[API](wctx)
 	n := s.W().N
 	go func() {
-		ids, err := api.TopStories()
+		ids, err := api.TopStories(ctx)
 		if err != nil {
-			post(func() { s.SetState(func() { s.loading, s.refreshing, s.err = false, false, err.Error() }) })
+			s.PostState(func() { s.feed, s.refreshing = feed{err: err, done: true}, false })
 			return
 		}
 		if len(ids) > n {
 			ids = ids[:n]
 		}
-		stories := make([]Item, 0, len(ids))
+		items := make([]Item, 0, len(ids))
 		for _, id := range ids {
-			if it, err := api.Item(id); err == nil && it.Title != "" {
-				stories = append(stories, it)
+			if ctx.Err() != nil {
+				return // the feed is gone; nothing wants these
+			}
+			if it, err := api.Item(ctx, id); err == nil && it.Title != "" {
+				items = append(items, it)
 			}
 		}
-		post(func() { s.SetState(func() { s.loading, s.refreshing, s.stories = false, false, stories }) })
+		s.PostState(func() { s.feed, s.refreshing = feed{items: items, done: true}, false })
 	}()
 }
 
 func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	var body widget.Widget
-	switch {
-	case s.loading:
+	switch f := s.feed; {
+	case !f.done:
 		body = widget.Center(widget.Text{S: "loading…", Size: th.Type.Body, Color: th.Muted})
-	case s.err != "":
-		body = widget.Center(widget.Text{S: s.err, Wrap: true, Size: th.Type.Body, Color: th.Muted})
+	case f.err != nil:
+		body = widget.Center(widget.Text{S: f.err.Error(), Wrap: true, Size: th.Type.Body, Color: th.Muted})
 	default:
 		nav := widget.MustOf[widget.Nav](ctx)
 		body = widget.LazyList{
-			Count:           len(s.stories),
+			Count:           len(s.feed.items),
 			EstimatedExtent: 66,
 			Build:           func(i int) widget.Widget { return s.storyRow(th, nav, i) },
 			Refreshing:      s.refreshing,
@@ -204,7 +220,7 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 }
 
 func (s *feedState) storyRow(th theme.Theme, nav widget.Nav, i int) widget.Widget {
-	st := s.stories[i]
+	st := s.feed.items[i]
 	meta := fmt.Sprintf("%d points · %s · %d comments", st.Score, st.By, st.Descendants)
 	if d := domain(st.URL); d != "" {
 		meta = d + " · " + meta
@@ -244,14 +260,14 @@ type threadState struct {
 	loading  bool
 }
 
-func (s *threadState) Init(ctx widget.Ctx) {
+func (s *threadState) Init(wctx widget.Ctx) {
 	s.loading = true
-	post := ctx.Post()
-	api := widget.MustOf[API](ctx)
+	ctx := wctx.Context()
+	api := widget.MustOf[API](wctx)
 	story := s.W().Story
 	go func() {
-		comments := loadComments(api, story, 80)
-		post(func() { s.SetState(func() { s.comments, s.loading = comments, false }) })
+		comments := loadComments(ctx, api, story, 80)
+		s.PostState(func() { s.comments, s.loading = comments, false })
 	}()
 }
 

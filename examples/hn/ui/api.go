@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/doug/gophics/layout"
@@ -28,8 +29,8 @@ type Item struct {
 // API is the data source; Live hits the real Firebase endpoints, tests use
 // a fixture implementation.
 type API interface {
-	TopStories() ([]int, error)
-	Item(id int) (Item, error)
+	TopStories(ctx context.Context) ([]int, error)
+	Item(ctx context.Context, id int) (Item, error)
 }
 
 type liveAPI struct{ client http.Client }
@@ -38,8 +39,12 @@ func newLiveAPI() *liveAPI {
 	return &liveAPI{client: http.Client{Timeout: 15 * time.Second}}
 }
 
-func (a *liveAPI) get(url string, v any) error {
-	resp, err := a.client.Get(url)
+func (a *liveAPI) get(ctx context.Context, url string, v any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := a.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -47,15 +52,15 @@ func (a *liveAPI) get(url string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-func (a *liveAPI) TopStories() ([]int, error) {
+func (a *liveAPI) TopStories(ctx context.Context) ([]int, error) {
 	var ids []int
-	err := a.get("https://hacker-news.firebaseio.com/v0/topstories.json", &ids)
+	err := a.get(ctx, "https://hacker-news.firebaseio.com/v0/topstories.json", &ids)
 	return ids, err
 }
 
-func (a *liveAPI) Item(id int) (Item, error) {
+func (a *liveAPI) Item(ctx context.Context, id int) (Item, error) {
 	var it Item
-	err := a.get(fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id), &it)
+	err := a.get(ctx, fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", id), &it)
 	return it, err
 }
 
@@ -66,7 +71,7 @@ type Comment struct {
 }
 
 // loadComments fetches the comment tree depth-first up to limit comments.
-func loadComments(api API, story Item, limit int) []Comment {
+func loadComments(ctx context.Context, api API, story Item, limit int) []Comment {
 	var out []Comment
 	var walk func(ids []int, depth int)
 	walk = func(ids []int, depth int) {
@@ -74,7 +79,10 @@ func loadComments(api API, story Item, limit int) []Comment {
 			if len(out) >= limit {
 				return
 			}
-			it, err := api.Item(id)
+			if ctx.Err() != nil {
+				return // the thread was closed; stop walking it
+			}
+			it, err := api.Item(ctx, id)
 			if err != nil || it.Text == "" {
 				continue
 			}
