@@ -51,15 +51,54 @@ func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th chartTheme,
 }
 
 // drawXAxis draws the baseline, optional vertical gridlines, and centered labels.
+// xLabelGap is the minimum space left between two x-axis labels. Below this
+// they read as one run of characters even when they do not technically touch.
+const xLabelGap = 8
+
+// visibleXLabels decides which x-axis tick labels can be drawn without running
+// into each other, walking left to right and keeping a tick only when its label
+// clears the last one kept.
+//
+// Labels are centred on their tick, so their width — not the tick spacing —
+// decides whether they collide: six ticks fit comfortably until the labels are
+// dates or names, and then they overlap into an unreadable smear. Dropping
+// every other label keeps the axis legible at any width, and the gridlines
+// still mark the positions of the ticks that lost their label.
+//
+// The first tick always keeps its label, so an axis never comes back empty.
+func visibleXLabels(ticks []Tick, area geom.Rect, ax Axis, measure func(string) float32) []bool {
+	show := make([]bool, len(ticks))
+	prevRight := float32(0)
+	first := true
+	for i, t := range ticks {
+		w := measure(ax.label(t))
+		left := area.Min.X + t.Pos*area.Dx() - w/2
+		if first || left >= prevRight+xLabelGap {
+			show[i] = true
+			prevRight = left + w
+			first = false
+		}
+	}
+	return show
+}
+
 func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th chartTheme, p *paint.Painter) {
 	if ax.Hide {
 		return
 	}
 	met := p.MetricsIn("", labelSize)
-	for _, t := range xs.Ticks(ax.tickCount(6)) {
+	ticks := xs.Ticks(ax.tickCount(6))
+	show := visibleXLabels(ticks, area, ax, func(lab string) float32 {
+		return p.MeasureWidthIn("", lab, labelSize)
+	})
+	for i, t := range ticks {
 		x := area.Min.X + t.Pos*area.Dx()
 		if ax.Grid {
 			c.Line(geom.Pt{X: x, Y: area.Min.Y}, geom.Pt{X: x, Y: area.Max.Y}, 1, th.grid)
+		}
+		if !show[i] {
+			continue // its neighbour is already there; two labels on top of each
+			// other read as neither
 		}
 		lab := ax.label(t)
 		w := p.MeasureWidthIn("", lab, labelSize)
