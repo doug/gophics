@@ -162,6 +162,12 @@ func (s *navState) pop() {
 // Build keeps every page mounted (state — scroll positions, loaded data —
 // survives under the stack); pages below the visible ones are offstage:
 // laid out but neither painted nor hit-testable.
+// parallaxFrac is how far the outgoing page travels, as a fraction of the
+// surface width, while the incoming page crosses the whole of it. A third is
+// the proportion iOS and Material both settle near; far enough that the two
+// pages are visibly separate, short enough that the outgoing one never leaves.
+const parallaxFrac = 0.30
+
 func (s *navState) Build(Ctx) Widget {
 	pages := append([]Widget{s.W().Home}, s.stack...)
 	children := make([]Widget, 0, len(pages)+1)
@@ -183,16 +189,30 @@ func (s *navState) Build(Ctx) Widget {
 		var slideReg *heroRegistry
 		var frac float32
 		if s.trans != nil {
+			t := s.slide.Value()
 			switch i {
 			case len(pages) - 1:
 				provReg, slideReg = s.overReg, s.overReg
-				t := s.slide.Value()
 				frac = 1 - t // push: sliding in from the right
 				if s.trans.popping {
 					frac = t // pop: sliding out to the right
 				}
 			case visibleFrom:
-				provReg = s.underReg
+				// The page being left behind eases aside rather than sitting
+				// still. Without this the incoming page slides over a fixed
+				// background, which reads as one page popping on top of
+				// another instead of as a stack moving: the eye follows two
+				// things travelling together at different rates, and a single
+				// moving layer over a static one is the thing it does not do.
+				//
+				// It travels a fraction of the width, so the pages separate as
+				// they move; matching speeds would look like one wide image
+				// sliding past.
+				provReg, slideReg = s.underReg, s.underReg
+				frac = -parallaxFrac * t // push: easing left
+				if s.trans.popping {
+					frac = -parallaxFrac * (1 - t) // pop: returning
+				}
 			}
 		}
 		children = append(children, WithKey{Key: i, Child: pageW{
