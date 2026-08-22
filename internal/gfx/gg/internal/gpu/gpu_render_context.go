@@ -958,9 +958,9 @@ func (rc *GPURenderContext) FillPath(target gg.GPURenderTarget, path *gg.Path, p
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
-		rc.shared.mu.Lock()
+		// velloAcceleratorForCompute takes shared.mu itself; locking here as
+		// well self-deadlocks, since sync.Mutex is not reentrant.
 		va := rc.shared.velloAcceleratorForCompute()
-		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
 			return va.FillPath(target, path, paint)
@@ -1007,9 +1007,9 @@ func (rc *GPURenderContext) StrokePath(target gg.GPURenderTarget, path *gg.Path,
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
-		rc.shared.mu.Lock()
+		// velloAcceleratorForCompute takes shared.mu itself; locking here as
+		// well self-deadlocks, since sync.Mutex is not reentrant.
 		va := rc.shared.velloAcceleratorForCompute()
-		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
 			return va.StrokePath(target, path, paint)
@@ -1056,9 +1056,9 @@ func (rc *GPURenderContext) FillShape(target gg.GPURenderTarget, shape gg.Detect
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
-		rc.shared.mu.Lock()
+		// velloAcceleratorForCompute takes shared.mu itself; locking here as
+		// well self-deadlocks, since sync.Mutex is not reentrant.
 		va := rc.shared.velloAcceleratorForCompute()
-		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
 			return va.FillShape(target, shape, paint)
@@ -1100,9 +1100,9 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 
 	// Compute mode delegates directly to VelloAccelerator (separate pipeline).
 	if rc.pipelineMode == gg.PipelineModeCompute && rc.computeClipSupported() {
-		rc.shared.mu.Lock()
+		// velloAcceleratorForCompute takes shared.mu itself; locking here as
+		// well self-deadlocks, since sync.Mutex is not reentrant.
 		va := rc.shared.velloAcceleratorForCompute()
-		rc.shared.mu.Unlock()
 		if va != nil && va.CanCompute() {
 			va.SetAntiAlias(rc.antiAlias)
 			return va.StrokeShape(target, shape, paint)
