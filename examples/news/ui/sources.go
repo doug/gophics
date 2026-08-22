@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -349,8 +348,9 @@ func (s *addFeedState) search(ctx widget.Ctx) {
 	s.searching, s.err, s.candidates = true, "", nil
 	post := ctx.Post()
 	in := s.input
+	lctx := ctx.Context()
 	go func() {
-		cands, err := library.Discover(context.Background(), in)
+		cands, err := library.Discover(lctx, in)
 		post(func() {
 			s.SetState(func() {
 				s.searching = false

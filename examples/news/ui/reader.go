@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -60,7 +59,7 @@ func (s *readerState) Init(ctx widget.Ctx) {
 
 	// Pull anything the prefetch missed — an article opened from a queue that
 	// was refreshed on a bad connection.
-	go lib.PrefetchItem(context.Background(), it)
+	go lib.PrefetchItem(ctx.Context(), it)
 }
 
 // Dispose is where the reading signal is recorded. Whether an article was

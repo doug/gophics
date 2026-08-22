@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"strings"
 
 	"github.com/doug/gophics/examples/news/internal/library"
@@ -217,8 +216,9 @@ func (s *signInState) verify(ctx widget.Ctx, lib *library.Library) {
 	}
 	s.SetState(func() { s.verifying = true })
 	post := ctx.Post()
+	lctx := ctx.Context()
 	go func() {
-		res := lib.VerifyCookies(context.Background(), f)
+		res := lib.VerifyCookies(lctx, f)
 		post(func() {
 			s.SetState(func() {
 				s.verifying = false

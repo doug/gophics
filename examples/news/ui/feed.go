@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -38,8 +37,9 @@ func (s *feedState) Init(ctx widget.Ctx) {
 	s.loading = true
 	post := ctx.Post()
 	url := s.W().URL
+	lctx := ctx.Context()
 	go func() {
-		c, err := library.Preview(context.Background(), url)
+		c, err := library.Preview(lctx, url)
 		post(func() {
 			s.SetState(func() {
 				s.loading = false
