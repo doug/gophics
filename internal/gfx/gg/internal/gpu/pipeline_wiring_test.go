@@ -1305,29 +1305,40 @@ func TestFlushGPU_DrawsConvertToScissorGroups(t *testing.T) {
 	// Build ScissorGroups from per-draw clip state.
 	groups := rc.buildScissorGroupsFromDraws()
 
-	// Both draws have no clip -> single group.
-	if len(groups) != 1 {
-		t.Fatalf("expected 1 ScissorGroup, got %d", len(groups))
+	// Neither draw is clipped, but they are different kinds, and a group emits
+	// its buckets in a fixed order (SDF shapes, then convex commands, then
+	// images, text…) rather than in the order the draws arrived. Putting a
+	// shape and a path in one group would therefore paint them in bucket order
+	// whatever the caller asked for — which is what made a solitaire card show
+	// through the card on top of it. The split is what preserves issue order.
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 ScissorGroups (one per draw kind), got %d", len(groups))
 	}
 
-	g := groups[0]
-
-	// Shape should be an SDF shape in the group.
-	if len(g.SDFShapes) != 1 {
-		t.Errorf("expected 1 SDFShape, got %d", len(g.SDFShapes))
+	// Group order must follow the order the draws were issued: shape first.
+	if len(groups[0].SDFShapes) != 1 {
+		t.Errorf("group 0: expected 1 SDFShape, got %d", len(groups[0].SDFShapes))
+	}
+	if len(groups[0].ConvexCommands) != 0 {
+		t.Errorf("group 0: expected no ConvexCommands, got %d", len(groups[0].ConvexCommands))
 	}
 
-	// Triangle (3 vertices, convex) should be a convex command in the group.
-	if len(g.ConvexCommands) != 1 {
-		t.Errorf("expected 1 ConvexCommand, got %d", len(g.ConvexCommands))
+	// Triangle (3 vertices, convex) follows in its own group.
+	if len(groups[1].ConvexCommands) != 1 {
+		t.Errorf("group 1: expected 1 ConvexCommand, got %d", len(groups[1].ConvexCommands))
+	}
+	if len(groups[1].SDFShapes) != 0 {
+		t.Errorf("group 1: expected no SDFShapes, got %d", len(groups[1].SDFShapes))
 	}
 
-	// No clip state on the group.
-	if g.Rect != nil {
-		t.Error("expected nil Rect (no clip)")
-	}
-	if g.ClipRRect != nil {
-		t.Error("expected nil ClipRRect (no clip)")
+	// No clip state on either group.
+	for i, g := range groups {
+		if g.Rect != nil {
+			t.Errorf("group %d: expected nil Rect (no clip)", i)
+		}
+		if g.ClipRRect != nil {
+			t.Errorf("group %d: expected nil ClipRRect (no clip)", i)
+		}
 	}
 }
 
