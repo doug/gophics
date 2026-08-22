@@ -79,12 +79,55 @@ func (s *dismissState) allow(dx float32) float32 {
 	return dx
 }
 
+// releaseBounds are the limits on how long a released card takes to finish its
+// travel. The floor keeps a hard flick from finishing in a frame; the ceiling
+// keeps a card released almost at rest from drifting.
+const (
+	minReleaseMS = 90
+	maxReleaseMS = 380
+	// slowestRelease is the speed used when the finger was barely moving, so
+	// distance still decides the duration rather than dividing by near zero.
+	slowestRelease = 600 // px/s
+)
+
 func (s *dismissState) animateTo(to float32, dismiss bool) {
 	s.gone = dismiss
 	s.from, s.to = s.dx, to
+	s.anim.Duration = releaseDuration(s.dx, to, s.velocity)
 	s.anim.Jump(0)
 	s.anim.Forward()
 	s.ctx.Invalidate()
+}
+
+// releaseDuration times the rest of the travel to the speed the finger was
+// already moving, so letting go does not change how fast the card is going.
+//
+// A fixed duration is what makes a swipe feel wrong: flick a card hard and it
+// visibly slows the instant you release, because the animation restarts at
+// distance/duration whatever the finger was doing. Nudge one a few pixels and
+// the same duration makes it crawl back. Dividing the remaining distance by the
+// release speed keeps the motion continuous through the release, which is the
+// property the eye is actually reading.
+func releaseDuration(from, to, velocity float32) time.Duration {
+	dist := to - from
+	if dist < 0 {
+		dist = -dist
+	}
+	speed := velocity
+	if speed < 0 {
+		speed = -speed
+	}
+	if speed < slowestRelease {
+		speed = slowestRelease
+	}
+	ms := dist / speed * 1000
+	if ms < minReleaseMS {
+		ms = minReleaseMS
+	}
+	if ms > maxReleaseMS {
+		ms = maxReleaseMS
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 func (s *dismissState) release() {
