@@ -74,8 +74,19 @@ func (s *dash) Init(ctx widget.Ctx) {
 }
 
 // Tick decides whether this frame needs a new view. It always asks for a
-// repaint: the Age column is derived from the clock rather than from the data,
-// so it advances every frame whether or not anything was rebuilt.
+// rebuild, not just a repaint: the Age column is derived from the clock rather
+// than from the data, and it is produced in cell() during Build, so a repaint
+// alone redraws the same strings.
+//
+// That distinction was a visible bug. Invalidate asks for a frame; only
+// SetState marks the tree for rebuilding. With a repaint alone the ages sat
+// still until something else dirtied a row — and hovering does dirty exactly
+// one row, so the row under the pointer would advance its age while every row
+// around it stayed where it was.
+//
+// Rebuilding every frame is what the design already assumes: cell() runs only
+// for the rows the viewport shows, twenty-odd of them, however many rows the
+// table holds.
 func (s *dash) Tick(dt float64) bool {
 	s.since += time.Duration(dt * float64(time.Second))
 	if s.dirty || (s.live && s.since >= rebuildEvery) {
@@ -86,7 +97,7 @@ func (s *dash) Tick(dt float64) bool {
 		s.ingest = float64(total-s.lastTotal) / now.Sub(s.lastAt).Seconds()
 		s.lastTotal, s.lastAt = total, now
 	}
-	s.ctx.Invalidate()
+	s.SetState(nil) // rebuild: Age is computed in cell(), not at paint time
 	return true
 }
 
