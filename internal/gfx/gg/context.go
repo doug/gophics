@@ -1871,6 +1871,14 @@ func (c *Context) doStroke() error {
 //
 //   - Legacy: ClipCoverage closure is still set as fallback for code paths
 //     that haven't migrated to mask-based clipping (e.g. AnalyticFiller).
+//
+// isWholePixelRect reports whether a clip rectangle lands on integer pixel
+// boundaries, where the renderer's scanline bounds describe it exactly.
+func isWholePixelRect(b clip.Rect) bool {
+	return b.X == math.Trunc(b.X) && b.Y == math.Trunc(b.Y) &&
+		b.W == math.Trunc(b.W) && b.H == math.Trunc(b.H)
+}
+
 func (c *Context) applyClipToPaint() {
 	if c.clipStack == nil || c.clipStack.Depth() == 0 {
 		return
@@ -1910,8 +1918,23 @@ func (c *Context) applyClipToPaint() {
 	}
 
 	// Legacy: closure fallback for AnalyticFiller blend paths.
-	c.paint.ClipCoverage = func(x, y float64) byte {
-		return cs.Coverage(x, y)
+	//
+	// Skipped for a rectangle on whole pixels, where it costs roughly 8ns per
+	// pixel to answer a question already answered. A rect-only stack's Coverage
+	// is a bounds test returning 255 or 0 — it antialiases nothing — and Layer A
+	// above has already limited the renderer to those same scanlines. When the
+	// rectangle sits on integer boundaries the two agree exactly, so the closure
+	// only re-proves that the pixel being blended is inside the rectangle it was
+	// already restricted to. Profiling a scrolling table put about a quarter of
+	// the frame there.
+	//
+	// A fractional rectangle still needs it: SetClipBounds truncates the near
+	// edge, so it admits up to a pixel the clip should exclude, and the closure
+	// is what trims that.
+	if !cs.IsRectOnly() || !isWholePixelRect(bounds) {
+		c.paint.ClipCoverage = func(x, y float64) byte {
+			return cs.Coverage(x, y)
+		}
 	}
 }
 
