@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"reflect"
@@ -206,9 +207,38 @@ type element struct {
 	kids    []*element // render-widget children
 	dirty   bool
 	mounted bool
+
+	// lifeCtx is this element's lifetime as a context, created on first use by
+	// lifetime() and cancelled by unmount. Children derive from their parent,
+	// so cancelling an element cancels everything below it.
+	lifeCtx    context.Context
+	lifeCancel context.CancelFunc
 }
 
 func (el *element) ctx() Ctx { return Ctx{el: el} }
+
+// lifetime returns a context cancelled when this element leaves the tree. It
+// derives from the parent element's lifetime, so unmounting a subtree cancels
+// the work started anywhere inside it; the root derives from Background.
+//
+// Created on demand: an element whose widget never starts background work
+// never allocates one. An element that has already unmounted gets a context
+// that is cancelled before it is returned, so late callers cannot start work
+// that nothing will ever stop.
+func (el *element) lifetime() context.Context {
+	if el.lifeCtx != nil {
+		return el.lifeCtx
+	}
+	parent := context.Background()
+	if el.parent != nil {
+		parent = el.parent.lifetime()
+	}
+	el.lifeCtx, el.lifeCancel = context.WithCancel(parent)
+	if !el.mounted {
+		el.lifeCancel()
+	}
+	return el.lifeCtx
+}
 
 func (el *element) markDirty() {
 	if el.dirty || !el.mounted {
@@ -482,6 +512,12 @@ func (el *element) unmount() {
 		return
 	}
 	el.mounted = false
+	// Cancel before anything else: Dispose hooks and the child walk below can
+	// take a while, and work started by this subtree should stop now rather
+	// than run on against a tree it can no longer touch.
+	if el.lifeCancel != nil {
+		el.lifeCancel()
+	}
 	// Release keyboard focus if this element's box holds it, so key/text events
 	// stop routing to a detached handler and a newly-mounted focusable can take
 	// focus (autofocus only fires when KeyboardTarget is nil, and text-capturing

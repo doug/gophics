@@ -5,6 +5,7 @@
 package widget
 
 import (
+	"context"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/input"
 	"github.com/doug/gophics/paint"
@@ -62,6 +63,41 @@ func (s *StateBase[W]) SetState(fn func()) {
 		fn()
 	}
 	s.el.markDirty()
+}
+
+// PostState applies fn on the UI goroutine and marks this widget's subtree for
+// rebuild, exactly as SetState does. Unlike SetState it is safe to call from
+// any goroutine, so it is what background work uses to deliver a result:
+//
+//	go func() {
+//	    items, err := api.TopStories(ctx)
+//	    s.PostState(func() { s.feed = feed{items: items, err: err, done: true} })
+//	}()
+//
+// The rule is the whole of it: SetState from the UI goroutine, PostState from
+// anywhere else. Prefer SetState where it applies — PostState runs fn at the
+// top of the next frame rather than immediately, so a handler that reads the
+// state back after writing it would see the old value.
+//
+// fn is dropped if the widget left the tree while the work was in flight.
+func (s *StateBase[W]) PostState(fn func()) {
+	el := s.el
+	if el == nil {
+		return // never mounted; there is no tree to notify
+	}
+	post := el.owner.Post
+	if post == nil {
+		// No runner attached (tests, headless embedding): run inline, matching
+		// the documented fallback for a nil Owner.Post elsewhere.
+		s.SetState(fn)
+		return
+	}
+	post(func() {
+		if !el.mounted {
+			return
+		}
+		s.SetState(fn)
+	})
 }
 
 func (s *StateBase[W]) setElement(el *element) { s.el = el }
@@ -138,6 +174,24 @@ func (c Ctx) KeyboardInset() float32 { return c.el.owner.KeyboardInset }
 // Capture the func from Ctx during Build/Init; it is safe to call from any
 // goroutine (unlike SetState directly).
 func (c Ctx) Post() func(fn func()) { return c.el.owner.Post }
+
+// Context returns a context cancelled when this widget leaves the tree. Pass it
+// to any work started on the widget's behalf — a fetch, a file read, a database
+// call — so the work stops when the thing that wanted it is gone:
+//
+//	ctx := c.Context()
+//	go func() {
+//	    items, err := api.TopStories(ctx)
+//	    s.PostState(func() { ... })
+//	}()
+//
+// It is a lifetime, not a scheduler: it cancels work, it does not deliver it.
+// Results still come back through PostState or Post. Contexts derive down the
+// element tree, so removing a subtree cancels everything started inside it.
+//
+// Safe to call only from the UI goroutine (during Init, Build or an event
+// handler); the returned context is then safe to use from any goroutine.
+func (c Ctx) Context() context.Context { return c.el.lifetime() }
 
 // AddTicker registers per-frame animation work (see Owner.AddTicker).
 func (c Ctx) AddTicker(t Ticker) { c.el.owner.AddTicker(t) }
