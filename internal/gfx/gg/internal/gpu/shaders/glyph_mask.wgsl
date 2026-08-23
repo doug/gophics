@@ -63,13 +63,21 @@ fn rrect_clip_coverage(frag_pos: vec2<f32>) -> f32 {
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let p = vec4<f32>(in.position, 0.0, 1.0);
-    let col0 = uniforms.transform[0];
-    let col1 = uniforms.transform[1];
-    let col2 = uniforms.transform[2];
-    let col3 = uniforms.transform[3];
-    let pos = p.x * col0 + p.y * col1 + p.z * col2 + p.w * col3;
-    out.position = pos;
+    // Plain matrix-vector multiply.
+    //
+    // This used to expand the columns by hand — transform[0]..transform[3],
+    // each scaled and summed — to work around naga's SPIR-V backend not
+    // supporting mat4x4 * vec4 as one operator. That support exists now
+    // (OpMatrixTimesVector, spirv/internal/codegen/backend.go), so the
+    // workaround outlived its reason, and on Adreno 619 / Android 16 it
+    // miscompiled: the vertex stage produced a degenerate position, every
+    // glyph quad collapsed, and text vanished while shapes drew correctly.
+    // Metal was unaffected, which is why it only ever showed on device.
+    //
+    // The same expansion was in glyph_mask_lcd, msdf_text and textured_quad —
+    // exactly the tiers that were reported blank on that device. Do not
+    // reintroduce it without re-checking the backend first.
+    out.position = uniforms.transform * vec4<f32>(in.position, 0.0, 1.0);
     out.tex_coord = in.tex_coord;
     return out;
 }
