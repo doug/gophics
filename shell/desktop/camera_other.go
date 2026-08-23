@@ -13,3 +13,7 @@ import "github.com/doug/gophics/shell"
 // Foundation; nil is the contract's way of saying so, and an app hides the
 // affordance rather than failing.
 func (w *window) CameraPreview() shell.CameraPreview { return nil }
+
+// Camera returns nil: still capture follows the preview, and the preview is
+// macOS-only until the V4L2 and Media Foundation paths land.
+func (w *window) Camera() shell.Camera { return nil }

@@ -537,9 +537,9 @@ closing next, and why.
 | Capability | desktop | web | mobile | terminal |
 |---|---|---|---|---|
 | `Accessibility` | yes | yes | — | — |
-| `Audio` | — | yes | yes | — |
+| `Audio` | yes | yes | yes | — |
 | `Battery` | yes | yes | — | — |
-| `Camera` | — | yes | yes | — |
+| `Camera` | yes | yes | yes | — |
 | `CameraPreview` | yes | yes | yes | — |
 | `Connectivity` | yes | yes | — | — |
 | `FilePicker` | yes | yes | — | — |

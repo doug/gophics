@@ -112,7 +112,7 @@ func (b *Bridge) DeliverPCM(reqID int, pcm []byte, sampleRate int, durationMs in
 			Data:     shell.EncodeWAV(samples, sampleRate),
 			Mime:     "audio/wav",
 			Duration: dur,
-			Envelope: envelope(samples, 120),
+			Envelope: shell.Envelope(samples, 120),
 		}, nil)
 	}
 }
@@ -174,36 +174,6 @@ func pcmToInt16(b []byte) []int16 {
 	out := make([]int16, n)
 	for i := 0; i < n; i++ {
 		out[i] = int16(binary.LittleEndian.Uint16(b[i*2:]))
-	}
-	return out
-}
-
-// envelope downsamples |samples| into at most buckets peak values in 0..1.
-func envelope(samples []int16, buckets int) []float32 {
-	if len(samples) == 0 || buckets <= 0 {
-		return nil
-	}
-	if buckets > len(samples) {
-		buckets = len(samples)
-	}
-	out := make([]float32, buckets)
-	per := len(samples) / buckets
-	if per < 1 {
-		per = 1
-	}
-	for i := 0; i < buckets; i++ {
-		var peak int
-		start := i * per
-		for j := start; j < start+per && j < len(samples); j++ {
-			v := int(samples[j])
-			if v < 0 {
-				v = -v
-			}
-			if v > peak {
-				peak = v
-			}
-		}
-		out[i] = float32(peak) / 32768
 	}
 	return out
 }

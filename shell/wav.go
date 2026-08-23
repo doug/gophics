@@ -83,3 +83,39 @@ func DecodeWAV(b []byte) (pcm []int16, sampleRate int, err error) {
 	}
 	return mono, sampleRate, nil
 }
+
+// Envelope downsamples |pcm| into at most buckets peak values in 0..1, for the
+// waveform an app draws beside a recording.
+//
+// It lives here, beside EncodeWAV, because every backend that produces a Clip
+// needs it and they must agree: a waveform computed one way on desktop and
+// another on Android would make the same recording look different depending on
+// where it was made.
+func Envelope(pcm []int16, buckets int) []float32 {
+	if len(pcm) == 0 || buckets <= 0 {
+		return nil
+	}
+	if buckets > len(pcm) {
+		buckets = len(pcm)
+	}
+	out := make([]float32, buckets)
+	per := len(pcm) / buckets
+	if per < 1 {
+		per = 1
+	}
+	for i := range out {
+		var peak int
+		start := i * per
+		for j := start; j < start+per && j < len(pcm); j++ {
+			v := int(pcm[j])
+			if v < 0 {
+				v = -v
+			}
+			if v > peak {
+				peak = v
+			}
+		}
+		out[i] = float32(peak) / 32768
+	}
+	return out
+}
