@@ -1,5 +1,11 @@
 package widget
 
+import (
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
+)
+
 // Tree renders a hierarchy with expandable rows — a file browser, an outline,
 // a settings pane.
 //
@@ -60,7 +66,14 @@ func (s *treeState) Build(ctx Ctx) Widget {
 	}
 	var rows []Widget
 	s.appendRows(&rows, w.Nodes, 0, indent)
-	return Column(rows...)
+	// Rows start at the leading edge. A plain Column centres its children, and
+	// a centred row makes the indentation meaningless: every level would sit in
+	// the middle, shifted by a step that no longer reads as depth. Indentation
+	// is the only thing on screen conveying the hierarchy, so it has to be
+	// measured from a fixed edge.
+	col := Column(rows...)
+	col.CrossAlign = layout.CrossStart
+	return Semantics{Role: layout.RoleTree, Child: col}
 }
 
 // expandedSet returns whichever set is authoritative: the app's when supplied,
@@ -112,7 +125,30 @@ func (s *treeState) appendRows(out *[]Widget, nodes []TreeNode, depth int, inden
 		if n.Child != nil {
 			row = append(row, n.Child)
 		}
-		*out = append(*out, Row(row...))
+
+		// Expanded stays nil for a leaf. "Collapsed" and "has nothing to open"
+		// are different announcements, and a tree that calls every leaf
+		// collapsed invites the user to open rows that will never open.
+		var expanded *bool
+		if expandable {
+			e := open
+			expanded = &e
+		}
+		// OnActivate is what assistive technology triggers. Without it the row
+		// is inert to a screen reader even though it folds on tap, because the
+		// only thing carrying a handler is the chevron — a target the user
+		// cannot see and, at 16pt, would struggle to hit.
+		var activate func()
+		if expandable {
+			id := n.ID
+			activate = func() { s.toggle(id) }
+		}
+		*out = append(*out, Semantics{
+			Role:       layout.RoleTreeItem,
+			Expanded:   expanded,
+			OnActivate: activate,
+			Child:      Row(row...),
+		})
 
 		if open {
 			s.appendRows(out, n.Children, depth+1, indent)
@@ -131,12 +167,51 @@ func (s *treeState) disclosureFor(id string, expandable, open bool) Widget {
 	if !expandable {
 		return Sized{W: affordance}
 	}
-	mark := "▸"
-	if open {
-		mark = "▾"
-	}
+	// The triangle is drawn rather than typed. The obvious spelling is a text
+	// glyph — "▸" and "▾" — and it is invisible in the Go font, which has no
+	// glyph for either and renders .notdef. The disclosure marker is the only
+	// thing on screen saying a row can be opened, so it cannot depend on which
+	// font the app happens to ship.
+	//
+	// Hidden from semantics as well: the row already announces its expanded
+	// state, and an exposed marker is absorbed into the row's label, so a
+	// screen reader would read a triangle aloud and then say nothing about
+	// whether the row is open.
 	return Sized{W: affordance, Child: Interactive{
 		Handler: Handler{OnTap: func() { s.toggle(id) }},
-		Child:   Text{S: mark},
+		Child: Semantics{Hidden: true, Child: Canvas{
+			W: affordance, H: affordance,
+			Draw: func(c paint.Canvas, size geom.Size) {
+				drawDisclosure(c, size, open)
+			},
+		}},
 	}}
 }
+
+// drawDisclosure paints the collapsed (right-pointing) or expanded
+// (down-pointing) triangle, centred in its box.
+func drawDisclosure(c paint.Canvas, size geom.Size, open bool) {
+	const side = 7 // the triangle's extent; the rest of the box is padding
+	cx, cy := size.W/2, size.H/2
+	h := float32(side) / 2
+
+	p := paint.NewPath()
+	if open {
+		// Pointing down: a wide base above, apex below.
+		p.MoveTo(geom.Pt{X: cx - h, Y: cy - h/2})
+		p.LineTo(geom.Pt{X: cx + h, Y: cy - h/2})
+		p.LineTo(geom.Pt{X: cx, Y: cy + h})
+	} else {
+		// Pointing right.
+		p.MoveTo(geom.Pt{X: cx - h/2, Y: cy - h})
+		p.LineTo(geom.Pt{X: cx + h, Y: cy})
+		p.LineTo(geom.Pt{X: cx - h/2, Y: cy + h})
+	}
+	p.Close()
+	c.FillPath(p, treeDisclosureColor)
+}
+
+// treeDisclosureColor is a mid grey that reads on light and dark surfaces
+// alike. The widget layer holds no theme — a themed tree wraps this — but the
+// marker still has to be visible by default.
+var treeDisclosureColor = paint.Color{R: 0.45, G: 0.47, B: 0.5, A: 1}
