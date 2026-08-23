@@ -1,6 +1,6 @@
 //go:build !js
 
-package desktop
+package devmedia
 
 import (
 	"math"
@@ -17,7 +17,7 @@ import (
 // what the samples should have been.
 
 func TestRecorderAssemblesChunksInOrder(t *testing.T) {
-	r := &desktopRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
+	r := &deviceRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
 
 	// More than two chunks, so ordering and the partial tail both matter.
 	const n = chunkSamples*2 + 100
@@ -53,7 +53,7 @@ func TestRecorderAssemblesChunksInOrder(t *testing.T) {
 }
 
 func TestRecorderClipsRatherThanWrapping(t *testing.T) {
-	r := &desktopRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
+	r := &deviceRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
 	r.write([]float32{2, -2, 1, -1})
 	pcm, _, _ := r.finish()
 	// Full scale is 32767, so +-1.0 maps symmetrically to +-32767 and never
@@ -68,7 +68,7 @@ func TestRecorderClipsRatherThanWrapping(t *testing.T) {
 
 func TestFinishIsIdempotent(t *testing.T) {
 	c := &countingCapture{}
-	r := &desktopRecorder{cap: c, rate: 8000, start: time.Now()}
+	r := &deviceRecorder{cap: c, rate: 8000, start: time.Now()}
 	r.write([]float32{0.5})
 	if _, _, ok := r.finish(); !ok {
 		t.Fatal("first finish reported false")
@@ -82,7 +82,7 @@ func TestFinishIsIdempotent(t *testing.T) {
 }
 
 func TestStopProducesAPlayableClip(t *testing.T) {
-	r := &desktopRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
+	r := &deviceRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
 	in := make([]float32, 8000) // exactly one second
 	for i := range in {
 		in[i] = float32(math.Sin(float64(i) * 0.05))
@@ -116,7 +116,7 @@ func TestStopProducesAPlayableClip(t *testing.T) {
 }
 
 func TestStopWithNoAudioReportsAnError(t *testing.T) {
-	r := &desktopRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
+	r := &deviceRecorder{cap: nopCapture{}, rate: 8000, start: time.Now()}
 	var err error
 	r.Stop(func(_ shell.Clip, e error) { err = e })
 	if err == nil {
@@ -127,7 +127,7 @@ func TestStopWithNoAudioReportsAnError(t *testing.T) {
 // --- playback position -------------------------------------------------------
 
 func TestPositionIsClampedAndFrozenWhenStopped(t *testing.T) {
-	p := &desktopPlayback{rate: 8000, duration: 2 * time.Second}
+	p := &devicePlayback{rate: 8000, duration: 2 * time.Second}
 
 	// Not started: the cursor sits at the offset.
 	if got := p.Position(); got != 0 {
@@ -150,7 +150,7 @@ func TestPositionIsClampedAndFrozenWhenStopped(t *testing.T) {
 }
 
 func TestSeekOnAStoppedPlaybackMovesTheCursorWithoutResuming(t *testing.T) {
-	p := &desktopPlayback{rate: 8000, duration: 2 * time.Second, stopped: true}
+	p := &devicePlayback{rate: 8000, duration: 2 * time.Second, stopped: true}
 	p.Seek(time.Second)
 	if p.Playing() {
 		t.Error("seeking a stopped playback resumed it")

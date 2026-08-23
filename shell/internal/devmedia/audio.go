@@ -1,6 +1,6 @@
 //go:build !js
 
-package desktop
+package devmedia
 
 import (
 	"errors"
@@ -11,7 +11,12 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
-// Recording and playback on the desktop.
+// Recording and playback over the local audio devices.
+//
+// This lives below the shells rather than inside one because nothing here
+// concerns a window: it adapts internal/audio to the shell.Audio contract, and
+// a terminal app wants that adapter exactly as much as a GUI app does. The
+// shells are the thin part — each returns these and says whether it has them.
 //
 // Both halves already existed under internal/audio and were reachable only
 // through the sound package, which is not a capability — so an app written
@@ -24,26 +29,20 @@ import (
 // backends produce too. A recording made on one platform therefore plays on
 // any other, and the waveform beside it is computed by one shared function.
 
-// The window opts into media capture by implementing shell.MediaWindow; this
-// is the compile-time check that it still does. It lives here rather than
-// beside the camera because MediaWindow needs Camera and Audio together, and
-// Audio is the half that exists on every desktop.
-var _ shell.MediaWindow = (*window)(nil)
-
 // Audio returns the record/playback capability.
 //
 // Non-nil even with no input device, for the reason Microphone is: whether a
 // usable device exists cannot be known without opening it, and on macOS
 // opening it is what raises the permission prompt. A missing or refused device
 // surfaces as an error from Record, where an app can report it.
-func (w *window) Audio() shell.Audio { return desktopAudio{} }
+func Audio() shell.Audio { return deviceAudio{} }
 
-type desktopAudio struct{}
+type deviceAudio struct{}
 
 // Authorize reports granted without asking, the same way desktopMic does and
 // for the same reason: none of the three desktops has a permission API that
 // can be queried ahead of the attempt. Record is what finds out.
-func (desktopAudio) Authorize(cb func(shell.Permission)) {
+func (deviceAudio) Authorize(cb func(shell.Permission)) {
 	if cb != nil {
 		cb(shell.PermissionGranted)
 	}
@@ -53,7 +52,7 @@ func (desktopAudio) Authorize(cb func(shell.Permission)) {
 
 const recordRate = 44100
 
-func (desktopAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+func (deviceAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
 	if done == nil {
 		return
 	}
@@ -68,7 +67,7 @@ func (desktopAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, erro
 		done(nil, errors.New("audio: capture device reported no sample rate"))
 		return
 	}
-	r := &desktopRecorder{cap: cap, rate: rate, start: time.Now()}
+	r := &deviceRecorder{cap: cap, rate: rate, start: time.Now()}
 	if err := cap.Start(r.write); err != nil {
 		cap.Close()
 		done(nil, err)
@@ -86,7 +85,7 @@ func (desktopAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, erro
 // per chunk and never copy what is already captured.
 const chunkSamples = 8192
 
-type desktopRecorder struct {
+type deviceRecorder struct {
 	cap   audio.Capture
 	rate  int
 	start time.Time
@@ -100,7 +99,7 @@ type desktopRecorder struct {
 }
 
 // write runs on the audio thread: copy, measure, return.
-func (r *desktopRecorder) write(pcm []float32) {
+func (r *deviceRecorder) write(pcm []float32) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.stopped {
@@ -137,13 +136,13 @@ func (r *desktopRecorder) write(pcm []float32) {
 	}
 }
 
-func (r *desktopRecorder) Level() float32 {
+func (r *deviceRecorder) Level() float32 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.level
 }
 
-func (r *desktopRecorder) Elapsed() time.Duration {
+func (r *deviceRecorder) Elapsed() time.Duration {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.stopped {
@@ -152,7 +151,7 @@ func (r *desktopRecorder) Elapsed() time.Duration {
 	return time.Since(r.start)
 }
 
-func (r *desktopRecorder) Stop(done func(shell.Clip, error)) {
+func (r *deviceRecorder) Stop(done func(shell.Clip, error)) {
 	pcm, rate, ok := r.finish()
 	if done == nil {
 		return
@@ -173,11 +172,11 @@ func (r *desktopRecorder) Stop(done func(shell.Clip, error)) {
 	}, nil)
 }
 
-func (r *desktopRecorder) Cancel() { r.finish() }
+func (r *deviceRecorder) Cancel() { r.finish() }
 
 // finish releases the device and returns what was captured. It reports false
 // on a second call, so Stop-then-Cancel cannot double-close the device.
-func (r *desktopRecorder) finish() ([]int16, int, bool) {
+func (r *deviceRecorder) finish() ([]int16, int, bool) {
 	r.mu.Lock()
 	if r.finished {
 		r.mu.Unlock()
@@ -224,7 +223,7 @@ func outputContext() (*audio.Context, error) {
 	return outCtx, outErr
 }
 
-func (desktopAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
+func (deviceAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
 	if done == nil {
 		return
 	}
@@ -249,7 +248,7 @@ func (desktopAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
 		done(nil, err)
 		return
 	}
-	p := &desktopPlayback{
+	p := &devicePlayback{
 		ctx:      ctx,
 		pcm:      pcm,
 		rate:     rate,
@@ -262,7 +261,7 @@ func (desktopAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
 	done(p, nil)
 }
 
-type desktopPlayback struct {
+type devicePlayback struct {
 	ctx      *audio.Context
 	pcm      []int16
 	rate     int
@@ -276,7 +275,7 @@ type desktopPlayback struct {
 }
 
 // playFrom starts a player at off. The caller must not hold mu.
-func (p *desktopPlayback) playFrom(off time.Duration) error {
+func (p *devicePlayback) playFrom(off time.Duration) error {
 	if off < 0 {
 		off = 0
 	}
@@ -306,7 +305,7 @@ func (p *desktopPlayback) playFrom(off time.Duration) error {
 // exposes no cursor. It is therefore the position of the audio handed to the
 // device, not of the audio leaving the speaker — the two differ by the output
 // buffer, a few milliseconds, which no waveform cursor can show.
-func (p *desktopPlayback) Position() time.Duration {
+func (p *devicePlayback) Position() time.Duration {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.stopped || p.player == nil {
@@ -319,16 +318,16 @@ func (p *desktopPlayback) Position() time.Duration {
 	return at
 }
 
-func (p *desktopPlayback) Duration() time.Duration { return p.duration }
+func (p *devicePlayback) Duration() time.Duration { return p.duration }
 
-func (p *desktopPlayback) Playing() bool {
+func (p *devicePlayback) Playing() bool {
 	p.mu.Lock()
 	pl, stopped := p.player, p.stopped
 	p.mu.Unlock()
 	return !stopped && pl != nil && pl.IsPlaying()
 }
 
-func (p *desktopPlayback) Seek(t time.Duration) {
+func (p *devicePlayback) Seek(t time.Duration) {
 	p.mu.Lock()
 	stopped := p.stopped
 	p.mu.Unlock()
@@ -343,7 +342,7 @@ func (p *desktopPlayback) Seek(t time.Duration) {
 	_ = p.playFrom(t)
 }
 
-func (p *desktopPlayback) Stop() {
+func (p *devicePlayback) Stop() {
 	p.mu.Lock()
 	if p.stopped {
 		p.mu.Unlock()

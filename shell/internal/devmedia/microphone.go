@@ -1,6 +1,6 @@
 //go:build !js
 
-package desktop
+package devmedia
 
 import (
 	"errors"
@@ -11,11 +11,7 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
-// The window opts into live capture by implementing shell.LiveMediaWindow;
-// this is the compile-time check that it still does.
-var _ shell.LiveMediaWindow = (*window)(nil)
-
-// Live microphone capture on the desktop, over the same zero-CGo FFI the audio
+// Live microphone capture over the same zero-CGo FFI the audio
 // output drivers use: CoreAudio's AudioQueue on macOS, pa_simple on Linux,
 // WASAPI on Windows (see internal/audio/capture_*.go). Everything above the
 // device — the ring buffer, the level, the FFT bands — is the shared analyzer
@@ -27,9 +23,9 @@ var _ shell.LiveMediaWindow = (*window)(nil)
 // exists cannot be known without opening it — and on macOS, opening it is what
 // triggers the permission prompt. A missing or refused device surfaces as an
 // error from Listen, which is where an app can actually report it.
-func (w *window) Microphone() shell.Microphone { return desktopMic{} }
+func Microphone() shell.Microphone { return deviceMic{} }
 
-type desktopMic struct{}
+type deviceMic struct{}
 
 // Authorize is a no-op that reports granted.
 //
@@ -39,13 +35,13 @@ type desktopMic struct{}
 // bundled app's Info.plist); Linux and Windows gate at the OS settings level.
 // So the honest answer is "try it and see", and Listen is what actually finds
 // out.
-func (desktopMic) Authorize(cb func(shell.Permission)) {
+func (deviceMic) Authorize(cb func(shell.Permission)) {
 	if cb != nil {
 		cb(shell.PermissionGranted)
 	}
 }
 
-func (desktopMic) Listen(done func(shell.Monitor, error)) {
+func (deviceMic) Listen(done func(shell.Monitor, error)) {
 	if done == nil {
 		return
 	}
@@ -59,7 +55,7 @@ func (desktopMic) Listen(done func(shell.Monitor, error)) {
 		done(nil, errors.New("audio: capture device reported no sample rate"))
 		return
 	}
-	m := &desktopMonitor{cap: cap, an: mic.New(rate, mic.DefaultWindow)}
+	m := &deviceMonitor{cap: cap, an: mic.New(rate, mic.DefaultWindow)}
 	// The sink runs on the platform's audio thread and does nothing but copy
 	// into the mutex-guarded ring buffer, which is the whole reason the
 	// analyzer is written to be safe there.
@@ -71,7 +67,7 @@ func (desktopMic) Listen(done func(shell.Monitor, error)) {
 	done(m, nil)
 }
 
-type desktopMonitor struct {
+type deviceMonitor struct {
 	cap audio.Capture
 	an  *mic.Analyzer
 
@@ -79,44 +75,44 @@ type desktopMonitor struct {
 	stopped bool
 }
 
-func (m *desktopMonitor) write(pcm []float32) {
+func (m *deviceMonitor) write(pcm []float32) {
 	if m.done() {
 		return
 	}
 	m.an.Write(pcm)
 }
 
-func (m *desktopMonitor) done() bool {
+func (m *deviceMonitor) done() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.stopped
 }
 
-func (m *desktopMonitor) Level() float32 {
+func (m *deviceMonitor) Level() float32 {
 	if m.done() {
 		return 0
 	}
 	return m.an.Level()
 }
 
-func (m *desktopMonitor) Bands(dst []float32) int {
+func (m *deviceMonitor) Bands(dst []float32) int {
 	if m.done() {
 		return 0
 	}
 	return m.an.Bands(dst)
 }
 
-func (m *desktopMonitor) Samples(dst []float32) int {
+func (m *deviceMonitor) Samples(dst []float32) int {
 	if m.done() {
 		return 0
 	}
 	return m.an.Samples(dst)
 }
 
-func (m *desktopMonitor) WindowSize() int { return m.an.WindowSize() }
-func (m *desktopMonitor) SampleRate() int { return m.an.SampleRate() }
+func (m *deviceMonitor) WindowSize() int { return m.an.WindowSize() }
+func (m *deviceMonitor) SampleRate() int { return m.an.SampleRate() }
 
-func (m *desktopMonitor) Stop() {
+func (m *deviceMonitor) Stop() {
 	m.mu.Lock()
 	if m.stopped {
 		m.mu.Unlock()

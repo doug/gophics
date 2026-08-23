@@ -1,6 +1,6 @@
 //go:build !js
 
-package desktop
+package devmedia
 
 import (
 	"os"
@@ -24,7 +24,7 @@ func TestHardwareRecordAndPlay(t *testing.T) {
 	if os.Getenv("GOPHICS_AUDIO_HW") == "" {
 		t.Skip("set GOPHICS_AUDIO_HW=1 to run against real audio hardware")
 	}
-	a := desktopAudio{}
+	a := deviceAudio{}
 
 	var rec shell.Recorder
 	var err error

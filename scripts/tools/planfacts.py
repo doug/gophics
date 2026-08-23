@@ -71,6 +71,10 @@ def capabilities():
 # would put "yes" beside mobile Battery, which never returns one.
 ALWAYS_NIL = re.compile(r"\{\s*(?://[^\n]*\n\s*)*return nil\s*\}")
 
+# An accessor that hands off to another package: its implementation is not in
+# this file, so nothing here can say whether it does anything.
+DELEGATES = re.compile(r"return\s+\w+\.\w+\(")
+
 
 def accessor_body(src, end):
     """The accessor body starting at the brace after its signature."""
@@ -132,12 +136,28 @@ def hollow_accessors():
 
 
 def returns_nothing(src, end):
-    """Whether the methods defined after an accessor all just return nil.
+    """Whether the methods implementing an accessor all just return nil.
 
     Shallow by design: it flags the shape so a human looks, rather than trying
-    to decide what a platform call does.
+    to decide what a platform call does. Two limits keep the shallowness from
+    turning into a false accusation, both learned the hard way.
+
+    It stops at the next accessor. Scanning to end-of-file meant an unrelated
+    stub further down the file decided the verdict, so moving a function
+    changed a documented fact — the tool reported terminal Microphone as
+    hollow because two nil-returning camera accessors happened to sit below it.
+
+    It declines to judge a delegating accessor. `return devmedia.Microphone()`
+    is implemented in another package this tool does not read, and "I cannot
+    see it" must not print as "it does nothing" — that is the same lie the
+    check exists to catch, told about working code.
     """
     body = src[end:]
+    nxt = CAP_ACCESSOR.search(body)
+    if nxt:
+        body = body[: nxt.start()]
+    if DELEGATES.search(accessor_body(src, end)):
+        return False
     methods = re.findall(r"\nfunc \([^)]+\) \w+\([^)]*\)[^{]*\{([^}]*)\}", body)
     if not methods:
         return False

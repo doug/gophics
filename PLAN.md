@@ -537,7 +537,7 @@ closing next, and why.
 | Capability | desktop | web | mobile | terminal |
 |---|---|---|---|---|
 | `Accessibility` | yes | yes | — | — |
-| `Audio` | yes | yes | yes | — |
+| `Audio` | yes | yes | yes | yes |
 | `Battery` | yes | yes | — | — |
 | `Camera` | yes | yes | yes | — |
 | `CameraPreview` | yes | yes | yes | — |
@@ -549,7 +549,7 @@ closing next, and why.
 | `Lifecycle` | yes | yes | yes | — |
 | `Links` | yes | yes | — | — |
 | `Menus` | yes | — | — | — |
-| `Microphone` | yes | yes | yes | — |
+| `Microphone` | yes | yes | yes | yes |
 | `Notifier` | — | yes | — | — |
 | `Permissions` | — | yes | — | — |
 | `Preferences` | yes | yes | — | — |
