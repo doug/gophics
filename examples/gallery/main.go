@@ -244,6 +244,20 @@ func sections() []section {
 			sp("Pull to refresh", "LazyList with Refreshing / OnRefresh", refreshSection{})},
 		{"Swipe to dismiss", "Swipe a row aside to remove it",
 			sp("Swipe to dismiss", "Dismissible rows, keyed so the right one goes", dismissSection{})},
+		{"Tree", "Fold a hierarchy; rows announce their state",
+			sp("Tree", "Expandable rows, indented and announced as a tree", treeSection{})},
+		{"Autocomplete", "Type-ahead over an in-memory list",
+			sp("Autocomplete", "Suggestions filtered as you type", autocompleteSection{})},
+		{"Reorderable list", "Drag rows into a new order",
+			sp("Reorderable list", "Uniform rows, reordered by dragging", reorderSection{})},
+		{"Drag & drop", "Carry chips between two bins",
+			sp("Drag & drop", "Draggable payloads and targets that accept them", dragDropSection{})},
+		{"Rich text & selection", "Styled spans, a link, and drag-to-select",
+			sp("Rich text & selection", "Rich spans inside a SelectionArea", richTextSection{})},
+		{"Transform", "Rotate and scale a still-live widget",
+			sp("Transform", "A transformed subtree that still takes taps", transformSection{})},
+		{"Right to left", "Mirror a layout, not its glyphs",
+			sp("Right to left", "Directionality flipping a whole subtree", rtlSection{})},
 	}
 }
 
