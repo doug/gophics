@@ -48,10 +48,18 @@ func (s *reorderState) Build(ctx Ctx) Widget {
 	for _, i := range order {
 		rows = append(rows, s.row(i))
 	}
+	// Rows fill the cross axis. A plain Column or Row centres its children, so
+	// a list of differently-sized rows comes out ragged and centred — and the
+	// drag maths, which assumes a row occupies the full cross extent, no longer
+	// matches where the row is drawn.
 	if w.Axis == layout.Horizontal {
-		return Row(rows...)
+		r := Row(rows...)
+		r.CrossAlign = layout.CrossStretch
+		return r
 	}
-	return Column(rows...)
+	c := Column(rows...)
+	c.CrossAlign = layout.CrossStretch
+	return c
 }
 
 // row wraps one item with its drag handling. The dragged row is offset to
