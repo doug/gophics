@@ -24,3 +24,9 @@ func (w *window) Audio() shell.Audio { return devmedia.Audio() }
 
 // Microphone returns live input monitoring.
 func (w *window) Microphone() shell.Microphone { return devmedia.Microphone() }
+
+// Camera returns still capture, or nil where no backend exists yet.
+func (w *window) Camera() shell.Camera { return devmedia.Camera() }
+
+// CameraPreview returns live camera preview, or nil where no backend exists yet.
+func (w *window) CameraPreview() shell.CameraPreview { return devmedia.CameraPreview() }

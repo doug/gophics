@@ -1,9 +1,7 @@
 //go:build darwin && !ios
 
-// Package camera captures live video frames from the system camera.
-//
-// macOS goes through AVFoundation, driven from Go over the Objective-C bridge
-// in internal/objc — zero CGo, like every other native path in this tree.
+// macOS capture, over AVFoundation driven from Go through the Objective-C
+// bridge in internal/objc — zero CGo, like every other native path here.
 //
 // The shape is the one AVFoundation dictates: a capture session owns a device
 // input and a video data output, and the output pushes each frame to a delegate
@@ -14,9 +12,8 @@
 // Camera access is gated by TCC. A bundled .app needs NSCameraUsageDescription
 // in its Info.plist — `gophics build` checks for it — and a bare binary run
 // from a terminal inherits the terminal's own grant, so the first run may
-// prompt for the terminal rather than for this program. A denial surfaces as a
-// session that starts and delivers nothing, which is why Status is reported
-// separately rather than inferred from silence.
+// prompt for the terminal rather than for this program.
+
 package camera
 
 import (
@@ -30,23 +27,6 @@ import (
 	"github.com/go-webgpu/goffi/types"
 
 	"github.com/doug/gophics/internal/objc"
-)
-
-// Facing selects a camera on a device with more than one.
-type Facing int
-
-const (
-	FacingFront Facing = iota
-	FacingBack
-)
-
-// Status is the current capture authorization.
-type Status int
-
-const (
-	StatusPrompt  Status = iota // not yet decided; opening the camera asks
-	StatusGranted               // allowed
-	StatusDenied                // refused, or restricted by policy
 )
 
 // AVAuthorizationStatus, from AVCaptureDevice.h.
@@ -63,13 +43,6 @@ const (
 const pixelFormat32BGRA = 0x42475241 // 'BGRA'
 
 // Options configure a capture session.
-type Options struct {
-	Facing Facing
-	// Width is a hint. The camera picks the nearest mode it has, so read the
-	// real size off the image rather than assuming this one.
-	Width int
-}
-
 // Authorization reports whether the process may use the camera.
 //
 // It does not prompt. On macOS the prompt is raised by opening the device, so
@@ -98,12 +71,7 @@ type Capture struct {
 	delegate objc.ID
 	queue    uintptr
 
-	mu   sync.Mutex
-	pool [3]*image.RGBA // rotated: the scene compares frames by identity
-	cur  int
-	last *image.RGBA
-
-	stopped bool
+	frames
 }
 
 var (
@@ -397,46 +365,23 @@ func cvSize(sym unsafe.Pointer, buf uintptr) uint64 {
 
 // deliver converts BGRA to RGBA into the next pooled image and publishes it.
 func (c *Capture) deliver(src []byte, w, h, stride int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.stopped {
-		return
-	}
-
-	i := c.cur % len(c.pool)
-	img := c.pool[i]
-	if img == nil || img.Rect.Dx() != w || img.Rect.Dy() != h {
-		img = image.NewRGBA(image.Rect(0, 0, w, h))
-		c.pool[i] = img
-	}
-	for y := 0; y < h; y++ {
-		s := src[y*stride : y*stride+w*4]
-		d := img.Pix[y*img.Stride : y*img.Stride+w*4]
-		for x := 0; x < w*4; x += 4 {
-			// BGRA → RGBA; the alpha the camera reports is not meaningful.
-			d[x+0], d[x+1], d[x+2], d[x+3] = s[x+2], s[x+1], s[x+0], 0xff
+	c.frames.deliver(w, h, func(img *image.RGBA) {
+		for y := 0; y < h; y++ {
+			s := src[y*stride : y*stride+w*4]
+			d := img.Pix[y*img.Stride : y*img.Stride+w*4]
+			for x := 0; x < w*4; x += 4 {
+				// BGRA → RGBA; the alpha the camera reports is not meaningful.
+				d[x+0], d[x+1], d[x+2], d[x+3] = s[x+2], s[x+1], s[x+0], 0xff
+			}
 		}
-	}
-	c.cur++
-	c.last = img
-}
-
-// Frame returns the newest frame, or nil before the first arrives.
-func (c *Capture) Frame() *image.RGBA {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.last
+	})
 }
 
 // Stop ends the session and releases the camera, turning its light off.
 func (c *Capture) Stop() {
-	c.mu.Lock()
-	if c.stopped {
-		c.mu.Unlock()
+	if !c.stop() {
 		return
 	}
-	c.stopped = true
-	c.mu.Unlock()
 
 	if c.session.Valid() {
 		c.session.SendVoid("stopRunning")

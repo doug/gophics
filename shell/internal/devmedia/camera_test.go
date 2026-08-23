@@ -1,6 +1,6 @@
-//go:build darwin && !ios && !js
+//go:build ((darwin && !ios) || (linux && !android)) && !js
 
-package desktop
+package devmedia
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ import (
 // machines and CI runners alike, and a runner with no webcam is not a failure.
 func TestDesktopCameraDeliversFrames(t *testing.T) {
 	var status shell.Permission
-	desktopCamera{}.Authorize(func(p shell.Permission) { status = p })
+	deviceCamera{}.Authorize(func(p shell.Permission) { status = p })
 	if status == shell.PermissionDenied {
 		t.Skip("camera access denied on this machine")
 	}
@@ -29,7 +29,7 @@ func TestDesktopCameraDeliversFrames(t *testing.T) {
 		frames shell.Frames
 		err    error
 	)
-	desktopCamera{}.Start(shell.PreviewOptions{Facing: shell.FacingFront, Width: 640},
+	deviceCamera{}.Start(shell.PreviewOptions{Facing: shell.FacingFront, Width: 640},
 		func(f shell.Frames, e error) { frames, err = f, e })
 	if err != nil {
 		t.Skipf("no camera available: %v", err)
@@ -79,7 +79,7 @@ func TestDesktopCameraDeliversFrames(t *testing.T) {
 func TestDesktopCameraStopIsIdempotent(t *testing.T) {
 	var frames shell.Frames
 	var err error
-	desktopCamera{}.Start(shell.PreviewOptions{}, func(f shell.Frames, e error) { frames, err = f, e })
+	deviceCamera{}.Start(shell.PreviewOptions{}, func(f shell.Frames, e error) { frames, err = f, e })
 	if err != nil || frames == nil {
 		t.Skipf("no camera available: %v", err)
 	}

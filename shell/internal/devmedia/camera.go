@@ -1,6 +1,6 @@
-//go:build darwin && !ios && !js
+//go:build ((darwin && !ios) || (linux && !android)) && !js
 
-package desktop
+package devmedia
 
 import (
 	"errors"
@@ -11,11 +11,11 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
-// Live camera preview on macOS, over AVFoundation (internal/camera).
+// Live camera preview and still capture, over internal/camera.
 //
-// Only macOS for now. Linux wants V4L2 and Windows Media Foundation, both plain
-// C rather than Objective-C, so they are closer to the microphone paths than to
-// this one — see camera_other.go for the placeholder they share.
+// macOS goes through AVFoundation and Linux through V4L2, but internal/camera
+// presents them identically, so this adapter is written once. Windows still
+// wants a Media Foundation backend; until then camera_other.go answers nil.
 
 // CameraPreview returns live camera preview.
 //
@@ -23,9 +23,9 @@ import (
 // whether a usable device exists cannot be known without opening it, and on
 // macOS opening it is what raises the permission prompt. A missing or refused
 // camera surfaces as an error from Start, which is where an app can report it.
-func (w *window) CameraPreview() shell.CameraPreview { return desktopCamera{} }
+func CameraPreview() shell.CameraPreview { return deviceCamera{} }
 
-type desktopCamera struct{}
+type deviceCamera struct{}
 
 // Authorize reports the current capture authorization.
 //
@@ -34,7 +34,7 @@ type desktopCamera struct{}
 // now. Reporting it separately still matters, because a denied camera starts a
 // session that simply delivers nothing — silence and refusal look identical
 // from the frame side.
-func (desktopCamera) Authorize(done func(shell.Permission)) {
+func (deviceCamera) Authorize(done func(shell.Permission)) {
 	if done == nil {
 		return
 	}
@@ -49,7 +49,7 @@ func (desktopCamera) Authorize(done func(shell.Permission)) {
 }
 
 // Start opens the camera and hands back a frame source.
-func (desktopCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error)) {
+func (deviceCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error)) {
 	if done == nil {
 		return
 	}
@@ -62,14 +62,14 @@ func (desktopCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error
 		done(nil, err)
 		return
 	}
-	done(desktopFrames{c}, nil)
+	done(deviceFrames{c}, nil)
 }
 
-type desktopFrames struct{ c *camera.Capture }
+type deviceFrames struct{ c *camera.Capture }
 
-func (f desktopFrames) Frame() *image.RGBA { return f.c.Frame() }
+func (f deviceFrames) Frame() *image.RGBA { return f.c.Frame() }
 
-func (f desktopFrames) Stop() { f.c.Stop() }
+func (f deviceFrames) Stop() { f.c.Stop() }
 
 // Camera returns still capture, taken from the preview stream.
 //
@@ -78,18 +78,18 @@ func (f desktopFrames) Stop() { f.c.Stop() }
 // runtime, and a shutter sound the user did not ask for — to produce the same
 // pixels the preview is already delivering. One frame off the stream is the
 // same photo, and it reuses a path that a hardware test already covers.
-func (w *window) Camera() shell.Camera { return desktopStill{} }
+func Camera() shell.Camera { return deviceStill{} }
 
-type desktopStill struct{}
+type deviceStill struct{}
 
-func (desktopStill) Authorize(done func(shell.Permission)) { desktopCamera{}.Authorize(done) }
+func (deviceStill) Authorize(done func(shell.Permission)) { deviceCamera{}.Authorize(done) }
 
 // captureTimeout bounds the wait for the first frame. A camera that opens but
 // never delivers — in use by another app, or covered by a privacy shutter —
 // would otherwise hang the callback forever.
 const captureTimeout = 5 * time.Second
 
-func (desktopStill) Capture(o shell.CaptureOptions, done func(image.Image, error)) {
+func (deviceStill) Capture(o shell.CaptureOptions, done func(image.Image, error)) {
 	if done == nil {
 		return
 	}

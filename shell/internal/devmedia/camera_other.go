@@ -1,6 +1,6 @@
-//go:build !js && !(darwin && !ios)
+//go:build !js && !((darwin && !ios) || (linux && !android))
 
-package desktop
+package devmedia
 
 import "github.com/doug/gophics/shell"
 
@@ -12,8 +12,8 @@ import "github.com/doug/gophics/shell"
 // implemented and the camera is not. Linux wants V4L2 and Windows Media
 // Foundation; nil is the contract's way of saying so, and an app hides the
 // affordance rather than failing.
-func (w *window) CameraPreview() shell.CameraPreview { return nil }
+func CameraPreview() shell.CameraPreview { return nil }
 
 // Camera returns nil: still capture follows the preview, and the preview is
 // macOS-only until the V4L2 and Media Foundation paths land.
-func (w *window) Camera() shell.Camera { return nil }
+func Camera() shell.Camera { return nil }
