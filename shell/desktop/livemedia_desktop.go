@@ -21,14 +21,6 @@ var _ shell.LiveMediaWindow = (*window)(nil)
 // device — the ring buffer, the level, the FFT bands — is the shared analyzer
 // in internal/mic, so a desktop monitor and an Android one answer identically.
 
-// CameraPreview reports that live camera preview is unavailable on desktop.
-//
-// shell.LiveMediaWindow pairs the preview with the microphone, but they are
-// independent capabilities and a platform may have one without the other.
-// There is no desktop camera path yet; nil is the contract's way of saying so,
-// and an app hides the affordance rather than failing.
-func (w *window) CameraPreview() shell.CameraPreview { return nil }
-
 // Microphone returns live input monitoring.
 //
 // It is non-nil even on a machine with no input device, because whether one
