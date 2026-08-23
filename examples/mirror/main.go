@@ -70,12 +70,13 @@ type mirror struct {
 	cur  int
 	show *image.RGBA
 
-	amount   float32
-	mirrored bool
-	starting bool
-	err      string
-	fps      float32
-	lastWarp time.Duration
+	amount    float32
+	mirrored  bool
+	starting  bool
+	autoTried bool // the launch-time open has been attempted, once
+	err       string
+	fps       float32
+	lastWarp  time.Duration
 }
 
 // Source lets a test drive the app with frames and audio of its own. When one
@@ -106,6 +107,36 @@ func (m *mirror) Init(ctx widget.Ctx) {
 	if stateHook != nil {
 		stateHook(m)
 	}
+}
+
+// autostart opens the camera on launch when it can do so without prompting.
+//
+// A demo whose whole subject is the camera should show the camera, not a button
+// that shows the camera. But opening one raises a permission prompt the first
+// time and lights the capture indicator, and doing that unasked the instant an
+// app launches is what makes people distrust an app. So it starts immediately
+// where access is already granted, and keeps the button for the case where
+// starting would prompt — the prompt then follows a press, which is the only
+// moment the user has asked for it.
+//
+// Driven from the ticker rather than Init because capabilities are not wired
+// when Init runs: the tree mounts inside newCore before any shell exists, and
+// they arrive on the first frame (see app/present.go). Reading them in Init
+// sees nil on every platform, which is what the first version of this did.
+func (m *mirror) autostart() {
+	if m.autoTried || m.starting || m.running() {
+		return
+	}
+	cam := m.ctx.CameraPreview()
+	if cam == nil || !m.live() {
+		return // capabilities not wired yet, or this platform has none
+	}
+	m.autoTried = true
+	cam.Authorize(func(p shell.Permission) {
+		if p == shell.PermissionGranted {
+			m.start()
+		}
+	})
 }
 
 // Dispose releases the camera and microphone. Without this the capture light
@@ -183,6 +214,7 @@ func (m *mirror) Tick(dt float64) bool {
 	if dt > 0 {
 		m.fps += (float32(1/dt) - m.fps) * 0.05
 	}
+	m.autostart()
 	if !m.running() {
 		return true
 	}
