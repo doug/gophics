@@ -80,6 +80,9 @@ func describeNode(n shell.A11yNode, scale float64) mirrorElement {
 	if n.Checkable {
 		el.Attrs["aria-checked"] = strconv.FormatBool(n.Checked)
 	}
+	if n.Expandable {
+		el.Attrs["aria-expanded"] = strconv.FormatBool(n.Expanded)
+	}
 	el.Focus = n.Focused
 
 	// Nodes are absolutely positioned in page coordinates rather than nested

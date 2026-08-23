@@ -90,5 +90,10 @@ type A11yNode struct {
 	Selected   bool
 	Checkable  bool
 	Checked    bool
+	// Expandable marks a node that opens and closes; Expanded is its current
+	// state. ARIA's aria-expanded, and the same distinction Checkable draws:
+	// a leaf is not a collapsed branch.
+	Expandable bool
+	Expanded   bool
 	Children   []int
 }

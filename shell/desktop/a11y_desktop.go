@@ -52,6 +52,12 @@ func (a desktopA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
 			X: n.X, Y: n.Y, W: n.W, H: n.H,
 			Tappable: n.Tappable, Focused: n.Focused, Disabled: n.Disabled,
 			Selected: n.Selected, Checkable: n.Checkable, Checked: n.Checked,
+			// TODO(platform): Expandable/Expanded are dropped here. Carrying
+			// them needs the field on the substrate's A11yNode and a mapping in
+			// each backend — AT-SPI EXPANDABLE/EXPANDED states, UIA's
+			// ExpandCollapsePattern, NSAccessibilityDisclosureTriangle. Web
+			// already emits aria-expanded, so a tree announces its state there
+			// and not yet on the desktop.
 		}
 	}
 	// activate is passed straight through. It arrives on whichever thread the

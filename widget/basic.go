@@ -1253,6 +1253,10 @@ type Semantics struct {
 	Hint string
 	// Checked marks a toggleable node's state; nil means not toggleable.
 	Checked *bool
+	// Expanded marks an expandable node's state; nil means not expandable. A
+	// leaf in a tree is not a collapsed branch, which is why this is a pointer
+	// rather than a bool.
+	Expanded *bool
 	// Disabled and Selected mirror the ARIA states of the same name.
 	Disabled bool
 	Selected bool
@@ -1270,6 +1274,7 @@ func (sw Semantics) updateBox(_ Ctx, b layout.Box) {
 	sb.info = layout.SemInfo{
 		Role: sw.Role, Label: sw.Label, Hidden: sw.Hidden,
 		Value: sw.Value, Hint: sw.Hint, Checked: sw.Checked,
+		Expanded: sw.Expanded,
 		Disabled: sw.Disabled, Selected: sw.Selected,
 		OnActivate: sw.OnActivate,
 	}

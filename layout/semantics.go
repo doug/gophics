@@ -38,6 +38,8 @@ const (
 	RoleList
 	RoleListItem
 	RoleTab
+	RoleTree
+	RoleTreeItem
 )
 
 func (r Role) String() string {
@@ -72,6 +74,10 @@ func (r Role) String() string {
 		return "listitem"
 	case RoleTab:
 		return "tab"
+	case RoleTree:
+		return "tree"
+	case RoleTreeItem:
+		return "treeitem"
 	}
 	return "none"
 }
@@ -94,6 +100,10 @@ type SemInfo struct {
 	Checked  *bool
 	Disabled bool
 	Selected bool
+	// Expanded is set for nodes that open and close (tree items, disclosure
+	// rows); nil = not expandable. Same shape as Checked, and for the same
+	// reason: "collapsed" and "cannot expand" are different things to announce.
+	Expanded *bool
 	// Hint describes the result of activating the node ("opens the thread").
 	Hint string
 }
@@ -119,6 +129,7 @@ type SemNode struct {
 	Disabled   bool
 	Selected   bool
 	Checked    *bool
+	Expanded   *bool
 	Hint       string
 	OnActivate func()
 	Rect       geom.Rect
@@ -160,6 +171,7 @@ func collectSem(b Box, at geom.Pt) []SemNode {
 		Disabled:   info.Disabled,
 		Selected:   info.Selected,
 		Checked:    info.Checked,
+		Expanded:   info.Expanded,
 		Hint:       info.Hint,
 		OnActivate: info.OnActivate,
 		Rect:       geom.Rect{Min: at, Max: at.Add(b.Size().Pt())},

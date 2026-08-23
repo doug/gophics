@@ -42,6 +42,7 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 			Tappable: n.OnActivate != nil,
 			Focused:  n.Focused, Disabled: n.Disabled, Selected: n.Selected,
 			Checkable: n.Checked != nil, Checked: n.Checked != nil && *n.Checked,
+			Expandable: n.Expanded != nil, Expanded: n.Expanded != nil && *n.Expanded,
 		}
 		idx := len(t.nodes)
 		t.nodes = append(t.nodes, node)
