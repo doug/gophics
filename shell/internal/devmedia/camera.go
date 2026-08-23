@@ -1,4 +1,4 @@
-//go:build ((darwin && !ios) || (linux && !android)) && !js
+//go:build ((darwin && !ios) || (linux && !android) || windows) && !js
 
 package devmedia
 
@@ -13,9 +13,9 @@ import (
 
 // Live camera preview and still capture, over internal/camera.
 //
-// macOS goes through AVFoundation and Linux through V4L2, but internal/camera
-// presents them identically, so this adapter is written once. Windows still
-// wants a Media Foundation backend; until then camera_other.go answers nil.
+// macOS goes through AVFoundation, Linux through V4L2 and Windows through
+// Media Foundation, but internal/camera presents all three identically, so
+// this adapter is written once.
 
 // CameraPreview returns live camera preview.
 //

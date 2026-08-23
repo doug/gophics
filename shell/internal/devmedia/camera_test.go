@@ -1,4 +1,4 @@
-//go:build ((darwin && !ios) || (linux && !android)) && !js
+//go:build ((darwin && !ios) || (linux && !android) || windows) && !js
 
 package devmedia
 
