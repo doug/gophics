@@ -5,14 +5,25 @@
 import UIKit
 import Hnmobile
 
+// One bridge per process, at file scope because the app delegate and the view
+// controller both drive it. gomobile assumes one anyway: Start builds the app
+// once.
+private var bridge: MobileBridge!
+
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        let err = HnmobileStart()
-        if !err.isEmpty { fatalError("gophics start: \(err)") }
+        // Start is a package-level Go function, so gomobile emits it as a C
+        // function rather than a method — which means Swift does not translate
+        // its NSError** into `throws`, and the pointer is passed by hand.
+        var err: NSError?
+        guard let b = HnmobileStart(&err) else {
+            fatalError("gophics start: \(err?.localizedDescription ?? "unknown")")
+        }
+        bridge = b
         let w = UIWindow(frame: UIScreen.main.bounds)
         w.rootViewController = GophicsViewController()
         w.makeKeyAndVisible()
@@ -20,8 +31,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    func applicationWillResignActive(_ application: UIApplication) { HnmobileFocused(false) }
-    func applicationDidBecomeActive(_ application: UIApplication) { HnmobileFocused(true) }
+    func applicationWillResignActive(_ application: UIApplication) { bridge.focused(false) }
+    func applicationDidBecomeActive(_ application: UIApplication) { bridge.focused(true) }
 }
 
 class GophicsViewController: UIViewController {
@@ -52,7 +63,7 @@ class GophicsView: UIView, UIKeyInput {
             cpuLayer.isHidden = true
             layer.addSublayer(cpuLayer)
         }
-        HnmobileSetDarkMode(traitCollection.userInterfaceStyle == .dark)
+        bridge.setDarkMode(traitCollection.userInterfaceStyle == .dark)
         let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
@@ -75,31 +86,30 @@ class GophicsView: UIView, UIKeyInput {
         CATransaction.commit()
         if !surfaceSet {
             let ptr = Int64(Int(bitPattern: Unmanaged.passUnretained(metal).toOpaque()))
-            HnmobileSetSurface(0, ptr, wPx, hPx, Double(scale))
+            bridge.setSurface(0, windowHandle: ptr, widthPx: wPx, heightPx: hPx, scale: Float(scale))
             surfaceSet = true
         }
-        HnmobileResize(wPx, hPx, Double(scale))
+        bridge.resize(wPx, heightPx: hPx, scale: Float(scale))
         let i = safeAreaInsets
-        HnmobileSetInsets(Double(i.top * scale), Double(i.right * scale),
-                          Double(i.bottom * scale), Double(i.left * scale))
+        bridge.setInsets(Float(i.top * scale), rightPx: Float(i.right * scale), bottomPx: Float(i.bottom * scale), leftPx: Float(i.left * scale))
     }
 
     @objc private func frame(_ link: CADisplayLink) {
         let dt = lastTime == 0 ? 1.0 / 60 : link.timestamp - lastTime
         lastTime = link.timestamp
-        guard HnmobileNeedsFrame() else { syncKeyboard(); return }
-        if HnmobileGpuActive() {
-            HnmobileRenderFrame(dt) // renders on the GPU straight to the CAMetalLayer
+        guard bridge.needsFrame() else { syncKeyboard(); return }
+        if bridge.gpuActive() {
+            bridge.renderFrame(dt) // renders on the GPU straight to the CAMetalLayer
         } else {
             presentCPU(dt) // Simulator: rasterize on the CPU and blit
         }
         while true {
-            let url = HnmobileTakeOpenedURL()
+            let url = bridge.takeOpenedURL()
             if url.isEmpty { break }
             if let u = URL(string: url) { UIApplication.shared.open(u) }
         }
         while true {
-            let h = HnmobileTakeHaptic()
+            let h = bridge.takeHaptic()
             if h < 0 { break }
             playHaptic(h)
         }
@@ -126,8 +136,8 @@ class GophicsView: UIView, UIKeyInput {
     // presentCPU renders one frame on the CPU (Hnmobile.Snapshot → RGBA8888)
     // and shows it in cpuLayer. Used only when GPU rendering is unavailable.
     private func presentCPU(_ dt: CFTimeInterval) {
-        guard let data = HnmobileSnapshot(dt), !data.isEmpty else { return }
-        let w = HnmobileFrameWidth(), h = HnmobileFrameHeight()
+        guard let data = bridge.snapshot(dt), !data.isEmpty else { return }
+        let w = bridge.frameWidth(), h = bridge.frameHeight()
         guard w > 0, h > 0, data.count >= w * h * 4,
               let provider = CGDataProvider(data: data as CFData) else { return }
         let img = CGImage(
@@ -142,7 +152,7 @@ class GophicsView: UIView, UIKeyInput {
     }
 
     private func syncKeyboard() {
-        let want = HnmobileTextInputActive()
+        let want = bridge.textInputActive()
         guard want != keyboardVisible else { return }
         keyboardVisible = want
         if want { becomeFirstResponder() } else { resignFirstResponder() }
@@ -153,7 +163,7 @@ class GophicsView: UIView, UIKeyInput {
     private func send(_ phase: Int, _ t: UITouch) {
         let scale = window?.screen.scale ?? 2
         let p = t.location(in: self)
-        HnmobileTouch(phase, Double(p.x * scale), Double(p.y * scale))
+        bridge.touch(phase, xPx: Float(p.x * scale), yPx: Float(p.y * scale))
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -174,9 +184,9 @@ class GophicsView: UIView, UIKeyInput {
     override var canBecomeFirstResponder: Bool { true }
     var hasText: Bool { true }
     func insertText(_ text: String) {
-        if text == "\n" { HnmobileKey(1, true) } else { HnmobileText(text) }
+        if text == "\n" { bridge.key(1, pressed: true) } else { bridge.text(text) }
     }
-    func deleteBackward() { HnmobileKey(2, true) }
+    func deleteBackward() { bridge.key(2, pressed: true) }
 
     // --- VoiceOver: expose gophics's semantics tree as a flat list of
     // virtual accessibility elements (the Go side owns the pixels, so there
@@ -195,22 +205,22 @@ class GophicsView: UIView, UIKeyInput {
 
     private func buildA11yElements() -> [Any] {
         let scale = window?.screen.scale ?? 2
-        let count = HnmobileA11yRefresh()
+        let count = bridge.a11yRefresh()
         var out: [Any] = []
         for i in 0..<count {
-            let label = HnmobileA11yLabel(i)
-            let tappable = HnmobileA11yTappable(i)
+            let label = bridge.a11yLabel(i)
+            let tappable = bridge.a11yTappable(i)
             // Skip pure structural containers with nothing to announce.
             if label.isEmpty && !tappable { continue }
             let el = GophicsA11yElement(accessibilityContainer: self)
-            el.nodeID = HnmobileA11yID(i)
-            let value = HnmobileA11yValue(i)
+            el.nodeID = bridge.a11yID(i)
+            let value = bridge.a11yValue(i)
             el.accessibilityLabel = value.isEmpty ? label : "\(label), \(value)"
-            let hint = HnmobileA11yHint(i)
+            let hint = bridge.a11yHint(i)
             if !hint.isEmpty { el.accessibilityHint = hint }
             el.accessibilityTraits = tappable ? .button : .staticText
-            let r = CGRect(x: Double(HnmobileA11yX(i)) / scale, y: Double(HnmobileA11yY(i)) / scale,
-                           width: Double(HnmobileA11yW(i)) / scale, height: Double(HnmobileA11yH(i)) / scale)
+            let r = CGRect(x: Double(bridge.a11yX(i)) / scale, y: Double(bridge.a11yY(i)) / scale,
+                           width: Double(bridge.a11yW(i)) / scale, height: Double(bridge.a11yH(i)) / scale)
             el.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(r, in: self)
             out.append(el)
         }
@@ -223,7 +233,7 @@ class GophicsView: UIView, UIKeyInput {
 final class GophicsA11yElement: UIAccessibilityElement {
     var nodeID: Int = -1
     override func accessibilityActivate() -> Bool {
-        HnmobileA11yActivate(nodeID)
+        bridge.a11yActivate(nodeID)
         return true
     }
 }

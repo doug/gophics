@@ -29,6 +29,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import healthmobile.Healthmobile
+import mobile.Bridge
 
 /**
  * Host for the gophics health dashboard: the Go side (package healthui) owns the
@@ -36,6 +37,11 @@ import healthmobile.Healthmobile
  * on-device data read from Health Connect. Metric codes match healthui.Metric:
  * 0 heart rate, 1 steps, 2 weight, 3 sleep.
  */
+// One bridge per process, at file scope because MainActivity and the surface
+// view are separate classes and both drive it. gomobile assumes one anyway:
+// Start builds the app once.
+private lateinit var bridge: Bridge
+
 class MainActivity : ComponentActivity() {
     private var healthClient: HealthConnectClient? = null
 
@@ -61,8 +67,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val err = Healthmobile.start("Health Connect")
-        if (err.isNotEmpty()) throw RuntimeException("gophics start: $err")
+        bridge = Healthmobile.start("Health Connect")
         setContentView(GophicsView(this))
 
         when (HealthConnectClient.getSdkStatus(this)) {
@@ -196,20 +201,20 @@ class GophicsView(private val activity: Activity) :
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {
-        val d = resources.displayMetrics.density.toDouble()
+        val d = resources.displayMetrics.density
         if (!surfaceSet && nativeWin != 0L) {
-            Healthmobile.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
-            gpuActive = Healthmobile.gpuActive()
+            bridge.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
+            gpuActive = bridge.gpuActive()
             surfaceSet = true
             Log.i("gophics", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
         }
-        Healthmobile.resize(w.toLong(), h.toLong(), d)
+        bridge.resize(w.toLong(), h.toLong(), d)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         running = false
         Choreographer.getInstance().removeFrameCallback(this)
-        Healthmobile.clearSurface()
+        bridge.clearSurface()
         NativeSurface.release(nativeWin)
         nativeWin = 0L
         surfaceSet = false
@@ -219,15 +224,15 @@ class GophicsView(private val activity: Activity) :
         if (!running) return
         val dt = if (lastNanos == 0L) 1.0 / 60 else (frameNanos - lastNanos) / 1e9
         lastNanos = frameNanos
-        if (Healthmobile.needsFrame()) {
-            if (gpuActive) Healthmobile.renderFrame(dt) else presentCPU(dt)
+        if (bridge.needsFrame()) {
+            if (gpuActive) bridge.renderFrame(dt) else presentCPU(dt)
         }
         Choreographer.getInstance().postFrameCallback(this)
     }
 
     private fun presentCPU(dt: Double) {
-        val px = Healthmobile.snapshot(dt) ?: return
-        val w = Healthmobile.frameWidth().toInt(); val h = Healthmobile.frameHeight().toInt()
+        val px = bridge.snapshot(dt) ?: return
+        val w = bridge.frameWidth().toInt(); val h = bridge.frameHeight().toInt()
         if (w == 0 || h == 0 || px.size < w * h * 4) return
         var bmp = blitBitmap
         if (bmp == null || bmp.width != w || bmp.height != h) {
@@ -250,7 +255,7 @@ class GophicsView(private val activity: Activity) :
             MotionEvent.ACTION_UP -> 2L
             else -> 3L
         }
-        Healthmobile.touch(phase, e.x.toDouble(), e.y.toDouble())
+        bridge.touch(phase, e.x.toFloat(), e.y.toFloat())
         return true
     }
 }
