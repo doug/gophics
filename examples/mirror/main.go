@@ -104,8 +104,8 @@ func (m *mirror) Init(ctx widget.Ctx) {
 	switch {
 	case testSource != nil:
 		m.source = testSource
-	case ctx.CameraPreview() == nil || ctx.Microphone() == nil:
-		// No live capture on this platform. Rather than showing an apology and
+	case useSynthetic(ctx.CameraPreview() != nil, ctx.Microphone() != nil):
+		// No camera on this platform. Rather than showing an apology and
 		// nothing else, run the effect off the stand-in — labelled — so what
 		// the demo does is still visible. See synthetic.go.
 		m.source, m.synthetic = newSynthetic(), true
@@ -132,9 +132,26 @@ func (m *mirror) stop() {
 	}
 }
 
-// live reports whether this platform can capture for real.
+// useSynthetic decides whether to run off the stand-in drawing.
+//
+// Only the camera decides. A missing microphone used to force the fallback too,
+// which meant a platform that grew a camera before a microphone still showed a
+// drawing — and start() already treats a failed microphone as survivable, so
+// the two disagreed. A mirror with no sound is a mirror that sits still, not
+// one that cannot run.
+//
+// hasMic is taken and ignored on purpose: it is the parameter whose influence
+// was removed, and naming it here is what makes the test able to prove it has
+// none.
+func useSynthetic(hasCamera, hasMic bool) bool {
+	_ = hasMic
+	return !hasCamera
+}
+
+// live reports whether this platform can capture for real. The camera is what
+// decides; the microphone only modulates the effect.
 func (m *mirror) live() bool {
-	return m.ctx.CameraPreview() != nil && m.ctx.Microphone() != nil
+	return m.ctx.CameraPreview() != nil
 }
 
 func (m *mirror) running() bool { return m.source != nil || m.frames != nil }
@@ -159,6 +176,9 @@ func (m *mirror) start() {
 			})
 		})
 
+	if m.ctx.Microphone() == nil {
+		return // camera-only platform: the effect runs, it just does not breathe
+	}
 	m.ctx.Microphone().Listen(func(mon shell.Monitor, err error) {
 		m.SetState(func() {
 			if err != nil {

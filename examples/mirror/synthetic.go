@@ -12,7 +12,7 @@ import (
 // screen: a demo that quietly showed you a drawing when you asked for a camera
 // would be worse than one that showed you nothing.
 
-// syntheticSource renders a face and a sweeping spectrum, both animated by a
+// syntheticSource renders a cartoon and a sweeping spectrum, both animated by a
 // frame counter, so it needs no clock and stays deterministic.
 type syntheticSource struct {
 	n     int
@@ -26,9 +26,9 @@ func (s *syntheticSource) Frame() *image.RGBA {
 	s.n++
 	i := s.n % len(s.pool)
 	if s.pool[i] == nil {
-		s.pool[i] = drawFace(640, 480)
+		s.pool[i] = drawFriend(640, 480)
 	}
-	// The face itself is static; the warp is what moves. Rotating the pool keeps
+	// The drawing itself is static; the warp is what moves. Rotating the pool keeps
 	// the identity contract the scene relies on.
 	return s.pool[i]
 }
@@ -36,7 +36,7 @@ func (s *syntheticSource) Frame() *image.RGBA {
 // Level swells and fades like speech, so the chroma split and the sway breathe.
 //
 // It never falls near silence, unlike a real voice. A stand-in that went quiet
-// would leave the face still and unwarped for stretches at a time, and a
+// would leave the drawing still and unwarped for stretches at a time, and a
 // screenshot or a gallery thumbnail is one arbitrary frame — it would sooner or
 // later land on one of them and show a demo that appears to do nothing.
 func (s *syntheticSource) Level() float32 {
@@ -71,36 +71,98 @@ func clampf(v, lo, hi float64) float64 {
 	return v
 }
 
-// drawFace paints a stand-in portrait: a lit oval with eyes and a mouth, which
-// is all the warp needs to have something recognisable to bend.
-func drawFace(w, h int) *image.RGBA {
+// drawFriend paints the stand-in: a flat cartoon blob with big eyes, on a
+// teal ground.
+//
+// It replaces a lit oval with skin tones, eye sockets and a dark mouth, which
+// was an attempt at a portrait and landed squarely in the uncanny valley —
+// unsettling on its own and worse once the warp started bending it. Nothing
+// here is trying to be a person: saturated flat colour, no shading, features
+// that read as drawn. A cartoon that warps is funny; a face that warps is not.
+//
+// The shapes stay bold and high-contrast because the warp needs edges to bend.
+// A subtle image would ripple invisibly and the demo would look broken.
+func drawFriend(w, h int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	cx, cy := float64(w)/2, float64(h)*0.54
+	fw, fh := float64(w), float64(h)
+	cx, cy := fw/2, fh*0.52
+	r := math.Min(fw, fh) * 0.34 // body radius
+
+	// Flat palette, deliberately not skin: cyan ground, warm yellow body.
+	var (
+		ground = [3]float64{18, 92, 104}
+		body   = [3]float64{255, 206, 84}
+		ink    = [3]float64{34, 40, 52}
+		white  = [3]float64{255, 255, 255}
+		blush  = [3]float64{247, 141, 122}
+	)
+
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			dx := (float64(x) - cx) / (float64(w) * 0.23)
-			dy := (float64(y) - cy) / (float64(h) * 0.36)
-			d := math.Hypot(dx, dy)
+			fx, fy := float64(x), float64(y)
 
-			// Background: a soft vignette, so the frame isn't flat.
-			vx := (float64(x)/float64(w) - 0.5) * 2
-			vy := (float64(y)/float64(h) - 0.5) * 2
-			g := clampf(1-0.55*math.Hypot(vx, vy), 0, 1)
-			c := color.RGBA{R: uint8(26 * g), G: uint8(34 * g), B: uint8(54 * g), A: 255}
+			// Ground with a gentle vignette so the frame is not flat.
+			vx, vy := (fx/fw-0.5)*2, (fy/fh-0.5)*2
+			g := clampf(1-0.45*math.Hypot(vx, vy), 0, 1)
+			c := [3]float64{ground[0] * g, ground[1] * g, ground[2] * g}
 
-			if d < 1 {
-				k := clampf(1-d*0.5, 0, 1) * clampf(1.05-0.35*dy, 0, 1.2)
-				c = color.RGBA{R: sat(232 * k), G: sat(180 * k), B: sat(150 * k), A: 255}
-				for _, e := range [][3]float64{{-0.34, -0.20, 0.11}, {0.34, -0.20, 0.11}} {
-					if math.Hypot(dx-e[0], (dy-e[1])*1.6) < e[2] {
-						c = color.RGBA{R: 38, G: 30, B: 34, A: 255}
-					}
-				}
-				if math.Hypot(dx, (dy-0.36)*1.5) < 0.24 {
-					c = color.RGBA{R: 96, G: 42, B: 48, A: 255}
+			// A couple of drifting dots, so an arbitrary frame still has
+			// something off-centre in it.
+			for _, d := range [][3]float64{{0.16, 0.20, 0.035}, {0.86, 0.30, 0.025}, {0.78, 0.82, 0.03}} {
+				if math.Hypot(fx-d[0]*fw, fy-d[1]*fh) < d[2]*fw {
+					c = [3]float64{ground[0] * 2.2, ground[1] * 1.3, ground[2] * 1.3}
 				}
 			}
-			img.SetRGBA(x, y, c)
+
+			d := math.Hypot(fx-cx, (fy-cy)*1.06)
+			if d < r {
+				c = body
+
+				// Big friendly eyes, set wide and high — cartoon proportions,
+				// not anatomical ones.
+				for _, e := range [][2]float64{{-0.36, -0.18}, {0.36, -0.18}} {
+					ex, ey := cx+e[0]*r, cy+e[1]*r
+					switch de := math.Hypot(fx-ex, fy-ey); {
+					case de < r*0.20:
+						c = white
+					case de < r*0.235:
+						c = ink
+					}
+					// Pupil, offset slightly so it looks alive rather than blank.
+					if math.Hypot(fx-ex-r*0.03, fy-ey+r*0.02) < r*0.095 {
+						c = ink
+					}
+				}
+
+				// Rosy cheeks.
+				for _, k := range [][2]float64{{-0.52, 0.18}, {0.52, 0.18}} {
+					if math.Hypot(fx-(cx+k[0]*r), (fy-(cy+k[1]*r))*1.4) < r*0.13 {
+						c = [3]float64{
+							body[0]*0.35 + blush[0]*0.65,
+							body[1]*0.35 + blush[1]*0.65,
+							body[2]*0.35 + blush[2]*0.65,
+						}
+					}
+				}
+
+				// A smile: the lower arc of a ring, so it curves.
+				sr := math.Hypot((fx-cx)/(r*0.46), (fy-cy-r*0.10)/(r*0.42))
+				if fy > cy+r*0.12 && sr > 0.78 && sr < 1.0 {
+					c = ink
+				}
+
+			}
+
+			// The antenna sits above the body, so it is drawn outside the body
+			// test — inside it, the bobble fell beyond the radius and never
+			// appeared while the stalk only notched the top edge.
+			if math.Abs(fx-cx) < r*0.022 && fy < cy-r*0.99 && fy > cy-r*1.20 {
+				c = ink
+			}
+			if math.Hypot(fx-cx, fy-(cy-r*1.24)) < r*0.075 {
+				c = blush
+			}
+			img.SetRGBA(x, y, color.RGBA{R: sat(c[0]), G: sat(c[1]), B: sat(c[2]), A: 255})
 		}
 	}
 	return img

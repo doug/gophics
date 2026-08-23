@@ -344,3 +344,26 @@ func TestStopReleasesEverything(t *testing.T) {
 		t.Error("handles survived stop")
 	}
 }
+
+// A platform with a camera and no microphone must still run the camera.
+//
+// It used to fall back to the drawing, because the check wanted both. That was
+// wrong in a way that would only show up as a platform grew capture support one
+// half at a time — which is exactly what is happening on desktop and mobile
+// now. start() already survives a microphone that fails to open; this makes the
+// two agree.
+func TestCameraWithoutMicrophoneStaysLive(t *testing.T) {
+	if useSynthetic(true, false) {
+		t.Error("a camera with no microphone fell back to the stand-in; the " +
+			"microphone only modulates the effect, it does not gate capture")
+	}
+	if useSynthetic(true, true) {
+		t.Error("a platform with both fell back to the stand-in")
+	}
+	if !useSynthetic(false, true) {
+		t.Error("a platform with no camera did not fall back")
+	}
+	if !useSynthetic(false, false) {
+		t.Error("a platform with neither did not fall back")
+	}
+}
