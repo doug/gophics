@@ -55,6 +55,13 @@ type Bridge struct {
 	lcMu    sync.Mutex
 	lcState shell.AppState
 	lcSubs  []func(shell.AppState)
+
+	// Live microphone monitoring; see livemedia.go. Guarded by its own mutex
+	// because PCM blocks arrive on the audio thread, not the UI thread.
+	monMu    sync.Mutex
+	monHost  MonitorHost
+	monitors map[int]*mobileMonitor
+	monCb    map[int]func(shell.Monitor, error)
 }
 
 // NewBridge wraps a shell.Handler (see app.NewHandler).
@@ -62,6 +69,8 @@ func NewBridge(h shell.Handler) *Bridge {
 	b := &Bridge{scale: 1}
 	b.handler = h
 	b.media = newMediaBridge(b)
+	b.monitors = map[int]*mobileMonitor{}
+	b.monCb = map[int]func(shell.Monitor, error){}
 	b.dirty.Store(true)
 	return b
 }

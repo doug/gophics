@@ -1,4 +1,12 @@
-# Native MediaHost reference (iOS / Android)
+# Native media host reference (iOS / Android)
+
+There are **two** host interfaces, matching the two independent capabilities:
+`MediaHost` for one-shot capture (`shell.Camera` / `shell.Audio`) and
+`MonitorHost` for live microphone streaming (`shell.Microphone`). A host can
+provide either, both, or neither. See [MonitorHost](#monitorhost-live-microphone)
+below; the rest of this file covers `MediaHost`.
+
+# MediaHost (one-shot capture)
 
 The gophics mobile media capabilities (`shell.Camera` / `shell.Audio`) are pure
 Go in `shell/mobile` and fully tested headless (`media_test.go`). The only
@@ -39,6 +47,43 @@ callbacks (audio taps, camera completion) to the UI thread first.
   `RECORD_AUDIO` at runtime before `StartRecording`.
 
 `gophics create` should inject these into the scaffolded projects.
+
+## MonitorHost (live microphone)
+
+`shell.Microphone` is a *stream*, not a transaction: there is no result and no
+end state, so it gets its own host interface rather than more methods on
+`MediaHost`. `GophicsMonitor.kt` / `GophicsMonitor.swift` here are the reference
+implementations. Register with `bridge.SetMonitorHost(...)`; until you do,
+`ctx.Microphone()` is nil and the app degrades to no input.
+
+Go → native (you implement): `AuthorizeMic`, `StartMonitoring`, `StopMonitoring`.
+
+Native → Go: `DeliverPermission`, `DeliverMonitorReady`(reqID, **sampleRate**) /
+`FailMonitoring`, then `DeliverMonitorPCM`(16-bit LE mono) or
+`DeliverMonitorFloat32`(little-endian float32 bytes) repeatedly until stopped.
+
+Report the rate the device *actually* granted, not the one you asked for. A
+wrong rate makes every pitch wrong by the ratio — uniformly sharp or flat — which
+looks like the user's fault rather than the app's.
+
+**Threading — the one place this differs from `MediaHost`:** the PCM calls
+(`DeliverMonitorPCM`, `DeliverMonitorFloat32`) must be made **directly from the
+audio thread**, not marshaled to the UI thread. They run hundreds of times a
+second, touch only a mutex-guarded ring buffer on the Go side, and hopping
+threads would add latency to the one path whose whole purpose is to be current.
+Everything else (`DeliverPermission`, `DeliverMonitorReady`, `FailMonitoring`)
+still goes on the UI thread, because those run app callbacks.
+
+**Pick the least-processed input source.** The platform default runs voice
+processing — automatic gain control, noise suppression, an aggressive high-pass —
+tuned to make speech intelligible over a phone line. All of it distorts the
+harmonic structure that pitch analysis reads. Android: prefer
+`AudioSource.UNPROCESSED`, then `VOICE_RECOGNITION`, then `MIC`. iOS: set the
+audio session to `.measurement` mode.
+
+Everything above the device is shared Go: `internal/mic` provides the ring
+buffer, level, and FFT bands, so an Android monitor and a macOS one answer
+`shell.Monitor` identically.
 
 ## GPU rendering (optional, recommended)
 
