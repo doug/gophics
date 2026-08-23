@@ -1,6 +1,6 @@
-// Reference Android PreviewHost for gophics's shell/mobile camera Mirrormobile.
+// Reference Android PreviewHost for gophics's shell/mobile camera Bind.
 //
-// Wire once at startup:  Mirrormobile.setPreviewHost(GophicsPreview(activity, bridge))
+// Wire once at startup:  Bind.setPreviewHost(GophicsPreview(activity, bridge))
 // and route the runtime-permission result to onPermissionResult().
 //
 // This is the camera counterpart to GophicsMonitor: an open stream the Go side
@@ -29,8 +29,8 @@ import android.os.HandlerThread
 import android.os.Looper
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import mirrormobile.Mirrormobile
-import mirrormobile.PreviewHost
+import bind.Bind
+import bind.PreviewHost
 
 class GophicsPreview(
     private val activity: Activity,
@@ -61,7 +61,7 @@ class GophicsPreview(
         val granted = ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         if (granted) {
-            ui { Mirrormobile.deliverPermission(reqID, true) }
+            ui { Bind.deliverPermission(reqID, true) }
             return
         }
         pendingAuth = reqID
@@ -74,7 +74,7 @@ class GophicsPreview(
         val ok = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
         val id = pendingAuth
         pendingAuth = 0L
-        ui { Mirrormobile.deliverPermission(id, ok) }
+        ui { Bind.deliverPermission(id, ok) }
     }
 
     // --- streaming ----------------------------------------------------------
@@ -83,13 +83,13 @@ class GophicsPreview(
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            ui { Mirrormobile.failPreview(reqID, "camera permission not granted") }
+            ui { Bind.failPreview(reqID, "camera permission not granted") }
             return
         }
         val mgr = activity.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val id = pickCamera(mgr, facing.toInt())
         if (id == null) {
-            ui { Mirrormobile.failPreview(reqID, "no camera on this device") }
+            ui { Bind.failPreview(reqID, "no camera on this device") }
             return
         }
 
@@ -112,7 +112,7 @@ class GophicsPreview(
                 if (rgba.size != n) rgba = ByteArray(n)
                 convert(img, rgba)
                 // Camera thread on purpose — see the class comment.
-                Mirrormobile.deliverPreviewFrame(activeReq, rgba, img.width.toLong(), img.height.toLong())
+                Bind.deliverPreviewFrame(activeReq, rgba, img.width.toLong(), img.height.toLong())
             } catch (e: Throwable) {
                 // A dropped frame is survivable; taking the process down is not.
             } finally {
@@ -138,18 +138,18 @@ class GophicsPreview(
                                         CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
                                     )
                                     s.setRepeatingRequest(b.build(), null, handler)
-                                    ui { Mirrormobile.deliverPreviewReady(reqID) }
+                                    ui { Bind.deliverPreviewReady(reqID) }
                                 }
 
                                 override fun onConfigureFailed(s: CameraCaptureSession) {
-                                    ui { Mirrormobile.failPreview(reqID, "could not configure the camera") }
+                                    ui { Bind.failPreview(reqID, "could not configure the camera") }
                                     release()
                                 }
                             },
                             handler,
                         )
                     } catch (e: Throwable) {
-                        ui { Mirrormobile.failPreview(reqID, e.message ?: "camera session failed") }
+                        ui { Bind.failPreview(reqID, e.message ?: "camera session failed") }
                         release()
                     }
                 }
@@ -157,15 +157,15 @@ class GophicsPreview(
                 override fun onDisconnected(cam: CameraDevice) = release()
 
                 override fun onError(cam: CameraDevice, error: Int) {
-                    ui { Mirrormobile.failPreview(reqID, "camera error $error") }
+                    ui { Bind.failPreview(reqID, "camera error $error") }
                     release()
                 }
             }, handler)
         } catch (e: SecurityException) {
-            ui { Mirrormobile.failPreview(reqID, "camera permission not granted") }
+            ui { Bind.failPreview(reqID, "camera permission not granted") }
             release()
         } catch (e: Throwable) {
-            ui { Mirrormobile.failPreview(reqID, e.message ?: "could not open the camera") }
+            ui { Bind.failPreview(reqID, e.message ?: "could not open the camera") }
             release()
         }
     }

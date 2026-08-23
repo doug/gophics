@@ -24,6 +24,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.nio.ByteBuffer
+import bind.Bind
 import mirrormobile.Mirrormobile
 
 /**
@@ -66,15 +67,15 @@ class MainActivity : Activity() {
         // Register the capture backends. Until these are set, ctx.Microphone()
         // and ctx.CameraPreview() are nil on the Go side and the app has
         // nothing to mirror.
-        monitor = GophicsMonitor(this).also { Mirrormobile.setMonitorHost(it) }
-        preview = GophicsPreview(this).also { Mirrormobile.setPreviewHost(it) }
+        monitor = GophicsMonitor(this).also { Bind.setMonitorHost(it) }
+        preview = GophicsPreview(this).also { Bind.setPreviewHost(it) }
         val v = GophicsView(this)
         view = v
         setContentView(v)
         ViewCompat.setOnApplyWindowInsetsListener(v) { _, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
-            Mirrormobile.setInsets(
+            Bind.setInsets(
                 bars.top.toDouble(), bars.right.toDouble(),
                 bars.bottom.toDouble(), bars.left.toDouble())
             insets
@@ -86,19 +87,19 @@ class MainActivity : Activity() {
     // while onStop means "not visible", which is the one worth persisting on.
     override fun onPause() {
         super.onPause()
-        Mirrormobile.focused(false)
-        Mirrormobile.setAppState(1)
+        Bind.focused(false)
+        Bind.setAppState(1)
     }
 
     override fun onResume() {
         super.onResume()
-        Mirrormobile.focused(true)
-        Mirrormobile.setAppState(0)
+        Bind.focused(true)
+        Bind.setAppState(0)
     }
 
     override fun onStop() {
         super.onStop()
-        Mirrormobile.setAppState(2)
+        Bind.setAppState(2)
     }
 }
 
@@ -132,30 +133,30 @@ class GophicsView(private val activity: Activity) :
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                Mirrormobile.composition(2, "", 0, "") // end any preedit
-                Mirrormobile.text(text.toString())
+                Bind.composition(2, "", 0, "") // end any preedit
+                Bind.text(text.toString())
                 return true
             }
             override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
-                Mirrormobile.composition(1, text.toString(), text.length.toLong().toInt().toLong(), "")
+                Bind.composition(1, text.toString(), text.length.toLong().toInt().toLong(), "")
                 return true
             }
             override fun finishComposingText(): Boolean {
-                Mirrormobile.composition(2, "", 0, "")
+                Bind.composition(2, "", 0, "")
                 return true
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-                repeat(beforeLength) { Mirrormobile.key(2, true) } // KeyBackspace
+                repeat(beforeLength) { Bind.key(2, true) } // KeyBackspace
                 return true
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     when (event.keyCode) {
-                        KeyEvent.KEYCODE_DEL -> Mirrormobile.key(2, true)
-                        KeyEvent.KEYCODE_ENTER -> Mirrormobile.key(1, true)
+                        KeyEvent.KEYCODE_DEL -> Bind.key(2, true)
+                        KeyEvent.KEYCODE_ENTER -> Bind.key(1, true)
                         else -> {
                             val ch = event.unicodeChar
-                            if (ch != 0) Mirrormobile.text(String(Character.toChars(ch)))
+                            if (ch != 0) Bind.text(String(Character.toChars(ch)))
                         }
                     }
                 }
@@ -165,7 +166,7 @@ class GophicsView(private val activity: Activity) :
     }
 
     private fun syncIME() {
-        val want = Mirrormobile.textInputActive()
+        val want = Bind.textInputActive()
         if (want == imeShown) return
         imeShown = want
         val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -183,7 +184,7 @@ class GophicsView(private val activity: Activity) :
         running = true
         val dark = (resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        Mirrormobile.setDarkMode(dark)
+        Bind.setDarkMode(dark)
         nativeWin = NativeSurface.acquire(holder.surface) // ANativeWindow* for the GPU
         Choreographer.getInstance().postFrameCallback(this)
     }
@@ -193,18 +194,18 @@ class GophicsView(private val activity: Activity) :
         // Hand the surface to the Go side once it has a size; the GPU renders
         // directly to it. Resize thereafter reconfigures the surface.
         if (!surfaceSet && nativeWin != 0L) {
-            Mirrormobile.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
-            gpuActive = Mirrormobile.gpuActive()
+            Bind.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
+            gpuActive = Bind.gpuActive()
             surfaceSet = true
             Log.i("gophics", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
         }
-        Mirrormobile.resize(w.toLong(), h.toLong(), d)
+        Bind.resize(w.toLong(), h.toLong(), d)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         running = false
         Choreographer.getInstance().removeFrameCallback(this)
-        Mirrormobile.clearSurface()
+        Bind.clearSurface()
         NativeSurface.release(nativeWin)
         nativeWin = 0L
         surfaceSet = false
@@ -215,10 +216,10 @@ class GophicsView(private val activity: Activity) :
         val dt = if (lastNanos == 0L) 1.0 / 60 else (frameNanos - lastNanos) / 1e9
         lastNanos = frameNanos
 
-        if (Mirrormobile.needsFrame()) {
+        if (Bind.needsFrame()) {
             val t0 = System.nanoTime()
             if (gpuActive) {
-                Mirrormobile.renderFrame(dt) // GPU-presents directly to the ANativeWindow
+                Bind.renderFrame(dt) // GPU-presents directly to the ANativeWindow
             } else {
                 presentCPU(dt) // emulator / no GPU: rasterize on CPU and blit
             }
@@ -230,12 +231,12 @@ class GophicsView(private val activity: Activity) :
                 frameTimeSum = 0.0
             }
             while (true) {
-                val url = Mirrormobile.takeOpenedURL()
+                val url = Bind.takeOpenedURL()
                 if (url.isEmpty()) break
                 activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }
             while (true) {
-                val h = Mirrormobile.takeHaptic().toInt()
+                val h = Bind.takeHaptic().toInt()
                 if (h < 0) break
                 playHaptic(h)
             }
@@ -262,13 +263,13 @@ class GophicsView(private val activity: Activity) :
         performHapticFeedback(effect, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
 
-    // presentCPU rasterizes one frame on the Go side (Mirrormobile.snapshot →
+    // presentCPU rasterizes one frame on the Go side (Bind.snapshot →
     // RGBA8888) and blits it into the SurfaceView with lockCanvas — the present
     // path when the GPU surface is unavailable (emulator). The frame is
     // physical-pixel sized, matching the surface, so it blits 1:1.
     private fun presentCPU(dt: Double) {
-        val px = Mirrormobile.snapshot(dt) ?: return
-        val w = Mirrormobile.frameWidth().toInt(); val h = Mirrormobile.frameHeight().toInt()
+        val px = Bind.snapshot(dt) ?: return
+        val w = Bind.frameWidth().toInt(); val h = Bind.frameHeight().toInt()
         if (w == 0 || h == 0 || px.size < w * h * 4) return
         var bmp = blitBitmap
         if (bmp == null || bmp.width != w || bmp.height != h) {
@@ -291,7 +292,7 @@ class GophicsView(private val activity: Activity) :
             MotionEvent.ACTION_UP -> 2L
             else -> 3L
         }
-        Mirrormobile.touch(phase, e.x.toDouble(), e.y.toDouble())
+        Bind.touch(phase, e.x.toDouble(), e.y.toDouble())
         return true
     }
 
@@ -305,13 +306,13 @@ class GophicsView(private val activity: Activity) :
     private var rootId = -1
 
     private fun refreshA11y() {
-        val count = Mirrormobile.a11yRefresh().toInt()
+        val count = Bind.a11yRefresh().toInt()
         idToIndex.clear()
         rootId = -1
         for (i in 0 until count) {
-            val id = Mirrormobile.a11yID(i.toLong()).toInt()
+            val id = Bind.a11yID(i.toLong()).toInt()
             idToIndex[id] = i
-            if (Mirrormobile.a11yParent(i.toLong()).toInt() == -1) rootId = id
+            if (Bind.a11yParent(i.toLong()).toInt() == -1) rootId = id
         }
     }
 
@@ -326,9 +327,9 @@ class GophicsView(private val activity: Activity) :
                 onInitializeAccessibilityNodeInfo(info)
                 val ri = idToIndex[rootId]
                 if (ri != null) {
-                    val cc = Mirrormobile.a11yChildCount(ri.toLong()).toInt()
+                    val cc = Bind.a11yChildCount(ri.toLong()).toInt()
                     for (j in 0 until cc) {
-                        info.addChild(this@GophicsView, Mirrormobile.a11yChild(ri.toLong(), j.toLong()).toInt())
+                        info.addChild(this@GophicsView, Bind.a11yChild(ri.toLong(), j.toLong()).toInt())
                     }
                 }
                 return info
@@ -338,32 +339,32 @@ class GophicsView(private val activity: Activity) :
             val i = idx.toLong()
             val info = AccessibilityNodeInfo.obtain(this@GophicsView, virtualViewId)
             info.packageName = context.packageName
-            info.className = "gophics." + Mirrormobile.a11yRole(i)
-            val label = Mirrormobile.a11yLabel(i)
-            val value = Mirrormobile.a11yValue(i)
+            info.className = "gophics." + Bind.a11yRole(i)
+            val label = Bind.a11yLabel(i)
+            val value = Bind.a11yValue(i)
             info.contentDescription = if (value.isNotEmpty()) "$label, $value" else label
-            val x = Mirrormobile.a11yX(i).toInt()
-            val y = Mirrormobile.a11yY(i).toInt()
+            val x = Bind.a11yX(i).toInt()
+            val y = Bind.a11yY(i).toInt()
             info.setBoundsInScreen(Rect(loc[0] + x, loc[1] + y,
-                loc[0] + x + Mirrormobile.a11yW(i).toInt(), loc[1] + y + Mirrormobile.a11yH(i).toInt()))
+                loc[0] + x + Bind.a11yW(i).toInt(), loc[1] + y + Bind.a11yH(i).toInt()))
             info.isVisibleToUser = true
             info.isFocusable = true
-            val parent = Mirrormobile.a11yParent(i).toInt()
+            val parent = Bind.a11yParent(i).toInt()
             info.setParent(this@GophicsView, if (parent == rootId) HOST_VIEW_ID else parent)
-            if (Mirrormobile.a11yTappable(i)) {
+            if (Bind.a11yTappable(i)) {
                 info.isClickable = true
                 info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
             }
-            val cc = Mirrormobile.a11yChildCount(i).toInt()
+            val cc = Bind.a11yChildCount(i).toInt()
             for (j in 0 until cc) {
-                info.addChild(this@GophicsView, Mirrormobile.a11yChild(i, j.toLong()).toInt())
+                info.addChild(this@GophicsView, Bind.a11yChild(i, j.toLong()).toInt())
             }
             return info
         }
 
         override fun performAction(virtualViewId: Int, action: Int, arguments: android.os.Bundle?): Boolean {
             if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-                Mirrormobile.a11yActivate(virtualViewId.toLong())
+                Bind.a11yActivate(virtualViewId.toLong())
                 return true
             }
             return false

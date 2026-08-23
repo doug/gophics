@@ -65,12 +65,27 @@ func gomobileBind(o buildOpts, target, out string) error {
 	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
 	}
-	args = append(args, o.pkg)
+	// Bind the shell facade alongside the app's package.
+	//
+	// gomobile exports only the packages it is given, and a native host needs
+	// the frame loop, input, lifecycle, accessibility and the capture-host
+	// registration — all of which live in shell/mobile/bind. Binding only the
+	// app package leaves an app re-declaring forty passthroughs by hand, which
+	// is what every example did until this line existed.
+	//
+	// shell/mobile itself cannot be bound: Bridge.TakeHaptic returns
+	// (int, bool), and gomobile allows a second result only when it is an
+	// error. The facade absorbs that, and every other restriction gomobile
+	// imposes, so the package underneath keeps its own vocabulary.
+	args = append(args, o.pkg, bindPkg)
 	if err := run("", nil, "gomobile", args...); err != nil {
 		return fmt.Errorf("gomobile bind: %w", err)
 	}
 	return nil
 }
+
+// bindPkg is the gomobile-facing facade every gophics mobile app is built on.
+const bindPkg = "github.com/doug/gophics/shell/mobile/bind"
 
 // runMobile is the `gophics run` path for ios/android: bind the Go side into
 // the host project, build it, and install + launch on a simulator/device — the
