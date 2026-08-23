@@ -85,12 +85,26 @@ Everything above the device is shared Go: `internal/mic` provides the ring
 buffer, level, and FFT bands, so an Android monitor and a macOS one answer
 `shell.Monitor` identically.
 
+## How these files are checked
+
+Nothing in this repository compiles them — they are meant to be copied into an
+app's own project — so `shell/mobile/native_test.go` checks what it can without
+a toolchain: that every Swift file importing the generated types says `import
+Mobile`, that each conforms to the `…Protocol` name Swift gives a gomobile
+protocol rather than to the identically named class, and that no host role
+exists for one platform only. All three of those had gone wrong here at once.
+
+The real check runs `gomobile bind` and `swiftc -typecheck` against the result.
+It needs macOS, Xcode and gomobile, so it is off unless `GOPHICS_IOS_HOSTS=1`
+is set.
+
 ## PreviewHost (live camera)
 
 `shell.CameraPreview` is the camera's streaming counterpart to `MonitorHost`:
 an open stream of frames the app draws, rather than a capture that ends with a
-result. `GophicsPreview.kt` here is the Android reference implementation
-(Camera2, so the host needs no AndroidX camera dependency). Register with
+result. `GophicsPreview.kt` and `GophicsPreview.swift` here are the reference
+implementations — Camera2 on Android, so the host needs no AndroidX camera
+dependency, and AVFoundation on iOS. Register with
 `bridge.SetPreviewHost(...)`; until you do, `ctx.CameraPreview()` is nil and the
 app hides the affordance.
 

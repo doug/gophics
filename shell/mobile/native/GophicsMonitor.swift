@@ -8,6 +8,7 @@
 // to be current, not eventual.
 
 import AVFoundation
+import Mobile
 import Foundation
 
 final class GophicsMonitor: NSObject {
@@ -23,7 +24,7 @@ final class GophicsMonitor: NSObject {
     private func ui(_ f: @escaping () -> Void) { DispatchQueue.main.async(execute: f) }
 }
 
-extension GophicsMonitor: MobileMonitorHost {
+extension GophicsMonitor: MobileMonitorHostProtocol {
 
     // MARK: Permission
 

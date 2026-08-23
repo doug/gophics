@@ -5,6 +5,7 @@
 // Wire once at startup:  bridge.setMediaHost(GophicsMedia(bridge: bridge))
 
 import UIKit
+import Mobile
 import AVFoundation
 
 final class GophicsMedia: NSObject {
@@ -33,7 +34,7 @@ final class GophicsMedia: NSObject {
     private func ui(_ f: @escaping () -> Void) { DispatchQueue.main.async(execute: f) }
 }
 
-extension GophicsMedia: MobileMediaHost {
+extension GophicsMedia: MobileMediaHostProtocol {
     // MARK: Camera (UIImagePickerController — native camera UI, like web input-capture)
 
     func authorizeCamera(_ reqID: Int) {
@@ -103,7 +104,13 @@ extension GophicsMedia: MobileMediaHost {
         bridge.deliverPCM(reqID, pcm: pcm, sampleRate: recRate, durationMs: ms)
     }
 
-    func playClip(_ reqID: Int, wav: Data) {
+    // wav is optional because gomobile maps a Go []byte to a nullable NSData;
+    // a nil slice on the Go side arrives here as nil rather than as empty.
+    func playClip(_ reqID: Int, wav: Data?) {
+        guard let wav, !wav.isEmpty else {
+            bridge.failRecording(reqID, msg: "the clip is empty")
+            return
+        }
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback)
             try AVAudioSession.sharedInstance().setActive(true)
