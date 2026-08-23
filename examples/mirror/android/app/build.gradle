@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'dev.gophics.mirror'
+    compileSdk 34
+    // The AGP 8.5 default NDK; `gophics run` ensures it (and the CMake below)
+    // are installed. Pin here so the native build is reproducible across machines.
+    ndkVersion '26.1.10909125'
+    defaultConfig {
+        applicationId 'dev.gophics.mirror'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '0.1'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' } // real devices + emulator
+    }
+    // Build the JNI surface shim (libgophics_surface.so) that hands the Go/GPU
+    // side the ANativeWindow* behind the Java Surface. Without this the app
+    // crashes at launch on System.loadLibrary("gophics_surface").
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+    kotlinOptions { jvmTarget = '17' }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    // The gomobile-bind .aar, produced by `gophics run/build -p android`
+    // into libs/. fileTree keeps it name-agnostic (the CLI names it after the
+    // bind package), so any gophics app's host links its own bind output.
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
+}
