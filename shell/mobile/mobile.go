@@ -62,6 +62,13 @@ type Bridge struct {
 	monHost  MonitorHost
 	monitors map[int]*mobileMonitor
 	monCb    map[int]func(shell.Monitor, error)
+
+	// Live camera preview; see preview.go. Its own mutex for the same reason
+	// as the microphone's: frames arrive on the camera thread.
+	prevMu   sync.Mutex
+	prevHost PreviewHost
+	previews map[int]*mobilePreview
+	prevCb   map[int]func(shell.Frames, error)
 }
 
 // NewBridge wraps a shell.Handler (see app.NewHandler).
@@ -71,6 +78,8 @@ func NewBridge(h shell.Handler) *Bridge {
 	b.media = newMediaBridge(b)
 	b.monitors = map[int]*mobileMonitor{}
 	b.monCb = map[int]func(shell.Monitor, error){}
+	b.previews = map[int]*mobilePreview{}
+	b.prevCb = map[int]func(shell.Frames, error){}
 	b.dirty.Store(true)
 	return b
 }

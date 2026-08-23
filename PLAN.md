@@ -534,7 +534,7 @@ closing next, and why.
 | `Audio` | — | yes | yes | — |
 | `Battery` | yes | yes | — | — |
 | `Camera` | — | yes | yes | — |
-| `CameraPreview` | yes | yes | — | — |
+| `CameraPreview` | yes | yes | yes | — |
 | `Connectivity` | yes | yes | — | — |
 | `FilePicker` | yes | yes | — | — |
 | `Gamepads` | yes | yes | hollow | — |
