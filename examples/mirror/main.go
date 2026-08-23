@@ -234,6 +234,12 @@ func (m *mirror) Tick(dt float64) bool {
 	})
 	m.lastWarp = time.Since(start)
 	m.show = dst
+	// The painter caches a copy of an image's pixels keyed by the image value,
+	// so a buffer it has already drawn stays frozen at whatever it held then.
+	// Rotating two buffers does not avoid that — both end up cached, and the
+	// preview cycles two stale frames forever, which is exactly how this
+	// looked: the first frames arrived and then the picture stopped.
+	m.ctx.Painter().ImageChanged(dst)
 	m.ctx.Invalidate()
 	return true
 }
