@@ -2,7 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Health Connect read permissions. The user grants these in the Health
          Connect permission sheet, launched from the activity below. -->
+    <!-- gophics:permissions -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <!-- /gophics:permissions -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- gophics:permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- /gophics:permissions -->
     <application android:label="Tally" android:icon="@mipmap/ic_launcher" android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".MainActivity" android:exported="true"
                   android:configChanges="orientation|screenSize|uiMode">

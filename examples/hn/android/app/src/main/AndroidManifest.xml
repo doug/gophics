@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- gophics:permissions -->
+    <!-- Generated from the capabilities this app uses. Edit the code, not this. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- /gophics:permissions -->
     <application android:label="gophics HN" android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".MainActivity" android:exported="true"
                   android:configChanges="orientation|screenSize|uiMode">

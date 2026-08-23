@@ -2,13 +2,17 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/doug/gophics/internal/cli/capscan"
 )
 
 // The pinned Android build bits the JNI surface shim needs; ensureAndroidSDK
@@ -145,6 +149,10 @@ func runIOS(o buildOpts, host string) error {
 		return fmt.Errorf("full Xcode required (not just Command Line Tools); run:\n" +
 			"  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer")
 	}
+	if err := checkIOSPermissions(o, host); err != nil {
+		return err
+	}
+
 	fw, err := frameworkName(o)
 	if err != nil {
 		return err
@@ -285,6 +293,10 @@ func runAndroid(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
+	if err := syncAndroidPermissions(o, host); err != nil {
+		return err
+	}
+
 	fmt.Fprintln(os.Stderr, "gophics: binding Go → app/libs/"+name+".aar")
 	aar := filepath.Join(host, "app", "libs", name+".aar")
 	if err := gomobileBind(o, "android", aar); err != nil {
@@ -491,4 +503,88 @@ func findByExt(dir, ext string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no %s in %s", ext, dir)
+}
+
+// syncAndroidPermissions derives the app's <uses-permission> set from the
+// capabilities it actually reaches and writes it into the host manifest.
+//
+// Run before the build rather than after, so a capability added this morning is
+// declared in the APK installed this afternoon. The manifest is scaffolded once
+// and then hand-owned, which is exactly how it drifts: an app grows a camera
+// screen and nobody remembers the manifest until it fails on a device.
+func syncAndroidPermissions(o buildOpts, host string) error {
+	manifest := filepath.Join(host, "app", "src", "main", "AndroidManifest.xml")
+	if !fileExists(manifest) {
+		return nil // a host project that keeps its manifest elsewhere
+	}
+
+	dir, err := packageDir(o.pkg)
+	if err != nil {
+		return err
+	}
+	// Scan as the target, not as the host: a capability reached only from
+	// android code is invisible to a scan of the host build.
+	target := capscan.Target{GOOS: "android", GOARCH: "arm64"}
+	if o.tags != "" {
+		target.Tags = strings.Split(o.tags, ",")
+	}
+	res, err := capscan.Scan(dir, ".", target)
+	if err != nil {
+		return err
+	}
+
+	perm := capscan.Permissions(res)
+	changed, err := capscan.AndroidManifest(manifest, perm, false)
+	if err != nil {
+		return err
+	}
+	if changed {
+		fmt.Fprintf(os.Stderr, "gophics: manifest permissions updated (%s)\n",
+			strings.Join(perm.Android, ", "))
+	}
+	if perm.RuntimeRequest {
+		fmt.Fprintln(os.Stderr, "gophics: note — some of these are requested at "+
+			"runtime, not granted at install; the app must ask via ctx.Permissions()")
+	}
+	return nil
+}
+
+// checkIOSPermissions fails the build when a capability needs a usage
+// description the Info.plist does not supply.
+//
+// Checked, not generated: the text is app-specific prose that Apple reads at
+// review, and a placeholder turns a build error into a rejection weeks later.
+func checkIOSPermissions(o buildOpts, host string) error {
+	plist := filepath.Join(host, "App", "Info.plist")
+	if !fileExists(plist) {
+		return nil
+	}
+	dir, err := packageDir(o.pkg)
+	if err != nil {
+		return err
+	}
+	target := capscan.Target{GOOS: "ios", GOARCH: "arm64"}
+	if o.tags != "" {
+		target.Tags = strings.Split(o.tags, ",")
+	}
+	res, err := capscan.Scan(dir, ".", target)
+	if err != nil {
+		return err
+	}
+	missing, err := capscan.CheckIOSUsageDescriptions(plist, res.Capabilities)
+	if err != nil {
+		return err
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s is missing usage descriptions iOS requires:\n", plist)
+	for _, m := range missing {
+		fmt.Fprintf(&b, "  %s — needed by %s\n", m.Key, strings.Join(m.Capabilities, ", "))
+	}
+	b.WriteString("\nAdd each as a <key>/<string> pair saying why the app needs it.\n")
+	b.WriteString("The text is shown to the user in the permission prompt and read at App Review,\n")
+	b.WriteString("so it cannot be generated.")
+	return errors.New(b.String())
 }
