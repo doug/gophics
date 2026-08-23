@@ -564,6 +564,19 @@ closing next, and why.
 *Generated. `yes` means the shell publishes the accessor; `—` means `ctx.<Cap>()` is nil there, which is how an app is meant to ask. `hollow` means it returns a value whose methods do nothing — the one shape a caller cannot detect.*
 <!-- /planfacts -->
 
+The column above is per shell, which cannot say which operating system. A
+desktop build targets one at a time:
+
+<!-- planfacts:devices -->
+| Device | darwin | linux | windows |
+|---|---|---|---|
+| `Camera` | capture_darwin.go | capture_linux.go | capture_windows.go |
+| `Microphone / recording` | capture_darwin.go | capture_linux.go | capture_windows.go |
+| `Speakers` | driver_darwin.go | driver_linux.go | driver_default_windows.go |
+
+*Generated from `go list` per GOOS: the file each build actually compiles. `—` means no backend, so the capability is nil there even where the shell column above reads `yes`.*
+<!-- /planfacts -->
+
 Terminal publishes no optional capability, which is a fact about terminals
 rather than a gap. Web is the most complete shell — that is not a standard the
 others fall short of, it is the platform whose APIs happen to match this

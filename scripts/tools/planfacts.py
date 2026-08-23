@@ -27,6 +27,7 @@ file counts would be worse than writing three honest sentences.
 
 import os
 import re
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -286,10 +287,75 @@ def widget_catalog():
     return "\n".join(out) + "\n\n*Generated: every exported widget type.*"
 
 
+
+# --- native device backends ---------------------------------------------------
+
+# The per-shell capability matrix has one column per shell, which is the right
+# grain for "can an app use this here" and the wrong one for "on which
+# operating system". A desktop app is built for one OS at a time, and a column
+# reading "yes" because two of the three have a backend is the kind of true
+# statement that misleads.
+#
+# So this second table asks the compiler rather than the tree. `go list` with
+# GOOS set reports exactly which files that build would include, which is the
+# same answer the build itself gets — no build-tag expression is re-implemented
+# here, and no regex decides what a tag means. Adding a backend file changes
+# this table; the gate makes it change in the same commit.
+
+NATIVE_OS = ["darwin", "linux", "windows"]
+
+# A file whose name matches one of these is a placeholder, not a backend: it
+# exists so the package compiles everywhere and does nothing when called.
+#
+# Matched on the suffix alone, and deliberately not on "_default_": the first
+# version of this list excluded driver_default_windows.go as boilerplate, and
+# the table then reported Windows as having no speakers — hours after a
+# hardware test had played audio there. It is the real WASAPI driver.
+STUBS = ("_other.go", "_null.go")
+
+DEVICES = [
+    ("Camera", "internal/camera", "capture_"),
+    ("Microphone / recording", "internal/audio", "capture_"),
+    ("Speakers", "internal/audio", "driver_"),
+]
+
+
+def goos_files(pkg, goos):
+    """The files `go build` would include for pkg on goos, per the toolchain."""
+    env = dict(os.environ, GOOS=goos, GOARCH="amd64" if goos != "darwin" else "arm64")
+    out = subprocess.run(
+        ["go", "list", "-f", "{{range .GoFiles}}{{.}}\n{{end}}", "./" + pkg],
+        capture_output=True, text=True, env=env,
+    )
+    if out.returncode != 0:
+        raise SystemExit("planfacts: go list %s for %s failed:\n%s" % (pkg, goos, out.stderr))
+    return [l.strip() for l in out.stdout.splitlines() if l.strip()]
+
+
+def device_table():
+    rows = ["| Device | " + " | ".join(NATIVE_OS) + " |",
+            "|---" * (len(NATIVE_OS) + 1) + "|"]
+    for label, pkg, prefix in DEVICES:
+        cells = []
+        for goos in NATIVE_OS:
+            real = [
+                f for f in goos_files(pkg, goos)
+                if f.startswith(prefix) and not f.endswith(STUBS)
+            ]
+            cells.append(", ".join(sorted(real)) if real else "—")
+        rows.append("| `%s` | %s |" % (label, " | ".join(cells)))
+    rows.append("")
+    rows.append("*Generated from `go list` per GOOS: the file each build actually "
+                "compiles. `—` means no backend, so the capability is nil there "
+                "even where the shell column above reads `yes`.*")
+    return "\n".join(rows)
+
+
 # --- rewrite ------------------------------------------------------------------
 
 BLOCKS = {
     "capabilities": capability_table,
+    "devices": device_table,
     "layout": layout_table,
     "widgets": widget_catalog,
 }
