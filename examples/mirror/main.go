@@ -56,7 +56,7 @@ type mirror struct {
 
 	frames shell.Frames
 	mon    shell.Monitor
-	source Source // the synthetic stand-in, when one is installed
+	source Source // a test-installed source, in place of the camera
 
 	bands  []float32
 	level  float32
@@ -70,19 +70,17 @@ type mirror struct {
 	cur  int
 	show *image.RGBA
 
-	amount    float32
-	mirrored  bool
-	starting  bool
-	synthetic bool // the source is the stand-in, not a camera
-	err       string
-	fps       float32
-	lastWarp  time.Duration
+	amount   float32
+	mirrored bool
+	starting bool
+	err      string
+	fps      float32
+	lastWarp time.Duration
 }
 
-// Source lets a test (or a platform without a camera) drive the app with
-// synthetic frames and audio. When one is installed the capability path is
-// skipped entirely, so the whole app — not just the effect — is exercisable
-// headless.
+// Source lets a test drive the app with frames and audio of its own. When one
+// is installed the capability path is skipped entirely, so the whole app — not
+// just the effect — is exercisable headless.
 type Source interface {
 	Frame() *image.RGBA
 	Level() float32
@@ -101,14 +99,8 @@ func (m *mirror) Init(ctx widget.Ctx) {
 	m.bands = make([]float32, numBands)
 	m.amount = 0.75
 	m.mirrored = true
-	switch {
-	case testSource != nil:
+	if testSource != nil {
 		m.source = testSource
-	case useSynthetic(ctx.CameraPreview() != nil, ctx.Microphone() != nil):
-		// No camera on this platform. Rather than showing an apology and
-		// nothing else, run the effect off the stand-in — labelled — so what
-		// the demo does is still visible. See synthetic.go.
-		m.source, m.synthetic = newSynthetic(), true
 	}
 	ctx.AddTicker(m)
 	if stateHook != nil {
@@ -132,26 +124,14 @@ func (m *mirror) stop() {
 	}
 }
 
-// useSynthetic decides whether to run off the stand-in drawing.
+// live reports whether this platform can capture for real.
 //
-// Only the camera decides. A missing microphone used to force the fallback too,
-// which meant a platform that grew a camera before a microphone still showed a
-// drawing — and start() already treats a failed microphone as survivable, so
-// the two disagreed. A mirror with no sound is a mirror that sits still, not
-// one that cannot run.
-//
-// hasMic is taken and ignored on purpose: it is the parameter whose influence
-// was removed, and naming it here is what makes the test able to prove it has
-// none.
-func useSynthetic(hasCamera, hasMic bool) bool {
-	_ = hasMic
-	return !hasCamera
-}
-
-// live reports whether this platform can capture for real. The camera is what
-// decides; the microphone only modulates the effect.
+// Both are required. The app is a camera warped by a voice, so without either
+// one there is nothing to show — and it says so rather than substituting
+// something. A drawing stood in here once; it made the demo look like it worked
+// on platforms where it did not.
 func (m *mirror) live() bool {
-	return m.ctx.CameraPreview() != nil
+	return m.ctx.CameraPreview() != nil && m.ctx.Microphone() != nil
 }
 
 func (m *mirror) running() bool { return m.source != nil || m.frames != nil }
@@ -279,31 +259,8 @@ func (m *mirror) Build(ctx widget.Ctx) widget.Widget {
 			Axis:       layout.Vertical,
 			CrossAlign: layout.CrossStretch,
 			Children: []widget.Widget{
-				m.notice(th),
 				widget.Expand(body),
 				m.controls(th),
-			},
-		}}}
-}
-
-// notice is the banner explaining that what you are looking at is not a camera.
-// It sits over the running effect rather than replacing it, because "here is
-// what this does, and here is why it isn't your face" beats either alone.
-func (m *mirror) notice(th theme.Theme) widget.Widget {
-	if !m.synthetic {
-		return widget.Sized{H: 0}
-	}
-	return widget.Padding{Insets: geom.Insets{Left: 14, Right: 14, Top: 14},
-		Child: theme.Card{Pad: 12, Child: widget.Flex{
-			Axis:       layout.Vertical,
-			CrossAlign: layout.CrossStart,
-			Children: []widget.Widget{
-				widget.Text{S: "Synthetic preview", Font: theme.FontBold, Size: th.Type.Label, Color: th.Warning},
-				widget.Sized{H: 3},
-				widget.Text{S: "ctx.CameraPreview() and ctx.Microphone() are nil here, so this is a " +
-					"drawn face and a generated spectrum driving the same effect. Live capture is " +
-					"implemented by the web shell today — run this one in a browser for the real thing.",
-					Size: th.Type.Caption, Color: th.Muted, Wrap: true},
 			},
 		}}}
 }
@@ -320,8 +277,18 @@ func (m *mirror) idle(th theme.Theme) widget.Widget {
 			"and nothing is recorded — the frames are read, drawn, and dropped.",
 			Size: th.Type.Body, Color: th.Muted, Wrap: true},
 		widget.Sized{H: 20},
-		theme.Button{Label: label, Primary: true, OnTap: m.start},
 	}
+	if !m.live() {
+		// No substitute, and no button for a stream that cannot open. Saying so
+		// is the honest thing a capability-gated demo does.
+		kids = append(kids, widget.Text{
+			S:    "This platform has no camera and microphone available to the app yet, so there is nothing to mirror.",
+			Size: th.Type.Body, Color: th.Muted, Wrap: true,
+		})
+		return widget.Center(widget.Sized{W: 420, Child: widget.Padding{All: 24,
+			Child: widget.Flex{Axis: layout.Vertical, CrossAlign: layout.CrossStart, Children: kids}}})
+	}
+	kids = append(kids, theme.Button{Label: label, Primary: true, OnTap: m.start})
 	if m.err != "" {
 		kids = append(kids, widget.Sized{H: 14},
 			widget.Text{S: m.err, Size: th.Type.Label, Color: th.Danger, Wrap: true})

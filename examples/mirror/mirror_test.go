@@ -290,40 +290,21 @@ func TestLevelAttacksFastReleasesSlow(t *testing.T) {
 	}
 }
 
-// TestDegradesWithoutCapabilities is the capability-layer contract. With no
-// camera or microphone the app must stay up, say plainly that what you are
-// seeing is not a camera, and still show what the effect does — not present a
-// start button for a stream it cannot open.
-func TestDegradesWithoutCapabilities(t *testing.T) {
+// TestRefusesWithoutCapabilities is the capability-layer contract. With no
+// camera or microphone the app must stay up and say plainly that it cannot
+// run — not offer a start button for a stream it cannot open, and not
+// substitute something else and let you think it worked.
+func TestRefusesWithoutCapabilities(t *testing.T) {
 	h, m := newApp(t, nil) // headless publishes no capabilities
 	if m.live() {
 		t.Fatal("the app claims live capture without any capability")
 	}
-	if !m.synthetic {
-		t.Fatal("no stand-in source was installed")
-	}
-	for i := 0; i < 20; i++ {
-		h.Step(1.0 / 60)
-	}
-	if m.show == nil {
-		t.Error("the stand-in produced nothing to draw")
-	}
 	h.Render()
-	if !hasText(h, "Synthetic preview") {
-		t.Error("the synthetic source wasn't disclosed on screen")
+	if !hasText(h, "nothing to mirror") {
+		t.Error("the app did not say why it cannot run")
 	}
 	if hasText(h, "Start the mirror") {
 		t.Error("a start button was offered with nothing to start")
-	}
-}
-
-// TestSyntheticIsOnlyAFallback checks the stand-in never displaces a real
-// camera: an installed source (as in every other test here) is not labelled
-// synthetic, and neither would a live platform's be.
-func TestSyntheticIsOnlyAFallback(t *testing.T) {
-	_, m := newApp(t, &fakeSource{})
-	if m.synthetic {
-		t.Error("an explicit source was mislabelled as the stand-in")
 	}
 }
 
@@ -342,28 +323,5 @@ func TestStopReleasesEverything(t *testing.T) {
 	m.stop()
 	if m.frames != nil || m.mon != nil {
 		t.Error("handles survived stop")
-	}
-}
-
-// A platform with a camera and no microphone must still run the camera.
-//
-// It used to fall back to the drawing, because the check wanted both. That was
-// wrong in a way that would only show up as a platform grew capture support one
-// half at a time — which is exactly what is happening on desktop and mobile
-// now. start() already survives a microphone that fails to open; this makes the
-// two agree.
-func TestCameraWithoutMicrophoneStaysLive(t *testing.T) {
-	if useSynthetic(true, false) {
-		t.Error("a camera with no microphone fell back to the stand-in; the " +
-			"microphone only modulates the effect, it does not gate capture")
-	}
-	if useSynthetic(true, true) {
-		t.Error("a platform with both fell back to the stand-in")
-	}
-	if !useSynthetic(false, true) {
-		t.Error("a platform with no camera did not fall back")
-	}
-	if !useSynthetic(false, false) {
-		t.Error("a platform with neither did not fall back")
 	}
 }
