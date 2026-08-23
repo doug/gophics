@@ -9,13 +9,13 @@ on:
 #   - lint:           fast gates — gofmt, go vet (framework scope), generated-code
 #                     freshness, and a tracked-binary size guard.
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
-#   - test-framework: gophics's own packages (CPU/headless, deterministic) — the gate.
-#   - test-substrate: the vendored internal/gfx + internal/audio. Compiling
-#                     their tests blocks; running them does not, since the
-#                     GPU / Metal-toolchain / interactive-display cases depend
-#                     on the machine and self-skip when prerequisites are absent.
-#                     This job also runs the framework's own gophics_gpu-tagged
-#                     tests, which no other job does.
+#   - test-framework: gophics's own packages (CPU/headless, deterministic) — the
+#                     gate — plus the examples, which are the integration suite.
+#   - test-substrate: the vendored internal/gfx + internal/audio. Blocking, in
+#                     two passes: -tags nogpu (pure CPU, deterministic
+#                     anywhere) and the default build. This job also runs the
+#                     framework's own gophics_gpu-tagged tests, which no other
+#                     job does.
 
 jobs:
   lint:
@@ -97,25 +97,61 @@ jobs:
       - name: framework tests (pure-CPU, -tags nogpu)
         run: go test -tags nogpu -count=1 $(go list ./... | grep -vE 'internal/gfx|internal/audio|/examples/')
 
+      # The examples are excluded above because they are demos, but their tests
+      # are not demo-grade: they drive real widget trees headlessly and are the
+      # closest thing here to an integration suite. They caught a feed
+      # regression that every unit test missed.
+      #
+      # Run without -race, which is what keeps this to about two minutes rather
+      # than ten. Anything genuinely machine-dependent skips itself.
+      - name: example tests (headless integration)
+        run: go test -count=1 -timeout 20m ./examples/...
+
   test-substrate:
-    name: test (substrate, best-effort)
+    name: test (substrate)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      # Compiling the substrate's tests is a blocking gate even though running
-      # them is not. An interface change in internal/gfx can break a test file
-      # while every build stays green: `go build` does not compile tests, and
-      # the lint job's vet deliberately skips this tree. Running them stays
-      # best-effort because the GPU and toolchain cases depend on the machine;
-      # compiling them does not.
+      # Compiling the substrate's tests is its own gate. An interface change in
+      # internal/gfx can break a test file while every build stays green: `go
+      # build` does not compile tests, and the lint job's vet deliberately skips
+      # this tree.
       - name: substrate tests compile
         run: go test -run '^$' -count=1 ./internal/...
-      - name: substrate tests (GPU/toolchain tests self-skip)
-        continue-on-error: true
-        run: go test -count=1 ./internal/...
+
+      # The pure-CPU pass. No adapter, no toolchain, no display: whatever fails
+      # here fails on any machine, so it blocks unconditionally and runs on the
+      # cheapest thing available.
+      #
+      # This is the pass that would have caught TestStrokeClipped, which sat red
+      # on main while every job stayed green.
+      - name: substrate tests (pure-CPU, -tags nogpu)
+        run: go test -tags nogpu -count=1 -timeout 15m ./internal/...
+
+      # The default build, which is where the GPU-tagged code lives.
+      #
+      # This ran before and could not fail: it was marked continue-on-error on
+      # the grounds that GPU and toolchain cases depend on the machine. Of the
+      # 75 tagged test files under internal/gfx, three so much as name an
+      # adapter, and two of those skip themselves when there is none — the rest
+      # is ordinary deterministic code sitting behind a build tag. So the flag
+      # was suppressing 70-odd files' worth of real signal to accommodate two
+      # that already handle their own absence.
+      #
+      # It cost exactly what you would expect. A self-deadlock in the
+      # compute-mode draw paths hung this step for ten minutes, the step went
+      # red, and continue-on-error swallowed it; the bug reached main and stayed
+      # there. The explicit timeout is here for the same reason: a hang should
+      # end the job promptly rather than burn the wall clock and then be
+      # ignored.
+      #
+      # If a genuinely machine-dependent case turns up, skip that test on its
+      # own prerequisite rather than restoring the blanket flag.
+      - name: substrate tests
+        run: go test -count=1 -timeout 20m ./internal/...
 
       # The framework's GPU correctness tests live behind the gophics_gpu tag,
       # so nothing was running them: GPU-vs-CPU equivalence, gradient
