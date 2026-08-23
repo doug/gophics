@@ -73,8 +73,14 @@ drive prioritization throughout:
    execution traces — ordinary tooling, no emulators or bespoke harnesses.
    The offscreen path also makes the UI a *rendering library*: a server can
    render widget trees to images and reports with no display at all.
-6. **No codegen.** No generated-source layer between you and your program;
-   structs, generics, stdlib.
+6. **No codegen in your build.** `go build` compiles what you wrote and a
+   stack trace names it — no generated layer between you and your program;
+   structs, generics, stdlib. The framework generates its own plumbing
+   (`internal/capgen`, §7's tables), which is on this side of the line and
+   which an app never runs. For a new generator the test is not "is it
+   codegen" but *does this remove duplication or merely automate it* — a stub
+   from a schema you do not own is the first; forty per-app functions because
+   a package was factored wrong is the second, and the fix is the factoring.
 7. **Small surface, Go-style stability.** A distilled API and the Go 1
    compatibility ethos after 1.0 — no upgrade treadmill.
 

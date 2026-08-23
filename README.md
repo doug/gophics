@@ -26,7 +26,7 @@ Gophics borrows the *architecture* behind the best cross-platform UIs — not th
 - **It draws every pixel itself.** A pure-Go WebGPU renderer (vendored in-tree, zero CGo) composites the UI, so it looks identical on every platform — including GPU opacity/blend layers, gradients, shadows, and real text shaping.
 - **Real concurrency.** Goroutines plus a single UI thread. Streaming data into a live UI — a chore in most UI stacks — is the easy case here.
 - **Everything is `go test`.** Golden-image tests, fuzzing, benchmarks, pprof — ordinary Go tooling, no emulators or bespoke harnesses.
-- **No codegen.** Structs, generics, and the standard library. That's it.
+- **No codegen in your build.** Structs, generics, and the standard library. `go build` compiles what you wrote.
 
 ### Where it fits
 
