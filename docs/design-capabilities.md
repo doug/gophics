@@ -169,7 +169,8 @@ below; desktop/mobile = compile-verified on the targets noted, not device-run),
 |---|---|---|---|---|
 | Clipboard, OpenURL, SafeInsets, Input, DarkMode | ✅ | ✅ | ✅ | pre-existing core |
 | Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge; still capture + clip recording |
-| **CameraPreview, Microphone** (live capture) | ✅ | — | — | getUserMedia → canvas readback for frames, AnalyserNode for the spectrum; a separate capability from Camera/Audio because streaming and one-shot capture are independent. Native shells unwired, so `ctx.*` is nil there |
+| **Microphone** (live capture) | ✅ | ✅ | ✅ | Implemented everywhere. Web: getUserMedia + two AnalyserNodes (a short one for level/bands, a wider one for `Samples`). Desktop: AudioQueue (macOS, device-verified), pa_simple (Linux), WASAPI (Windows), all zero-CGo via the same goffi path as audio output. Mobile: Android `AudioRecord` / iOS `AVAudioEngine` pushing PCM through `mobile.MonitorHost`. Every native shell shares one analyzer (`internal/mic`: ring buffer, level, FFT bands) so the three answers agree; the web shell shares its band folding. `Monitor.Samples` exposes raw time-domain PCM because `Bands` is folded for display and cannot support pitch analysis (see `sound/pitch`) |
+| **CameraPreview** (live capture) | ✅ | — | — | getUserMedia → canvas readback for frames; a separate capability from Camera because streaming and one-shot capture are independent. Native shells return nil |
 | **FilePicker** | ✅ | ✅ macOS / stub | stub | macOS = real NSOpenPanel/NSSavePanel via zero-CGo objc; linux/windows TODO |
 | **Preferences** (settings) | ✅ | ✅ all | stub | desktop = JSON under os.UserConfigDir; distinct from SecureStorage (never prompts) |
 | Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native share sheet/notifications/keychain TODO |

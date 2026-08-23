@@ -21,6 +21,7 @@ import (
 	"math"
 	"syscall/js"
 
+	"github.com/doug/gophics/internal/mic"
 	"github.com/doug/gophics/shell"
 )
 
@@ -220,6 +221,24 @@ func (m *webMicrophone) Listen(done func(shell.Monitor, error)) {
 		mon.timeJS = js.Global().Get("Uint8Array").New(fftSize)
 		mon.freq = make([]byte, mon.bins)
 		mon.time = make([]byte, fftSize)
+
+		// A second analyser, wider and unsmoothed, feeds Samples. Sharing the
+		// display analyser would force one window size to serve two jobs that
+		// want opposite things: the meter wants a short window so the bars
+		// track the attack, while pitch detection wants a long one so two full
+		// periods of the lowest note fit. An extra AnalyserNode is a few
+		// kilobytes and no extra capture, so each gets the size it needs.
+		mon.pcmNode = mon.audioCtx.Call("createAnalyser")
+		mon.pcmNode.Set("fftSize", pcmSize)
+		mon.source.Call("connect", mon.pcmNode)
+		mon.pcmJS = js.Global().Get("Float32Array").New(pcmSize)
+		// A byte view onto the same ArrayBuffer. syscall/js can bulk-copy bytes
+		// but has no float equivalent, and reading 2048 elements one Index() at
+		// a time would cost more than the detection does — so the floats come
+		// back as raw little-endian bytes and are reassembled in Go.
+		mon.pcmBytesJS = js.Global().Get("Uint8Array").New(mon.pcmJS.Get("buffer"))
+		mon.pcmBytes = make([]byte, pcmSize*4)
+		mon.rate = mon.audioCtx.Get("sampleRate").Int()
 		done(mon, nil)
 	})
 }
@@ -228,12 +247,26 @@ func (m *webMicrophone) Listen(done func(shell.Monitor, error)) {
 // enough to track a voice's attack, long enough for usable low-end resolution.
 const fftSize = 1024
 
+// pcmSize is the window Samples reports, and it is sized by the lowest note the
+// app must hear rather than by the display. Autocorrelation needs two full
+// periods to find a period at all: at 44.1 kHz, 2048 samples is ~46 ms, which
+// holds two periods of any pitch down to ~43 Hz and so covers the whole singing
+// range with margin. Halving it would silently cost the bottom of a bass's
+// range; doubling it would blur a moving voice into its own average.
+const pcmSize = 2048
+
 type webMonitor struct {
 	stream, audioCtx, source, analyser js.Value
 	freqJS, timeJS                     js.Value
 	freq, time                         []byte
 	bins                               int
 	stopped                            bool
+
+	pcmNode    js.Value // wider analyser backing Samples
+	pcmJS      js.Value // Float32Array the browser writes into
+	pcmBytesJS js.Value // Uint8Array view onto pcmJS's buffer
+	pcmBytes   []byte   // Go-side landing buffer for that view
+	rate       int
 }
 
 func (m *webMonitor) Level() float32 {
@@ -265,49 +298,63 @@ func (m *webMonitor) Bands(dst []float32) int {
 	return foldBands(m.freq, dst)
 }
 
-// foldBands groups linear FFT bins into logarithmically spaced bands. Pitch is
-// logarithmic and the bins are not: fold them linearly and the bottom two
-// octaves — where a voice lives — land in the first couple of bars while the
-// rest of the display shows hiss.
+// foldBands converts the analyser's byte bins to the shared folding routine's
+// scale and delegates to it.
+//
+// The grouping itself lives in internal/mic because every native shell needs
+// the same one: shell.Monitor promises that asking for N bands means the same
+// thing on every platform, and two independent implementations of a
+// logarithmic fold would quietly drift apart.
 func foldBands(bins []byte, dst []float32) int {
-	n := len(dst)
-	// Skip bin 0: it is DC, and a microphone's DC offset would peg the first
-	// band at full scale in a silent room.
-	const lo = 1
-	hi := len(bins)
-	if hi <= lo {
+	if len(dst) == 0 || len(bins) == 0 {
 		return 0
 	}
-	ratio := math.Log(float64(hi) / float64(lo))
-	edge := func(i int) int {
-		e := int(float64(lo) * math.Exp(ratio*float64(i)/float64(n)))
-		if e > hi {
-			e = hi
-		}
-		return e
+	if cap(foldScratch) < len(bins) {
+		foldScratch = make([]float32, len(bins))
 	}
+	f := foldScratch[:len(bins)]
+	for i, v := range bins {
+		f[i] = float32(v) / 255
+	}
+	return mic.FoldBands(f, dst)
+}
+
+// foldScratch is reused across calls; the web shell is single-goroutine (the
+// browser has one JS thread), so no lock is needed.
+var foldScratch []float32
+
+// Samples copies the newest PCM window out of the wide analyser.
+//
+// getFloatTimeDomainData always writes the full window, so a dst shorter than
+// pcmSize takes the *most recent* tail of it rather than a stale prefix: a
+// caller that only needs 1024 samples should get the last 23 ms, not the 23 ms
+// before that.
+func (m *webMonitor) Samples(dst []float32) int {
+	if m.stopped || len(dst) == 0 {
+		return 0
+	}
+	m.pcmNode.Call("getFloatTimeDomainData", m.pcmJS)
+	js.CopyBytesToGo(m.pcmBytes, m.pcmBytesJS)
+
+	n := len(dst)
+	if n > pcmSize {
+		n = pcmSize
+	}
+	off := pcmSize - n // take the tail
 	for i := 0; i < n; i++ {
-		a, b := edge(i), edge(i+1)
-		if b <= a {
-			b = a + 1 // the lowest bands are narrower than one bin
-		}
-		if a >= hi {
-			dst[i] = 0
-			continue
-		}
-		if b > hi {
-			b = hi
-		}
-		var peak byte
-		for _, v := range bins[a:b] {
-			if v > peak {
-				peak = v
-			}
-		}
-		dst[i] = float32(peak) / 255
+		b := m.pcmBytes[(off+i)*4:]
+		bits := uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
+		dst[i] = math.Float32frombits(bits)
 	}
 	return n
 }
+
+func (m *webMonitor) WindowSize() int { return pcmSize }
+
+// SampleRate is whatever rate the browser chose for the AudioContext — commonly
+// 48000, not the 44100 a caller might assume — so pitch math must read it
+// rather than hardcode a rate.
+func (m *webMonitor) SampleRate() int { return m.rate }
 
 func (m *webMonitor) Stop() {
 	if m.stopped {

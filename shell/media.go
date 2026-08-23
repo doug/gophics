@@ -183,6 +183,24 @@ type Monitor interface {
 	// hertz. A visualization therefore never has to know or care about the FFT
 	// size behind it — ask for as many bars as you intend to draw.
 	Bands(dst []float32) int
+	// Samples fills dst with the most recent window of time-domain PCM in
+	// [-1,1], oldest sample first, and returns how many it wrote (at most
+	// len(dst)). Successive calls overlap: the window slides with real time
+	// rather than advancing by whole buffers, so a caller polling once a frame
+	// sees the newest audio without having to keep up with the capture rate.
+	//
+	// This is the raw signal, deliberately unlike Bands. Bands is folded for
+	// display and throws away the resolution that pitch analysis needs; a tuner
+	// or a note-matching exercise must run its own autocorrelation over real
+	// samples (see sound/pitch). Ask for at most WindowSize samples — a longer
+	// dst is short-filled, and the return value, not len(dst), is the count.
+	Samples(dst []float32) int
+	// WindowSize is the largest number of samples Samples can return, and
+	// SampleRate is the capture rate in Hz. Together they bound the lowest
+	// frequency the input can resolve, which for pitch detection is the
+	// difference between hearing a bass note and reporting silence.
+	WindowSize() int
+	SampleRate() int
 	// Stop ends monitoring and releases the microphone.
 	Stop()
 }
