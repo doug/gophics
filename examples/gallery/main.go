@@ -24,6 +24,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -99,6 +100,84 @@ func (s *galleryState) Init(ctx widget.Ctx) {
 	if rootHook != nil {
 		rootHook(s)
 	}
+	s.publishMenus(ctx)
+}
+
+// Menu item IDs. These cross into the platform's menu, which outlives the build
+// that described it, so they are constants rather than indices into anything.
+const (
+	menuThemeLight = iota + 1
+	menuThemeDark
+	menuThemeGlass
+	menuThemeGlassDark
+)
+
+// publishMenus installs the native menu bar, where the platform has one.
+//
+// The theme items are the interesting half: choosing one travels out to the OS
+// menu, back through the capability's invoke, onto the UI goroutine, and into
+// SetState — the same round trip any real app's menu makes. The roles are the
+// other half: About and Quit are placed and performed by the platform, which on
+// macOS is the difference between a menu bar that looks right and one that
+// looks almost right.
+func (s *galleryState) publishMenus(ctx widget.Ctx) {
+	menus := ctx.Menus()
+	if menus == nil {
+		return // web, mobile, terminal: nothing to publish into
+	}
+	s.publishBar(menus)
+}
+
+// publishBar describes the bar and installs it. Split from publishMenus so the
+// description can be tested without a platform menu to publish into.
+func (s *galleryState) publishBar(menus shell.Menus) {
+	menus.SetBar([]shell.Menu{
+		{Title: "Gallery", Items: []shell.MenuItem{
+			{Title: "About Gallery", Role: shell.RoleAbout},
+			{Separator: true},
+			{Title: "Hide Gallery", Role: shell.RoleHide},
+			{Title: "Quit Gallery", Role: shell.RoleQuit},
+		}},
+		{Title: "View", Items: []shell.MenuItem{
+			{ID: menuThemeLight, Title: "Light"},
+			{ID: menuThemeDark, Title: "Dark"},
+			{Separator: true},
+			{ID: menuThemeGlass, Title: "Glass"},
+			{ID: menuThemeGlassDark, Title: "Glass Dark"},
+		}},
+		{Title: "Window", Items: []shell.MenuItem{
+			{Title: "Minimize", Role: shell.RoleMinimize},
+			{Title: "Zoom", Role: shell.RoleZoom},
+			{Separator: true},
+			{Title: "Close Window", Role: shell.RoleClose},
+		}},
+	}, s.onMenu)
+}
+
+// onMenu handles an item the user chose. The capability delivers this on the UI
+// goroutine, so SetState is the right call rather than PostState.
+func (s *galleryState) onMenu(id int) {
+	mode, ok := menuThemeMode(id)
+	if !ok {
+		return
+	}
+	s.SetState(func() { s.mode = mode })
+}
+
+// menuThemeMode maps a menu ID to the theme it selects. Separate from onMenu so
+// the mapping can be tested without a platform menu to click.
+func menuThemeMode(id int) (themeMode, bool) {
+	switch id {
+	case menuThemeLight:
+		return modeLight, true
+	case menuThemeDark:
+		return modeDark, true
+	case menuThemeGlass:
+		return modeGlass, true
+	case menuThemeGlassDark:
+		return modeGlassDark, true
+	}
+	return 0, false
 }
 
 func (s *galleryState) Build(ctx widget.Ctx) widget.Widget {
