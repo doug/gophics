@@ -23,7 +23,7 @@ type PermissionWindow interface {
 }
 
 // Permissions queries and requests runtime permissions. (Reuses the Permission
-// outcome type — PermissionPrompt/Granted/Denied — from media.go.)
+// outcome type — PermissionPrompt, Granted, Denied — from media.go.)
 type Permissions interface {
 	// Status reports the current state without prompting (PermissionPrompt when
 	// undecided or unknowable).

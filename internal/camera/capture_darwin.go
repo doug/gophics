@@ -372,13 +372,18 @@ func onFrame(self, cmd, output, sampleBuf, conn uintptr) uintptr {
 	if w <= 0 || h <= 0 || stride < w*4 {
 		return 0
 	}
-	var base uintptr
+	// base is unsafe.Pointer rather than uintptr on purpose. The pixels live in
+	// CoreVideo's memory, not Go's, so the address is stable and the collector
+	// simply ignores it — but round-tripping it through uintptr and back is the
+	// unsound pattern vet rejects, because in general nothing keeps a uintptr's
+	// referent alive across the conversion.
+	var base unsafe.Pointer
 	if _, err := ffi.CallFunction(&cifCVPtr, cvBase, unsafe.Pointer(&base),
-		[]unsafe.Pointer{unsafe.Pointer(&pixBuf)}); err != nil || base == 0 {
+		[]unsafe.Pointer{unsafe.Pointer(&pixBuf)}); err != nil || base == nil {
 		return 0
 	}
 
-	src := unsafe.Slice((*byte)(unsafe.Pointer(base)), stride*h)
+	src := unsafe.Slice((*byte)(base), stride*h)
 	c.deliver(src, w, h, stride)
 	return 0
 }

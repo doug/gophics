@@ -52,20 +52,6 @@ func (b *Bridge) SetMonitorHost(h MonitorHost) {
 	b.monHost = h
 }
 
-// CameraPreview returns live camera preview, or nil until a PreviewHost is set.
-//
-// shell.LiveMediaWindow pairs the preview with the microphone, but the two are
-// independent capabilities and a platform may have one without the other — a
-// host can register either, both, or neither.
-func (b *Bridge) CameraPreview() shell.CameraPreview {
-	b.prevMu.Lock()
-	defer b.prevMu.Unlock()
-	if b.prevHost == nil {
-		return nil
-	}
-	return &mobileCameraPreview{b: b}
-}
-
 // Microphone returns live input monitoring, or nil until a MonitorHost is set.
 func (b *Bridge) Microphone() shell.Microphone {
 	b.monMu.Lock()

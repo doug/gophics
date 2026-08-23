@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"bytes"
 	"errors"
 	"image"
 	"sync"
@@ -8,9 +9,76 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
+// The camera, in both of the shapes an app asks for it.
+//
+// Capture is a one-shot transaction that ends with a photo; preview is an open
+// stream with no end state. They are separate capabilities (shell.Camera and
+// shell.CameraPreview) served by separate hosts, because a platform may have
+// one without the other — but they are the same device, so they live together.
+
+// Camera returns the still-capture capability, or nil until a MediaHost is set.
+func (b *Bridge) Camera() shell.Camera {
+	if b.media.host == nil {
+		return nil
+	}
+	return &mobileCamera{b.media}
+}
+
+// --- Camera ------------------------------------------------------------------
+
+type mobileCamera struct{ m *mediaBridge }
+
+func (c *mobileCamera) Authorize(cb func(shell.Permission)) {
+	id := c.m.newReq()
+	c.m.perm[id] = cb
+	c.m.host.AuthorizeCamera(id)
+}
+
+func (c *mobileCamera) Capture(opts shell.CaptureOptions, done func(image.Image, error)) {
+	id := c.m.newReq()
+	c.m.photo[id] = done
+	c.m.host.CapturePhoto(id, int(opts.Facing))
+}
+
+// DeliverPhoto hands captured photo bytes (JPEG/PNG) back to the pending
+// Capture. Call on the UI thread.
+func (b *Bridge) DeliverPhoto(reqID int, data []byte) {
+	cb := b.media.photo[reqID]
+	if cb == nil {
+		return
+	}
+	delete(b.media.photo, reqID)
+	img, _, err := image.Decode(bytes.NewReader(data))
+	cb(img, err)
+}
+
+// FailCapture reports a failed capture (e.g. the user cancelled).
+func (b *Bridge) FailCapture(reqID int, msg string) {
+	cb := b.media.photo[reqID]
+	if cb == nil {
+		return
+	}
+	delete(b.media.photo, reqID)
+	cb(nil, errors.New(msg))
+}
+
+// CameraPreview returns live camera preview, or nil until a PreviewHost is set.
+//
+// shell.LiveMediaWindow pairs the preview with the microphone, but the two are
+// independent capabilities and a platform may have one without the other — a
+// host can register either, both, or neither.
+func (b *Bridge) CameraPreview() shell.CameraPreview {
+	b.prevMu.Lock()
+	defer b.prevMu.Unlock()
+	if b.prevHost == nil {
+		return nil
+	}
+	return &mobileCameraPreview{b: b}
+}
+
 // Live camera preview on Android and iOS.
 //
-// The shape follows the microphone (livemedia.go) because the constraints are
+// The shape follows the microphone (microphone.go) because the constraints are
 // the same: the device belongs to the host, Go cannot open it, and frames have
 // to cross the bind boundary without allocating per frame if the preview is to
 // keep up. Go asks the host to start; the host reports back through the

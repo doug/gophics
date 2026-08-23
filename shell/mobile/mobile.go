@@ -44,7 +44,7 @@ type Bridge struct {
 	opened       []string           // OpenURL requests for the host to perform
 	haptics      []shell.HapticKind // pending haptic events for the host to play
 	clip         string
-	media        *mediaBridge // camera/audio capability plumbing (see media.go)
+	media        *mediaBridge // shared one-shot request plumbing (see media.go)
 	gpu          *mobileGPU   // GPU surface the host renders to (see gpu.go)
 	dispHandle   int64        // retained native handles so Resize can full-rebuild
 	winHandle    int64        // the GPU surface on an orientation change (see Resize)
@@ -56,14 +56,14 @@ type Bridge struct {
 	lcState shell.AppState
 	lcSubs  []func(shell.AppState)
 
-	// Live microphone monitoring; see livemedia.go. Guarded by its own mutex
+	// Live microphone monitoring; see microphone.go. Guarded by its own mutex
 	// because PCM blocks arrive on the audio thread, not the UI thread.
 	monMu    sync.Mutex
 	monHost  MonitorHost
 	monitors map[int]*mobileMonitor
 	monCb    map[int]func(shell.Monitor, error)
 
-	// Live camera preview; see preview.go. Its own mutex for the same reason
+	// Live camera preview; see camera.go. Its own mutex for the same reason
 	// as the microphone's: frames arrive on the camera thread.
 	prevMu   sync.Mutex
 	prevHost PreviewHost
