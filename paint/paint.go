@@ -920,8 +920,44 @@ func (s ggSink) CubeTo(c1x, c1y, c2x, c2y, x, y float32) {
 }
 func (s ggSink) Close() { s.dc.ClosePath() }
 
+// ImageChanged tells the painter that img's pixels have been rewritten, so the
+// next draw re-reads them.
+//
+// Drawing an image copies its pixels into a GPU-ready buffer and keeps that
+// copy, keyed by the image value: an icon or a sprite sheet is written once and
+// drawn thousands of times, and re-uploading it every frame would be waste.
+// The cost is that mutating an image the painter has already seen changes
+// nothing on screen — the copy is what gets drawn.
+//
+// That bites exactly the apps that look like they should work: a camera
+// preview, a video frame, a procedurally painted texture. Rotating a pool of
+// images does not avoid it either, which is the trap worth naming — every
+// buffer in the pool is cached in turn, and from then on the display cycles
+// through stale snapshots. A camera preview built that way shows its first
+// frames and then freezes.
+//
+// So an app that rewrites an image says so:
+//
+//	warp(dst, src)          // dst is reused across frames
+//	ctx.Painter().ImageChanged(dst)
+//
+// This is the same contract Skia states with notifyPixelsChanged and Flutter
+// sidesteps by making ui.Image immutable. Cheap: it drops one map entry, and
+// the next draw re-copies what it would have had to copy anyway.
+func (p *Painter) ImageChanged(img image.Image) {
+	if p == nil || img == nil {
+		return
+	}
+	delete(p.imgBufs, img)
+}
+
 // imgBuf returns the cached gg texture for img (shared by Image and
 // DrawSprite), building it on first use.
+//
+// The cache holds a *copy* of the pixels, keyed by the image value. That is
+// right for the images most apps draw — an icon, a sprite sheet, a decoded
+// photo — which are written once and drawn many times, and wrong for one whose
+// pixels change under a stable image value. See ImageChanged.
 func (c *ggCanvas) imgBuf(img image.Image) *gg.ImageBuf {
 	buf, ok := c.p.imgBufs[img]
 	if !ok {
