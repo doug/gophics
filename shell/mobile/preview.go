@@ -14,7 +14,7 @@ import (
 // the same: the device belongs to the host, Go cannot open it, and frames have
 // to cross the bind boundary without allocating per frame if the preview is to
 // keep up. Go asks the host to start; the host reports back through the
-// Deliver*/Fail* methods, correlating by request ID.
+// Deliver… and Fail… methods, correlating by request ID.
 //
 // Threading matches the microphone's, and for the same reasons:
 //

@@ -1,11 +1,9 @@
 // Package mirrormobile is the gomobile-bind surface for the mirror app.
 //
 // It holds only what is mirror's own. Everything generic — the frame loop,
-// input, lifecycle, accessibility, and the camera and microphone host
-// registration — lives in shell/mobile/bind, which the host binds alongside
-// this package:
-//
-//	gophics run -platform android -host ./android ./mobile
+// input, lifecycle, accessibility, and registering the camera and microphone
+// backends — is on shell/mobile.Bridge, which the CLI binds alongside this
+// package, so a host calls those methods on the Bridge that Start returns.
 //
 // gomobile cannot bind package main and carries only a restricted vocabulary
 // across the boundary, so the app itself lives in ../ui and this is the thin
@@ -16,17 +14,17 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/examples/mirror/ui"
 	"github.com/doug/gophics/shell/mobile"
-	"github.com/doug/gophics/shell/mobile/bind"
 )
 
-// Start builds the app and must be called once from the host before anything
-// else, including anything in the bind package. It returns "" on success, or
-// the error to show.
-func Start() string {
+// Start builds the app and returns the bridge the host drives it through.
+//
+// Call it once, before anything else. On failure it returns a nil bridge and
+// the error to show — two results because the second is an error, which is the
+// one shape gomobile allows.
+func Start() (*mobile.Bridge, error) {
 	h, err := app.NewHandler(ui.App{}, ui.Config())
 	if err != nil {
-		return err.Error()
+		return nil, err
 	}
-	bind.Attach(mobile.NewBridge(h))
-	return ""
+	return mobile.NewBridge(h), nil
 }

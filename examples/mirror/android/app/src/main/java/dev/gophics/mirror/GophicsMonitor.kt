@@ -1,6 +1,6 @@
-// Reference Android MonitorHost for gophics's shell/mobile live-capture Bind.
+// Reference Android MonitorHost for gophics's shell/mobile live-capture bridge.
 //
-// Wire once at startup:  Bind.setMonitorHost(GophicsMonitor(activity, bridge))
+// Wire once at startup:  bridge.setMonitorHost(GophicsMonitor(activity, bridge))
 // and route the runtime-permission result to onPermissionResult().
 //
 // This is the streaming counterpart to GophicsMedia: MediaHost records one clip
@@ -22,11 +22,12 @@ import android.os.Looper
 import android.os.Process
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import bind.Bind
-import bind.MonitorHost
+import mobile.Bridge
+import mobile.MonitorHost
 
 class GophicsMonitor(
     private val activity: Activity,
+    private val bridge: Bridge,
 ) : MonitorHost {
 
     private val ui = Handler(Looper.getMainLooper())
@@ -42,7 +43,7 @@ class GophicsMonitor(
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            Bind.deliverPermission(reqID, true)
+            bridge.deliverPermission(reqID, true)
             return
         }
         pendingPermReq = reqID
@@ -54,7 +55,7 @@ class GophicsMonitor(
     /** Call from Activity.onRequestPermissionsResult for REQ_RECORD_AUDIO. */
     fun onPermissionResult(granted: Boolean) {
         if (pendingPermReq != 0L) {
-            Bind.deliverPermission(pendingPermReq, granted)
+            bridge.deliverPermission(pendingPermReq, granted)
             pendingPermReq = 0L
         }
     }
@@ -67,13 +68,13 @@ class GophicsMonitor(
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            ui { Bind.failMonitoring(reqID, "microphone permission not granted") }
+            ui { bridge.failMonitoring(reqID, "microphone permission not granted") }
             return
         }
 
         val rec = openRecorder()
         if (rec == null) {
-            ui { Bind.failMonitoring(reqID, "could not open the microphone") }
+            ui { bridge.failMonitoring(reqID, "could not open the microphone") }
             return
         }
 
@@ -83,12 +84,12 @@ class GophicsMonitor(
         } catch (e: IllegalStateException) {
             running = false
             rec.release()
-            ui { Bind.failMonitoring(reqID, "microphone busy: ${e.message}") }
+            ui { bridge.failMonitoring(reqID, "microphone busy: ${e.message}") }
             return
         }
 
         val rate = rec.sampleRate
-        ui { Bind.deliverMonitorReady(reqID, rate.toLong()) }
+        ui { bridge.deliverMonitorReady(reqID, rate.toLong()) }
 
         worker = Thread({
             // Audio priority: a scheduling stall here shows up as a dropped
@@ -107,7 +108,7 @@ class GophicsMonitor(
                 // a mutex-guarded ring buffer on the Go side, runs hundreds of
                 // times a second, and hopping threads would add latency to the
                 // one path that must stay current. See MonitorHost's doc.
-                Bind.deliverMonitorPCM(reqID, if (n == buf.size) buf else buf.copyOf(n))
+                bridge.deliverMonitorPCM(reqID, if (n == buf.size) buf else buf.copyOf(n))
             }
             try {
                 rec.stop()

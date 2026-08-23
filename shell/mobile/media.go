@@ -15,9 +15,9 @@ import (
 // MediaHost is implemented by the native host (iOS/Android) and registered via
 // Bridge.SetMediaHost. Go calls these to start asynchronous native operations —
 // camera capture, mic recording, playback — and the host reports results back
-// through the Bridge.Deliver*/Set*/Fail* methods, correlating by reqID.
+// through the Bridge.Deliver…, Set… and Fail… methods, correlating by reqID.
 //
-// Every Deliver*/Set*/Fail* call MUST be made on the host's UI thread (like the
+// Every Deliver…, Set… and Fail… call MUST be made on the host's UI thread (like the
 // rest of the Bridge), because delivering a result runs app callbacks that
 // mutate the widget tree. Native capture callbacks that arrive on a background
 // thread must be marshaled to the UI thread first.

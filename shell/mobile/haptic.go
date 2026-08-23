@@ -21,13 +21,18 @@ func (h bridgeHaptic) Play(k shell.HapticKind) {
 }
 
 // TakeHaptic returns and clears the oldest pending haptic event as its
-// HapticKind value (see shell.HapticKind), and ok=false when none are pending.
-// The host calls it each frame and maps the value to its native generator.
-func (b *Bridge) TakeHaptic() (kind int, ok bool) {
+// HapticKind value (see shell.HapticKind), or -1 when none are pending. The
+// host calls it each frame and maps the value to its native generator.
+//
+// A sentinel rather than the comma-ok a Go reader expects, because this method
+// crosses the gomobile boundary and a second result is allowed there only when
+// it is an error. Every app's bind package used to flatten it to -1 by hand;
+// doing it once here is what let those packages go away.
+func (b *Bridge) TakeHaptic() int {
 	if len(b.haptics) == 0 {
-		return 0, false
+		return -1
 	}
 	k := b.haptics[0]
 	b.haptics = b.haptics[1:]
-	return int(k), true
+	return int(k)
 }

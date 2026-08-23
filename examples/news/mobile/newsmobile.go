@@ -122,12 +122,7 @@ func TakeOpenedURL() string { return bridge.TakeOpenedURL() }
 // 0 selection, 1 light, 2 medium, 3 heavy, 4 success, 5 warning, 6 error), or -1
 // when none are pending. The host drains it each frame and plays it on the OS
 // generator (View.performHapticFeedback / Vibrator).
-func TakeHaptic() int {
-	if k, ok := bridge.TakeHaptic(); ok {
-		return k
-	}
-	return -1
-}
+func TakeHaptic() int { return bridge.TakeHaptic() }
 
 // Focused forwards window focus. Note this is *focus*, not visibility: it fires
 // for a dialog appearing over the app. Use SetAppState for the run state.

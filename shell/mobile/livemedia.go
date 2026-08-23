@@ -21,7 +21,7 @@ var _ shell.LiveMediaWindow = (*Bridge)(nil)
 // stream with no end state. A host can provide either, both, or neither.
 //
 // Go calls these to start and stop capture; the host reports back through the
-// Bridge.DeliverMonitor*/FailMonitoring methods, correlating by reqID.
+// Bridge.DeliverMonitor… and FailMonitoring methods, correlating by reqID.
 //
 // Threading is the one place this differs from MediaHost, and deliberately:
 //

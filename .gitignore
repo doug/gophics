@@ -39,6 +39,7 @@ docs/source/
 # remembers to add a line. That is how a 19MB luminaria binary reached the
 # index; the pre-push size gate is what caught it.
 /luminaria
+/mirror
 /telemetry
 /2048
 /canvas

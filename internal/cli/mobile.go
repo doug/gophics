@@ -65,27 +65,27 @@ func gomobileBind(o buildOpts, target, out string) error {
 	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
 	}
-	// Bind the shell facade alongside the app's package.
+	// Bind the shell bridge alongside the app's package.
 	//
-	// gomobile exports only the packages it is given, and a native host needs
-	// the frame loop, input, lifecycle, accessibility and the capture-host
-	// registration — all of which live in shell/mobile/bind. Binding only the
-	// app package leaves an app re-declaring forty passthroughs by hand, which
-	// is what every example did until this line existed.
+	// gomobile exports only the packages it is given, so without this a host
+	// cannot name mobile.Bridge and every app re-declares forty passthroughs by
+	// hand — which is what every example did until this line existed, and they
+	// had already drifted apart.
 	//
-	// shell/mobile itself cannot be bound: Bridge.TakeHaptic returns
-	// (int, bool), and gomobile allows a second result only when it is an
-	// error. The facade absorbs that, and every other restriction gomobile
-	// imposes, so the package underneath keeps its own vocabulary.
-	args = append(args, o.pkg, bindPkg)
+	// It costs shell/mobile a constraint: gomobile allows a second result only
+	// when it is an error, and gobind copies Go doc comments into Javadoc where
+	// prose containing a slash-star closes the comment early. Both are checked
+	// by scripts/gates.sh so they fail here rather than in a gradle log.
+	args = append(args, o.pkg, bridgePkg)
 	if err := run("", nil, "gomobile", args...); err != nil {
 		return fmt.Errorf("gomobile bind: %w", err)
 	}
 	return nil
 }
 
-// bindPkg is the gomobile-facing facade every gophics mobile app is built on.
-const bindPkg = "github.com/doug/gophics/shell/mobile/bind"
+// bridgePkg is the shell bridge every gophics mobile app runs on; hosts call
+// its methods directly, so it is bound alongside the app's own package.
+const bridgePkg = "github.com/doug/gophics/shell/mobile"
 
 // runMobile is the `gophics run` path for ios/android: bind the Go side into
 // the host project, build it, and install + launch on a simulator/device — the

@@ -102,12 +102,7 @@ func TakeOpenedURL() string { return bridge.TakeOpenedURL() }
 
 // TakeHaptic returns the next queued haptic event's kind, or -1 when none are
 // pending. The host drains it each frame and plays it on the OS generator.
-func TakeHaptic() int {
-	if k, ok := bridge.TakeHaptic(); ok {
-		return k
-	}
-	return -1
-}
+func TakeHaptic() int { return bridge.TakeHaptic() }
 
 // Focused forwards app focus/visibility.
 func Focused(f bool) { bridge.Focused(f) }
