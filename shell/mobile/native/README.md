@@ -85,6 +85,43 @@ Everything above the device is shared Go: `internal/mic` provides the ring
 buffer, level, and FFT bands, so an Android monitor and a macOS one answer
 `shell.Monitor` identically.
 
+## PreviewHost (live camera)
+
+`shell.CameraPreview` is the camera's streaming counterpart to `MonitorHost`:
+an open stream of frames the app draws, rather than a capture that ends with a
+result. `GophicsPreview.kt` here is the Android reference implementation
+(Camera2, so the host needs no AndroidX camera dependency). Register with
+`bridge.SetPreviewHost(...)`; until you do, `ctx.CameraPreview()` is nil and the
+app hides the affordance.
+
+Go → native (you implement): `AuthorizeCamera`, `StartPreview`(reqID, facing,
+width), `StopPreview`.
+
+Native → Go: `DeliverPermission`, `DeliverPreviewReady`(reqID) /
+`FailPreview`(reqID, msg), then `DeliverPreviewFrame`(reqID, **RGBA8888**, w, h)
+repeatedly until stopped.
+
+**Threading is the same split as `MonitorHost`, for the same reason.**
+`DeliverPreviewFrame` must come **directly from the camera thread**: it touches
+no app code, and marshalling it through the UI thread adds a frame of latency to
+the one path whose whole job is to be current — and janks the UI at 30fps.
+`DeliverPermission`, `DeliverPreviewReady` and `FailPreview` still go on the UI
+thread, because those run app callbacks.
+
+**Convert to RGBA on the native side.** Camera2 delivers `YUV_420_888` because
+that is what the hardware produces, and the renderer wants RGBA. Converting in
+the host costs one pass over pixels you are already touching; shipping three
+planes across the bind boundary and converting in Go costs an extra crossing per
+frame. `width` is a hint — report the size the camera actually gave you, and Go
+reads it off the frame rather than assuming.
+
+**Deliver the newest frame, not every frame.** Use `acquireLatestImage` and a
+small `ImageReader` queue (two is enough: one converting while the next fills).
+A preview that queues frames drifts further behind the longer it runs.
+
+Go copies out of the buffer immediately, so the same array can be reused every
+frame.
+
 ## GPU rendering (optional, recommended)
 
 By default the Bridge returns CPU-rasterized pixels each frame (`RenderFrame` →
