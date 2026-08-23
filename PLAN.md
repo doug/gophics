@@ -537,7 +537,11 @@ every phase de-risked the ones after it.
 - **Platform capabilities** — around twenty optional capabilities behind
   `ctx.<Cap>()`, including file pickers with native panels on macOS, the
   standard desktop chooser chain on Linux and BSD, and the common dialogs on
-  Windows.
+  Windows. Native menu bars (`ctx.Menus()`) publish through to NSMenu, HMENU
+  and X11, with the OS placing the roles it owns; `examples/gallery` uses one.
+- **Mobile lifecycle** — `ctx.Lifecycle()` reports foreground and background
+  transitions on Android and iOS, which is what "save my state before I am
+  killed" needs.
 - **Mobile** — Android and iOS via the bind pattern, with GPU present
   verified on real Android hardware (§6.4).
 - **Terminal** — a fourth shell target, rendering the same widget trees.
@@ -549,29 +553,20 @@ criteria in `design/milestones.md`.
 
 ### Remaining, roughly in order of value
 
-Reordered 2026-08-17 against the code rather than against the previous list.
-Three items had been overtaken by work — accessibility on Linux and Windows,
-desktop battery and gamepad, and multi-line editing — and one gap was missing
-entirely: native menus exist in the substrate and are not reachable from an app.
+Reordered 2026-08-22 against the code. Three more items had been overtaken by
+work since the last pass: native menus, mobile lifecycle, and two thirds of the
+widget-catalog entry. The lesson is the same one the previous pass recorded —
+this list drifts faster than it reads, so check it against the tree before
+planning from it.
 
-1. **Native menus, exposed** — the highest ratio of value to work on this list,
-   because the hard part is already done. `gogpu.App.SetMenu` takes a full
-   `Menu`/`MenuItem`/`MenuRole` model and is implemented for macOS, Linux and
-   Windows with tests, but `shell` publishes no menu capability, so no gophics
-   app can use any of it. A desktop app with no menu bar reads as unfinished on
-   macOS in particular. This is a shell capability and a desktop binding, not
-   platform work.
-2. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
+1. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
    the fallback and the reference either way.
-3. **Mobile lifecycle** — `ctx.Lifecycle()` is nil on Android and iOS, so an app
-   cannot tell it is about to be killed. Small, and it is what "save my state"
-   needs. See `design/mobile-background.md` and M6.
-4. **Accessibility, the remainder** (§6.5) — Linux (AT-SPI) and Windows (UIA)
+2. **Accessibility, the remainder** (§6.5) — Linux (AT-SPI) and Windows (UIA)
    now publish trees, verified with Orca and a UIA client. What is left is
    narrower than the old entry implied: Windows `BoundingRectangle` arrives at
    clients as zero, macOS announcements are a documented no-op, and iOS has only
    been checked in the simulator.
-5. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
+3. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
    tracked and the raster is already damage-culled (`ReplayDamaged`); only the
    upload sends the whole surface. It is *not* the one-line change it looks
    like, and the trap is worth stating because the API invites it:
@@ -587,20 +582,22 @@ entirely: native menus exist in the substrate and are not reachable from an app.
    intermittent, invisible to tests, visible to users.
 
    So the work is the buffer-age accounting on this path, not the plumbing.
-6. **Widget catalog gaps** — reorderable lists, tree views, autocomplete.
-   Draggable scrollbars landed; pull-to-refresh was already there (`Scroll`
-   grows a spinner from overscroll), which the old entry had missed.
-7. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
+4. **Tree views** — the last of the widget-catalog entry. Reorderable lists
+   (`widget/reorderable.go`) and autocomplete (`widget/autocomplete.go`) have
+   both landed, as did draggable scrollbars; pull-to-refresh was already there
+   (`Scroll` grows a spinner from overscroll).
+5. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
    geometry and full UBA have not.
-8. ~~**Message catalog and plural rules** in `intl`~~ — done. `Catalog` keys by
+6. ~~**Message catalog and plural rules** in `intl`~~ — done. `Catalog` keys by
    language rather than locale (pt-BR and pt share grammar), and `PluralFor`
    implements CLDR's cardinal categories for the rule families that differ from
    English. What remains is loading catalogs from a file format, which is an
    app's choice more than the framework's.
-9. **Remaining platform gaps** — system tray, multi-window, desktop and mobile
-   geolocation, and the mobile battery/gamepad bridges. Desktop battery and
-   gamepad are done on all three platforms.
-10. **Durable background work** on mobile — see M7. Deliberately last: it is
+7. **Remaining platform gaps** — multi-window, desktop and mobile geolocation
+   (both still the stub in `shell/*/geolocation.go`), and the mobile
+   battery/gamepad bridges. System tray landed (`shell/tray.go`); desktop
+   battery and gamepad are done on all three platforms.
+8. **Durable background work** on mobile — see M7. Deliberately last: it is
     the largest, and the design deliberately makes it useful before any
     platform scheduler exists.
 
