@@ -88,23 +88,28 @@ everything before it.
 What a toolkit of this kind needs, and how gophics gets it. "Build" means
 gophics owns the code; "adopt" means a dependency does the work.
 
-| Subsystem | What it is | Approach | State |
-| --- | --- | --- | --- |
-| GPU rasterization, compositing | vector renderer on wgpu | **Build** (§5) | working; GPU vector backend still ahead |
-| Text shaping, bidi, line breaking, font discovery | HarfBuzz-class stack | **Adopt** go-text/typesetting + `fontscan` | working, incl. paragraph layout built above it |
-| Image decoding | png/jpeg/webp/… | **Adopt** stdlib + x/image | working |
-| Platform embedding | windows, input, vsync, IME | **Adopt/extend** the windowing layer | working on 4 desktop/web targets + mobile |
-| Canvas, Paint, Path, Scene | immediate + retained drawing | **Build** — `paint`, `scene` | working |
-| Render objects, box model, flex, stack, viewport | layout protocol | **Build** — `layout` | working |
-| Widget/element trees, State, reconciliation, focus, routing | the declarative layer | **Build** — `widget` | working |
-| Pointer routing, gesture disambiguation | gestures | **Build** — in `app`/`widget` | working |
-| Tickers, curves, controllers | animation | **Build** — `anim` | working |
-| Frame pipeline, vsync phases | scheduling | **Build** — `app` | working |
-| Default design language | theme + controls | **Build** — `theme` | working |
-| Semantics + platform a11y bridges | accessibility | **Build** (§6.5) | semantics + Android, iOS, web, macOS done; Linux and Windows pending |
-| Text editing + IME | TextField, composing regions | **Build** (§6.1) | working incl. IME preedit; single-line |
-| Internationalization | number/date/money formats, bidi, RTL layout | **Build** — `intl` + `widget` | formats and RTL done; message catalog pending |
-| Inspector, preview, dev harness | DX | **Build** (§6.3) | state-snapshot restart + inspector done |
+This table records a decision, not a status. It used to carry a State column
+as well, and that column drifted — it still called accessibility on Linux and
+Windows pending after both shipped, and text editing single-line after
+multiline landed. Where each subsystem stands is §7, which is generated.
+
+| Subsystem | What it is | Approach |
+| --- | --- | --- |
+| GPU rasterization, compositing | vector renderer on wgpu | **Build** (§5) |
+| Text shaping, bidi, line breaking, font discovery | HarfBuzz-class stack | **Adopt** go-text/typesetting + `fontscan` |
+| Image decoding | png/jpeg/webp/… | **Adopt** stdlib + x/image |
+| Platform embedding | windows, input, vsync, IME | **Adopt/extend** the windowing layer |
+| Canvas, Paint, Path, Scene | immediate + retained drawing | **Build** — `paint`, `scene` |
+| Render objects, box model, flex, stack, viewport | layout protocol | **Build** — `layout` |
+| Widget/element trees, State, reconciliation, focus, routing | the declarative layer | **Build** — `widget` |
+| Pointer routing, gesture disambiguation | gestures | **Build** — in `app`/`widget` |
+| Tickers, curves, controllers | animation | **Build** — `anim` |
+| Frame pipeline, vsync phases | scheduling | **Build** — `app` |
+| Default design language | theme + controls | **Build** — `theme` |
+| Semantics + platform a11y bridges | accessibility | **Build** (§6.5) |
+| Text editing + IME | TextField, composing regions | **Build** (§6.1) |
+| Internationalization | number/date/money formats, bidi, RTL layout | **Build** — `intl` + `widget` |
+| Inspector, preview, dev harness | DX | **Build** (§6.3) |
 
 ## 3. Architecture
 
@@ -505,68 +510,92 @@ than the shared abstraction.
 
 ## 7. State of the work
 
-The original M0–M9 sequencing is complete; what follows is what that
-produced and what remains. The ordering *was* the estimate, and it held:
-every phase de-risked the ones after it.
+The original M0–M9 sequencing is complete; the ordering *was* the estimate, and
+it held — every phase de-risked the ones after it.
 
-### Done
+What follows is split deliberately. The tables are generated from the tree by
+`scripts/tools/planfacts.py` and checked by `scripts/gates.sh`, because this
+section used to be maintained by hand and went stale six times in a single
+week: native menus and mobile lifecycle sat under "remaining" after they
+shipped, tree views were listed as missing while `widget/tree.go` was in the
+repo, and the repo layout named a package that no longer existed. An inventory
+kept by hand next to the thing it inventories is a promise to notice, and
+nobody does.
 
-- **Foundations** — `geom`, the shell interface, and desktop + web frame
-  loops from one `main`.
-- **Canvas and CPU renderer** — `paint`/`scene`, display lists, layer tree,
-  damage tracking, golden-test harness, per-phase benchmarks.
-- **Layout** — render-object protocol, box model, flex, stack, grid, wrap,
-  padding/align/constrained, relayout boundaries, hit-test geometry,
-  viewport culling by ink bounds.
-- **Widgets** — reconciler, State, keys, `Provide`/`Of`, error boundaries,
-  semantics, overlays, navigation, lazy lists, selection, rich text.
-- **Interaction and motion** — gesture routing with axis and priority
-  disambiguation, tickers, curves, controllers, implicit animations, focus,
-  keyboard, drag and drop.
-- **Scrolling** — lazy lists with measured-height caching, fling physics,
-  overscroll, keyboard-avoiding insets.
-- **Text editing and theme** — IME-correct single-line input, and the
-  default design language: buttons, checkboxes, switches, sliders, radios,
-  segmented controls, dropdowns, tabs, tables, dialogs, menus, sheets,
-  snackbars, date and time pickers, progress, spinners, tooltips, list
-  tiles, chips, badges, avatars.
-- **Internationalization** — locale-aware number, money and date formatting;
-  bidirectional text; RTL layout mirroring.
-- **Accessibility** — semantics tree plus Android, iOS, web and macOS
-  bridges (§6.5).
-- **Platform capabilities** — around twenty optional capabilities behind
-  `ctx.<Cap>()`, including file pickers with native panels on macOS, the
-  standard desktop chooser chain on Linux and BSD, and the common dialogs on
-  Windows. Native menu bars (`ctx.Menus()`) publish through to NSMenu, HMENU
-  and X11, with the OS placing the roles it owns; `examples/gallery` uses one.
-- **Mobile lifecycle** — `ctx.Lifecycle()` reports foreground and background
-  transitions on Android and iOS, which is what "save my state before I am
-  killed" needs.
-- **Mobile** — Android and iOS via the bind pattern, with GPU present
-  verified on real Android hardware (§6.4).
-- **Terminal** — a fourth shell target, rendering the same widget trees.
-- **DX** — headless rendering, golden tests, state-snapshot hot restart,
-  inspector, docs site with live WASM demos.
+The prose keeps what no generator can produce: which of the gaps is worth
+closing next, and why.
 
-The near-term slice of what follows is broken into milestones with exit
-criteria in `design/milestones.md`.
+### What ships, by platform
 
-### Remaining, roughly in order of value
+<!-- planfacts:capabilities -->
+| Capability | desktop | web | mobile | terminal |
+|---|---|---|---|---|
+| `Accessibility` | yes | yes | — | — |
+| `Audio` | — | yes | yes | — |
+| `Battery` | yes | yes | — | — |
+| `Camera` | — | yes | yes | — |
+| `CameraPreview` | — | yes | — | — |
+| `Connectivity` | yes | yes | — | — |
+| `FilePicker` | yes | yes | — | — |
+| `Gamepads` | yes | yes | hollow | — |
+| `Geolocation` | — | yes | — | — |
+| `Haptic` | — | yes | yes | — |
+| `Lifecycle` | yes | yes | yes | — |
+| `Links` | yes | yes | — | — |
+| `Menus` | yes | — | — | — |
+| `Microphone` | yes | yes | yes | — |
+| `Notifier` | — | yes | — | — |
+| `Permissions` | — | yes | — | — |
+| `Preferences` | yes | yes | — | — |
+| `SecureStorage` | — | yes | — | — |
+| `Share` | — | yes | — | — |
+| `Socket` | yes | yes | yes | — |
+| `TextInput` | — | yes | — | — |
+| `Tray` | yes | — | — | — |
+| `WebView` | — | yes | — | — |
+| `WindowControl` | yes | yes | — | — |
 
-Reordered 2026-08-22 against the code. Three more items had been overtaken by
-work since the last pass: native menus, mobile lifecycle, and two thirds of the
-widget-catalog entry. The lesson is the same one the previous pass recorded —
-this list drifts faster than it reads, so check it against the tree before
-planning from it.
+*Generated. `yes` means the shell publishes the accessor; `—` means `ctx.<Cap>()` is nil there, which is how an app is meant to ask. `hollow` means it returns a value whose methods do nothing — the one shape a caller cannot detect.*
+<!-- /planfacts -->
 
-1. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
+Terminal publishes no optional capability, which is a fact about terminals
+rather than a gap. Web is the most complete shell — that is not a standard the
+others fall short of, it is the platform whose APIs happen to match this
+capability set.
+
+### The widget catalog
+
+<!-- planfacts:widgets -->
+`Align`, `AspectRatio`, `Autocomplete`, `Canvas`, `Decorated`
+`Directionality`, `Dismissible`, `DragHost`, `Draggable`, `DropTarget`
+`Fill`, `Flexible`, `Grid`, `Hero`, `Image`, `Interactive`
+`KeyboardAvoiding`, `LayoutBuilder`, `LazyList`, `Nav`, `Navigator`
+`NetworkImage`, `Opacity`, `Overlay`, `OverlayHost`, `Padding`
+`Reorderable`, `Rich`, `SafeArea`, `Scroll`, `ScrollController`
+`SelectableText`, `SelectionArea`, `Semantics`, `Sized`, `Stack`, `Text`
+`TextField`, `Transform`, `Tree`, `TreeNode`, `Wrap`
+
+*Generated: every exported widget type.*
+<!-- /planfacts -->
+
+### Where to go next
+
+Ordered by value, and this ordering is a judgment rather than a reading of the
+tree.
+
+1. **Honesty before coverage.** Three capabilities answer without meaning
+   anything, which is worse than being absent because a caller cannot detect
+   it: mobile `Gamepads` returns a poller that never reports a pad, Windows
+   `AnnounceA11y` has an empty body, and `ctx.Accessibility()` is nil on mobile
+   even though mobile publishes a full semantics tree through the Bridge — so a
+   mobile app cannot announce to a screen reader at all. Each is small, and
+   each currently misleads.
+2. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
    the fallback and the reference either way.
-2. **Accessibility, the remainder** (§6.5) — Linux (AT-SPI) and Windows (UIA)
-   now publish trees, verified with Orca and a UIA client. What is left is
-   narrower than the old entry implied: Windows `BoundingRectangle` arrives at
-   clients as zero, macOS announcements are a documented no-op, and iOS has only
-   been checked in the simulator.
-3. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
+3. **Mobile's thin shell.** `Permissions` is nil on the one platform with a
+   real permission model; `SecureStorage` is nil, so an app has nowhere safe
+   for a token; `Share` is nil on both platforms that have a share sheet.
+4. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
    tracked and the raster is already damage-culled (`ReplayDamaged`); only the
    upload sends the whole surface. It is *not* the one-line change it looks
    like, and the trap is worth stating because the API invites it:
@@ -582,24 +611,18 @@ planning from it.
    intermittent, invisible to tests, visible to users.
 
    So the work is the buffer-age accounting on this path, not the plumbing.
-4. **Tree views** — the last of the widget-catalog entry. Reorderable lists
-   (`widget/reorderable.go`) and autocomplete (`widget/autocomplete.go`) have
-   both landed, as did draggable scrollbars; pull-to-refresh was already there
-   (`Scroll` grows a spinner from overscroll).
-5. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL caret
-   geometry and full UBA have not.
-6. ~~**Message catalog and plural rules** in `intl`~~ — done. `Catalog` keys by
-   language rather than locale (pt-BR and pt share grammar), and `PluralFor`
-   implements CLDR's cardinal categories for the rule families that differ from
-   English. What remains is loading catalogs from a file format, which is an
-   app's choice more than the framework's.
-7. **Remaining platform gaps** — multi-window, desktop and mobile geolocation
-   (both still the stub in `shell/*/geolocation.go`), and the mobile
-   battery/gamepad bridges. System tray landed (`shell/tray.go`); desktop
-   battery and gamepad are done on all three platforms.
-8. **Durable background work** on mobile — see M7. Deliberately last: it is
-    the largest, and the design deliberately makes it useful before any
-    platform scheduler exists.
+5. **Accessibility, the remainder** (§6.5) — Windows `BoundingRectangle`
+   arrives at clients as zero, and `Expanded` is dropped at the desktop bridge
+   (web already emits `aria-expanded`). iOS has only been checked in the
+   simulator.
+6. **Desktop's missing pieces** — no `Notifier` on any of the three operating
+   systems, no `SecureStorage`, no `Share`. `WebView` is a large piece of work
+   on every platform and is the honest last of these.
+7. **Text editing depth** — multi-line landed (`TextField.Multiline`); RTL
+   caret geometry and full UBA have not.
+8. **Durable background work** on mobile — see M7. Deliberately last: it is the
+   largest, and the design deliberately makes it useful before any platform
+   scheduler exists.
 
 ## 8. Testing strategy
 
@@ -621,31 +644,34 @@ planning from it.
 
 ## 9. Repo layout
 
-```
-gophics/
-  geom/          # Point, Size, Rect, Insets, transforms
-  input/         # device-independent input types
-  paint/         # Canvas, Path, Paint, Color, gradients, images
-  text/          # shaping, bidi, paragraph layout, fonts
-  scene/         # display lists, layer tree, damage tracking
-  layout/        # render-object protocol, box/flex/stack/viewport, semantics
-  widget/        # Widget/Element, State, keys, focus, reconciler, gestures
-  anim/          # tickers, curves, controllers
-  theme/         # the default design language
-  chart/         # data visualization
-  intl/          # locale-aware formatting
-  sound/         # audio mixer
-  shell/         # interface + desktop/ web/ mobile/ terminal/
-  app/           # the runner tying shell → scene → widget; Headless
-  cmd/gophics/   # dev CLI: build, run and hot-restart across every target
-  internal/gfx/  # vendored GPU substrate (wgpu, naga, windowing)
-  examples/      # ~25 apps, from hello to a beancount ledger
-  design/        # ADRs and design notes
-  docs/          # the site, live WASM demos, reviews
-  skills/        # agent instructions + API-drift checker for this repo
-```
+<!-- planfacts:layout -->
+| Package | Purpose |
+|---|---|
+| `anim/` | Animation primitives: curves and controllers |
+| `app/` | Ties the widget tree to a shell: the gophics runtime |
+| `apptest/` | Drives a gophics UI in a test and asserts on what it produced |
+| `chart/` | A built-in, Swift Charts–style charting library |
+| `cmd/` | Developer CLI: build, run and hot-restart across every target |
+| `examples/` | Example apps, from hello to a beancount ledger |
+| `geom/` | The geometric primitives used throughout gophics |
+| `input/` | Per-frame, poll-style input state for games: which keys are held right now |
+| `internal/` | Vendored GPU substrate (wgpu, naga, windowing) and internals |
+| `intl/` | Formats numbers, money and dates the way a reader's locale writes them |
+| `layout/` | Gophics's render layer: the box protocol and the core layout boxes |
+| `paint/` | Gophics's drawing layer |
+| `scene/` | Display lists: recorded paint commands that can be replayed onto any paint.Canvas |
+| `shell/` | Defines the platform interface gophics runs on |
+| `sound/` | A pure-Go DSP mixer for game and UI audio: PCM samples, oscillators, gain |
+| `text/` | Gophics's text stack: shaping, bidi, font fallback, and line breaking |
+| `theme/` | Gophics's default design language: a Theme value provided to the tree plus components |
+| `widget/` | Gophics's declarative layer: immutable widget values describing the UI |
 
-`build/` and `gallery/` hold build output and are untracked.
+*Generated from each package's doc comment.*
+<!-- /planfacts -->
+
+`build/` holds build output and is untracked. `design/` holds ADRs and design
+notes, `docs/` the site and its live WASM demos, `skills/` the agent
+instructions and API-drift checker for this repo.
 
 ## 10. Working method
 

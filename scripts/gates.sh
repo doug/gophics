@@ -72,6 +72,15 @@ if ! out=$(./docs/build-embeds.sh -check 2>&1); then
 	fail "doc embeds are stale" "$out" "" "  fix: ./docs/build-embeds.sh"
 fi
 
+# ---- generated sections of PLAN.md ------------------------------------------
+# The plan's inventories — the capability matrix, the widget catalog, the repo
+# layout — are derived from the tree. Hand-maintained, they went stale six times
+# in one week, each time claiming work was outstanding that had already shipped.
+say "plan facts…"
+if ! out=$(python3 scripts/tools/planfacts.py -check 2>&1); then
+	fail "PLAN.md facts are stale" "$out" "" "  fix: python3 scripts/tools/planfacts.py"
+fi
+
 # ---- no oversized tracked files ---------------------------------------------
 # An 18 MB compiled binary reached main once. `wc -c` rather than stat, whose
 # flags differ between macOS and Linux — CI's copy used the GNU spelling with a
