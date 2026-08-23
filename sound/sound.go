@@ -89,6 +89,100 @@ func Tone(freq, seconds, amp float64) Source {
 	}
 }
 
+// Harmonics returns a one-shot note built from a harmonic series: partials[i] is
+// the amplitude of the (i+1)th harmonic, so partials[0] is the fundamental. It
+// shares Tone's attack/release, so it does not click either.
+//
+// The point is timbre. A sine is the worst model for a singer to match: pitch
+// matching is measurably more accurate against a human voice than against a
+// piano or a synthesized tone, and a voice is a harmonic stack, not a sine. A
+// caller imitating a sung vowel passes a decaying series (roughly 1, 0.6, 0.35,
+// 0.2, …); an instrument-like tone uses a different one.
+//
+// Amplitudes are normalized against their own sum, so amp stays the peak level
+// no matter how many partials are asked for — otherwise adding a harmonic would
+// silently clip.
+func Harmonics(freq, seconds, amp float64, partials []float64) Source {
+	if len(partials) == 0 {
+		return Tone(freq, seconds, amp)
+	}
+	var sum float64
+	for _, a := range partials {
+		if a > 0 {
+			sum += a
+		}
+	}
+	if sum <= 0 {
+		return Tone(freq, seconds, amp)
+	}
+	h := &harmonics{
+		total:  int(seconds * SampleRate),
+		attack: int(math.Round(0.008 * SampleRate)),
+		decay:  int(math.Round(0.06 * SampleRate)),
+	}
+	for i, a := range partials {
+		if a <= 0 {
+			continue
+		}
+		f := freq * float64(i+1)
+		// Skip partials above Nyquist: they would alias back down as audible
+		// inharmonic tones, which is exactly the cue that makes a synthesized
+		// note sound artificial.
+		if f >= SampleRate/2 {
+			break
+		}
+		h.oscs = append(h.oscs, Osc{Wave: Sine, Freq: f, Amp: amp * a / sum})
+	}
+	return h
+}
+
+type harmonics struct {
+	oscs          []Osc
+	pos, total    int
+	attack, decay int
+	scratch       []float32
+}
+
+func (h *harmonics) gain(pos int) float64 {
+	if pos < h.attack && h.attack > 0 {
+		return float64(pos) / float64(h.attack)
+	}
+	if rem := h.total - pos; rem < h.decay && h.decay > 0 {
+		return float64(rem) / float64(h.decay)
+	}
+	return 1
+}
+
+func (h *harmonics) Process(out []float32) bool {
+	if h.pos >= h.total {
+		return false
+	}
+	for i := range out {
+		out[i] = 0
+	}
+	if cap(h.scratch) < len(out) {
+		h.scratch = make([]float32, len(out))
+	}
+	scratch := h.scratch[:len(out)]
+	for i := range h.oscs {
+		h.oscs[i].Process(scratch)
+		for j, v := range scratch {
+			out[j] += v
+		}
+	}
+	for i := range out {
+		if h.pos >= h.total {
+			for j := i; j < len(out); j++ {
+				out[j] = 0
+			}
+			break
+		}
+		out[i] *= float32(h.gain(h.pos))
+		h.pos++
+	}
+	return h.pos < h.total
+}
+
 func (t *tone) gain(pos int) float64 {
 	if pos < t.attack && t.attack > 0 {
 		return float64(pos) / float64(t.attack)
