@@ -8,14 +8,17 @@ package app
 import (
 	"encoding/json"
 	"log"
+	"log/slog"
 	"os"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/input"
+	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/scene"
@@ -61,6 +64,23 @@ type Config struct {
 	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
 	// rasterizer. The GOPHICS_RENDERER env var overrides this at startup.
 	Renderer RendererMode
+	// GraphicsLog receives diagnostics from the rendering stack: adapter and
+	// surface selection, shader and pipeline compilation, atlas uploads, and
+	// every fallback taken when something is unsupported. Nil, the default,
+	// discards them.
+	//
+	// The stack is silent by default because a library should not write to a
+	// program's output uninvited, and that is the right default. It has a cost
+	// worth knowing: when GPU text came up blank on an Adreno tablet, the
+	// render session was already logging which batches it was skipping, and
+	// there was no way to hear it — the investigation started by adding this
+	// wiring by hand.
+	//
+	// GOPHICS_GPU_LOG=debug|info|warn turns the same diagnostics on without
+	// touching code, routed through the standard logger so they reach stderr
+	// on desktop and logcat on Android. That matters on mobile, where the
+	// process is started by the host and there is often nowhere to set a field.
+	GraphicsLog *slog.Logger
 }
 
 // RendererMode selects the rasterization backend; see the Renderer* constants.
@@ -244,7 +264,61 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 	}
 	c.Owner.Post = c.Post
 	c.debugPaint = cfg.Debug
+	applyGraphicsLog(cfg.GraphicsLog)
 	return c, nil
+}
+
+// applyGraphicsLog points the rendering stack at a logger. One call reaches all
+// of it: gg propagates to its GPU accelerator, which propagates to wgpu and the
+// HAL beneath it, in either order — registering an accelerator later re-applies
+// whatever logger is current.
+//
+// With nothing configured this does nothing at all, rather than resetting the
+// stack to silent. The distinction matters: gg is silent to begin with, so an
+// app that configures nothing gets nothing, and an embedder or test that called
+// gg.SetLogger directly keeps what it asked for instead of having it cleared by
+// the next app that happens to start.
+func applyGraphicsLog(l *slog.Logger) {
+	if l == nil {
+		l = envGraphicsLog()
+	}
+	if l == nil {
+		return
+	}
+	gg.SetLogger(l)
+}
+
+// envGraphicsLog builds a logger from GOPHICS_GPU_LOG, or returns nil when it
+// is unset or unrecognised.
+//
+// Output goes through the standard logger rather than straight to stderr,
+// because that is what reaches the platform's own log: gomobile routes it to
+// logcat, and on desktop it lands on stderr either way.
+func envGraphicsLog() *slog.Logger {
+	var level slog.Level
+	switch strings.ToLower(os.Getenv("GOPHICS_GPU_LOG")) {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn", "warning":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		return nil
+	}
+	return slog.New(slog.NewTextHandler(stdlogWriter{}, &slog.HandlerOptions{Level: level}))
+}
+
+// stdlogWriter forwards a slog handler's output to the standard logger.
+type stdlogWriter struct{}
+
+func (stdlogWriter) Write(p []byte) (int, error) {
+	// Depth 0: the standard logger's own file/line would point here, which
+	// tells the reader nothing. The record already carries its source.
+	_ = log.Output(0, "gophics/gpu: "+strings.TrimRight(string(p), "\n"))
+	return len(p), nil
 }
 
 // mount builds the widget tree. Callers wire all Owner hooks (RequestFrame,
