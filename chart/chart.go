@@ -71,12 +71,15 @@ type chartState struct {
 	// Selection: the primary data series and the currently-selected index
 	// (-1 = none), plus the last drawn plot area so the press handler can map a
 	// pointer back to a datum.
-	sel     int
-	xs, ys  Scale
-	area    geom.Rect
-	primary []Datum
-	selCol  paint.Color
-	legend  []legendEntry
+	sel int
+	// pressPos is where the pointer went down, held so OnTap can select at
+	// that point: OnTap carries no position of its own.
+	pressPos geom.Pt
+	xs, ys   Scale
+	area     geom.Rect
+	primary  []Datum
+	selCol   paint.Color
+	legend   []legendEntry
 }
 
 func (s *chartState) Init(ctx widget.Ctx) {
@@ -131,7 +134,12 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		m.Top += float32(legendRows(s.legend, p))*p.MetricsIn("", legendSize).LineHeight() + 10
 	}
 
-	canvas := widget.Canvas{Clip: false, Draw: func(c paint.Canvas, size geom.Size) {
+	// Clipped to the widget's own box. The marks are clipped to the plot area
+	// below, but the selection — crosshair, dot and tooltip — is drawn after
+	// that clip is popped, and the legend after that, so an unclipped canvas
+	// let a chart paint onto whatever surrounded it. On a scrolled page that
+	// was the header above it.
+	canvas := widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
 		area := m.Inset(geom.RectFromSize(size))
 		s.area = area
 		if area.IsEmpty() {
@@ -167,8 +175,17 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	if len(s.primary) > 0 {
 		root = widget.Interactive{
 			Handler: widget.Handler{
-				OnPress: func(pos geom.Pt) { s.selectAt(pos) },
+				// Selection commits on tap rather than on press. A finger
+				// landing on a chart is usually the start of a scroll, and
+				// selecting on touch-down strands a tooltip and crosshair when
+				// the scroll then takes the gesture. Crossing the tap slop
+				// cancels the pending tap, so only a real tap selects.
+				OnPress: func(pos geom.Pt) { s.pressPos = pos },
+				OnTap:   func() { s.selectAt(s.pressPos) },
 				OnDrag:  func(pos, _ geom.Pt) { s.selectAt(pos) },
+				// Scrubbing picks the datum nearest in x, so it is a horizontal
+				// gesture; a vertical drag belongs to the enclosing scroll.
+				DragAxis: widget.DragHorizontal,
 			},
 			Child: canvas,
 		}

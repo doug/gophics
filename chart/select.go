@@ -37,6 +37,41 @@ var (
 	tipInk = gray(1, 1)
 )
 
+// tooltipBox places a tw x th card near anchor and keeps every edge inside
+// area.
+//
+// It used to clamp the left edge and flip an upward overflow downward, and
+// check nothing else — so a card could hang off the bottom, and off the top
+// whenever the flip pushed it back out. A chart's selection is drawn after the
+// plot clip is popped, so whatever escaped landed on the page: on a phone,
+// the tooltip painted over the header above a scrolled chart.
+//
+// Clamping after placing, on both axes, is the whole fix. Preferring above-left
+// keeps the old feel where there is room.
+func tooltipBox(area geom.Rect, anchor geom.Pt, tw, th float32) geom.Rect {
+	tx, ty := anchor.X+14, anchor.Y-th-14
+	if tx+tw > area.Max.X {
+		tx = anchor.X - tw - 14
+	}
+	if ty < area.Min.Y {
+		ty = anchor.Y + 14
+	}
+	// Whatever the preference produced, it has to fit.
+	if tx+tw > area.Max.X {
+		tx = area.Max.X - tw
+	}
+	if tx < area.Min.X {
+		tx = area.Min.X
+	}
+	if ty+th > area.Max.Y {
+		ty = area.Max.Y - th
+	}
+	if ty < area.Min.Y {
+		ty = area.Min.Y
+	}
+	return geom.RectXYWH(tx, ty, tw, th)
+}
+
 // drawTooltip renders a two-line value card near anchor, clamped inside area.
 func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.Pt, label, value string, _ chartTheme) {
 	const ls, vs = float32(12), float32(15)
@@ -47,19 +82,9 @@ func drawTooltip(c paint.Canvas, p *paint.Painter, area geom.Rect, anchor geom.P
 	tw := max(p.MeasureWidthIn("", label, ls), p.MeasureWidthIn("", value, vs)) + padX*2
 	th := padY*2 + lineL + gap + lineV
 
-	tx, ty := anchor.X+14, anchor.Y-th-14
-	if tx+tw > area.Max.X {
-		tx = anchor.X - tw - 14
-	}
-	if tx < area.Min.X {
-		tx = area.Min.X
-	}
-	if ty < area.Min.Y {
-		ty = anchor.Y + 14
-	}
-	box := geom.RectXYWH(tx, ty, tw, th)
+	box := tooltipBox(area, anchor, tw, th)
 	paint.DropShadow(c, box, 9, geom.Pt{Y: 2}, 10, paint.Color{A: 0.22})
 	c.FillRRect(box, 9, tipBG)
-	c.TextIn("", label, geom.Pt{X: tx + padX, Y: ty + padY + mL.Ascent}, ls, tipSub)
-	c.TextIn("", value, geom.Pt{X: tx + padX, Y: ty + padY + lineL + gap + mV.Ascent}, vs, tipInk)
+	c.TextIn("", label, geom.Pt{X: box.Min.X + padX, Y: box.Min.Y + padY + mL.Ascent}, ls, tipSub)
+	c.TextIn("", value, geom.Pt{X: box.Min.X + padX, Y: box.Min.Y + padY + lineL + gap + mV.Ascent}, vs, tipInk)
 }
