@@ -11,18 +11,20 @@ import (
 // shell/internal/devmedia, because they concern devices rather than windows
 // and the terminal shell needs the same ones.
 //
-// These are the compile-time checks that the window still opts into both
-// capability groups; dropping a method silently un-publishes it from the
-// widget tree, which no test would otherwise catch.
+// These are the compile-time checks that the window still opts into each one;
+// dropping a method silently un-publishes it from the widget tree, which no
+// test would otherwise catch.
 var (
-	_ shell.MediaWindow     = (*window)(nil)
-	_ shell.LiveMediaWindow = (*window)(nil)
+	_ shell.CameraWindow        = (*window)(nil)
+	_ shell.CameraPreviewWindow = (*window)(nil)
+	_ shell.MicrophoneWindow    = (*window)(nil)
+	_ shell.SpeakersWindow      = (*window)(nil)
 )
 
-// Audio returns the record/playback capability.
-func (w *window) Audio() shell.Audio { return devmedia.Audio() }
+// Speakers returns audio output.
+func (w *window) Speakers() shell.Speakers { return devmedia.Speakers() }
 
-// Microphone returns live input monitoring.
+// Microphone returns audio input.
 func (w *window) Microphone() shell.Microphone { return devmedia.Microphone() }
 
 // Camera returns still capture, or nil where no backend exists yet.

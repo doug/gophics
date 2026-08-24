@@ -8,35 +8,39 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
-// Recording and playback: one-shot audio transactions, each ending with a
-// result. Live input monitoring belongs to the microphone, in microphone.go.
+// Playback, and the recording half of the microphone. Both are one-shot
+// transactions ending in a result, and both run over MediaHost; the
+// microphone's other half streams over MonitorHost, in microphone.go.
 
-// Audio returns the record/playback capability, or nil until a MediaHost is set.
-func (b *Bridge) Audio() shell.Audio {
+// Speakers returns audio output, or nil until a MediaHost is set.
+func (b *Bridge) Speakers() shell.Speakers {
 	if b.media.host == nil {
 		return nil
 	}
-	return &mobileAudio{b.media}
+	return &mobileSpeakers{b.media}
 }
 
-// --- Audio -------------------------------------------------------------------
+// --- Speakers ----------------------------------------------------------------
 
-type mobileAudio struct{ m *mediaBridge }
+type mobileSpeakers struct{ m *mediaBridge }
 
-func (a *mobileAudio) Authorize(cb func(shell.Permission)) {
-	id := a.m.newReq()
-	a.m.perm[id] = cb
-	a.m.host.AuthorizeMic(id)
-}
+// mobileRecording is the microphone's recording half. It is a distinct type
+// only because the two halves arrive over different hosts; mobileMicrophone
+// embeds it so an app sees one device.
+type mobileRecording struct{ m *mediaBridge }
 
-func (a *mobileAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+func (a *mobileRecording) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+	if a.m == nil || a.m.host == nil {
+		done(nil, errors.New("recording is not available on this device"))
+		return
+	}
 	id := a.m.newReq()
 	a.m.recCb[id] = done
 	a.m.recs[id] = &mobileRecorder{m: a.m, id: id, start: time.Now()}
 	a.m.host.StartRecording(id)
 }
 
-func (a *mobileAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
+func (a *mobileSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
 	id := a.m.newReq()
 	a.m.playCb[id] = done
 	a.m.plays[id] = &mobilePlayback{m: a.m, id: id, duration: clip.Duration}

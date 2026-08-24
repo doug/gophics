@@ -37,50 +37,6 @@ func (p postedAccessibility) SetTree(a0 []A11yNode, a1 func(id int)) {
 	p.inner.SetTree(a0, w1)
 }
 
-// PostedAudio wraps inner so every callback it (or anything it hands out)
-// invokes is delivered through post — the app runner passes Owner.Post, making
-// the "callbacks fire on the UI goroutine" contract hold no matter which
-// goroutine the platform implementation completes on. Nil-safe: a nil inner
-// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
-func PostedAudio(inner Audio, post func(func())) Audio {
-	if inner == nil || post == nil {
-		return inner
-	}
-	return postedAudio{inner, post}
-}
-
-type postedAudio struct {
-	inner Audio
-	post  func(func())
-}
-
-func (p postedAudio) Authorize(a0 func(Permission)) {
-	f0 := a0
-	var w0 func(Permission)
-	if f0 != nil {
-		w0 = func(c0 Permission) { p.post(func() { f0(c0) }) }
-	}
-	p.inner.Authorize(w0)
-}
-
-func (p postedAudio) Record(a0 RecordOptions, a1 func(Recorder, error)) {
-	f1 := a1
-	var w1 func(Recorder, error)
-	if f1 != nil {
-		w1 = func(c0 Recorder, c1 error) { p.post(func() { f1(PostedRecorder(c0, p.post), c1) }) }
-	}
-	p.inner.Record(a0, w1)
-}
-
-func (p postedAudio) Play(a0 Clip, a1 func(Playback, error)) {
-	f1 := a1
-	var w1 func(Playback, error)
-	if f1 != nil {
-		w1 = func(c0 Playback, c1 error) { p.post(func() { f1(c0, c1) }) }
-	}
-	p.inner.Play(a0, w1)
-}
-
 // PostedBattery wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -406,6 +362,15 @@ func (p postedMicrophone) Listen(a0 func(Monitor, error)) {
 	p.inner.Listen(w0)
 }
 
+func (p postedMicrophone) Record(a0 RecordOptions, a1 func(Recorder, error)) {
+	f1 := a1
+	var w1 func(Recorder, error)
+	if f1 != nil {
+		w1 = func(c0 Recorder, c1 error) { p.post(func() { f1(PostedRecorder(c0, p.post), c1) }) }
+	}
+	p.inner.Record(a0, w1)
+}
+
 // PostedNotifier wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -567,6 +532,32 @@ func (p postedSocket) Dial(a0 string, a1 SocketHandlers) {
 		w1.OnClose = func(c0 error) { p.post(func() { g(c0) }) }
 	}
 	p.inner.Dial(a0, w1)
+}
+
+// PostedSpeakers wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedSpeakers(inner Speakers, post func(func())) Speakers {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedSpeakers{inner, post}
+}
+
+type postedSpeakers struct {
+	inner Speakers
+	post  func(func())
+}
+
+func (p postedSpeakers) Play(a0 Clip, a1 func(Playback, error)) {
+	f1 := a1
+	var w1 func(Playback, error)
+	if f1 != nil {
+		w1 = func(c0 Playback, c1 error) { p.post(func() { f1(c0, c1) }) }
+	}
+	p.inner.Play(a0, w1)
 }
 
 // PostedTextInput wraps inner so every callback it (or anything it hands out)

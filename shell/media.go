@@ -5,24 +5,49 @@ import (
 	"time"
 )
 
-// Media capture capabilities. These are optional platform features: a Window
-// exposes them by implementing MediaWindow, and callers reach them through the
-// widget layer (ctx.Camera()/ctx.Audio()), which returns nil when the running
-// platform can't provide them. Only the web shell implements them today; the
-// same interfaces are the contract the mobile (gomobile) and desktop shells
-// will satisfy. All callbacks fire on the UI goroutine.
+// The camera, the microphone and the speakers.
 //
-// See design/spec-media-journal.md for the still/clip half, and the live
-// capture section at the bottom of this file for the streaming one.
+// Each is an optional platform feature a Window opts into by implementing the
+// matching <Cap>Window interface; callers reach them through the widget layer
+// (ctx.Camera(), ctx.Microphone(), ctx.Speakers()), which is nil where the
+// platform cannot provide them. All callbacks fire on the UI goroutine.
+//
+// One capability per Window interface, which is how every other capability in
+// this package is declared. Media used to be the exception: MediaWindow paired
+// the camera with audio and LiveMediaWindow paired the preview with the
+// microphone, grouping by lifecycle rather than by device. It made a shell
+// implement a device it does not have in order to publish one it does — the
+// terminal carried a nil Camera purely to reach the speakers, and three files
+// carried comments apologising for the pairing.
+//
+// The lifecycle distinction is real, but it lives *within* a device: a camera
+// takes a still and streams a preview, a microphone records a clip and streams
+// a monitor. So it is a pair of methods, not a pair of interfaces.
+//
+// See design/spec-media-journal.md for the still/clip half.
 
-// MediaWindow is implemented by a Window that can capture media. The app runner
-// type-asserts the Window to it and, when present, publishes Camera()/Audio()
-// to the widget tree.
-type MediaWindow interface {
-	// Camera returns a still-image capture capability, or nil if unavailable.
+// CameraWindow is implemented by a Window that can take a still photo.
+type CameraWindow interface {
+	// Camera returns still capture, or nil if unavailable.
 	Camera() Camera
-	// Audio returns an audio record/playback capability, or nil if unavailable.
-	Audio() Audio
+}
+
+// CameraPreviewWindow is implemented by a Window that can stream the camera.
+type CameraPreviewWindow interface {
+	// CameraPreview returns live preview, or nil if unavailable.
+	CameraPreview() CameraPreview
+}
+
+// MicrophoneWindow is implemented by a Window that can capture audio input.
+type MicrophoneWindow interface {
+	// Microphone returns audio input, or nil if unavailable.
+	Microphone() Microphone
+}
+
+// SpeakersWindow is implemented by a Window that can play audio.
+type SpeakersWindow interface {
+	// Speakers returns audio output, or nil if unavailable.
+	Speakers() Speakers
 }
 
 // Permission is the outcome of a capability authorization request.
@@ -86,13 +111,15 @@ type Playback interface {
 	Stop()
 }
 
-// Audio plays and records audio.
-type Audio interface {
-	// Authorize requests microphone permission (for Record).
-	Authorize(func(Permission))
-	// Record starts capturing the microphone; the Recorder arrives on the
-	// callback once the mic is live (permission may prompt first).
-	Record(RecordOptions, func(Recorder, error))
+// Speakers plays audio.
+//
+// Output only, and named for the device rather than for the medium. The
+// interface it replaced was called Audio and carried Record alongside Play,
+// which put the microphone and the speakers behind one name and left the
+// speakers with no name at all.
+//
+// There is no Authorize: no platform gates playback.
+type Speakers interface {
 	// Play decodes and plays clip; the Playback control arrives on the callback
 	// once playback starts.
 	Play(Clip, func(Playback, error))
@@ -100,23 +127,11 @@ type Audio interface {
 
 // --- Live capture ------------------------------------------------------------
 
-// Live capture is a separate capability from MediaWindow on purpose. Camera
-// takes one still and Audio records one clip; both are one-shot transactions
-// that end with a result. A preview and a microphone monitor are neither — they
-// are continuous, they retain nothing, and a platform can perfectly well offer
-// one pair and not the other. Splitting them means the shells that haven't
-// implemented streaming yet simply don't publish it, and ctx.CameraPreview()
-// is nil, instead of every shell carrying a method that returns "unsupported".
-
-// LiveMediaWindow is implemented by a Window that can stream live capture. The
-// app runner type-asserts the Window to it and, when present, publishes
-// CameraPreview()/Microphone() to the widget tree.
-type LiveMediaWindow interface {
-	// CameraPreview returns live camera capture, or nil if unavailable.
-	CameraPreview() CameraPreview
-	// Microphone returns live input monitoring, or nil if unavailable.
-	Microphone() Microphone
-}
+// A still and a preview stay separate capabilities even though they are one
+// device, because a platform really can have one without the other: the mobile
+// hosts implement capture and preview through different native APIs and may
+// register either. The microphone's two shapes come from one device open, so
+// they are one interface; the camera's two do not.
 
 // PreviewOptions configures a live camera preview.
 type PreviewOptions struct {
@@ -159,14 +174,21 @@ type Frames interface {
 	Stop()
 }
 
-// Microphone is live input monitoring: the analysis half of recording, with
-// nothing kept, so it can run for as long as a visualization needs it to.
+// Microphone is audio input, in both of the shapes an app asks for it.
+//
+// Record is a one-shot transaction ending in a Clip; Listen is an open stream
+// that keeps nothing and can run as long as a visualization needs. Same device,
+// same permission, so one interface — a platform that has the microphone has
+// both, and one that does not has neither.
 type Microphone interface {
 	// Authorize requests microphone permission, reporting the outcome.
 	Authorize(func(Permission))
 	// Listen opens the microphone; the Monitor arrives on the callback once
 	// input is live (permission may prompt first).
 	Listen(func(Monitor, error))
+	// Record starts capturing to a clip; the Recorder arrives on the callback
+	// once the mic is live (permission may prompt first).
+	Record(RecordOptions, func(Recorder, error))
 }
 
 // Monitor is a running microphone monitor. Poll it whenever you draw.

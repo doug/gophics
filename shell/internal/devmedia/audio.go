@@ -29,30 +29,20 @@ import (
 // backends produce too. A recording made on one platform therefore plays on
 // any other, and the waveform beside it is computed by one shared function.
 
-// Audio returns the record/playback capability.
+// Speakers returns audio output.
 //
-// Non-nil even with no input device, for the reason Microphone is: whether a
-// usable device exists cannot be known without opening it, and on macOS
-// opening it is what raises the permission prompt. A missing or refused device
-// surfaces as an error from Record, where an app can report it.
-func Audio() shell.Audio { return deviceAudio{} }
+// Non-nil even on a machine with no output device: whether one exists cannot
+// be known without opening it, so a missing device surfaces as an error from
+// Play, where an app can report it.
+func Speakers() shell.Speakers { return deviceSpeakers{} }
 
-type deviceAudio struct{}
-
-// Authorize reports granted without asking, the same way desktopMic does and
-// for the same reason: none of the three desktops has a permission API that
-// can be queried ahead of the attempt. Record is what finds out.
-func (deviceAudio) Authorize(cb func(shell.Permission)) {
-	if cb != nil {
-		cb(shell.PermissionGranted)
-	}
-}
+type deviceSpeakers struct{}
 
 // --- recording ---------------------------------------------------------------
 
 const recordRate = 44100
 
-func (deviceAudio) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+func (deviceMic) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
 	if done == nil {
 		return
 	}
@@ -223,7 +213,7 @@ func outputContext() (*audio.Context, error) {
 	return outCtx, outErr
 }
 
-func (deviceAudio) Play(clip shell.Clip, done func(shell.Playback, error)) {
+func (deviceSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
 	if done == nil {
 		return
 	}

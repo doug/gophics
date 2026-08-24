@@ -16,6 +16,9 @@ import (
 // run raises the permission prompt, which no unattended run can answer. Set
 // GOPHICS_AUDIO_HW=1 to include it.
 //
+// It exercises both devices, because a recording that cannot be played back
+// is only half a check.
+//
 // It exists because everything between the device and the Clip is FFI and
 // pointer arithmetic, and the failure modes all produce a well-formed result:
 // a clip of exactly the right length full of silence, a player that reports
@@ -24,11 +27,12 @@ func TestHardwareRecordAndPlay(t *testing.T) {
 	if os.Getenv("GOPHICS_AUDIO_HW") == "" {
 		t.Skip("set GOPHICS_AUDIO_HW=1 to run against real audio hardware")
 	}
-	a := deviceAudio{}
+	mic := deviceMic{}
+	spk := deviceSpeakers{}
 
 	var rec shell.Recorder
 	var err error
-	a.Record(shell.RecordOptions{}, func(r shell.Recorder, e error) { rec, err = r, e })
+	mic.Record(shell.RecordOptions{}, func(r shell.Recorder, e error) { rec, err = r, e })
 	if err != nil {
 		t.Fatalf("Record: %v", err)
 	}
@@ -66,7 +70,7 @@ func TestHardwareRecordAndPlay(t *testing.T) {
 	}
 
 	var pb shell.Playback
-	a.Play(clip, func(p shell.Playback, e error) { pb, err = p, e })
+	spk.Play(clip, func(p shell.Playback, e error) { pb, err = p, e })
 	if err != nil {
 		t.Fatalf("Play: %v", err)
 	}

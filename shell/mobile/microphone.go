@@ -10,9 +10,9 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
-// The Bridge opts into live capture by implementing shell.LiveMediaWindow;
+// The Bridge opts into audio input by implementing shell.MicrophoneWindow;
 // this is the compile-time check that it still does.
-var _ shell.LiveMediaWindow = (*Bridge)(nil)
+var _ shell.MicrophoneWindow = (*Bridge)(nil)
 
 // MonitorHost is implemented by the native host (Android/iOS) and registered
 // via Bridge.SetMonitorHost. It is deliberately separate from MediaHost, the
@@ -52,30 +52,46 @@ func (b *Bridge) SetMonitorHost(h MonitorHost) {
 	b.monHost = h
 }
 
-// Microphone returns live input monitoring, or nil until a MonitorHost is set.
+// Microphone returns audio input, or nil until a host that can provide it is
+// set.
+//
+// The two halves arrive over different hosts — Listen over MonitorHost, Record
+// over MediaHost — and a host may register one without the other. One device
+// is one capability, so this is non-nil when either is present and the half
+// with no host reports an error when called: an app that can record should not
+// lose recording because nothing implements monitoring.
 func (b *Bridge) Microphone() shell.Microphone {
 	b.monMu.Lock()
-	defer b.monMu.Unlock()
-	if b.monHost == nil {
+	mon := b.monHost
+	b.monMu.Unlock()
+	if mon == nil && b.media.host == nil {
 		return nil
 	}
-	return &mobileMicrophone{b: b}
+	return &mobileMicrophone{b: b, mobileRecording: mobileRecording{m: b.media}}
 }
 
-type mobileMicrophone struct{ b *Bridge }
+type mobileMicrophone struct {
+	b *Bridge
+	mobileRecording
+}
 
 func (m *mobileMicrophone) Authorize(cb func(shell.Permission)) {
 	b := m.b
 	b.monMu.Lock()
 	host := b.monHost
 	b.monMu.Unlock()
-	if host == nil {
-		cb(shell.PermissionDenied)
-		return
-	}
 	id := b.media.newReq()
 	b.media.perm[id] = cb
-	host.AuthorizeMic(id)
+	switch {
+	case host != nil:
+		host.AuthorizeMic(id)
+	case b.media.host != nil:
+		// Same permission, either route: whichever host is registered can ask.
+		b.media.host.AuthorizeMic(id)
+	default:
+		delete(b.media.perm, id)
+		cb(shell.PermissionDenied)
+	}
 }
 
 func (m *mobileMicrophone) Listen(done func(shell.Monitor, error)) {

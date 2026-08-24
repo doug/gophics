@@ -20,6 +20,12 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.BatteryWindow); ok {
 		o.Battery = shell.PostedBattery(x.Battery(), o.Post)
 	}
+	if x, ok := w.(shell.CameraPreviewWindow); ok {
+		o.CameraPreview = shell.PostedCameraPreview(x.CameraPreview(), o.Post)
+	}
+	if x, ok := w.(shell.CameraWindow); ok {
+		o.Camera = shell.PostedCamera(x.Camera(), o.Post)
+	}
 	if x, ok := w.(shell.ConnectivityWindow); ok {
 		o.Connectivity = shell.PostedConnectivity(x.Connectivity(), o.Post)
 	}
@@ -41,16 +47,11 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.LinksWindow); ok {
 		o.Links = shell.PostedLinks(x.Links(), o.Post)
 	}
-	if x, ok := w.(shell.LiveMediaWindow); ok {
-		o.CameraPreview = shell.PostedCameraPreview(x.CameraPreview(), o.Post)
-		o.Microphone = shell.PostedMicrophone(x.Microphone(), o.Post)
-	}
-	if x, ok := w.(shell.MediaWindow); ok {
-		o.Audio = shell.PostedAudio(x.Audio(), o.Post)
-		o.Camera = shell.PostedCamera(x.Camera(), o.Post)
-	}
 	if x, ok := w.(shell.MenuWindow); ok {
 		o.Menus = shell.PostedMenus(x.Menus(), o.Post)
+	}
+	if x, ok := w.(shell.MicrophoneWindow); ok {
+		o.Microphone = shell.PostedMicrophone(x.Microphone(), o.Post)
 	}
 	if x, ok := w.(shell.NotifyWindow); ok {
 		o.Notifier = shell.PostedNotifier(x.Notifier(), o.Post)
@@ -66,6 +67,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	}
 	if x, ok := w.(shell.SocketWindow); ok {
 		o.Socket = shell.PostedSocket(x.Socket(), o.Post)
+	}
+	if x, ok := w.(shell.SpeakersWindow); ok {
+		o.Speakers = shell.PostedSpeakers(x.Speakers(), o.Post)
 	}
 	if x, ok := w.(shell.StorageWindow); ok {
 		o.SecureStorage = x.SecureStorage()

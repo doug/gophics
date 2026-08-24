@@ -256,7 +256,7 @@ type window struct {
 	renderer    shell.RendererMode // resolved backend for this run
 	pres        *presenter         // runtime-selected presentation (CPU blit or GPU surface)
 	cam         *webCamera         // lazily created still-capture capability
-	aud         *webAudio          // lazily created audio capability
+	spk         *webSpeakers       // lazily created audio output capability
 
 	logical geom.Size
 	// rect is the canvas's on-screen box, cached; see refreshRect.

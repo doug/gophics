@@ -108,7 +108,7 @@ func TestDocCommentsDoNotCloseAJavadocBlock(t *testing.T) {
 // should not"; if the answer is "a host should call this", the fix is the
 // signature, not the list.
 var goSideOnly = map[string]bool{
-	"Audio": true, "Battery": true, "Camera": true, "CameraPreview": true,
+	"Speakers": true, "Battery": true, "Camera": true, "CameraPreview": true,
 	"Gamepads": true, "Geolocation": true, "Haptic": true, "Lifecycle": true,
 	"Links": true, "Microphone": true, "Socket": true,
 }

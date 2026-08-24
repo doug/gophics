@@ -50,7 +50,7 @@ func TestBridgeMediaCapabilities(t *testing.T) {
 	b := mobile.NewBridge(h)
 
 	// No host yet → capabilities are nil (app degrades to text-only).
-	if b.Camera() != nil || b.Audio() != nil {
+	if b.Camera() != nil || b.Speakers() != nil {
 		t.Fatal("capabilities must be nil before a MediaHost is registered")
 	}
 
@@ -68,8 +68,8 @@ func TestBridgeMediaCapabilities(t *testing.T) {
 	host := &fakeHost{b: b, photo: pbuf.Bytes(), pcm: raw, rate: 48000}
 	b.SetMediaHost(host)
 
-	cam, aud := b.Camera(), b.Audio()
-	if cam == nil || aud == nil {
+	cam, mic, spk := b.Camera(), b.Microphone(), b.Speakers()
+	if cam == nil || mic == nil || spk == nil {
 		t.Fatal("capabilities must be present after SetMediaHost")
 	}
 
@@ -86,9 +86,9 @@ func TestBridgeMediaCapabilities(t *testing.T) {
 		t.Fatalf("decoded photo bounds = %v, want 4x3", b)
 	}
 
-	// Audio: record → live level → stop yields a portable WAV clip.
+	// Microphone: record → live level → stop yields a portable WAV clip.
 	var rec shell.Recorder
-	aud.Record(shell.RecordOptions{}, func(r shell.Recorder, err error) { rec = r })
+	mic.Record(shell.RecordOptions{}, func(r shell.Recorder, err error) { rec = r })
 	if rec == nil {
 		t.Fatal("Record did not deliver a recorder")
 	}
@@ -119,7 +119,7 @@ func TestBridgeMediaCapabilities(t *testing.T) {
 
 	// Playback: the recorded WAV is what gets played; position + end propagate.
 	var pb shell.Playback
-	aud.Play(clip, func(p shell.Playback, err error) { pb = p })
+	spk.Play(clip, func(p shell.Playback, err error) { pb = p })
 	if pb == nil || !pb.Playing() {
 		t.Fatal("Play did not start")
 	}

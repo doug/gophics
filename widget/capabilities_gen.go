@@ -10,7 +10,6 @@ import "github.com/doug/gophics/shell"
 // Regenerate with: go generate ./...
 type Capabilities struct {
 	Accessibility shell.Accessibility
-	Audio         shell.Audio
 	Battery       shell.Battery
 	Camera        shell.Camera
 	CameraPreview shell.CameraPreview
@@ -29,6 +28,7 @@ type Capabilities struct {
 	SecureStorage shell.SecureStorage
 	Share         shell.Share
 	Socket        shell.Socket
+	Speakers      shell.Speakers
 	TextInput     shell.TextInput
 	Tray          shell.Tray
 	WebView       shell.WebView
@@ -38,10 +38,6 @@ type Capabilities struct {
 // Accessibility returns the platform Accessibility capability (shell.Accessibility), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Accessibility() shell.Accessibility { return c.el.owner.Accessibility }
-
-// Audio returns the platform Audio capability (shell.Audio), or nil when the running
-// platform can't provide it. See shell/*.go for its contract.
-func (c Ctx) Audio() shell.Audio { return c.el.owner.Audio }
 
 // Battery returns the platform Battery capability (shell.Battery), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
@@ -114,6 +110,10 @@ func (c Ctx) Share() shell.Share { return c.el.owner.Share }
 // Socket returns the platform Socket capability (shell.Socket), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Socket() shell.Socket { return c.el.owner.Socket }
+
+// Speakers returns the platform Speakers capability (shell.Speakers), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Speakers() shell.Speakers { return c.el.owner.Speakers }
 
 // TextInput returns the platform TextInput capability (shell.TextInput), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

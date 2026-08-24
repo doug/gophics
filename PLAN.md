@@ -537,7 +537,6 @@ closing next, and why.
 | Capability | desktop | web | mobile | terminal |
 |---|---|---|---|---|
 | `Accessibility` | yes | yes | — | — |
-| `Audio` | yes | yes | yes | yes |
 | `Battery` | yes | yes | — | — |
 | `Camera` | yes | yes | yes | — |
 | `CameraPreview` | yes | yes | yes | — |
@@ -556,6 +555,7 @@ closing next, and why.
 | `SecureStorage` | — | yes | — | — |
 | `Share` | — | yes | — | — |
 | `Socket` | yes | yes | yes | — |
+| `Speakers` | yes | yes | yes | yes |
 | `TextInput` | — | yes | — | — |
 | `Tray` | yes | — | — | — |
 | `WebView` | — | yes | — | — |

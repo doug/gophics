@@ -52,8 +52,14 @@ type ManifestPermission struct {
 // and the test that guards this table cannot tell those apart either.
 var capabilityManifestPermissions = map[string]ManifestPermission{
 	"Accessibility": {},
-	"Audio":         {}, // playback only; recording is Microphone
-	"Battery":       {},
+	// Output only, and now that is true. While recording lived on Audio this
+	// entry was a live bug: an app calling Audio.Record without ever touching
+	// Microphone got no RECORD_AUDIO and no NSMicrophoneUsageDescription, so
+	// the capture was denied on Android and the process terminated on iOS.
+	// The comment here already described the intended model; the interface was
+	// what disagreed with it.
+	"Speakers": {},
+	"Battery":  {},
 	"Camera": {
 		Android:         []string{"android.permission.CAMERA"},
 		IOSKeys:         []string{"NSCameraUsageDescription"},

@@ -17,7 +17,9 @@ import (
 // device — the ring buffer, the level, the FFT bands — is the shared analyzer
 // in internal/mic, so a desktop monitor and an Android one answer identically.
 
-// Microphone returns live input monitoring.
+// Microphone returns audio input: Listen for a live monitor, Record for a clip.
+//
+// Record lives in audio.go, beside the playback it shares its encoding with.
 //
 // It is non-nil even on a machine with no input device, because whether one
 // exists cannot be known without opening it — and on macOS, opening it is what

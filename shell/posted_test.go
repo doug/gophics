@@ -109,15 +109,18 @@ func TestPostedNilSafety(t *testing.T) {
 	}
 }
 
-// fakeAudio delivers a Recorder synchronously; the Recorder's Stop callback is
+// fakeMic delivers a Recorder synchronously; the Recorder's Stop callback is
 // also synchronous. The posted wrapper must marshal both hops.
-type fakeAudio struct{}
+type fakeMic struct{}
 
-func (fakeAudio) Authorize(cb func(Permission)) { cb(PermissionGranted) }
-func (fakeAudio) Record(_ RecordOptions, cb func(Recorder, error)) {
+func (fakeMic) Authorize(cb func(Permission)) { cb(PermissionGranted) }
+
+// Listen is unused here; Record is what this test wraps.
+func (fakeMic) Listen(cb func(Monitor, error)) { cb(nil, nil) }
+func (fakeMic) Record(_ RecordOptions, cb func(Recorder, error)) {
 	cb(fakeRecorder{}, nil)
 }
-func (fakeAudio) Play(_ Clip, cb func(Playback, error)) { cb(nil, errors.New("no audio")) }
+func (fakeMic) Play(_ Clip, cb func(Playback, error)) { cb(nil, errors.New("no audio")) }
 
 type fakeRecorder struct{}
 
@@ -128,9 +131,9 @@ func (fakeRecorder) Stop(cb func(Clip, error)) {
 }
 func (fakeRecorder) Cancel() {}
 
-func TestPostedAudioWrapsRecorderRecursively(t *testing.T) {
+func TestPostedMicrophoneWrapsRecorderRecursively(t *testing.T) {
 	d := &deferredPost{}
-	a := PostedAudio(fakeAudio{}, d.post)
+	a := PostedMicrophone(fakeMic{}, d.post)
 
 	var rec Recorder
 	a.Record(RecordOptions{}, func(r Recorder, err error) { rec = r })
