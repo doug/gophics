@@ -7,6 +7,7 @@ import (
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/widget"
 )
@@ -83,5 +84,45 @@ func TestADragWinnerIsStillToldItsPressEnded(t *testing.T) {
 	}
 	if ended != 1 {
 		t.Errorf("OnPressEnd fired %d times after a drag, want exactly 1", ended)
+	}
+}
+
+// The gallery's arrangement: a reorderable list inside a scrolling page.
+//
+// A row drags along the same axis the page scrolls, so the two compete for
+// every movement. The row is the deeper candidate and has to win, or a list
+// cannot be reordered at all on a page that scrolls — which is every page it
+// is likely to appear on.
+func TestARowReordersInsideAScrollingPage(t *testing.T) {
+	const rowH = 60
+	var gotFrom, gotTo = -1, -1
+	list := widget.Reorderable{
+		Count:      5,
+		ItemExtent: rowH,
+		Build: func(i int) widget.Widget {
+			return widget.Sized{H: rowH, Child: widget.Decorated{Color: paint.RGB(0.5, 0.5, 0.5)}}
+		},
+		OnReorder: func(from, to int) { gotFrom, gotTo = from, to },
+	}
+	root := widget.Scroll{Axis: layout.Vertical, Child: widget.Column(
+		widget.Sized{H: rowH * 5, Child: list},
+		widget.Sized{H: 600},
+	)}
+	h, err := app.NewHeadless(root, app.Config{
+		Size: geom.Size{W: 300, H: 400}, Background: paint.RGB(1, 1, 1), Font: goregular.TTF,
+	}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+
+	h.TouchDrag(geom.Pt{X: 150, Y: 30}, geom.Pt{X: 150, Y: 150})
+	h.Render()
+
+	if gotFrom < 0 {
+		t.Fatal("inside a scroll, dragging a row reported no reorder at all")
+	}
+	if gotTo == 0 {
+		t.Errorf("row landed back at 0; the scroll took the gesture")
 	}
 }

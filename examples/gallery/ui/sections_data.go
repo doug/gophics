@@ -195,10 +195,17 @@ func (s *reorderDemo) Build(ctx widget.Ctx) widget.Widget {
 			// that renders taller overflows its own list and drops in the
 			// wrong place.
 			Build: func(i int) widget.Widget {
+				// The row's height is fixed at ItemExtent, so its padding has
+				// to fit inside it. Card already pads by 12, and adding
+				// another 8 on top left the content with less height than
+				// nothing (44 - 6 - 24 - 16 = -2): the handle and the label
+				// spilled out of the bottom of the card instead of sitting in
+				// the middle of it. One padding, and Align centres what is
+				// left over.
 				return widget.Sized{H: rowH, Child: widget.Padding{
 					Insets: geom.Insets{Bottom: 6},
-					Child: theme.Card{Child: widget.Padding{
-						Insets: geom.Insets{Top: 8, Bottom: 8, Left: 12, Right: 12},
+					Child: theme.Card{Pad: 8, Child: widget.Align{
+						X: 0, Y: 0.5, Directional: true,
 						Child: widget.Row(
 							widget.Text{S: "=", Font: theme.FontBold, Size: th.Type.Body, Color: th.Muted},
 							widget.Sized{W: 10},

@@ -180,6 +180,35 @@ func (h *Headless) DragTo(from, to geom.Pt) {
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
 }
 
+// TouchDrag is Drag from a touch device rather than a mouse.
+//
+// The distinction is not cosmetic: gesture arbitration asks whether a gesture
+// came from touch, and handlers answer differently — a drag that selects text
+// on a mouse scrolls on a finger, and a scroller claims a drag it would leave
+// to the wheel. A harness that only ever sends mouse events cannot see any of
+// that, which is how touch-only faults reach a device untested.
+func (h *Headless) TouchDrag(from, to geom.Pt) {
+	h.TouchPress(from)
+	h.TouchMove(to)
+	h.TouchRelease(to)
+}
+
+// TouchPress dispatches a touch-sourced pointer-down at p without releasing.
+func (h *Headless) TouchPress(p geom.Pt) {
+	h.layoutForInput()
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p, Source: shell.SourceTouch})
+}
+
+// TouchMove dispatches a touch-sourced move to p.
+func (h *Headless) TouchMove(p geom.Pt) {
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: shell.SourceTouch})
+}
+
+// TouchRelease dispatches a touch-sourced pointer-up at p.
+func (h *Headless) TouchRelease(p geom.Pt) {
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p, Source: shell.SourceTouch})
+}
+
 // Owner returns the widget Owner: the tree's shared services — state
 // snapshot/restore (hot-restart tests), clipboard, semantics. For tests that
 // assert past the input/render surface.
