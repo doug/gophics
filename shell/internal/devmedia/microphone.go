@@ -32,15 +32,20 @@ type deviceMic struct{}
 
 // Authorize is a no-op that reports granted.
 //
-// None of the three desktop platforms has a permission API that can be asked
-// ahead of time the way getUserMedia or Android's runtime permissions can be.
-// macOS prompts on first capture (and needs NSMicrophoneUsageDescription in a
-// bundled app's Info.plist); Linux and Windows gate at the OS settings level.
-// So the honest answer is "try it and see", and Listen is what actually finds
-// out.
+// macOS can answer this — it is the same AVCaptureDevice query the camera
+// uses, with the media type changed — so it is asked, in permission_darwin.go.
+// Linux and Windows have no per-application microphone permission to query;
+// both gate at the OS settings level and a refusal surfaces as a device that
+// will not open, so there Granted means "try it and see" and Listen is what
+// finds out.
+//
+// It still does not prompt. On macOS the prompt is raised by opening the
+// device, so PermissionPrompt means asking will happen on Listen rather than
+// now — reporting it separately is what lets an app distinguish a refusal from
+// a silent room, which sound alone cannot.
 func (deviceMic) Authorize(cb func(shell.Permission)) {
 	if cb != nil {
-		cb(shell.PermissionGranted)
+		cb(micPermission())
 	}
 }
 
