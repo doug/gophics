@@ -30,6 +30,32 @@ import (
 // The window opts into the preview and the microphone by implementing their
 // Window interfaces;
 // this is the compile-time check that it still does.
+// Verifying this path needs a browser, and the compiler will not help.
+//
+// syscall/js calls are opaque to it: moving a getUserMedia call — as splitting
+// the media capabilities by device did — compiles cleanly for js/wasm, passes
+// every Go test, and can still be broken. Headless Chrome supplies a synthetic
+// camera and microphone for exactly this:
+//
+//	go run ./cmd/gophics build -p web ./examples/mirror
+//	(cd build/web && python3 -m http.server 8731) &
+//	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+//	  --headless=new --user-data-dir=/tmp/p --remote-debugging-port=9222 \
+//	  --use-fake-ui-for-media-stream --use-fake-device-for-media-stream \
+//	  http://localhost:8731/
+//
+// Wrap navigator.mediaDevices.getUserMedia in the page before the wasm loads,
+// record each request and its outcome into document.title, and read that back
+// from http://127.0.0.1:9222/json — which needs no WebSocket client. Use real
+// time, not --virtual-time-budget: the media promises never resolve under it.
+//
+// Two results are worth knowing in advance. An app that waits for a click will
+// need a synthetic PointerEvent dispatched at its start control. And sampling
+// the canvas reads back empty while the GPU path is in use, which is a limit
+// of the sampling and not a black frame — run with Renderer: RendererCPU to
+// see the pixels. Checked this way after the split: video and audio each
+// yielded a track, and the canvas came back 100% non-black.
+
 var _ shell.CameraPreviewWindow = (*window)(nil)
 var _ shell.MicrophoneWindow = (*window)(nil)
 
