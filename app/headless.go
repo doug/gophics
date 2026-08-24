@@ -5,6 +5,7 @@ import (
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/scene"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
@@ -213,6 +214,13 @@ func (h *Headless) TouchRelease(p geom.Pt) {
 // snapshot/restore (hot-restart tests), clipboard, semantics. For tests that
 // assert past the input/render surface.
 func (h *Headless) Owner() *widget.Owner { return h.core.Owner }
+
+// Scene returns the display list recorded for the last frame, for tests that
+// need to assert on what was drawn rather than on what it looked like.
+//
+// It is prev, not cur: recordScene swaps the two once it has diffed them, so
+// the frame just recorded is the one now called previous.
+func (h *Headless) Scene() *scene.List { return h.core.prev }
 
 // Semantics returns the flattened accessibility tree for assertions.
 func (h *Headless) Semantics() []layout.SemNode { return h.core.Semantics() }

@@ -279,6 +279,17 @@ func (t themedText) Build(ctx widget.Ctx) widget.Widget {
 type Card struct {
 	Child widget.Widget
 	Pad   float32 // 0 → 12
+	// Solid draws the card on the near-opaque Elevated surface with no
+	// backdrop blur.
+	//
+	// A backdrop blur costs whatever is behind it, drawn again, so a frosted
+	// card over expensive content pays for that content twice. Over a page of
+	// charts that is the difference between a 4ms frame and a 16ms one, with
+	// the worst frames near 43ms — visible as stutter while scrolling. Set
+	// this for cards whose contents need a steady background anyway: a chart's
+	// grid lines and axis labels are easier to read over one, and at 0.92
+	// alpha the surface still belongs to the same family.
+	Solid bool
 }
 
 func (c Card) Build(ctx widget.Ctx) widget.Widget {
@@ -287,8 +298,12 @@ func (c Card) Build(ctx widget.Ctx) widget.Widget {
 	if pad == 0 {
 		pad = 12
 	}
+	color, blur := th.Surface, th.Blur
+	if c.Solid {
+		color, blur = th.Elevated, 0
+	}
 	return widget.Decorated{
-		Color: th.Surface, Radius: th.Radius, Blur: th.Blur,
+		Color: color, Radius: th.Radius, Blur: blur,
 		Child: widget.Padding{All: pad, Child: c.Child},
 	}
 }

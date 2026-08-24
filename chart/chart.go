@@ -13,6 +13,14 @@ import (
 
 // Chart is a widget that renders a set of marks over shared axes. Scales are
 // inferred from the marks' data unless X/Y are set explicitly.
+//
+// Give a chart an opaque background. Grid lines, axis labels and thin strokes
+// all want a steady surface behind them, and there is a cost reason too: a
+// backdrop blur re-reads whatever is behind it, so frosting a card that sits
+// over a chart means drawing the chart again for every blur. On the gallery's
+// charts page that was the difference between a 3.9ms frame and a 16.5ms one,
+// with the worst frames near 43ms. theme.Card{Solid: true} is the ready-made
+// version of this.
 type Chart struct {
 	Marks   []Mark
 	X, Y    Scale // optional; inferred from the marks when nil

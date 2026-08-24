@@ -57,6 +57,22 @@ func (l *List) HasLayers() bool { return l.hasLayers }
 // Len returns the number of recorded commands.
 func (l *List) Len() int { return len(l.ops) }
 
+// BackdropBlurs is how many backdrop blurs this frame records.
+//
+// It is the one op whose cost is not its own: a blur re-reads everything drawn
+// behind it, so the price is the content underneath, paid again per blur. That
+// makes the count worth asserting on directly — a frame can grow one of these
+// without any visible change and lose several milliseconds to it.
+func (l *List) BackdropBlurs() int {
+	n := 0
+	for _, o := range l.ops {
+		if o.kind == opBackdropBlur {
+			n++
+		}
+	}
+	return n
+}
+
 // Replay draws the recorded commands onto c in order.
 func (l *List) Replay(c paint.Canvas) {
 	for i := range l.ops {

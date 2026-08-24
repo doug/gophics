@@ -90,7 +90,9 @@ func chartCard(th theme.Theme, title, subtitle string, height float32, c chart.C
 		widget.Sized{H: height, Child: c},
 	)
 	body.CrossAlign = layout.CrossStretch
-	return theme.Card{Child: body}
+	// Solid: a frosted card over a chart costs the whole chart drawn again,
+	// every frame, and a chart reads better over a steady background anyway.
+	return theme.Card{Solid: true, Child: body}
 }
 
 // activityCells builds a deterministic 10×5 grid of activity values (0..9) for
