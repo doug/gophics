@@ -192,6 +192,11 @@ func Open(o Options) (*Capture, error) {
 		return nil, err
 	}
 
+	// A camera another application holds still opens, still starts a session,
+	// and still delivers nothing — the same silence as a broken pipeline, and
+	// for a long time indistinguishable from one. AVCaptureDevice knows the
+	// difference, so ask it rather than leaving the caller to guess from an
+	// empty frame.
 	var errOut objc.ID
 	input := objc.Class("AVCaptureDeviceInput").Send("deviceInputWithDevice:error:",
 		objc.Obj(dev), objc.Obj(objc.ID(uintptr(unsafe.Pointer(&errOut)))))

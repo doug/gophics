@@ -12,6 +12,7 @@
 package camera
 
 import (
+	"errors"
 	"image"
 	"sync"
 )
@@ -95,3 +96,17 @@ func (f *frames) stop() bool {
 	f.stopped = true
 	return true
 }
+
+// ErrNoFrames reports a camera that opened and then produced nothing.
+//
+// It is its own error because it is the failure that looks like success. The
+// device is listed, the session starts, Open returns — and no frame ever
+// arrives, so an app that trusted Open shows a black rectangle forever with
+// nothing to tell the user about it.
+//
+// The causes are all environmental and, on macOS at least, none is
+// distinguishable from the others beforehand: a camera unplugged or handed to
+// a virtual machine still reports itself connected and not in use by another
+// application. That was this machine's state when this error was written, and
+// it is why the check is a timeout rather than a property.
+var ErrNoFrames = errors.New("camera: the camera opened but delivered no frames")

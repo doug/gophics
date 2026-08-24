@@ -62,7 +62,40 @@ func (deviceCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error)
 		done(nil, err)
 		return
 	}
+	// Wait for the first frame before reporting success.
+	//
+	// Opening proves almost nothing: a camera that has been unplugged or handed
+	// to a virtual machine still enumerates, still reports itself connected and
+	// not in use, and still starts a session — it simply never delivers. An app
+	// that trusted Open then shows a black rectangle forever with nothing to
+	// tell the user, which is exactly what this machine did once its only
+	// camera was passed through to a VM.
+	//
+	// The cost is one frame of latency on the path that works, in exchange for
+	// the guarantee that a Frames handed to an app has already produced one.
+	if !waitForFrame(c, firstFrameTimeout) {
+		c.Stop()
+		done(nil, camera.ErrNoFrames)
+		return
+	}
 	done(deviceFrames{c}, nil)
+}
+
+// firstFrameTimeout bounds that wait. Cameras take a moment to expose and
+// focus, and a cold USB device can take longer than a built-in one; three
+// seconds is well past either and still short enough to report rather than
+// hang.
+const firstFrameTimeout = 3 * time.Second
+
+func waitForFrame(c *camera.Capture, within time.Duration) bool {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if c.Frame() != nil {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return c.Frame() != nil
 }
 
 type deviceFrames struct{ c *camera.Capture }
