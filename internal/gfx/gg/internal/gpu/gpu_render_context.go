@@ -1154,7 +1154,6 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 
 // Flush dispatches all pending commands for this context via the render session.
 func (rc *GPURenderContext) Flush(target gg.GPURenderTarget) error { //nolint:cyclop,gocognit,gocyclo,funlen // sequential resource setup + group dispatch
-	text.NoteFrameStart()
 	// Resolve opacity/blend groups (PushLayer/PopLayer) to offscreen composites
 	// first (Skia saveLayer): each group is rendered to its own offscreen target
 	// via a child context and rewritten into a single textured-quad composite,
@@ -2074,9 +2073,6 @@ func (rc *GPURenderContext) syncGlyphMaskAtlases(batches []GlyphMaskBatch) error
 	if err := s.glyphMaskEngine.SyncAtlasTextures(s.device, s.queue); err != nil {
 		return err
 	}
-	// From here on, a glyph written into the atlas will not reach the GPU
-	// until the next frame's upload.
-	text.NoteSynced()
 
 	hasLCD := false
 	for i := range batches {

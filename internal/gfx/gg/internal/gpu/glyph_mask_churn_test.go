@@ -112,8 +112,7 @@ func TestGlyphMaskSurvivesAtlasChurn(t *testing.T) {
 		render(t, sb.String())
 	}
 	ref, ev, cmp := text.AtlasStats()
-	w, late, up := text.AtlasWriteStats()
-	t.Logf("after churn: ref=%d ev=%d cmp=%d w=%d late=%d up=%d", ref, ev, cmp, w, late, up)
+	t.Logf("after churn: ref=%d ev=%d cmp=%d uploads=%d", ref, ev, cmp, text.AtlasUploads())
 
 	after := render(t, subject)
 

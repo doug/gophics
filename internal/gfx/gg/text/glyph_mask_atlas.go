@@ -245,13 +245,6 @@ func (p *glyphMaskPage) copyMask(mask []byte, maskW, maskH, dstX, dstY int) {
 		copy(p.Data[dstOffset:dstOffset+maskW], mask[srcOffset:srcOffset+maskW])
 	}
 	p.dirty = true
-	atlasWrites.Add(1)
-	if atlasSynced.Load() {
-		// Written after this frame's upload: the GPU texture is now behind the
-		// CPU atlas, and anything drawing this glyph samples whatever the page
-		// held before.
-		atlasLateWrites.Add(1)
-	}
 }
 
 // glyphMaskShelfAllocator is a shelf-based allocator for variable-sized glyph masks.
@@ -644,32 +637,13 @@ var (
 	atlasRefusals    atomic.Uint64
 	atlasEvictions   atomic.Uint64
 	atlasCompactions atomic.Uint64
-	atlasWrites      atomic.Uint64
-	atlasLateWrites  atomic.Uint64
 	atlasUploads     atomic.Uint64
-	atlasSynced      atomic.Bool
 	atlasNilViews    atomic.Uint64
 )
 
-// NoteUpload records that a page was uploaded to the GPU, and NoteSynced that
-// the frame's uploads are finished. Called by the GPU engine.
-//
-// The pair exists to catch one specific thing: a glyph written into the atlas
-// after the frame already uploaded its pages. The CPU atlas would hold the
-// right pixels and the GPU texture would not, which draws as garbage without
-// any allocation ever failing — the state the counters left us in.
+// NoteUpload records that a page was uploaded to the GPU. Called by the GPU
+// engine.
 func NoteUpload() { atlasUploads.Add(1) }
-func NoteSynced() { atlasSynced.Store(true) }
-
-// NoteFrameStart marks the beginning of a frame's dispatch.
-//
-// It is the other half of NoteSynced, and getting it wrong made the late-write
-// counter useless: glyphs are laid out *between* frames, before dispatch
-// begins, so a flag left set from the previous frame's upload counted every
-// ordinary write as late. Cleared here, "late" means what it should — written
-// after this frame uploaded, and therefore drawn from a texture that does not
-// contain it.
-func NoteFrameStart() { atlasSynced.Store(false) }
 
 // lastAtlas is the most recently created atlas, so a diagnostic can dump what
 // the CPU side actually holds without threading a reference through four
@@ -720,11 +694,8 @@ func AtlasStats() (refusals, evictions, compactions uint64) {
 	return atlasRefusals.Load(), atlasEvictions.Load(), atlasCompactions.Load()
 }
 
-// AtlasWriteStats reports glyph writes, writes that happened after the frame
-// had already uploaded, and page uploads.
-func AtlasWriteStats() (writes, late, uploads uint64) {
-	return atlasWrites.Load(), atlasLateWrites.Load(), atlasUploads.Load()
-}
+// AtlasUploads counts glyph atlas pages uploaded to the GPU.
+func AtlasUploads() uint64 { return atlasUploads.Load() }
 
 // AtlasNilViews counts glyph batches drawn without their atlas page bound.
 func AtlasNilViews() uint64 { return atlasNilViews.Load() }

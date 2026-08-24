@@ -7,8 +7,8 @@
 package gallerymobile
 
 import (
-	"fmt"
 	"os"
+	"strings"
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/examples/gallery/ui"
@@ -29,27 +29,15 @@ func Start() (*mobile.Bridge, error) {
 	return mobile.NewBridge(h), nil
 }
 
-// AtlasStats reports the glyph atlas counters as a line the host can log.
+// CaptureGPU writes one GPU-rendered frame to path as a PNG, and the glyph
+// atlas page beside it.
 //
-// Temporary, for chasing a rendering fault that only appears on a real device.
-// It exists because Go's own log output does not reach the device syslog —
-// gomobile writes it through os_log at a level the stream drops — while NSLog
-// from the host does, so the shortest path to seeing these numbers off-device
-// is to hand them to Swift and let it do the logging.
-func AtlasStats() string {
-	refusals, evictions, compactions := gtext.AtlasStats()
-	writes, late, uploads := gtext.AtlasWriteStats()
-	return fmt.Sprintf("ref=%d ev=%d cmp=%d w=%d late=%d up=%d nilview=%d",
-		refusals, evictions, compactions, writes, late, uploads, gtext.AtlasNilViews())
-}
-
-// CaptureGPU writes one GPU-rendered frame to path as a PNG.
-//
-// Temporary, for a rendering fault that only a device shows. The host calls
-// this with somewhere inside the app container; devicectl copies it off.
-// Rendering rather than screenshotting is the point: this frame comes off the
+// For diagnosing a rendering fault that only a device shows. The host calls it
+// with a path inside the app container and devicectl copies the files off.
+// Rendering rather than screenshotting is the point: the frame comes off the
 // same device, canvas and glyph atlas the screen does, so a fault in that
-// atlas is in the file.
+// atlas is in the file — and the atlas dump beside it says whether the atlas
+// or the sampling is at fault. That pair is what found the page-index bug.
 func CaptureGPU(bridge *mobile.Bridge, path string) string {
 	if bridge == nil {
 		return "no bridge"
@@ -60,6 +48,12 @@ func CaptureGPU(bridge *mobile.Bridge, path string) string {
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return err.Error()
+	}
+	// The atlas beside the frame. If the atlas is right and the frame is not,
+	// the GPU texture is stale; if the atlas is wrong, the fault is upstream of
+	// the GPU altogether. Nothing else separates those two.
+	if page := gtext.DumpAtlasPage(0); len(page) > 0 {
+		_ = os.WriteFile(strings.TrimSuffix(path, ".png")+"_atlas.png", page, 0o644)
 	}
 	return ""
 }

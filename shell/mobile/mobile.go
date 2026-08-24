@@ -44,12 +44,12 @@ type Bridge struct {
 	opened       []string           // OpenURL requests for the host to perform
 	haptics      []shell.HapticKind // pending haptic events for the host to play
 	clip         string
-	media        *mediaBridge // shared one-shot request plumbing (see media.go)
-	gpu          *mobileGPU   // GPU surface the host renders to (see gpu.go)
-	dispHandle   int64        // retained native handles so Resize can full-rebuild
-	winHandle    int64        // the GPU surface on an orientation change (see Resize)
-	snapshotting bool         // force a CPU offscreen frame (Snapshot)
-	capturing    *captureTarget
+	media        *mediaBridge     // shared one-shot request plumbing (see media.go)
+	gpu          *mobileGPU       // GPU surface the host renders to (see gpu.go)
+	dispHandle   int64            // retained native handles so Resize can full-rebuild
+	winHandle    int64            // the GPU surface on an orientation change (see Resize)
+	snapshotting bool             // force a CPU offscreen frame (Snapshot)
+	capturing    gpuCaptureTarget // non-nil only while CaptureGPU is running
 
 	// Lifecycle state, written from the host UI thread via SetAppState and
 	// read by the widget tree; see lifecycle.go.
@@ -422,3 +422,8 @@ func (f *frame) Target() shell.Target {
 	}
 	return shell.PixelTarget{Put: func(img *image.RGBA) { f.b.frame = img }}
 }
+
+// gpuCaptureTarget is the offscreen render target CaptureGPU installs. It is
+// an interface so the field can exist on every platform while the
+// implementation stays behind the build tag that has a GPU.
+type gpuCaptureTarget interface{ shell.Target }

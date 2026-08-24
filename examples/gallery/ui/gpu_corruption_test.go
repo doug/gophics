@@ -147,9 +147,8 @@ func TestGalleryTextSurvivesNavigation(t *testing.T) {
 	save("99_subject_after", after)
 
 	ref, ev, cmp := gtext.AtlasStats()
-	w, late, up := gtext.AtlasWriteStats()
-	t.Logf("%d sections x %d rounds — atlas ref=%d ev=%d cmp=%d w=%d late=%d up=%d nilview=%d",
-		len(sections), rounds, ref, ev, cmp, w, late, up, gtext.AtlasNilViews())
+	t.Logf("%d sections x %d rounds — atlas ref=%d ev=%d cmp=%d uploads=%d nilview=%d",
+		len(sections), rounds, ref, ev, cmp, gtext.AtlasUploads(), gtext.AtlasNilViews())
 
 	diff := 0
 	for i := range before.Pix {
