@@ -127,3 +127,39 @@ func TestAtlasWillNotEvictAGlyphInUseThisFrame(t *testing.T) {
 		}
 	}
 }
+
+// The subpixel path must evict too.
+//
+// Put and PutLCD each had their own copy of the allocation, and only Put was
+// fixed when a full atlas turned out to refuse glyphs forever. Grayscale text
+// healed; subpixel text went on corrupting, which is why the fault came back
+// smaller instead of going away. They share one allocator now, and this is
+// the test that would have caught the half-fix.
+func TestLCDAtlasEvictsWhenOutOfSpace(t *testing.T) {
+	cfg := DefaultGlyphMaskAtlasConfig()
+	cfg.MaxAtlases = 1
+	cfg.Size = 64
+	a, err := NewGlyphMaskAtlas(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// LCD masks carry three subpixels per pixel, so the atlas footprint is
+	// three times the logical width — it fills sooner, not later.
+	const logicalW, maskH = 8, 12
+	rgb := make([]byte, logicalW*3*maskH)
+	for i := range rgb {
+		rgb[i] = 0xff
+	}
+
+	for i := 0; i < 64; i++ {
+		a.AdvanceFrame()
+		a.AdvanceFrame()
+		a.AdvanceFrame()
+		k := GlyphMaskKey{GlyphID: uint16(i), SizeQ4: 192}
+		if _, err := a.PutLCD(k, rgb, logicalW, maskH, 0, 0); err != nil {
+			t.Fatalf("LCD glyph %d refused: %v — a full atlas must evict for the "+
+				"subpixel path exactly as it does for the grayscale one", i, err)
+		}
+	}
+}

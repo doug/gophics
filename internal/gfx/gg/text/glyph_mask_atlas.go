@@ -475,40 +475,9 @@ func (a *GlyphMaskAtlas) Put(key GlyphMaskKey, mask []byte, maskW, maskH int, be
 		}
 	}
 
-	// Find or create a page with space, evicting until one exists.
-	//
-	// The loop above evicts on entry count. Nothing evicted on space, so an
-	// atlas that filled spatially before reaching MaxEntries simply refused
-	// every glyph from then on — permanently, because nothing ever freed a
-	// page again. That is the failure a phone showed: scrolling brings new
-	// glyphs, the atlas fills, and from that moment text is drawn from
-	// whatever the caller does with the error. It never recovers, because the
-	// atlas never recovers.
-	//
-	// Bounded by the entry count rather than by attempts: each pass evicts the
-	// least recently used entry, and a page returns to the free list once its
-	// last entry goes, so this terminates either with space or with nothing
-	// left to give up.
-	var page *glyphMaskPage
-	var x, y int
-	for {
-		var err error
-		page, err = a.findOrCreatePage(maskW, maskH)
-		if err == nil {
-			var ok bool
-			if x, y, ok = page.allocator.Allocate(maskW, maskH); ok {
-				break
-			}
-		}
-		if !a.evictLRUUnusedThisFrame() {
-			// Either the glyph is larger than an empty page, or every entry
-			// is in use by the frame being drawn. Refusing is correct in both
-			// cases: one glyph missing this frame beats corrupting the ones
-			// already recorded.
-			return GlyphMaskRegion{}, fmt.Errorf(
-				"text: no room for a %dx%d glyph mask in a %dpx atlas page",
-				maskW, maskH, a.config.Size)
-		}
+	page, x, y, err := a.allocate(maskW, maskH)
+	if err != nil {
+		return GlyphMaskRegion{}, err
 	}
 
 	// Copy mask data into the page
@@ -573,18 +542,14 @@ func (a *GlyphMaskAtlas) PutLCD(key GlyphMaskKey, rgbMask []byte, logicalW, mask
 
 	// Evict LRU entries if at capacity.
 	for len(a.lookup) >= a.config.MaxEntries {
-		a.evictTail()
+		if !a.evictLRUUnusedThisFrame() {
+			break
+		}
 	}
 
-	// Find or create a page with space for the 3x-wide data.
-	page, err := a.findOrCreatePage(atlasW, maskH)
+	page, x, y, err := a.allocate(atlasW, maskH)
 	if err != nil {
 		return GlyphMaskRegion{}, err
-	}
-
-	x, y, ok := page.allocator.Allocate(atlasW, maskH)
-	if !ok {
-		return GlyphMaskRegion{}, fmt.Errorf("text: failed to allocate %dx%d LCD glyph mask in atlas page %d", atlasW, maskH, page.index)
 	}
 
 	// Copy the RGB data row by row into the R8 atlas at 3x width.
@@ -652,6 +617,34 @@ func (a *GlyphMaskAtlas) GetOrRasterize(
 	}
 
 	return a.Put(key, mask, maskW, maskH, bearingX, bearingY)
+}
+
+// allocate finds room for a mask, evicting until it fits.
+//
+// Shared by Put and PutLCD, which each had their own copy. Only one of them
+// was fixed when a full atlas turned out to refuse glyphs forever instead of
+// evicting, so subpixel-rendered text went on failing after grayscale text
+// was healed — the same bug, in the copy nobody looked at.
+//
+// Two ways to give up, both correct. A glyph larger than an empty page can
+// never fit. And when every remaining entry is in use by the frame being
+// drawn, evicting one would corrupt a quad already recorded, so the glyph is
+// refused for this frame instead — missing for a frame beats wrong for
+// however long the text stays on screen.
+func (a *GlyphMaskAtlas) allocate(w, h int) (*glyphMaskPage, int, int, error) {
+	for {
+		page, err := a.findOrCreatePage(w, h)
+		if err == nil {
+			if x, y, ok := page.allocator.Allocate(w, h); ok {
+				return page, x, y, nil
+			}
+		}
+		if !a.evictLRUUnusedThisFrame() {
+			return nil, 0, 0, fmt.Errorf(
+				"text: no room for a %dx%d glyph mask in a %dpx atlas page",
+				w, h, a.config.Size)
+		}
+	}
 }
 
 // findOrCreatePage finds a page with space for the given dimensions, or creates a new one.
