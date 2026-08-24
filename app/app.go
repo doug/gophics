@@ -639,7 +639,14 @@ func (c *core) Pointer(e shell.Pointer) {
 				}
 				if c.dragging == nil {
 					for _, h := range c.dragCandidates {
-						if h.box.GestureHandler().DragAxis.Accepts(d.X, d.Y) {
+						hd := h.box.GestureHandler()
+						// A handler that does not want this gesture steps
+						// aside rather than winning it on depth and then
+						// ignoring it (see Handler.DragClaims).
+						if dc := hd.DragClaims; dc != nil && !dc(c.downTouch) {
+							continue
+						}
+						if hd.DragAxis.Accepts(d.X, d.Y) {
 							c.dragging = h.box
 							// h.local is the box-local point at press, so the box
 							// origin comes from downPos (not the current move pos).

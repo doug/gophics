@@ -193,6 +193,43 @@ func TestSelectionAreaTouchDragScrolls(t *testing.T) {
 	}
 }
 
+// Copying nothing only proves the selection stayed out of it. The gesture has
+// to actually reach the scroller: a handler that wins a drag on depth and then
+// declines to act on it selects nothing *and* scrolls nothing, and the check
+// above cannot tell that apart from working correctly.
+func TestSelectionAreaTouchDragReachesTheScroller(t *testing.T) {
+	ctrl := &widget.ScrollController{}
+	h, err := NewHeadless(scrollSelApp{ctrl: ctrl},
+		Config{Size: geom.Size{W: 400, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	touchDown(h, geom.Pt{X: 20, Y: 100}) // on text
+	touchMove(h, geom.Pt{X: 20, Y: 20})  // drag up immediately, no hold
+	h.Release(geom.Pt{X: 20, Y: 20})
+	h.Render()
+
+	if ctrl.Offset() <= 0 {
+		t.Errorf("offset %v: the touch drag selected nothing and scrolled nothing", ctrl.Offset())
+	}
+}
+
+// scrollSelApp is listSelApp with a controller, so the scroll offset can be
+// read back.
+type scrollSelApp struct{ ctrl *widget.ScrollController }
+
+func (a scrollSelApp) Build(widget.Ctx) widget.Widget {
+	rows := make([]widget.Widget, 30)
+	for i := range rows {
+		rows[i] = widget.Sized{H: 20, Child: widget.Text{S: "alpha beta gamma", Size: 14}}
+	}
+	return widget.SelectionArea{Child: widget.Scroll{
+		Controller: a.ctrl,
+		Child:      widget.Column(rows...),
+	}}
+}
+
 // TestSelectionAreaTouchLongPressSelects verifies the touch entry point: a
 // long-press selects the word under it, and a following drag extends the
 // selection.

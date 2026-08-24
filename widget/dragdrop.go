@@ -256,6 +256,9 @@ func (s *draggableState) Build(ctx Ctx) Widget {
 	return Interactive{
 		Handler: Handler{
 			DragAxis: DragAny,
+			// Until the long press arms it, this drag is not ours: stand down
+			// so the page can scroll under a finger that starts on a chip.
+			DragClaims: func(bool) bool { return s.armed },
 			OnPress: func(local geom.Pt) {
 				s.pressAt = local
 				s.origin = ctx.Input().Pointer()

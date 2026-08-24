@@ -258,6 +258,20 @@ type Handler struct {
 	// text, but on touch only grabs once a long-press has started a selection —
 	// otherwise a touch drag scrolls). Evaluated after OnPress, before commit.
 	DragPriority func(touch bool) bool
+	// DragClaims, when non-nil and returning false at drag-commit time, takes
+	// this handler out of the running for that drag entirely, so a shallower
+	// candidate — usually the scroll it sits inside — gets it instead. Depth
+	// alone would hand the gesture to the deepest handler whether or not it
+	// wants it: a Draggable still waiting for its long press, or a
+	// SelectionArea on touch before a selection exists, would win the drag and
+	// then decline to act on it, and nothing would move at all — the element
+	// because it is not armed, the page because the element took the gesture.
+	// touch reports whether the gesture came from a touch device. Nil claims
+	// normally, by depth and axis.
+	//
+	// This is the counterpart to DragPriority: that one promotes a handler
+	// above depth, this one withdraws it.
+	DragClaims func(touch bool) bool
 	// OnRelease fires on pointer-up after this widget received the press
 	// (regardless of drag distance) — e.g. to start fling deceleration.
 	OnRelease func()
