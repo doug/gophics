@@ -649,7 +649,13 @@ func (c *core) Pointer(e shell.Pointer) {
 					}
 				}
 				c.dragCandidates = c.dragCandidates[:0]
-				c.firePressEnd() // the press became a drag/scroll: end any highlight
+				// The press became a drag or a scroll: end any highlight it
+				// put up — except on the box that won the drag, whose press
+				// has not ended at all. It is now dragging and will get
+				// OnRelease; telling it the press ended here would have it
+				// tear down the gesture on the very move that started it. It
+				// stays on the list so it still hears about pointer-up.
+				c.firePressEndExcept(c.dragging)
 			}
 		}
 		if c.moved && c.dragging != nil {
@@ -746,13 +752,23 @@ func (c *core) Pointer(e shell.Pointer) {
 // firePressEnd notifies every box that received OnPress this gesture that the
 // press has concluded (up, cancel, or a drag steal), then clears the list. It
 // is idempotent: the second call in a gesture finds an empty list.
-func (c *core) firePressEnd() {
+func (c *core) firePressEnd() { c.firePressEndExcept(nil) }
+
+// firePressEndExcept is firePressEnd with one box held back — the one that has
+// just taken the drag, which is retained for the end of the gesture rather
+// than notified now.
+func (c *core) firePressEndExcept(skip widget.GestureTarget) {
+	kept := c.pressBoxes[:0]
 	for _, b := range c.pressBoxes {
+		if skip != nil && b == skip {
+			kept = append(kept, b) // still owed an OnPressEnd at pointer-up
+			continue
+		}
 		if h := b.GestureHandler(); h.OnPressEnd != nil {
 			h.OnPressEnd()
 		}
 	}
-	c.pressBoxes = c.pressBoxes[:0]
+	c.pressBoxes = kept
 }
 
 // focusFrom moves keyboard focus to the topmost focusable hit, if any.

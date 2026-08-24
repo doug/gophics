@@ -236,6 +236,12 @@ type Handler struct {
 	// OnPress for driving a press-down visual: set a highlight in OnPress, clear
 	// it in OnPressEnd. Unlike OnRelease (drag boxes only), it fires for tap
 	// targets too, so touch UIs get reliable pressed-state feedback.
+	//
+	// One exception, and it is the one that matters for a handler that also
+	// drags: the box that *wins* the drag is not told at commit time, because
+	// its press has not concluded — it is now dragging, and a handler that
+	// tore its gesture down here would be undone by the very move that started
+	// it. It is told at pointer-up instead, after OnRelease.
 	OnPressEnd func()
 	// OnDrag receives pointer movement while pressed on this widget. Once a
 	// drag exceeds the tap slop, a pending tap is cancelled.
