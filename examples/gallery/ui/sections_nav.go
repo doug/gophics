@@ -1,4 +1,4 @@
-package main
+package ui
 
 // Navigator with Hero shared-element transitions.
 //

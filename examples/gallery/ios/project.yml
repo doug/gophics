@@ -1,0 +1,26 @@
+name: GophicsGallery
+options:
+  bundleIdPrefix: dev.gophics
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  GophicsGallery:
+    type: application
+    platform: iOS
+    sources:
+      - GophicsGallery
+    dependencies:
+      - framework: Gallerymobile.xcframework
+        embed: true
+    info:
+      path: GophicsGallery/Info.plist
+      properties:
+        CFBundleDisplayName: Catalog
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        ENABLE_BITCODE: NO

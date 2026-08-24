@@ -1,4 +1,4 @@
-package main
+package ui
 
 // Pull-to-refresh and swipe-to-dismiss, one demo each.
 //
