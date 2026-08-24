@@ -25,18 +25,23 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.nio.ByteBuffer
 import tallymobile.Tallymobile
+import mobile.Bridge
 
 /**
  * Thin host for the Tally app (M9 embedding model): the Go side owns
  * the UI; this activity owns the surface, vsync, input, IME, and intents.
  */
+// One bridge per process, at file scope because MainActivity and the surface
+// view are separate classes and both drive it. gomobile assumes one anyway:
+// Start builds the app once.
+private lateinit var bridge: Bridge
+
 class MainActivity : Activity() {
     private var view: GophicsView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val err = Tallymobile.start()
-        if (err.isNotEmpty()) throw RuntimeException("gophics start: $err")
+        bridge = Tallymobile.start()
         val v = GophicsView(this)
         view = v
         setContentView(v)
@@ -46,24 +51,24 @@ class MainActivity : Activity() {
             // for a keyboard it may not have raised, and makes a layout that
             // should sit under the gesture bar unable to say so.
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            Tallymobile.setInsets(
-                bars.top.toDouble(), bars.right.toDouble(),
-                bars.bottom.toDouble(), bars.left.toDouble())
+            bridge.setInsets(
+                bars.top.toFloat(), bars.right.toFloat(),
+                bars.bottom.toFloat(), bars.left.toFloat())
 
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            Tallymobile.setKeyboardHeight(ime.bottom.toDouble())
+            bridge.setKeyboardHeight(ime.bottom.toFloat())
             insets
         }
     }
 
     override fun onPause() {
         super.onPause()
-        Tallymobile.focused(false)
+        bridge.focused(false)
     }
 
     override fun onResume() {
         super.onResume()
-        Tallymobile.focused(true)
+        bridge.focused(true)
     }
 }
 
@@ -97,30 +102,30 @@ class GophicsView(private val activity: Activity) :
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                Tallymobile.composition(2, "", 0, "") // end any preedit
-                Tallymobile.text(text.toString())
+                bridge.composition(2, "", 0, "") // end any preedit
+                bridge.text(text.toString())
                 return true
             }
             override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
-                Tallymobile.composition(1, text.toString(), text.length.toLong().toInt().toLong(), "")
+                bridge.composition(1, text.toString(), text.length.toLong().toInt().toLong(), "")
                 return true
             }
             override fun finishComposingText(): Boolean {
-                Tallymobile.composition(2, "", 0, "")
+                bridge.composition(2, "", 0, "")
                 return true
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-                repeat(beforeLength) { Tallymobile.key(2, true) } // KeyBackspace
+                repeat(beforeLength) { bridge.key(2, true) } // KeyBackspace
                 return true
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     when (event.keyCode) {
-                        KeyEvent.KEYCODE_DEL -> Tallymobile.key(2, true)
-                        KeyEvent.KEYCODE_ENTER -> Tallymobile.key(1, true)
+                        KeyEvent.KEYCODE_DEL -> bridge.key(2, true)
+                        KeyEvent.KEYCODE_ENTER -> bridge.key(1, true)
                         else -> {
                             val ch = event.unicodeChar
-                            if (ch != 0) Tallymobile.text(String(Character.toChars(ch)))
+                            if (ch != 0) bridge.text(String(Character.toChars(ch)))
                         }
                     }
                 }
@@ -130,7 +135,7 @@ class GophicsView(private val activity: Activity) :
     }
 
     private fun syncIME() {
-        val want = Tallymobile.textInputActive()
+        val want = bridge.textInputActive()
         if (want == imeShown) return
         imeShown = want
         val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -148,28 +153,28 @@ class GophicsView(private val activity: Activity) :
         running = true
         val dark = (resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        Tallymobile.setDarkMode(dark)
+        bridge.setDarkMode(dark)
         nativeWin = NativeSurface.acquire(holder.surface) // ANativeWindow* for the GPU
         Choreographer.getInstance().postFrameCallback(this)
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {
-        val d = resources.displayMetrics.density.toDouble()
+        val d = resources.displayMetrics.density
         // Hand the surface to the Go side once it has a size; the GPU renders
         // directly to it. Resize thereafter reconfigures the surface.
         if (!surfaceSet && nativeWin != 0L) {
-            Tallymobile.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
-            gpuActive = Tallymobile.gpuActive()
+            bridge.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
+            gpuActive = bridge.gpuActive()
             surfaceSet = true
             Log.i("gophics", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
         }
-        Tallymobile.resize(w.toLong(), h.toLong(), d)
+        bridge.resize(w.toLong(), h.toLong(), d)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         running = false
         Choreographer.getInstance().removeFrameCallback(this)
-        Tallymobile.clearSurface()
+        bridge.clearSurface()
         NativeSurface.release(nativeWin)
         nativeWin = 0L
         surfaceSet = false
@@ -180,10 +185,10 @@ class GophicsView(private val activity: Activity) :
         val dt = if (lastNanos == 0L) 1.0 / 60 else (frameNanos - lastNanos) / 1e9
         lastNanos = frameNanos
 
-        if (Tallymobile.needsFrame()) {
+        if (bridge.needsFrame()) {
             val t0 = System.nanoTime()
             if (gpuActive) {
-                Tallymobile.renderFrame(dt) // GPU-presents directly to the ANativeWindow
+                bridge.renderFrame(dt) // GPU-presents directly to the ANativeWindow
             } else {
                 presentCPU(dt) // emulator / no GPU: rasterize on CPU and blit
             }
@@ -195,12 +200,12 @@ class GophicsView(private val activity: Activity) :
                 frameTimeSum = 0.0
             }
             while (true) {
-                val url = Tallymobile.takeOpenedURL()
+                val url = bridge.takeOpenedURL()
                 if (url.isEmpty()) break
                 activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }
             while (true) {
-                val h = Tallymobile.takeHaptic().toInt()
+                val h = bridge.takeHaptic().toInt()
                 if (h < 0) break
                 playHaptic(h)
             }
@@ -227,13 +232,13 @@ class GophicsView(private val activity: Activity) :
         performHapticFeedback(effect, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
 
-    // presentCPU rasterizes one frame on the Go side (Tallymobile.snapshot →
+    // presentCPU rasterizes one frame on the Go side (bridge.snapshot →
     // RGBA8888) and blits it into the SurfaceView with lockCanvas — the present
     // path when the GPU surface is unavailable (emulator). The frame is
     // physical-pixel sized, matching the surface, so it blits 1:1.
     private fun presentCPU(dt: Double) {
-        val px = Tallymobile.snapshot(dt) ?: return
-        val w = Tallymobile.frameWidth().toInt(); val h = Tallymobile.frameHeight().toInt()
+        val px = bridge.snapshot(dt) ?: return
+        val w = bridge.frameWidth().toInt(); val h = bridge.frameHeight().toInt()
         if (w == 0 || h == 0 || px.size < w * h * 4) return
         var bmp = blitBitmap
         if (bmp == null || bmp.width != w || bmp.height != h) {
@@ -256,7 +261,7 @@ class GophicsView(private val activity: Activity) :
             MotionEvent.ACTION_UP -> 2L
             else -> 3L
         }
-        Tallymobile.touch(phase, e.x.toDouble(), e.y.toDouble())
+        bridge.touch(phase, e.x.toFloat(), e.y.toFloat())
         return true
     }
 
@@ -270,13 +275,13 @@ class GophicsView(private val activity: Activity) :
     private var rootId = -1
 
     private fun refreshA11y() {
-        val count = Tallymobile.a11yRefresh().toInt()
+        val count = bridge.a11yRefresh().toInt()
         idToIndex.clear()
         rootId = -1
         for (i in 0 until count) {
-            val id = Tallymobile.a11yID(i.toLong()).toInt()
+            val id = bridge.a11yID(i.toLong()).toInt()
             idToIndex[id] = i
-            if (Tallymobile.a11yParent(i.toLong()).toInt() == -1) rootId = id
+            if (bridge.a11yParent(i.toLong()).toInt() == -1) rootId = id
         }
     }
 
@@ -291,9 +296,9 @@ class GophicsView(private val activity: Activity) :
                 onInitializeAccessibilityNodeInfo(info)
                 val ri = idToIndex[rootId]
                 if (ri != null) {
-                    val cc = Tallymobile.a11yChildCount(ri.toLong()).toInt()
+                    val cc = bridge.a11yChildCount(ri.toLong()).toInt()
                     for (j in 0 until cc) {
-                        info.addChild(this@GophicsView, Tallymobile.a11yChild(ri.toLong(), j.toLong()).toInt())
+                        info.addChild(this@GophicsView, bridge.a11yChild(ri.toLong(), j.toLong()).toInt())
                     }
                 }
                 return info
@@ -303,32 +308,32 @@ class GophicsView(private val activity: Activity) :
             val i = idx.toLong()
             val info = AccessibilityNodeInfo.obtain(this@GophicsView, virtualViewId)
             info.packageName = context.packageName
-            info.className = "gophics." + Tallymobile.a11yRole(i)
-            val label = Tallymobile.a11yLabel(i)
-            val value = Tallymobile.a11yValue(i)
+            info.className = "gophics." + bridge.a11yRole(i)
+            val label = bridge.a11yLabel(i)
+            val value = bridge.a11yValue(i)
             info.contentDescription = if (value.isNotEmpty()) "$label, $value" else label
-            val x = Tallymobile.a11yX(i).toInt()
-            val y = Tallymobile.a11yY(i).toInt()
+            val x = bridge.a11yX(i).toInt()
+            val y = bridge.a11yY(i).toInt()
             info.setBoundsInScreen(Rect(loc[0] + x, loc[1] + y,
-                loc[0] + x + Tallymobile.a11yW(i).toInt(), loc[1] + y + Tallymobile.a11yH(i).toInt()))
+                loc[0] + x + bridge.a11yW(i).toInt(), loc[1] + y + bridge.a11yH(i).toInt()))
             info.isVisibleToUser = true
             info.isFocusable = true
-            val parent = Tallymobile.a11yParent(i).toInt()
+            val parent = bridge.a11yParent(i).toInt()
             info.setParent(this@GophicsView, if (parent == rootId) HOST_VIEW_ID else parent)
-            if (Tallymobile.a11yTappable(i)) {
+            if (bridge.a11yTappable(i)) {
                 info.isClickable = true
                 info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
             }
-            val cc = Tallymobile.a11yChildCount(i).toInt()
+            val cc = bridge.a11yChildCount(i).toInt()
             for (j in 0 until cc) {
-                info.addChild(this@GophicsView, Tallymobile.a11yChild(i, j.toLong()).toInt())
+                info.addChild(this@GophicsView, bridge.a11yChild(i, j.toLong()).toInt())
             }
             return info
         }
 
         override fun performAction(virtualViewId: Int, action: Int, arguments: android.os.Bundle?): Boolean {
             if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-                Tallymobile.a11yActivate(virtualViewId.toLong())
+                bridge.a11yActivate(virtualViewId.toLong())
                 return true
             }
             return false
