@@ -26,9 +26,18 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 //
 // The tree mounts (Init + first Build) inside newCore, before any shell exists,
 // so capabilities are nil then; they only become available here, on the first
-// frame. Marking the tree dirty when they first arrive lets Build re-read them
-// (and Init-time subscriptions re-run on the rebuild) — otherwise an app that
-// reads ctx.<Cap>() would see it nil until an unrelated state change.
+// frame. Marking the tree dirty when they first arrive lets Build re-read them —
+// otherwise an app that reads ctx.<Cap>() would see it nil until an unrelated
+// state change.
+//
+// Build, and only Build. Init does not run again: a State's Init fires once,
+// when the State is created (see updateChild), and RebuildAll only marks the
+// tree dirty. So a widget must not decide anything permanent about a capability
+// in Init — a check there runs while every capability is still nil and is never
+// revisited. Read them in Build, or re-check in a Ticker.
+//
+// This is easy to get wrong and silent when you do: the capability is simply
+// absent forever, with no error and nothing in the logs.
 func (h *shellHandler) wireWindow(w shell.Window) {
 	if h.wired == w {
 		return
