@@ -870,7 +870,14 @@ func (rc *GPURenderContext) DrawGlyphMaskText(target gg.GPURenderTarget, face an
 		return nil
 	}
 
+	// A run whose glyphs span atlas pages comes back as one batch per page.
+	// Each must be queued separately: a batch binds a single page's texture.
+	extra := batch.Extra
+	batch.Extra = nil
 	rc.QueueGlyphMask(target, batch)
+	for _, b := range extra {
+		rc.QueueGlyphMask(target, b)
+	}
 	return nil
 }
 
@@ -908,7 +915,14 @@ func (rc *GPURenderContext) DrawGlyphMaskTextAliased(target gg.GPURenderTarget, 
 		return nil
 	}
 
+	// A run whose glyphs span atlas pages comes back as one batch per page.
+	// Each must be queued separately: a batch binds a single page's texture.
+	extra := batch.Extra
+	batch.Extra = nil
 	rc.QueueGlyphMask(target, batch)
+	for _, b := range extra {
+		rc.QueueGlyphMask(target, b)
+	}
 	return nil
 }
 
@@ -945,7 +959,14 @@ func (rc *GPURenderContext) DrawShapedGlyphMaskText(target gg.GPURenderTarget, f
 		return nil
 	}
 
+	// A run whose glyphs span atlas pages comes back as one batch per page.
+	// Each must be queued separately: a batch binds a single page's texture.
+	extra := batch.Extra
+	batch.Extra = nil
 	rc.QueueGlyphMask(target, batch)
+	for _, b := range extra {
+		rc.QueueGlyphMask(target, b)
+	}
 	return nil
 }
 

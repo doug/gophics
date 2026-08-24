@@ -612,6 +612,12 @@ type GlyphMaskQuad struct {
 // rendering parameters. Multiple batches may use different atlas pages,
 // transforms, or colors.
 type GlyphMaskBatch struct {
+	// Extra holds the remaining pages when a run's glyphs span more than one
+	// atlas page. Each carries its own AtlasPageIndex and must be queued as a
+	// batch of its own; drawing them under this batch's page samples the wrong
+	// texture.
+	Extra []GlyphMaskBatch
+
 	// Quads is the list of glyph quads to render.
 	Quads []GlyphMaskQuad
 

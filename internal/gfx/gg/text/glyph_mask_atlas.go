@@ -1,8 +1,11 @@
 package text
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"sync"
 	"sync/atomic"
 )
@@ -422,11 +425,13 @@ func NewGlyphMaskAtlas(config GlyphMaskAtlasConfig) (*GlyphMaskAtlas, error) {
 		return nil, err
 	}
 
-	return &GlyphMaskAtlas{
+	a := &GlyphMaskAtlas{
 		config: config,
 		pages:  make([]*glyphMaskPage, 0, config.MaxAtlases),
 		lookup: make(map[GlyphMaskKey]*glyphMaskEntry, 256),
-	}, nil
+	}
+	lastAtlas.Store(a)
+	return a, nil
 }
 
 // NewGlyphMaskAtlasDefault creates a new glyph mask atlas with default configuration.
@@ -665,6 +670,36 @@ func NoteSynced() { atlasSynced.Store(true) }
 // after this frame uploaded, and therefore drawn from a texture that does not
 // contain it.
 func NoteFrameStart() { atlasSynced.Store(false) }
+
+// lastAtlas is the most recently created atlas, so a diagnostic can dump what
+// the CPU side actually holds without threading a reference through four
+// packages. There is one per process in practice.
+var lastAtlas atomic.Pointer[GlyphMaskAtlas]
+
+// DumpAtlasPage renders a page of the live atlas as a grayscale PNG.
+//
+// This is the discriminator for a rendering fault that shows wrong glyphs
+// while every allocation counter reads zero. If this image is correct and the
+// frame is not, the CPU atlas is right and the GPU texture is stale — an
+// upload problem. If this image is wrong, the fault is upstream of the GPU
+// entirely.
+func DumpAtlasPage(index int) []byte {
+	a := lastAtlas.Load()
+	if a == nil {
+		return nil
+	}
+	data, w, h := a.PageR8Data(index)
+	if data == nil || w == 0 || h == 0 {
+		return nil
+	}
+	img := image.NewGray(image.Rect(0, 0, w, h))
+	copy(img.Pix, data)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil
+	}
+	return buf.Bytes()
+}
 
 // NoteNilView records a glyph batch whose atlas page had no GPU texture view.
 //

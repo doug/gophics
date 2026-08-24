@@ -318,6 +318,7 @@ func (e *GlyphMaskEngine) layoutGlyphs(
 	aliased bool,
 ) GlyphMaskBatch {
 	var quads []GlyphMaskQuad
+	var quadPages []int
 	var batchIsLCD bool
 
 	// ADR-054: compute variation hash for cache key differentiation.
@@ -411,6 +412,7 @@ func (e *GlyphMaskEngine) layoutGlyphs(
 			U0: region.U0, V0: region.V0,
 			U1: region.U1, V1: region.V1,
 		})
+		quadPages = append(quadPages, region.AtlasIndex)
 	}
 
 	if len(quads) == 0 {
@@ -425,15 +427,69 @@ func (e *GlyphMaskEngine) layoutGlyphs(
 	atlasConfig := e.atlas.Config()
 	atlasSize := float32(atlasConfig.Size)
 
-	return GlyphMaskBatch{
-		Quads:          quads,
-		Transform:      matrix,
-		Color:          batchColor,
-		IsLCD:          batchIsLCD,
-		AtlasWidth:     atlasSize,
-		AtlasHeight:    atlasSize,
-		AtlasPageIndex: 0, // Currently single page support (first page).
+	// One batch per atlas page.
+	//
+	// This used to hardcode page 0 with a note saying only one page was
+	// supported. The atlas has always had four, and it fills the first one
+	// before opening the second — so after enough distinct glyphs, a run's
+	// later glyphs live on page 1 while the batch still binds page 0. Texture
+	// coordinates are normalised per page, so those glyphs sampled page 0 at
+	// page 1's coordinates: not blank, not noise, but whatever other glyph
+	// occupies that spot. Deterministically the same wrong letter every time.
+	//
+	// It takes a while to show, needs no eviction, no compaction and no failed
+	// allocation, and leaves the atlas itself perfectly correct — which is why
+	// every counter read zero while the screen was visibly wrong, and why a
+	// harness that never filled a page could not reproduce it.
+	page := 0
+	if len(quadPages) > 0 {
+		page = quadPages[0]
 	}
+	single := true
+	for _, p := range quadPages {
+		if p != page {
+			single = false
+			break
+		}
+	}
+	if single {
+		return GlyphMaskBatch{
+			Quads:          quads,
+			Transform:      matrix,
+			Color:          batchColor,
+			IsLCD:          batchIsLCD,
+			AtlasWidth:     atlasSize,
+			AtlasHeight:    atlasSize,
+			AtlasPageIndex: page,
+		}
+	}
+	// Spanning run: keep this batch to the first page and hand the rest back
+	// as extras, in page order, so every quad is drawn from the page it is in.
+	byPage := map[int][]GlyphMaskQuad{}
+	order := []int{}
+	for i, q := range quads {
+		p := quadPages[i]
+		if _, seen := byPage[p]; !seen {
+			order = append(order, p)
+		}
+		byPage[p] = append(byPage[p], q)
+	}
+	mk := func(p int) GlyphMaskBatch {
+		return GlyphMaskBatch{
+			Quads:          byPage[p],
+			Transform:      matrix,
+			Color:          batchColor,
+			IsLCD:          batchIsLCD,
+			AtlasWidth:     atlasSize,
+			AtlasHeight:    atlasSize,
+			AtlasPageIndex: p,
+		}
+	}
+	first := mk(order[0])
+	for _, p := range order[1:] {
+		first.Extra = append(first.Extra, mk(p))
+	}
+	return first
 }
 
 // rasterizeGlyph dispatches glyph rasterization to the appropriate method

@@ -424,3 +424,76 @@ func TestTextSurvivesADeviceChange(t *testing.T) {
 			"belonging to a destroyed device", b, a)
 	}
 }
+
+// TestBatchesReferenceThePageTheirGlyphsAreOn is the test that would have
+// caught the fault a phone took twenty minutes of navigation to show.
+//
+// Every batch used to report page 0 — "currently single page support" — while
+// the atlas has always had four and fills the first before opening the second.
+// Once a run's glyphs landed on page 1, the batch still bound page 0, and
+// since texture coordinates are normalised per page those glyphs sampled
+// whatever else occupied that spot: the same wrong letter, every time, with a
+// perfectly correct atlas and every allocation counter reading zero.
+func TestBatchesReferenceThePageTheirGlyphsAreOn(t *testing.T) {
+	_, _, cleanup := reproRealDevice(t)
+	defer cleanup()
+
+	face := reproFont(t)
+	engine := NewGlyphMaskEngine()
+
+	layout := func(s string) GlyphMaskBatch {
+		var glyphs []text.ShapedGlyph
+		for g := range face.Glyphs(s) {
+			glyphs = append(glyphs, text.ShapedGlyph{GID: g.GID, X: g.X, Y: g.Y})
+		}
+		b, err := engine.LayoutShapedGlyphs(face, glyphs, 6, 24, gg.RGBA{A: 1}, gg.Identity(), 1.0, false)
+		if err != nil {
+			t.Fatalf("LayoutShapedGlyphs %q: %v", s, err)
+		}
+		return b
+	}
+
+	// Fill page 0. Distinct glyphs at a large device scale are what consume an
+	// atlas page; a few thousand of them spill onto the next.
+	var glyphs []text.ShapedGlyph
+	for r := rune(0x21); r < 0x2000; r++ {
+		for g := range face.Glyphs(string(r)) {
+			glyphs = append(glyphs, text.ShapedGlyph{GID: g.GID, X: g.X, Y: g.Y})
+		}
+		if engine.Atlas().PageCount() > 1 {
+			break
+		}
+		if len(glyphs) > 0 {
+			if _, err := engine.LayoutShapedGlyphs(face, glyphs, 6, 24,
+				gg.RGBA{A: 1}, gg.Identity(), 8.0, false); err != nil {
+				t.Fatalf("fill: %v", err)
+			}
+			glyphs = glyphs[:0]
+		}
+	}
+	pages := engine.Atlas().PageCount()
+	if pages < 2 {
+		t.Skipf("atlas stayed on one page (%d); cannot exercise page spill here", pages)
+	}
+	t.Logf("atlas spilled to %d pages", pages)
+
+	// Something must now report a page other than zero — either a batch whose
+	// glyphs are all on a later page, or a spanning run split across pages.
+	sawNonZero := false
+	for r := rune(0x2000); r < 0x2200 && !sawNonZero; r++ {
+		b := layout(string(r))
+		if b.AtlasPageIndex != 0 {
+			sawNonZero = true
+		}
+		for _, e := range b.Extra {
+			if e.AtlasPageIndex != 0 {
+				sawNonZero = true
+			}
+		}
+	}
+	if !sawNonZero {
+		t.Error("every batch still reports atlas page 0 after the atlas spilled to " +
+			"a second page; glyphs living on page 1 will be sampled from page 0 " +
+			"and drawn as whatever else occupies those coordinates")
+	}
+}
