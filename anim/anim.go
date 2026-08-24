@@ -4,7 +4,10 @@
 // frame while running and stops consuming work when idle.
 package anim
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Curve maps linear progress t in [0,1] to eased progress. A curve must satisfy
 // f(0)=0 and f(1)=1 (start and end pinned); only the shape in between differs.
@@ -49,6 +52,35 @@ type Controller struct {
 
 	progress float32 // linear, 0..1
 	dir      float32 // +1 forward, -1 reverse, 0 idle
+}
+
+// Spring is the step response of an underdamped spring: it rises to 1,
+// overshoots by a few percent, and settles back.
+//
+// It is for motion that comes to rest against something — a card springing
+// back to its place, a sheet settling into position. An ease-out arrives at
+// rest by slowing to a stop, which reads as dead weight; a spring arrives by
+// going slightly too far and returning, which reads as elastic. That small
+// overshoot is most of what people mean when they say a gesture feels native.
+//
+// Do not use it for motion that leaves — a card being dismissed should not
+// come back a few pixels before it goes. EaseOut is right there.
+//
+// The damping ratio is 0.72, giving about 4% overshoot, and the frequency is
+// chosen so it has settled by the end of the duration.
+func Spring(t float32) float32 {
+	if t <= 0 {
+		return 0
+	}
+	if t >= 1 {
+		return 1 // exactly at rest at the end, whatever the tail is doing
+	}
+	const zeta = 0.72 // < 1 overshoots; at 1 it creeps in without any spring
+	const omega = 7.0 // in units of the whole duration
+	wd := omega * float32(math.Sqrt(1-zeta*zeta))
+	decay := float32(math.Exp(-zeta * omega * float64(t)))
+	return 1 - decay*(float32(math.Cos(float64(wd*t)))+
+		(zeta*omega/wd)*float32(math.Sin(float64(wd*t))))
 }
 
 func (c *Controller) duration() float32 {

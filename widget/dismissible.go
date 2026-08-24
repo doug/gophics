@@ -93,6 +93,16 @@ const (
 func (s *dismissState) animateTo(to float32, dismiss bool) {
 	s.gone = dismiss
 	s.from, s.to = s.dx, to
+	// Springing back is arriving against something; being dismissed is
+	// leaving. A card that eases to rest at its own position reads as dead
+	// weight, where one that goes a few pixels too far and settles reads as
+	// elastic — but a card on its way out must not bounce back before it
+	// goes, so only the return gets the spring.
+	if dismiss {
+		s.anim.Curve = anim.EaseOut
+	} else {
+		s.anim.Curve = anim.Spring
+	}
 	s.anim.Duration = releaseDuration(s.dx, to, s.velocity)
 	s.anim.Jump(0)
 	s.anim.Forward()
