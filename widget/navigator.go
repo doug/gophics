@@ -190,13 +190,11 @@ func (s *navState) Build(Ctx) Widget {
 		var frac float32
 		if s.trans != nil {
 			t := s.slide.Value()
+			over, under := pageFracs(t, s.trans.popping)
 			switch i {
 			case len(pages) - 1:
 				provReg, slideReg = s.overReg, s.overReg
-				frac = 1 - t // push: sliding in from the right
-				if s.trans.popping {
-					frac = t // pop: sliding out to the right
-				}
+				frac = over // sliding in from the right (out to it, on a pop)
 			case visibleFrom:
 				// The page being left behind eases aside rather than sitting
 				// still. Without this the incoming page slides over a fixed
@@ -209,10 +207,7 @@ func (s *navState) Build(Ctx) Widget {
 				// they move; matching speeds would look like one wide image
 				// sliding past.
 				provReg, slideReg = s.underReg, s.underReg
-				frac = -parallaxFrac * t // push: easing left
-				if s.trans.popping {
-					frac = -parallaxFrac * (1 - t) // pop: returning
-				}
+				frac = under
 			}
 		}
 		children = append(children, WithKey{Key: i, Child: pageW{
@@ -252,6 +247,16 @@ func (s *navState) Build(Ctx) Widget {
 	return Provide[Nav]{Value: Nav{s: s}, Child: stackW{Children: children}}
 }
 
+// pageFracs is the main-axis slide of the incoming and outgoing pages at t,
+// as a fraction of the surface width. Build positions the pages by it and
+// buildFlights places the hero overlay by it, so the two cannot drift.
+func pageFracs(t float32, popping bool) (over, under float32) {
+	if popping {
+		return t, -parallaxFrac * (1 - t)
+	}
+	return 1 - t, -parallaxFrac * t
+}
+
 // buildFlights returns the shared-element flight widgets for the current
 // transition: for each tag present on both the outgoing and incoming pages,
 // an overlay copy interpolating from one rect to the other, and it flags both
@@ -267,6 +272,11 @@ func (s *navState) buildFlights(width float32) []Widget {
 		from, to = s.overReg, s.underReg // pop: over → under
 	}
 	t := s.slide.Value()
+	over, under := pageFracs(t, s.trans.popping)
+	fromFrac, toFrac := under, over // push: under → over
+	if s.trans.popping {
+		fromFrac, toFrac = over, under
+	}
 
 	var flights []Widget
 	for tag, toRC := range to.rects {
@@ -274,8 +284,15 @@ func (s *navState) buildFlights(width float32) []Widget {
 		if !ok {
 			continue
 		}
-		src := restRect(fromRC, from.frac, width)
-		dst := restRect(toRC, to.frac, width)
+		// Normalise to at-rest (the painted rect carries whatever slide the
+		// page had when it was captured, and a hero stops painting once it is
+		// flying, so its raw rect goes stale), then re-apply the slide each
+		// page has *this* frame. Interpolating in at-rest space alone put the
+		// flight where the destination page was going to be rather than where
+		// it currently was, so the element sat offset from its own page for
+		// the whole transition and only met it on the last frame.
+		src := restRect(fromRC, from.frac, width).Translate(geom.Pt{X: fromFrac * width})
+		dst := restRect(toRC, to.frac, width).Translate(geom.Pt{X: toFrac * width})
 		from.flying[tag], to.flying[tag] = true, true
 		cur := lerpRect(src, dst, t)
 		// The child is rebuilt at the origin (its natural size ≈ dst size);
