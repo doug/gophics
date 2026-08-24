@@ -396,9 +396,17 @@ func yuyvToRGBA(src []byte, img *image.RGBA, w, h, stride int) {
 	if stride <= 0 {
 		stride = w * 2
 	}
+	// A row needs bytes for ceil(w/2) macropixels, not for w*2 bytes.
+	//
+	// YUYV packs two pixels into four bytes, so an odd width still reads a
+	// whole final quad — the last pixel's chroma lives in bytes belonging to a
+	// partner pixel that does not exist. Requiring only w*2 let a width of 1
+	// pass with two bytes and then read four. Odd widths are unusual but
+	// legal, and a driver is entitled to report one. Found by FuzzYUYVToRGBA.
+	need := ((w + 1) / 2) * 4
 	for y := 0; y < h; y++ {
 		row := y * stride
-		if row+w*2 > len(src) {
+		if row < 0 || row+need > len(src) {
 			return
 		}
 		d := img.Pix[y*img.Stride:]
