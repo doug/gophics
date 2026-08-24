@@ -64,6 +64,15 @@ func DecodeWAV(b []byte) (pcm []int16, sampleRate int, err error) {
 	if bits != 16 || channels < 1 {
 		return nil, 0, errors.New("wav: unsupported (want 16-bit PCM)")
 	}
+	// A rate of zero decoded as success for a long time, because nothing here
+	// looked at it: the fmt chunk was accepted on its bit depth and channel
+	// count alone. Every caller then divides by it to get a duration, so each
+	// one had to remember a guard, and the one that forgot would divide by
+	// zero on a file it did not write. Rejecting it here is the fix that does
+	// not depend on remembering. Found by FuzzDecodeWAV in two seconds.
+	if sampleRate <= 0 {
+		return nil, 0, errors.New("wav: the file declares no sample rate")
+	}
 	n := len(data) / 2
 	raw := make([]int16, n)
 	for i := 0; i < n; i++ {
