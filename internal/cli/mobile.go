@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -569,9 +570,50 @@ func syncAndroidPermissions(o buildOpts, host string) error {
 //
 // Checked, not generated: the text is app-specific prose that Apple reads at
 // review, and a placeholder turns a build error into a rejection weeks later.
+// findInfoPlist locates the app's Info.plist under an iOS host project.
+//
+// It used to be assumed at App/Info.plist. No project in this tree has ever
+// been laid out that way — Xcode names the group after the app, so it is
+// GophicsHN/Info.plist, Tally/Info.plist, GophicsMirror/Info.plist — so the
+// check above found no file, returned nil, and never once ran. A guard that
+// silently passes is worse than no guard, because it is counted on.
+//
+// Build products are skipped: a built .app and the bound .xcframework both
+// contain an Info.plist, and neither is the one a person edits.
+func findInfoPlist(host string) (string, error) {
+	var found string
+	err := filepath.WalkDir(host, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch {
+			case strings.HasSuffix(d.Name(), ".xcframework"),
+				strings.HasSuffix(d.Name(), ".framework"),
+				strings.HasSuffix(d.Name(), ".app"),
+				strings.HasSuffix(d.Name(), ".xcodeproj"),
+				d.Name() == "build", d.Name() == "build-sim":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == "Info.plist" && found == "" {
+			found = path
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return found, nil
+}
+
 func checkIOSPermissions(o buildOpts, host string) error {
-	plist := filepath.Join(host, "App", "Info.plist")
-	if !fileExists(plist) {
+	plist, err := findInfoPlist(host)
+	if err != nil {
+		return err
+	}
+	if plist == "" {
 		return nil
 	}
 	dir, err := packageDir(o.pkg)

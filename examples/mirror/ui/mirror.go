@@ -186,18 +186,33 @@ func (m *mirror) start() {
 			})
 		})
 
-	if m.ctx.Microphone() == nil {
+	mic := m.ctx.Microphone()
+	if mic == nil {
 		return // camera-only platform: the effect runs, it just does not breathe
 	}
-	m.ctx.Microphone().Listen(func(mon shell.Monitor, err error) {
-		m.SetState(func() {
-			if err != nil {
-				// A mirror with no microphone is still a mirror; it just sits
-				// still. Losing the camera is fatal, losing the mic is not.
-				m.err = "microphone: " + err.Error()
-				return
-			}
-			m.mon = mon
+	// Ask before listening, exactly as the camera does above.
+	//
+	// Skipping this went unnoticed for a long time because the two platforms
+	// hide it differently. Android refuses outright, which looked like a
+	// platform quirk and got worked around by granting the permission by hand.
+	// iOS does something worse: an audio session activated without permission
+	// still starts, still delivers buffers, and every sample in them is zero —
+	// so the microphone appears connected and the picture simply never moves.
+	mic.Authorize(func(p shell.Permission) {
+		if p != shell.PermissionGranted {
+			m.SetState(func() { m.err = "microphone: permission denied" })
+			return
+		}
+		mic.Listen(func(mon shell.Monitor, err error) {
+			m.SetState(func() {
+				if err != nil {
+					// A mirror with no microphone is still a mirror; it just
+					// sits still. Losing the camera is fatal, the mic is not.
+					m.err = "microphone: " + err.Error()
+					return
+				}
+				m.mon = mon
+			})
 		})
 	})
 }

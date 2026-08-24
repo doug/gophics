@@ -48,8 +48,23 @@ extension GophicsPreview: MobilePreviewHostProtocol {
     }
 
     func startPreview(_ reqID: Int, facing: Int, width: Int) {
-        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
-            main { self.bridge.failPreview(reqID, msg: "camera permission not granted") }
+        // Ask first if the user has not been asked: PreviewHost's contract says
+        // starting may prompt, and refusing outright when the answer was simply
+        // never sought makes an app look broken on first run.
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            break
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                guard granted else {
+                    self.main { self.bridge.failPreview(reqID, msg: "camera permission denied") }
+                    return
+                }
+                self.main { self.startPreview(reqID, facing: facing, width: width) }
+            }
+            return
+        default:
+            main { self.bridge.failPreview(reqID, msg: "camera permission denied") }
             return
         }
         queue.async { self.open(reqID, facing: facing, width: width) }
@@ -102,6 +117,23 @@ extension GophicsPreview: MobilePreviewHostProtocol {
             return
         }
         session.addOutput(out)
+
+        // Rotate to match the device, or the picture arrives sideways.
+        //
+        // The sensor delivers its own landscape orientation no matter how the
+        // phone is held, so a portrait app that does not ask for a rotation
+        // gets frames turned ninety degrees — which is exactly what it looked
+        // like on a real phone, and could not be seen in the Simulator, which
+        // has no camera at all.
+        if let conn = out.connection(with: .video) {
+            if #available(iOS 17.0, *) {
+                if conn.isVideoRotationAngleSupported(90) {
+                    conn.videoRotationAngle = 90
+                }
+            } else if conn.isVideoOrientationSupported {
+                conn.videoOrientation = .portrait
+            }
+        }
         session.commitConfiguration()
 
         activeReq = reqID

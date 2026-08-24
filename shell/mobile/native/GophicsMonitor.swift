@@ -40,7 +40,32 @@ extension GophicsMonitor: MobileMonitorHostProtocol {
         if active { stopMonitoring(reqID) }
         self.reqID = reqID
 
+        // Ask first if the user has not been asked.
+        //
+        // MonitorHost's contract says Listen may prompt, and for a long time
+        // this did not — which on iOS is the worst possible way to fail. An
+        // audio session activated without permission still starts, still calls
+        // the tap, and every sample it hands over is zero, so the microphone
+        // looks connected and the app simply never reacts to sound. Android
+        // refuses outright, which at least says something.
         let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
+        case .granted:
+            break
+        case .denied:
+            ui { self.bridge.failMonitoring(reqID, msg: "microphone permission denied") }
+            return
+        default:
+            session.requestRecordPermission { granted in
+                guard granted else {
+                    self.ui { self.bridge.failMonitoring(reqID, msg: "microphone permission denied") }
+                    return
+                }
+                self.ui { self.startMonitoring(reqID) }
+            }
+            return
+        }
+
         do {
             // .measurement is the point of this whole configuration: it turns
             // off the input processing — AGC, noise suppression, the voice EQ —
@@ -96,16 +121,22 @@ extension GophicsMonitor: MobileMonitorHostProtocol {
             }
         }
 
+        // Set before starting, not after: engine.start() begins calling the tap
+        // immediately, and a tap that reads active == false discards the buffer.
+        // Starting first threw away however many blocks arrived before this
+        // line ran.
+        active = true
+
         engine.prepare()
         do {
             try engine.start()
         } catch {
+            active = false
             input.removeTap(onBus: 0)
             ui { self.bridge.failMonitoring(reqID, msg: "engine: \(error.localizedDescription)") }
             return
         }
 
-        active = true
         let rate = Int(format.sampleRate)
         ui { self.bridge.deliverMonitorReady(reqID, sampleRate: rate) }
     }
