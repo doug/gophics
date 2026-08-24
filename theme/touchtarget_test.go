@@ -67,3 +67,55 @@ func TestSwitchCarriesItsLabel(t *testing.T) {
 		t.Errorf("switch label = %q, want it to name what it controls", n.Label)
 	}
 }
+
+// A stack of checkboxes must line up down their boxes.
+//
+// touchTargetH raised these to a fingertip's height with widget.Center, which
+// centres on both axes — so given a column wider than the control, which is
+// every form, each row drifted to the middle and a group came out ragged
+// instead of aligned. The height assertion above passed throughout: it is the
+// axis nobody was looking at.
+func TestLabeledControlsAlignToTheLeadingEdge(t *testing.T) {
+	const width = 320
+	for _, tc := range []struct {
+		name   string
+		widget widget.Widget
+	}{
+		{"Checkbox", theme.Checkbox{Label: "Mushroom", OnChange: func(bool) {}}},
+		{"Radio", theme.Radio{Label: "Free", OnSelect: func() {}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Measured in pixels, not from the semantic tree. The node these
+			// controls publish is the hit area, which spans the row whatever
+			// the content inside it does — so a rect assertion passes while
+			// the thing a person sees is centred. The leftmost painted pixel
+			// is the ragged edge itself.
+			a := apptest.New(t, widget.Column(
+				widget.Sized{W: width, Child: tc.widget},
+				widget.Sized{H: 100},
+			), apptest.WithConfig(app.Config{
+				Size: geom.Size{W: width, H: 200}, Font: goregular.TTF,
+			}))
+
+			img := a.Render()
+			b := img.Bounds()
+			bg := img.At(b.Max.X-2, b.Max.Y-2) // a corner the control never reaches
+			leftmost := b.Max.X
+			for y := b.Min.Y; y < b.Max.Y; y++ {
+				for x := b.Min.X; x < leftmost; x++ {
+					if img.At(x, y) != bg {
+						leftmost = x
+						break
+					}
+				}
+			}
+			// Scaled: the window is in points, the framebuffer in pixels.
+			limit := b.Dx() / 8
+			if leftmost > limit {
+				t.Errorf("%s paints nothing until x=%d of %d, want it to start near the "+
+					"leading edge — a centred control makes a column of them ragged",
+					tc.name, leftmost, b.Dx())
+			}
+		})
+	}
+}

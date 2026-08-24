@@ -67,6 +67,18 @@ func (h *Headless) SetDarkMode(dark bool) {
 	h.core.Owner.RebuildAll()
 }
 
+// SetSafeInsets reports the platform-obstructed edges — the notch, the status
+// bar, the home indicator — that a real device would.
+//
+// Headless they are zero, which is also what every desktop reports, so a
+// layout that hides its title under the Dynamic Island looks perfectly correct
+// in every test until it reaches a phone. This is how a test says "pretend
+// this is that phone".
+func (h *Headless) SetSafeInsets(in geom.Insets) {
+	h.core.Owner.SafeInsets = in
+	h.core.Owner.RebuildAll()
+}
+
 // Resize changes the logical surface size (simulates a window resize) and
 // delivers a Resize event so the tree can react.
 func (h *Headless) Resize(size geom.Size) {

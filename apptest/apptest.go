@@ -53,6 +53,8 @@ type Options struct {
 	Dir string
 	// Tol is how much difference Golden accepts. Default Exact.
 	Tol Tolerance
+	// SafeInsets are the platform-obstructed edges. Zero by default.
+	SafeInsets geom.Insets
 }
 
 // Option customises the harness.
@@ -85,6 +87,13 @@ func WithConfig(c app.Config) Option {
 	return func(o *Options) { o.Config = c }
 }
 
+// WithSafeInsets makes the app believe it is running on hardware with an
+// obstructed edge. Zero — the default, and what every desktop reports — is why
+// a notch bug cannot be caught without it.
+func WithSafeInsets(in geom.Insets) Option {
+	return func(o *Options) { o.SafeInsets = in }
+}
+
 // New builds a headless app around root and fails the test if it cannot start.
 func New(tb testing.TB, root widget.Widget, opts ...Option) *App {
 	tb.Helper()
@@ -107,6 +116,9 @@ func New(tb testing.TB, root widget.Widget, opts ...Option) *App {
 	h, err := app.NewHeadless(root, o.Config, o.Scale)
 	if err != nil {
 		tb.Fatalf("apptest: starting the app: %v", err)
+	}
+	if o.SafeInsets != (geom.Insets{}) {
+		h.SetSafeInsets(o.SafeInsets)
 	}
 	return &App{Headless: h, tb: tb, opts: o}
 }

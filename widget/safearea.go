@@ -54,12 +54,25 @@ type safeAreaState struct {
 	StateBase[SafeArea]
 }
 
+// safeAreaApplied marks a subtree that has already been inset, so a nested
+// SafeArea passes through instead of insetting a second time.
+//
+// The app runner wraps every root in one of these, because four of five
+// examples in this tree forgot to and had their titles under the notch. An app
+// that also wraps its own screen — which the documentation above recommends,
+// and which was the right advice before the default existed — must not end up
+// padded twice.
+type safeAreaApplied struct{}
+
 func (s *safeAreaState) Build(ctx Ctx) Widget {
 	w := s.W()
-	return Padding{
+	if _, done := Of[safeAreaApplied](ctx); done {
+		return w.Child
+	}
+	return Provide[safeAreaApplied]{Value: safeAreaApplied{}, Child: Padding{
 		Insets: resolveSafeInsets(ctx.SafeInsets(), w.Edges, w.Minimum),
 		Child:  w.Child,
-	}
+	}}
 }
 
 // resolveSafeInsets decides the padding for a set of platform insets. It is a

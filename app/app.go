@@ -34,6 +34,19 @@ type Config struct {
 	// conventional; empty falls back to the executable's name.
 	AppID string
 	Size  geom.Size // initial logical window size
+	// EdgeToEdge stops the runner from insetting the root for the notch, the
+	// status bar and the home indicator.
+	//
+	// The default is to inset, because forgetting is the common failure and it
+	// is invisible on a desktop: four of the five examples here shipped with
+	// their titles under the Dynamic Island, and the one that did not was the
+	// one whose author had met the problem before. On a platform with no
+	// obstructions the insets are zero and this costs nothing either way.
+	//
+	// Set it when the content is meant to run under the hardware — a
+	// full-bleed camera preview, a photo viewer, a map — and apply
+	// widget.SafeArea yourself around the parts that should not.
+	EdgeToEdge bool
 	// ScaleToFit treats Size as a fixed design size: the app lays out at
 	// exactly Size and the shell scales the result to fit the display,
 	// letterboxed, preserving aspect ratio. Set it for a layout that does not
@@ -107,6 +120,7 @@ type core struct {
 
 	background     paint.Color
 	backgroundDark paint.Color
+	edgeToEdge     bool
 	root           widget.Widget
 	size           geom.Size
 	debugPaint     bool
@@ -256,6 +270,7 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 		Painter:        p,
 		background:     cfg.Background,
 		backgroundDark: cfg.BackgroundDark,
+		edgeToEdge:     cfg.EdgeToEdge,
 		root:           root,
 		size:           cfg.Size,
 		cur:            &scene.List{},
@@ -331,7 +346,15 @@ func (c *core) mount() {
 	// and snackbars above the whole tree (widget.Overlay via Of), and in a
 	// DragHost so a Draggable and a DropTarget in unrelated subtrees can find
 	// each other. DragHost is inside, so a drag preview shows in the overlay.
-	c.Owner.SetRoot(widget.OverlayHost{Child: widget.DragHost{Child: c.root}})
+	// SafeArea sits inside the hosts, not around them: an overlay places
+	// itself against the whole window on purpose — a dialog centres in it, a
+	// snackbar decides for itself whether to clear the home indicator — while
+	// the app's own tree is what must not hide under the hardware.
+	var root widget.Widget = c.root
+	if !c.edgeToEdge {
+		root = widget.SafeArea{Child: root}
+	}
+	c.Owner.SetRoot(widget.OverlayHost{Child: widget.DragHost{Child: root}})
 }
 
 // Post schedules fn to run on the UI goroutine before the next frame's

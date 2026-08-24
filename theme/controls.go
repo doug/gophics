@@ -94,8 +94,18 @@ func touchTarget(child widget.Widget) widget.Widget {
 // A labeled checkbox or radio is already wide enough to hit; it is the height
 // that falls short, at the 20pt of the box itself. touchTarget pins both axes,
 // which suits a bare switch track but would clip a label, so rows use this.
+//
+// Centred vertically and aligned to the leading edge horizontally, not
+// centred on both. Centre used to do both, which the comment above already
+// said it should not: given a column wider than the control — which is every
+// form — a checkbox drifted to the middle of the row while its label sat
+// beside it, and a stack of them came out ragged instead of aligned down
+// their boxes. Directional, so it follows the leading edge in RTL rather
+// than pinning to the left.
 func touchTargetH(child widget.Widget) widget.Widget {
-	return widget.Sized{H: MinTouchTarget, Child: widget.Center(child)}
+	return widget.Sized{H: MinTouchTarget, Child: widget.Align{
+		X: 0, Y: 0.5, Directional: true, Child: child,
+	}}
 }
 
 // Checkbox is a labeled boolean box. Controlled via Checked/OnChange.
