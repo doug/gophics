@@ -591,6 +591,7 @@ func (e *GlyphMaskEngine) SyncAtlasTextures(device *wgpu.Device, queue *wgpu.Que
 		}
 
 		e.atlas.MarkClean(idx)
+		text.NoteUpload()
 	}
 
 	return nil

@@ -3,12 +3,14 @@
 // owns the layer, display link, touch, keyboard, and URL opening —
 // mirroring the Android host.
 import UIKit
+import os
 import Gallerymobile
 
 // One bridge per process, at file scope because the app delegate and the view
 // controller both drive it. gomobile assumes one anyway: Start builds the app
 // once.
 private var bridge: MobileBridge!
+private let atlasLog = OSLog(subsystem: "dev.gophics.gallery", category: "atlas")
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -95,7 +97,19 @@ class GophicsView: UIView, UIKeyInput {
         bridge.setInsets(Float(i.top * scale), rightPx: Float(i.right * scale), bottomPx: Float(i.bottom * scale), leftPx: Float(i.left * scale))
     }
 
+    // Temporary: log the glyph atlas counters once a second. Go's own log does
+    // not reach the device syslog; NSLog does.
+    private var atlasTick = 0
+
     @objc private func frame(_ link: CADisplayLink) {
+        atlasTick += 1
+        if atlasTick % 60 == 0 {
+            let stats = GallerymobileAtlasStats()
+            // Error level on purpose: the device syslog relay carries it,
+            // while NSLog and Go's own logger both go somewhere it does not.
+            os_log(.error, log: atlasLog, "GOPHICS_ATLAS %{public}@", stats)
+            print("GOPHICS_ATLAS \(stats)")
+        }
         let dt = lastTime == 0 ? 1.0 / 60 : link.timestamp - lastTime
         lastTime = link.timestamp
         guard bridge.needsFrame() else { syncKeyboard(); return }

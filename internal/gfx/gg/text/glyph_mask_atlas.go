@@ -242,6 +242,13 @@ func (p *glyphMaskPage) copyMask(mask []byte, maskW, maskH, dstX, dstY int) {
 		copy(p.Data[dstOffset:dstOffset+maskW], mask[srcOffset:srcOffset+maskW])
 	}
 	p.dirty = true
+	atlasWrites.Add(1)
+	if atlasSynced.Load() {
+		// Written after this frame's upload: the GPU texture is now behind the
+		// CPU atlas, and anything drawing this glyph samples whatever the page
+		// held before.
+		atlasLateWrites.Add(1)
+	}
 }
 
 // glyphMaskShelfAllocator is a shelf-based allocator for variable-sized glyph masks.
@@ -632,7 +639,40 @@ var (
 	atlasRefusals    atomic.Uint64
 	atlasEvictions   atomic.Uint64
 	atlasCompactions atomic.Uint64
+	atlasWrites      atomic.Uint64
+	atlasLateWrites  atomic.Uint64
+	atlasUploads     atomic.Uint64
+	atlasSynced      atomic.Bool
+	atlasNilViews    atomic.Uint64
 )
+
+// NoteUpload records that a page was uploaded to the GPU, and NoteSynced that
+// the frame's uploads are finished. Called by the GPU engine.
+//
+// The pair exists to catch one specific thing: a glyph written into the atlas
+// after the frame already uploaded its pages. The CPU atlas would hold the
+// right pixels and the GPU texture would not, which draws as garbage without
+// any allocation ever failing — the state the counters left us in.
+func NoteUpload() { atlasUploads.Add(1) }
+func NoteSynced() { atlasSynced.Store(true) }
+
+// NoteFrameStart marks the beginning of a frame's dispatch.
+//
+// It is the other half of NoteSynced, and getting it wrong made the late-write
+// counter useless: glyphs are laid out *between* frames, before dispatch
+// begins, so a flag left set from the previous frame's upload counted every
+// ordinary write as late. Cleared here, "late" means what it should — written
+// after this frame uploaded, and therefore drawn from a texture that does not
+// contain it.
+func NoteFrameStart() { atlasSynced.Store(false) }
+
+// NoteNilView records a glyph batch whose atlas page had no GPU texture view.
+//
+// It is not a harmless skip. The batch is still drawn, using whatever bind
+// group the same batch index was given on an earlier frame — so its glyphs are
+// sampled out of a different atlas page. That is text rendered as other text,
+// with nothing wrong on the CPU side and no allocation ever failing.
+func NoteNilView() { atlasNilViews.Add(1) }
 
 // AtlasStats reports how the glyph atlas has been behaving: how many glyphs it
 // refused outright, how many entries it evicted to make room, and how many
@@ -644,6 +684,15 @@ var (
 func AtlasStats() (refusals, evictions, compactions uint64) {
 	return atlasRefusals.Load(), atlasEvictions.Load(), atlasCompactions.Load()
 }
+
+// AtlasWriteStats reports glyph writes, writes that happened after the frame
+// had already uploaded, and page uploads.
+func AtlasWriteStats() (writes, late, uploads uint64) {
+	return atlasWrites.Load(), atlasLateWrites.Load(), atlasUploads.Load()
+}
+
+// AtlasNilViews counts glyph batches drawn without their atlas page bound.
+func AtlasNilViews() uint64 { return atlasNilViews.Load() }
 
 // touch records that an entry — and therefore the page holding it — is being
 // used in the current frame. Must be called with a.mu held.

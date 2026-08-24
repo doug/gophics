@@ -1133,6 +1133,7 @@ func (rc *GPURenderContext) StrokeShape(target gg.GPURenderTarget, shape gg.Dete
 
 // Flush dispatches all pending commands for this context via the render session.
 func (rc *GPURenderContext) Flush(target gg.GPURenderTarget) error { //nolint:cyclop,gocognit,gocyclo,funlen // sequential resource setup + group dispatch
+	text.NoteFrameStart()
 	// Resolve opacity/blend groups (PushLayer/PopLayer) to offscreen composites
 	// first (Skia saveLayer): each group is rendered to its own offscreen target
 	// via a child context and rewritten into a single textured-quad composite,
@@ -1267,6 +1268,8 @@ func (rc *GPURenderContext) Flush(target gg.GPURenderTarget) error { //nolint:cy
 			view := glyphEng.PageTextureView(batch.AtlasPageIndex)
 			if view != nil {
 				rc.session.SetGlyphMaskAtlasView(i, view, batch.IsLCD)
+			} else {
+				text.NoteNilView()
 			}
 		}
 	}
@@ -2050,6 +2053,9 @@ func (rc *GPURenderContext) syncGlyphMaskAtlases(batches []GlyphMaskBatch) error
 	if err := s.glyphMaskEngine.SyncAtlasTextures(s.device, s.queue); err != nil {
 		return err
 	}
+	// From here on, a glyph written into the atlas will not reach the GPU
+	// until the next frame's upload.
+	text.NoteSynced()
 
 	hasLCD := false
 	for i := range batches {
@@ -2066,6 +2072,7 @@ func (rc *GPURenderContext) syncGlyphMaskAtlases(batches []GlyphMaskBatch) error
 	for i, batch := range batches {
 		view := s.glyphMaskEngine.PageTextureView(batch.AtlasPageIndex)
 		if view == nil {
+			text.NoteNilView()
 			slogger().Warn("glyph mask atlas page not synced — text skipped",
 				"pageIndex", batch.AtlasPageIndex, "batchIndex", i, "quads", len(batch.Quads))
 			continue

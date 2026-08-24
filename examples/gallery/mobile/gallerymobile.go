@@ -7,8 +7,11 @@
 package gallerymobile
 
 import (
+	"fmt"
+
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/examples/gallery/ui"
+	gtext "github.com/doug/gophics/internal/gfx/gg/text"
 	"github.com/doug/gophics/shell/mobile"
 )
 
@@ -23,4 +26,18 @@ func Start() (*mobile.Bridge, error) {
 		return nil, err
 	}
 	return mobile.NewBridge(h), nil
+}
+
+// AtlasStats reports the glyph atlas counters as a line the host can log.
+//
+// Temporary, for chasing a rendering fault that only appears on a real device.
+// It exists because Go's own log output does not reach the device syslog —
+// gomobile writes it through os_log at a level the stream drops — while NSLog
+// from the host does, so the shortest path to seeing these numbers off-device
+// is to hand them to Swift and let it do the logging.
+func AtlasStats() string {
+	refusals, evictions, compactions := gtext.AtlasStats()
+	writes, late, uploads := gtext.AtlasWriteStats()
+	return fmt.Sprintf("ref=%d ev=%d cmp=%d w=%d late=%d up=%d nilview=%d",
+		refusals, evictions, compactions, writes, late, uploads, gtext.AtlasNilViews())
 }
