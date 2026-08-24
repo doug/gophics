@@ -375,21 +375,49 @@ func (c *Capture) convert(sample iface, w, h, stride int) {
 		return
 	}
 	src := unsafe.Slice((*byte)(data), abs*h)
-	bottomUp := stride < 0
 	c.frames.deliver(w, h, func(img *image.RGBA) {
-		for y := 0; y < h; y++ {
-			sy := y
-			if bottomUp {
-				sy = h - 1 - y
-			}
-			s := src[sy*abs : sy*abs+w*4]
-			d := img.Pix[y*img.Stride : y*img.Stride+w*4]
-			for x := 0; x < w*4; x += 4 {
-				// RGB32 is B,G,R,X in memory; the X byte is not alpha.
-				d[x+0], d[x+1], d[x+2], d[x+3] = s[x+2], s[x+1], s[x+0], 0xff
-			}
-		}
+		rgb32ToRGBA(src, img, w, h, stride)
 	})
+}
+
+// rgb32ToRGBA converts Media Foundation's RGB32 rows into RGBA.
+//
+// A negative stride means the rows arrive bottom-up, which is RGB32's
+// historical default and the reason an otherwise correct capture comes out
+// upside down.
+//
+// Split out from convert so the arithmetic can be tested without a camera: it
+// is the same shape as the V4L2 converters, indexing a driver-sized buffer
+// with a driver-reported stride, and it had the same defect. The buffer length
+// was checked once as stride*height while each row was then sliced at w*4, so
+// a stride narrower than a row of pixels — which nothing forbids a driver from
+// reporting — walked off the end on the last row.
+//
+// The fix is the per-row bound rather than a corrected stride. A stride too
+// narrow to hold a row describes no layout this can recover, so the rows that
+// do not fit are skipped instead of being invented.
+func rgb32ToRGBA(src []byte, img *image.RGBA, w, h, stride int) {
+	abs := stride
+	if abs < 0 {
+		abs = -abs
+	}
+	bottomUp := stride < 0
+	for y := 0; y < h; y++ {
+		sy := y
+		if bottomUp {
+			sy = h - 1 - y
+		}
+		off := sy * abs
+		if off < 0 || off+w*4 > len(src) {
+			continue
+		}
+		s := src[off : off+w*4]
+		d := img.Pix[y*img.Stride : y*img.Stride+w*4]
+		for x := 0; x < w*4; x += 4 {
+			// RGB32 is B,G,R,X in memory; the X byte is not alpha.
+			d[x+0], d[x+1], d[x+2], d[x+3] = s[x+2], s[x+1], s[x+0], 0xff
+		}
+	}
 }
 
 // Stop ends the stream and releases the device, turning the camera light off.
