@@ -333,3 +333,94 @@ func writePNG(t *testing.T, path string, rgba []uint8, w, h int) {
 		t.Fatal(err)
 	}
 }
+
+// TestTextSurvivesADeviceChange exercises the one path a phone takes and a
+// desktop never does.
+//
+// When the surface is recreated — backgrounding, rotation, memory pressure —
+// the wgpu device is recreated with it, and SyncAtlasTextures drops every page
+// texture and re-uploads. The CPU atlas is untouched by that, which is exactly
+// the state the device counters reported during the corruption: no refusals,
+// no evictions, no compactions, and wrong pixels.
+//
+// The bind groups are the hazard. They live in a slice indexed by batch and
+// persist across frames, each holding a texture view. After a device change
+// those views belong to a destroyed device, so a batch drawn before its bind
+// group is rebuilt samples released memory.
+func TestTextSurvivesADeviceChange(t *testing.T) {
+	device, queue, cleanup := reproRealDevice(t)
+	defer cleanup()
+
+	const W, H = 512, 48
+	face := reproFont(t)
+	engine := NewGlyphMaskEngine()
+	session := NewGPURenderSession(device, queue, testSampleCount(t, device))
+	if err := session.ensureClipBindLayout(); err != nil {
+		t.Fatalf("ensureClipBindLayout: %v", err)
+	}
+	if err := session.ensureGlyphMaskPipeline(false); err != nil {
+		t.Fatalf("ensureGlyphMaskPipeline: %v", err)
+	}
+
+	batch := func(t *testing.T, line string) GlyphMaskBatch {
+		t.Helper()
+		var glyphs []text.ShapedGlyph
+		for g := range face.Glyphs(line) {
+			glyphs = append(glyphs, text.ShapedGlyph{GID: g.GID, X: g.X, Y: g.Y})
+		}
+		b, err := engine.LayoutShapedGlyphs(face, glyphs, 6, 24, gg.RGBA{A: 1}, gg.Identity(), 1.0, false)
+		if err != nil {
+			t.Fatalf("LayoutShapedGlyphs: %v", err)
+		}
+		return b
+	}
+	frame := func(t *testing.T, b GlyphMaskBatch) []uint8 {
+		t.Helper()
+		if err := engine.SyncAtlasTextures(device, queue); err != nil {
+			t.Fatalf("SyncAtlasTextures: %v", err)
+		}
+		if v := engine.PageTextureView(b.AtlasPageIndex); v != nil {
+			session.SetGlyphMaskAtlasView(0, v, b.IsLCD)
+		}
+		data := make([]uint8, W*H*4)
+		for i := range data {
+			data[i] = 255
+		}
+		if err := session.RenderFrameGrouped(gg.GPURenderTarget{Data: data, Width: W, Height: H, Stride: W * 4},
+			[]ScissorGroup{{GlyphMaskBatches: []GlyphMaskBatch{b}}}, nil, nil); err != nil {
+			t.Fatalf("RenderFrameGrouped: %v", err)
+		}
+		engine.AdvanceFrame()
+		return data
+	}
+
+	line := batch(t, "device change")
+	before := frame(t, line)
+
+	// A second device, as a recreated surface produces. The engine notices and
+	// drops its page textures.
+	device2, queue2, cleanup2 := reproRealDevice(t)
+	defer cleanup2()
+	if err := engine.SyncAtlasTextures(device2, queue2); err != nil {
+		t.Fatalf("SyncAtlasTextures after device change: %v", err)
+	}
+
+	// Draw again on the original device, as a frame in flight across the change
+	// would. Whatever happens, it must not read freed memory or come back blank.
+	after := frame(t, batch(t, "device change"))
+
+	ink := func(d []uint8) int {
+		n := 0
+		for i := 0; i < len(d); i += 4 {
+			if d[i] != 255 || d[i+1] != 255 || d[i+2] != 255 {
+				n++
+			}
+		}
+		return n
+	}
+	if b, a := ink(before), ink(after); a == 0 && b > 0 {
+		t.Errorf("text drew %d ink pixels before a device change and %d after; "+
+			"the atlas page textures were dropped and the batch drew from views "+
+			"belonging to a destroyed device", b, a)
+	}
+}
