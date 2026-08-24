@@ -211,7 +211,8 @@ type glyphMaskPage struct {
 	// index is the page index in the manager.
 	index int
 
-	// lastUsedFrame is the frame when this page was last written to.
+	// lastUsedFrame is the frame when this page was last written to or drawn
+	// from. Both count: a page nobody adds to but everybody reads is in use.
 	// Used by Compact() for frame-based page eviction (Skia pattern).
 	lastUsedFrame uint64
 
@@ -439,9 +440,15 @@ func (a *GlyphMaskAtlas) Get(key GlyphMaskKey) (GlyphMaskRegion, bool) {
 		return GlyphMaskRegion{}, false
 	}
 
-	// Update LRU position
-	entry.lastAccessFrame = a.currentFrame.Load()
-	a.moveToFront(entry)
+	// Update LRU position, and mark the page as still in use.
+	//
+	// The page stamp is the important half. It used to be set only when a
+	// glyph was written, so a page whose glyphs are drawn every single frame
+	// still looked untouched thirty-two frames after the last glyph was added
+	// to it — and compaction then deleted its entries and zeroed its pixels
+	// under text that was on screen the whole time. Drawing a glyph is using
+	// its page.
+	a.touch(entry)
 
 	a.hits.Add(1)
 	return entry.region, true
@@ -462,8 +469,7 @@ func (a *GlyphMaskAtlas) Put(key GlyphMaskKey, mask []byte, maskW, maskH int, be
 
 	// Check if already cached (race with concurrent Put)
 	if entry, ok := a.lookup[key]; ok {
-		entry.lastAccessFrame = a.currentFrame.Load()
-		a.moveToFront(entry)
+		a.touch(entry)
 		return entry.region, nil
 	}
 
@@ -619,6 +625,37 @@ func (a *GlyphMaskAtlas) GetOrRasterize(
 	return a.Put(key, mask, maskW, maskH, bearingX, bearingY)
 }
 
+// Diagnostic counters, for chasing a rendering fault that only shows on real
+// hardware after a while of use. Cheap enough to leave on: three atomic adds
+// on paths that already rasterize a glyph or walk an LRU list.
+var (
+	atlasRefusals    atomic.Uint64
+	atlasEvictions   atomic.Uint64
+	atlasCompactions atomic.Uint64
+)
+
+// AtlasStats reports how the glyph atlas has been behaving: how many glyphs it
+// refused outright, how many entries it evicted to make room, and how many
+// pages compaction reclaimed.
+//
+// A refusal is the interesting one. It means a glyph could not be placed at
+// all, so whatever was drawn in its stead is wrong, and it is the signature of
+// the atlas being the cause rather than a bystander.
+func AtlasStats() (refusals, evictions, compactions uint64) {
+	return atlasRefusals.Load(), atlasEvictions.Load(), atlasCompactions.Load()
+}
+
+// touch records that an entry — and therefore the page holding it — is being
+// used in the current frame. Must be called with a.mu held.
+func (a *GlyphMaskAtlas) touch(entry *glyphMaskEntry) {
+	frame := a.currentFrame.Load()
+	entry.lastAccessFrame = frame
+	if i := entry.region.AtlasIndex; i >= 0 && i < len(a.pages) {
+		a.pages[i].lastUsedFrame = frame
+	}
+	a.moveToFront(entry)
+}
+
 // allocate finds room for a mask, evicting until it fits.
 //
 // Shared by Put and PutLCD, which each had their own copy. Only one of them
@@ -640,6 +677,7 @@ func (a *GlyphMaskAtlas) allocate(w, h int) (*glyphMaskPage, int, int, error) {
 			}
 		}
 		if !a.evictLRUUnusedThisFrame() {
+			atlasRefusals.Add(1)
 			return nil, 0, 0, fmt.Errorf(
 				"text: no room for a %dx%d glyph mask in a %dpx atlas page",
 				w, h, a.config.Size)
@@ -703,6 +741,7 @@ func (a *GlyphMaskAtlas) evictLRUUnusedThisFrame() bool {
 			continue // on screen, or recently enough to still be replayed
 		}
 		a.evictEntry(entry)
+		atlasEvictions.Add(1)
 		return true
 	}
 	return false
@@ -732,6 +771,7 @@ func (a *GlyphMaskAtlas) resetPage(page *glyphMaskPage) {
 	clear(page.Data)
 	page.dirty = true
 	page.entryCount = 0
+	atlasCompactions.Add(1)
 }
 
 // LRU list operations. Must be called with a.mu held.

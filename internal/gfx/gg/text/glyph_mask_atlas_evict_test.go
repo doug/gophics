@@ -163,3 +163,44 @@ func TestLCDAtlasEvictsWhenOutOfSpace(t *testing.T) {
 		}
 	}
 }
+
+// Compaction must not reclaim a page whose glyphs are still being drawn.
+//
+// A page's last-used stamp was set only when a glyph was written to it, so a
+// page nobody adds to but everybody reads looked idle after 32 frames.
+// Compaction then deleted its entries and zeroed its pixels — under text that
+// had been on screen the whole time. That is the corruption that survived
+// three fixes to the eviction path, and it was reachable only once the frame
+// clock started ticking, because compaction had never run before.
+func TestCompactionKeepsPagesThatAreStillBeingDrawn(t *testing.T) {
+	a := NewGlyphMaskAtlasDefault()
+
+	mask := make([]byte, 12*12)
+	for i := range mask {
+		mask[i] = 0xff
+	}
+	key := GlyphMaskKey{GlyphID: 7, SizeQ4: 192}
+	want, err := a.Put(key, mask, 12, 12, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Far longer than the staleness threshold, drawing the glyph every frame —
+	// which is what a line of body text that never changes does.
+	for i := 0; i < compactStaleFrames*3; i++ {
+		if _, ok := a.Get(key); !ok {
+			t.Fatalf("glyph vanished after %d frames of being drawn every frame; "+
+				"compaction reclaimed a page that was in use", i)
+		}
+		a.AdvanceFrame()
+	}
+
+	got, ok := a.Get(key)
+	if !ok {
+		t.Fatal("glyph was compacted away while it was being drawn")
+	}
+	if got != want {
+		t.Errorf("glyph moved from %+v to %+v while on screen — any quad already "+
+			"recorded now samples the wrong pixels", want, got)
+	}
+}
