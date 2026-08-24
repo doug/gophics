@@ -371,15 +371,31 @@ func cvSize(sym unsafe.Pointer, buf uintptr) uint64 {
 // deliver converts BGRA to RGBA into the next pooled image and publishes it.
 func (c *Capture) deliver(src []byte, w, h, stride int) {
 	c.frames.deliver(w, h, func(img *image.RGBA) {
-		for y := 0; y < h; y++ {
-			s := src[y*stride : y*stride+w*4]
-			d := img.Pix[y*img.Stride : y*img.Stride+w*4]
-			for x := 0; x < w*4; x += 4 {
-				// BGRA → RGBA; the alpha the camera reports is not meaningful.
-				d[x+0], d[x+1], d[x+2], d[x+3] = s[x+2], s[x+1], s[x+0], 0xff
-			}
-		}
+		bgraToRGBA(src, img, w, h, stride)
 	})
+}
+
+// bgraToRGBA converts CoreVideo's 32BGRA rows into RGBA.
+//
+// Split out from deliver, and bounded per row, for the reason the V4L2 and
+// Media Foundation converters are: all three index a buffer sized from a
+// stride the platform reported, and slicing w*4 out of each row is only safe
+// while that stride is at least a row wide. The other two were reading off the
+// end when it was not; this one is the same code and was fixed with them
+// rather than waiting to be caught separately.
+func bgraToRGBA(src []byte, img *image.RGBA, w, h, stride int) {
+	for y := 0; y < h; y++ {
+		off := y * stride
+		if off < 0 || off+w*4 > len(src) {
+			continue
+		}
+		s := src[off : off+w*4]
+		d := img.Pix[y*img.Stride : y*img.Stride+w*4]
+		for x := 0; x < w*4; x += 4 {
+			// BGRA → RGBA; the alpha the camera reports is not meaningful.
+			d[x+0], d[x+1], d[x+2], d[x+3] = s[x+2], s[x+1], s[x+0], 0xff
+		}
+	}
 }
 
 // Stop ends the session and releases the camera, turning its light off.
