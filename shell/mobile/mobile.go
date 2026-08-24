@@ -49,6 +49,7 @@ type Bridge struct {
 	dispHandle   int64        // retained native handles so Resize can full-rebuild
 	winHandle    int64        // the GPU surface on an orientation change (see Resize)
 	snapshotting bool         // force a CPU offscreen frame (Snapshot)
+	capturing    *captureTarget
 
 	// Lifecycle state, written from the host UI thread via SetAppState and
 	// read by the widget tree; see lifecycle.go.
@@ -413,6 +414,9 @@ func (f *frame) Scale() float32  { return f.b.scale }
 // Target presents on the GPU surface for a live frame; a Snapshot forces a CPU
 // offscreen target instead (tests/screenshots).
 func (f *frame) Target() shell.Target {
+	if f.b.capturing != nil && f.b.gpu != nil {
+		return f.b.capturing
+	}
 	if !f.b.snapshotting && f.b.gpu != nil {
 		return mobileGPUTarget{f.b.gpu}
 	}

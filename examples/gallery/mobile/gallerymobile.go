@@ -8,6 +8,7 @@ package gallerymobile
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/examples/gallery/ui"
@@ -40,4 +41,25 @@ func AtlasStats() string {
 	writes, late, uploads := gtext.AtlasWriteStats()
 	return fmt.Sprintf("ref=%d ev=%d cmp=%d w=%d late=%d up=%d nilview=%d",
 		refusals, evictions, compactions, writes, late, uploads, gtext.AtlasNilViews())
+}
+
+// CaptureGPU writes one GPU-rendered frame to path as a PNG.
+//
+// Temporary, for a rendering fault that only a device shows. The host calls
+// this with somewhere inside the app container; devicectl copies it off.
+// Rendering rather than screenshotting is the point: this frame comes off the
+// same device, canvas and glyph atlas the screen does, so a fault in that
+// atlas is in the file.
+func CaptureGPU(bridge *mobile.Bridge, path string) string {
+	if bridge == nil {
+		return "no bridge"
+	}
+	data := bridge.CaptureGPU(1.0 / 60)
+	if len(data) == 0 {
+		return "capture produced nothing (no GPU surface?)"
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err.Error()
+	}
+	return ""
 }

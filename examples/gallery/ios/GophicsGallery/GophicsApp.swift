@@ -100,6 +100,7 @@ class GophicsView: UIView, UIKeyInput {
     // Temporary: log the glyph atlas counters once a second. Go's own log does
     // not reach the device syslog; NSLog does.
     private var atlasTick = 0
+    private var captureTick = 0
 
     @objc private func frame(_ link: CADisplayLink) {
         atlasTick += 1
@@ -109,6 +110,22 @@ class GophicsView: UIView, UIKeyInput {
             // while NSLog and Go's own logger both go somewhere it does not.
             os_log(.error, log: atlasLog, "GOPHICS_ATLAS %{public}@", stats)
             print("GOPHICS_ATLAS \(stats)")
+
+            // Keep a rolling set of GPU frame captures in the app's Documents
+            // directory, which devicectl can copy off. One every ten seconds is
+            // enough to catch a fault that takes minutes to appear, and cheap
+            // enough not to change what we are measuring.
+            captureTick += 1
+            if captureTick % 10 == 0 {
+                let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let path = dir.appendingPathComponent("frame_\(captureTick / 10 % 6).png").path
+                let err = GallerymobileCaptureGPU(bridge, path)
+                if !err.isEmpty {
+                    os_log(.error, log: atlasLog, "GOPHICS_CAPTURE failed: %{public}@", err)
+                } else {
+                    os_log(.error, log: atlasLog, "GOPHICS_CAPTURE wrote %{public}@", path)
+                }
+            }
         }
         let dt = lastTime == 0 ? 1.0 / 60 : link.timestamp - lastTime
         lastTime = link.timestamp
