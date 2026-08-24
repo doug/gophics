@@ -1,4 +1,10 @@
-// Package mic is the shared Go half of live microphone capture.
+// Package dsp is the shared Go half of live microphone capture: level,
+// spectrum, and a ring buffer of recent samples.
+//
+// It holds no device code, which is why it is no longer called mic. That name
+// put it beside internal/audio — the package that does open devices — and made
+// two very different things look like siblings: one talks to CoreAudio, ALSA
+// and WASAPI, the other is arithmetic.
 //
 // Every shell that captures audio natively — Android, iOS, macOS, Linux,
 // Windows — receives raw PCM from a platform callback on some background
@@ -10,7 +16,7 @@
 // The web shell is the exception: a browser's AnalyserNode already does this
 // work natively, so shell/web keeps its own path and only shares the band
 // folding, so the bars look identical everywhere.
-package mic
+package dsp
 
 import "math"
 

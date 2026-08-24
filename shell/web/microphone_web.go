@@ -23,7 +23,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/doug/gophics/internal/mic"
+	"github.com/doug/gophics/internal/dsp"
 	"github.com/doug/gophics/shell"
 )
 
@@ -318,7 +318,7 @@ func (m *webMonitor) Bands(dst []float32) int {
 // foldBands converts the analyser's byte bins to the shared folding routine's
 // scale and delegates to it.
 //
-// The grouping itself lives in internal/mic because every native shell needs
+// The grouping itself lives in internal/dsp because every native shell needs
 // the same one: shell.Monitor promises that asking for N bands means the same
 // thing on every platform, and two independent implementations of a
 // logarithmic fold would quietly drift apart.
@@ -333,7 +333,7 @@ func foldBands(bins []byte, dst []float32) int {
 	for i, v := range bins {
 		f[i] = float32(v) / 255
 	}
-	return mic.FoldBands(f, dst)
+	return dsp.FoldBands(f, dst)
 }
 
 // foldScratch is reused across calls; the web shell is single-goroutine (the

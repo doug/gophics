@@ -1,4 +1,4 @@
-package mic
+package dsp
 
 import (
 	"math"

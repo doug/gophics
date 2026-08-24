@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/internal/audio"
-	"github.com/doug/gophics/internal/mic"
+	"github.com/doug/gophics/internal/dsp"
 	"github.com/doug/gophics/sound"
 	"github.com/doug/gophics/sound/device"
 	"github.com/doug/gophics/sound/pitch"
@@ -24,7 +24,7 @@ func main() {
 	}
 	fmt.Printf("capture open at %d Hz\n", rate)
 
-	an := mic.New(rate, mic.DefaultWindow)
+	an := dsp.New(rate, dsp.DefaultWindow)
 	var blocks int
 	if err := c.Start(func(pcm []float32) { blocks++; an.Write(pcm) }); err != nil {
 		fmt.Println("start:", err)

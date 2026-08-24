@@ -124,3 +124,62 @@ func TestSwiftHostsTypecheck(t *testing.T) {
 		}
 	}
 }
+
+// TestExampleHostsMatchTheReference catches the copies drifting.
+//
+// The files under native/ are meant to be copied into an app's project, and
+// mirror did exactly that — so GophicsMonitor.kt and GophicsPreview.kt now
+// exist twice, identical but for the package line, with nothing keeping them
+// that way. A fix applied to one would silently leave the other broken, and
+// the broken one is the copy people are told to start from.
+//
+// Comparing them here is the cheapest thing that makes the duplication safe:
+// the reference stays the source of truth, and a divergence is a failure with
+// the diff in it rather than a surprise months later.
+func TestExampleHostsMatchTheReference(t *testing.T) {
+	refs := nativeFiles(t, ".kt")
+	byName := map[string]string{}
+	for p, src := range refs {
+		byName[filepath.Base(p)] = src
+	}
+
+	copies, err := filepath.Glob(
+		filepath.Join("..", "..", "examples", "*", "android", "app", "src",
+			"main", "java", "dev", "gophics", "*", "Gophics*.kt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, p := range copies {
+		ref, ok := byName[filepath.Base(p)]
+		if !ok {
+			continue // an app's own host, not a copy of a reference
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checked++
+		if stripPackage(string(b)) != stripPackage(ref) {
+			t.Errorf("%s has diverged from shell/mobile/native/%s — "+
+				"apply the change to the reference and re-copy, or the file "+
+				"people are told to start from stays broken",
+				p, filepath.Base(p))
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no example copies found; this test is checking nothing")
+	}
+}
+
+// stripPackage drops the one line a copy is expected to change.
+func stripPackage(src string) string {
+	var out []string
+	for _, l := range strings.Split(src, "\n") {
+		if strings.HasPrefix(l, "package ") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return strings.Join(out, "\n")
+}

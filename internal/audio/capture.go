@@ -10,7 +10,7 @@ package audio
 // arrives when the hardware says it does, and a consumer that is late has
 // already lost it. So the platform calls sink from its own callback thread and
 // the consumer's job is to be quick — in practice, to copy into a ring buffer
-// (see internal/mic) and return.
+// (see internal/dsp) and return.
 type Capture interface {
 	// Open prepares mono capture near sampleRate and reports the rate actually
 	// granted, which may differ: devices are entitled to refuse a rate, and a

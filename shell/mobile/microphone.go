@@ -5,8 +5,9 @@ import (
 	"errors"
 	"math"
 	"sync"
+	"time"
 
-	"github.com/doug/gophics/internal/mic"
+	"github.com/doug/gophics/internal/dsp"
 	"github.com/doug/gophics/shell"
 )
 
@@ -115,7 +116,7 @@ func (m *mobileMicrophone) Listen(done func(shell.Monitor, error)) {
 type mobileMonitor struct {
 	b       *Bridge
 	id      int
-	an      *mic.Analyzer
+	an      *dsp.Analyzer
 	stopped bool
 	mu      sync.Mutex
 }
@@ -183,7 +184,7 @@ func (b *Bridge) DeliverMonitorReady(reqID int, sampleRate int) {
 	if sampleRate <= 0 {
 		sampleRate = 44100
 	}
-	m := &mobileMonitor{b: b, id: reqID, an: mic.New(sampleRate, mic.DefaultWindow)}
+	m := &mobileMonitor{b: b, id: reqID, an: dsp.New(sampleRate, dsp.DefaultWindow)}
 	b.monitors[reqID] = m
 	b.monMu.Unlock()
 
@@ -242,4 +243,109 @@ func (b *Bridge) DeliverMonitorFloat32(reqID int, data []byte) {
 		out[i] = math.Float32frombits(bits)
 	}
 	m.an.Write(out)
+}
+
+// --- Recording ---------------------------------------------------------------
+//
+// The clip half of the microphone. It runs over MediaHost rather than
+// MonitorHost — see the note on Bridge.Microphone for why that matters.
+
+// mobileRecording is the microphone's recording half. It is a distinct type
+// only because the two halves arrive over different hosts; mobileMicrophone
+// embeds it so an app sees one device.
+type mobileRecording struct{ m *mediaBridge }
+
+func (a *mobileRecording) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+	if a.m == nil || a.m.host == nil {
+		done(nil, errors.New("recording is not available on this device"))
+		return
+	}
+	id := a.m.newReq()
+	a.m.recCb[id] = done
+	a.m.recs[id] = &mobileRecorder{m: a.m, id: id, start: time.Now()}
+	a.m.host.StartRecording(id)
+}
+
+type mobileRecorder struct {
+	m      *mediaBridge
+	id     int
+	start  time.Time
+	level  float32
+	stopCb func(shell.Clip, error)
+}
+
+func (r *mobileRecorder) Level() float32 { return r.level }
+
+func (r *mobileRecorder) Elapsed() time.Duration { return time.Since(r.start) }
+
+func (r *mobileRecorder) Stop(done func(shell.Clip, error)) {
+	r.stopCb = done
+	r.m.host.StopRecording(r.id)
+}
+
+func (r *mobileRecorder) Cancel() {
+	delete(r.m.recs, r.id)
+	r.m.host.StopRecording(r.id)
+}
+
+// DeliverRecorderReady signals the mic is live; the Record callback fires.
+func (b *Bridge) DeliverRecorderReady(reqID int) {
+	cb := b.media.recCb[reqID]
+	r := b.media.recs[reqID]
+	if cb == nil || r == nil {
+		return
+	}
+	delete(b.media.recCb, reqID)
+	r.start = time.Now()
+	cb(r, nil)
+}
+
+// FailRecording reports that recording could not start (e.g. permission denied).
+func (b *Bridge) FailRecording(reqID int, msg string) {
+	cb := b.media.recCb[reqID]
+	delete(b.media.recCb, reqID)
+	delete(b.media.recs, reqID)
+	if cb != nil {
+		cb(nil, errors.New(msg))
+	}
+}
+
+// SetAudioLevel updates a live recording's input level (0..1) for the meter.
+func (b *Bridge) SetAudioLevel(reqID int, level float32) {
+	if r := b.media.recs[reqID]; r != nil {
+		r.level = level
+		b.dirty.Store(true)
+	}
+}
+
+// DeliverPCM finalizes a recording: raw 16-bit LE mono PCM + sample rate. Go
+// encodes the WAV Clip and computes its waveform envelope.
+func (b *Bridge) DeliverPCM(reqID int, pcm []byte, sampleRate int, durationMs int) {
+	r := b.media.recs[reqID]
+	if r == nil {
+		return
+	}
+	delete(b.media.recs, reqID)
+	samples := pcmToInt16(pcm)
+	dur := time.Duration(durationMs) * time.Millisecond
+	if dur == 0 && sampleRate > 0 {
+		dur = time.Duration(len(samples)) * time.Second / time.Duration(sampleRate)
+	}
+	if r.stopCb != nil {
+		r.stopCb(shell.Clip{
+			Data:     shell.EncodeWAV(samples, sampleRate),
+			Mime:     "audio/wav",
+			Duration: dur,
+			Envelope: shell.Envelope(samples, 120),
+		}, nil)
+	}
+}
+
+func pcmToInt16(b []byte) []int16 {
+	n := len(b) / 2
+	out := make([]int16, n)
+	for i := 0; i < n; i++ {
+		out[i] = int16(binary.LittleEndian.Uint16(b[i*2:]))
+	}
+	return out
 }
