@@ -316,11 +316,16 @@ type Translated struct {
 	// FracX adds a fraction of the box's own width (1 = fully offscreen
 	// right), resolved at layout time.
 	FracX float32
+	// FracY does the same on the vertical axis. Together they place a box
+	// relative to its own size, which is the only way to centre something on
+	// a point when that size is not known until layout — a drag preview under
+	// a finger, for one.
+	FracY float32
 	Child Box
 }
 
 func (b *Translated) offsetPt() geom.Pt {
-	return geom.Pt{X: b.Dx + b.FracX*b.Size().W, Y: b.Dy}
+	return geom.Pt{X: b.Dx + b.FracX*b.Size().W, Y: b.Dy + b.FracY*b.Size().H}
 }
 
 func (b *Translated) Layout(cs Constraints) geom.Size {

@@ -4,6 +4,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 )
 
 // Drag and drop. A Draggable picks its payload up and carries a floating
@@ -220,10 +221,21 @@ func (s *draggableState) start() {
 	}
 	s.active = true
 	s.sess.begin(s.W().Payload, s.origin)
+	// The moment the item leaves the surface is the one worth feeling: on
+	// touch it is the only confirmation that the long press took, since the
+	// finger is covering what just changed.
+	s.haptic(shell.HapticMedium)
 	if f := s.W().OnDragStart; f != nil {
 		f()
 	}
 	s.showPreview()
+}
+
+// haptic plays k if the platform has haptics (desktop does not).
+func (s *draggableState) haptic(k shell.HapticKind) {
+	if h := s.ctx.Haptic(); h != nil {
+		h.Play(k)
+	}
 }
 
 // showPreview puts the carried widget in the overlay, positioned by padding
@@ -246,6 +258,12 @@ func (s *draggableState) finish(dropped bool) {
 	}
 	s.active = false
 	s.tok.Dismiss()
+	// Landing and failing to land should not feel the same.
+	if dropped {
+		s.haptic(shell.HapticSuccess)
+	} else {
+		s.haptic(shell.HapticLight)
+	}
 	if f := s.W().OnDragEnd; f != nil {
 		f(dropped)
 	}
@@ -329,10 +347,29 @@ func (p dragPreview) Build(Ctx) Widget {
 		return Sized{}
 	}
 	at := p.sess.Pos().Add(p.offset)
+	// Padding cannot take a negative inset, so the pointer position places the
+	// box's top-left and centred shifts it back by half its own size — which is
+	// only knowable at layout time. Without this the ghost hangs below and to
+	// the right of the finger rather than under it, which is what
+	// PreviewOffset has always documented ("zero centers it on the pointer").
 	return Padding{
 		Insets: geom.Insets{Left: max0(at.X), Top: max0(at.Y)},
-		Child:  Align{X: 0, Y: 0, Child: Opacity{Alpha: 0.85, Child: p.Child}},
+		Child:  Align{X: 0, Y: 0, Child: centered{child: Opacity{Alpha: 0.85, Child: p.Child}}},
 	}
+}
+
+// centered shifts a child back by half its own size, so it sits centred on
+// whatever point positioned it.
+type centered struct{ child Widget }
+
+func (c centered) createBox(Ctx) layout.Box { return &layout.Translated{} }
+func (c centered) updateBox(_ Ctx, b layout.Box) {
+	t := b.(*layout.Translated)
+	t.FracX, t.FracY = -0.5, -0.5
+}
+func (c centered) childWidgets() []Widget { return []Widget{c.child} }
+func (c centered) attach(b layout.Box, kids []layout.Box) {
+	b.(*layout.Translated).Child = first(kids)
 }
 
 func max0(v float32) float32 {

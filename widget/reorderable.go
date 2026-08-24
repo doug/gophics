@@ -3,6 +3,7 @@ package widget
 import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/shell"
 )
 
 // Reorderable is a list whose rows can be dragged into a new order.
@@ -32,11 +33,21 @@ func (r Reorderable) CreateState() State { return &reorderState{from: -1} }
 
 type reorderState struct {
 	StateBase[Reorderable]
-	from  int     // index being dragged, or -1
-	delta float32 // drag distance along the axis
+	ctx     Ctx
+	from    int     // index being dragged, or -1
+	delta   float32 // drag distance along the axis
+	lastTgt int     // last landing slot a haptic was played for
+}
+
+// haptic plays k if the platform has haptics (desktop does not).
+func (s *reorderState) haptic(k shell.HapticKind) {
+	if h := s.ctx.Haptic(); h != nil {
+		h.Play(k)
+	}
 }
 
 func (s *reorderState) Build(ctx Ctx) Widget {
+	s.ctx = ctx
 	w := s.W()
 	if w.Build == nil || w.Count <= 0 {
 		return Column()
@@ -88,7 +99,18 @@ func (s *reorderState) row(i int) Widget {
 				if w.Axis == layout.Horizontal {
 					step = d.X
 				}
+				if s.delta == 0 {
+					// First movement: the row has been picked up.
+					s.haptic(shell.HapticMedium)
+					s.lastTgt = s.from
+				}
 				s.SetState(func() { s.delta += step })
+				// A tick per slot crossed, so reordering can be felt without
+				// watching it — the finger is over the row it is moving.
+				if t := s.target(); t != s.lastTgt {
+					s.lastTgt = t
+					s.haptic(shell.HapticSelection)
+				}
 			},
 			OnRelease:  func() { s.drop() },
 			OnPressEnd: func() { s.drop() },
