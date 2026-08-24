@@ -81,10 +81,17 @@ func (s *reorderState) row(i int) Widget {
 	child := w.Build(i)
 
 	axis := DragVertical
-	off := geom.Pt{Y: s.delta}
+	// The list already draws the dragged row in the slot it would land in —
+	// that is what opens the gap ahead of it — so the row has been displaced
+	// by a whole ItemExtent for every row the drag has passed. What is left to
+	// apply is the pointer distance minus that displacement. Applying the
+	// whole distance on top of it made the row travel twice, running away
+	// downward by another row's height each time it crossed one.
+	travel := s.delta - float32(s.target()-s.from)*w.ItemExtent
+	off := geom.Pt{Y: travel}
 	if w.Axis == layout.Horizontal {
 		axis = DragHorizontal
-		off = geom.Pt{X: s.delta}
+		off = geom.Pt{X: travel}
 	}
 	if i == s.from {
 		child = dragOffset{dx: off.X, dy: off.Y, child: child}
