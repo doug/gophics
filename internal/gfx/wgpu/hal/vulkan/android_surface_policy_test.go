@@ -117,9 +117,17 @@ func TestAndroidSDKPolicyStartsAtAPI29(t *testing.T) {
 	}
 }
 
-func TestAndroidInstancePolicyRejectsDebugCallbacks(t *testing.T) {
-	if err := validateAndroidInstanceFlags(gputypes.InstanceFlagsDebug); err == nil {
-		t.Fatal("Android debug callback request was accepted")
+// TestAndroidInstancePolicyAllowsDebug pins the reversal of an earlier rule.
+//
+// Debug used to be refused on Android because a debug *messenger* needs a
+// C-callable callback, which goffi cannot provide there. But no messenger is
+// ever created, and the flag's real effect is to enable
+// VK_LAYER_KHRONOS_validation, which reports to logcat and needs no callback.
+// Refusing the flag left the platform with the least reliable GPU drivers as
+// the only one that could not run validation.
+func TestAndroidInstancePolicyAllowsDebug(t *testing.T) {
+	if err := validateAndroidInstanceFlags(gputypes.InstanceFlagsDebug); err != nil {
+		t.Fatalf("Android rejected the debug flag, so validation layers cannot be enabled: %v", err)
 	}
 	if err := validateAndroidInstanceFlags(gputypes.InstanceFlagsNone); err != nil {
 		t.Fatalf("ordinary Android instance flags rejected: %v", err)
