@@ -472,16 +472,38 @@ func (a *GlyphMaskAtlas) Put(key GlyphMaskKey, mask []byte, maskW, maskH int, be
 		a.evictTail()
 	}
 
-	// Find or create a page with space
-	page, err := a.findOrCreatePage(maskW, maskH)
-	if err != nil {
-		return GlyphMaskRegion{}, err
-	}
-
-	// Allocate space in the page
-	x, y, ok := page.allocator.Allocate(maskW, maskH)
-	if !ok {
-		return GlyphMaskRegion{}, fmt.Errorf("text: failed to allocate %dx%d glyph mask in atlas page %d", maskW, maskH, page.index)
+	// Find or create a page with space, evicting until one exists.
+	//
+	// The loop above evicts on entry count. Nothing evicted on space, so an
+	// atlas that filled spatially before reaching MaxEntries simply refused
+	// every glyph from then on — permanently, because nothing ever freed a
+	// page again. That is the failure a phone showed: scrolling brings new
+	// glyphs, the atlas fills, and from that moment text is drawn from
+	// whatever the caller does with the error. It never recovers, because the
+	// atlas never recovers.
+	//
+	// Bounded by the entry count rather than by attempts: each pass evicts the
+	// least recently used entry, and a page returns to the free list once its
+	// last entry goes, so this terminates either with space or with nothing
+	// left to give up.
+	var page *glyphMaskPage
+	var x, y int
+	for {
+		var err error
+		page, err = a.findOrCreatePage(maskW, maskH)
+		if err == nil {
+			var ok bool
+			if x, y, ok = page.allocator.Allocate(maskW, maskH); ok {
+				break
+			}
+		}
+		if a.tail == nil {
+			// Nothing left to evict: the glyph is larger than an empty page.
+			return GlyphMaskRegion{}, fmt.Errorf(
+				"text: cannot fit a %dx%d glyph mask in a %dpx atlas page",
+				maskW, maskH, a.config.Size)
+		}
+		a.evictTail()
 	}
 
 	// Copy mask data into the page
