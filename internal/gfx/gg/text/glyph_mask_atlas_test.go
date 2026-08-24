@@ -167,6 +167,14 @@ func TestGlyphMaskAtlas_LRUEviction(t *testing.T) {
 		t.Fatal("Get(0) failed")
 	}
 
+	// Move past the frames these were placed in. Eviction refuses to touch a
+	// glyph the frame being drawn still references, so nothing is evictable
+	// until the clock moves — the LRU ordering asserted below is unaffected,
+	// since that is the list order and not the frame stamp.
+	for i := 0; i < 4; i++ {
+		atlas.AdvanceFrame()
+	}
+
 	// Add a 4th entry — should evict glyph 1 (LRU)
 	key3 := MakeGlyphMaskKey(1, 3, 13.0, 0, 0)
 	_, err = atlas.Put(key3, mask, 2, 2, 0, 0)
@@ -587,6 +595,13 @@ func TestGlyphMaskAtlas_EvictTail_ResetsEmptyPage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Put %d failed: %v", i, err)
 		}
+	}
+
+	// Past the frames that placed them: a glyph the current frame still uses
+	// is never evicted, so the clock has to move before anything is a
+	// candidate.
+	for i := 0; i < 4; i++ {
+		atlas.AdvanceFrame()
 	}
 
 	// Adding one more should evict the tail and eventually reset the page

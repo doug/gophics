@@ -479,6 +479,13 @@ func (e *GlyphMaskEngine) rasterizeGlyph(
 	}
 }
 
+// AdvanceFrame ends the frame for the glyph atlas: it moves the clock that
+// decides what may be evicted and reclaims pages nothing has drawn from in a
+// while. Call once per rendered frame.
+func (e *GlyphMaskEngine) AdvanceFrame() {
+	e.atlas.AdvanceFrame()
+}
+
 // SyncAtlasTextures uploads dirty atlas pages to the GPU as R8 textures.
 // Must be called before rendering any glyph mask batches. Creates new
 // textures on first use and re-uploads data when pages are modified.

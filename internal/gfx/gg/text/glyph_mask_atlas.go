@@ -467,9 +467,12 @@ func (a *GlyphMaskAtlas) Put(key GlyphMaskKey, mask []byte, maskW, maskH int, be
 		return entry.region, nil
 	}
 
-	// Evict LRU entries if at capacity
+	// Evict LRU entries if at capacity, skipping anything the frame being
+	// drawn still references.
 	for len(a.lookup) >= a.config.MaxEntries {
-		a.evictTail()
+		if !a.evictLRUUnusedThisFrame() {
+			break
+		}
 	}
 
 	// Find or create a page with space, evicting until one exists.
@@ -497,13 +500,15 @@ func (a *GlyphMaskAtlas) Put(key GlyphMaskKey, mask []byte, maskW, maskH int, be
 				break
 			}
 		}
-		if a.tail == nil {
-			// Nothing left to evict: the glyph is larger than an empty page.
+		if !a.evictLRUUnusedThisFrame() {
+			// Either the glyph is larger than an empty page, or every entry
+			// is in use by the frame being drawn. Refusing is correct in both
+			// cases: one glyph missing this frame beats corrupting the ones
+			// already recorded.
 			return GlyphMaskRegion{}, fmt.Errorf(
-				"text: cannot fit a %dx%d glyph mask in a %dpx atlas page",
+				"text: no room for a %dx%d glyph mask in a %dpx atlas page",
 				maskW, maskH, a.config.Size)
 		}
-		a.evictTail()
 	}
 
 	// Copy mask data into the page
@@ -674,10 +679,45 @@ func (a *GlyphMaskAtlas) findOrCreatePage(w, h int) (*glyphMaskPage, error) {
 // pixel data zeroed) — reclaiming atlas space for new allocations.
 // Must be called with a.mu held.
 func (a *GlyphMaskAtlas) evictTail() {
-	if a.tail == nil {
-		return
+	a.evictLRUUnusedThisFrame()
+}
+
+// framesInFlight is how many frames a glyph is protected for after its last
+// use. Two covers a scene recorded on one frame and replayed on the next.
+const framesInFlight = 2
+
+// evictLRUUnusedThisFrame drops the least recently used entry that the frame
+// being drawn has not touched, and reports whether it found one.
+//
+// The frame check is the whole point. A glyph the current frame has already
+// recorded is still referenced by a quad in the scene, carrying the atlas
+// coordinates it had when it was recorded. Evicting it hands that space to a
+// different glyph, and the quad then samples whatever landed there — which is
+// text that renders as other text, arriving after a while of ordinary use and
+// never going away. Walking past those entries costs at most the number of
+// glyphs on screen.
+func (a *GlyphMaskAtlas) evictLRUUnusedThisFrame() bool {
+	frame := a.currentFrame.Load()
+	// A scene is recorded once and can be replayed for a frame or two before
+	// the glyphs in it are looked up again, so "used recently" has to mean a
+	// little more than "used in this exact frame".
+	var keep uint64 = framesInFlight
+	if frame < keep {
+		keep = frame
 	}
-	entry := a.tail
+	for entry := a.tail; entry != nil; entry = entry.prev {
+		if entry.lastAccessFrame+keep >= frame {
+			continue // on screen, or recently enough to still be replayed
+		}
+		a.evictEntry(entry)
+		return true
+	}
+	return false
+}
+
+// evictEntry removes one entry, resetting its page if it was the last.
+// Must be called with a.mu held.
+func (a *GlyphMaskAtlas) evictEntry(entry *glyphMaskEntry) {
 	pageIdx := entry.region.AtlasIndex
 	a.removeFromList(entry)
 	delete(a.lookup, entry.key)

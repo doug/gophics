@@ -2038,6 +2038,15 @@ func (rc *GPURenderContext) syncTextAtlases() error {
 // syncGlyphMaskAtlases uploads dirty R8 atlas pages. Must be called with shared.mu held.
 func (rc *GPURenderContext) syncGlyphMaskAtlases(batches []GlyphMaskBatch) error {
 	s := rc.shared
+	// Tick the atlas's frame clock, which nothing did before.
+	//
+	// The atlas stamps every glyph with the frame that used it, refuses to
+	// evict anything the current frame still references, and reclaims pages
+	// left untouched for a while. All three read a counter that only
+	// AdvanceFrame moves, and AdvanceFrame had no callers — so the counter sat
+	// at zero, every entry looked equally ancient, and none of that machinery
+	// did anything. This is one frame; here is where it ends.
+	s.glyphMaskEngine.AdvanceFrame()
 	if err := s.glyphMaskEngine.SyncAtlasTextures(s.device, s.queue); err != nil {
 		return err
 	}
