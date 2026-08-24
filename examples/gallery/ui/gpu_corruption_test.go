@@ -34,7 +34,10 @@ import (
 // Set GALLERY_OUT to a directory to keep every frame as a PNG.
 func TestGalleryTextSurvivesNavigation(t *testing.T) {
 	out := os.Getenv("GALLERY_OUT")
-	a := apptest.New(t, ui.Gallery{}, apptest.WithConfig(app.Config{
+	// @3x, as a phone renders. Glyph cache keys carry the device pixel size,
+	// so scale decides how many distinct masks the atlas holds — at 1x this
+	// catalog saturates at a couple of hundred and never pressures anything.
+	a := apptest.New(t, ui.Gallery{}, apptest.Scale(3), apptest.WithConfig(app.Config{
 		Title: "Gophics Catalog", Size: geom.Size{W: 420, H: 760},
 		Font: goregular.TTF,
 	}))
@@ -77,15 +80,32 @@ func TestGalleryTextSurvivesNavigation(t *testing.T) {
 	// test compares the catalog list to itself, and the press highlight left on
 	// every row reads as a forty-percent difference that means nothing — which
 	// is exactly how this first "reproduced" the bug.
+	// settle runs the frame clock forward. A Navigator push is animated, so a
+	// tap followed by a single render still shows the catalog — which is why
+	// this harness appeared unable to navigate at all.
+	settle := func() {
+		for i := 0; i < 40; i++ {
+			a.Step(1.0 / 60)
+		}
+		a.RenderGPU()
+	}
+
 	open := func(t *testing.T, name string) (*image.RGBA, bool) {
 		t.Helper()
 		a.TapText(name)
-		a.RenderGPU()
+		settle()
 		landed := !a.HasText("A tour of the gophics component set")
+		// Scroll the page as well: it is the motion that brings glyphs the
+		// atlas has not seen, and the fault a device shows arrives while
+		// scrolling rather than on arrival.
+		a.Scroll(geom.Pt{Y: -200})
+		settle()
 		img := toRGBA(a.RenderGPU())
+		a.Scroll(geom.Pt{Y: 200})
+		settle()
 		if a.HasText("Back") {
 			a.TapText("Back")
-			a.RenderGPU()
+			settle()
 		}
 		return img, landed
 	}
@@ -101,11 +121,26 @@ func TestGalleryTextSurvivesNavigation(t *testing.T) {
 
 	// Churn: every other section, several times over. Each page shapes text
 	// the atlas has not seen, which is what moving around an app does.
-	const rounds = 12
+	const rounds = 40
+	// Cycling the theme as well. Each theme redraws every label in different
+	// colours and the glass ones add their own chrome, so it shapes text the
+	// atlas has not held — which is the pressure a device sees and a fixed
+	// screen does not.
+	themes := []string{"Light", "Dark", "Glass", "Glass Dark"}
 	for r := 0; r < rounds; r++ {
 		for _, name := range sections[1:] {
 			open(t, name) //nolint:errcheck // churn only
 		}
+		if th := themes[r%len(themes)]; a.HasText(th) {
+			a.TapText(th)
+			settle()
+		}
+	}
+	// Back to the theme the subject was captured under, or every pixel differs
+	// for a reason that is not corruption.
+	if a.HasText("Light") {
+		a.TapText("Light")
+		settle()
 	}
 
 	after, _ := open(t, subject)
