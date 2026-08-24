@@ -143,11 +143,21 @@ func TestExampleHostsMatchTheReference(t *testing.T) {
 		byName[filepath.Base(p)] = src
 	}
 
-	copies, err := filepath.Glob(
-		filepath.Join("..", "..", "examples", "*", "android", "app", "src",
-			"main", "java", "dev", "gophics", "*", "Gophics*.kt"))
-	if err != nil {
-		t.Fatal(err)
+	for p, src := range nativeFiles(t, ".swift") {
+		byName[filepath.Base(p)] = src
+	}
+
+	var copies []string
+	for _, pat := range [][]string{
+		{"..", "..", "examples", "*", "android", "app", "src", "main", "java",
+			"*", "gophics", "*", "Gophics*.kt"},
+		{"..", "..", "examples", "*", "ios", "*", "Gophics*.swift"},
+	} {
+		found, err := filepath.Glob(filepath.Join(pat...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		copies = append(copies, found...)
 	}
 	checked := 0
 	for _, p := range copies {
@@ -160,7 +170,7 @@ func TestExampleHostsMatchTheReference(t *testing.T) {
 			t.Fatal(err)
 		}
 		checked++
-		if stripPackage(string(b)) != stripPackage(ref) {
+		if normalize(string(b)) != normalize(ref) {
 			t.Errorf("%s has diverged from shell/mobile/native/%s — "+
 				"apply the change to the reference and re-copy, or the file "+
 				"people are told to start from stays broken",
@@ -172,14 +182,30 @@ func TestExampleHostsMatchTheReference(t *testing.T) {
 	}
 }
 
-// stripPackage drops the one line a copy is expected to change.
-func stripPackage(src string) string {
+// normalize drops the lines a copy is expected to change: Kotlin's package
+// declaration, and the Swift import of the bound module, which is named after
+// whatever the app called its framework.
+func normalize(src string) string {
 	var out []string
 	for _, l := range strings.Split(src, "\n") {
 		if strings.HasPrefix(l, "package ") {
 			continue
 		}
+		if strings.HasPrefix(l, "import ") && !isPlatformImport(l) {
+			continue
+		}
 		out = append(out, l)
 	}
 	return strings.Join(out, "\n")
+}
+
+// isPlatformImport keeps the imports that must not drift — a copy that drops
+// AVFoundation is a real divergence, one that renames the bound module is not.
+func isPlatformImport(line string) bool {
+	for _, fw := range []string{"AVFoundation", "Foundation", "UIKit", "CoreMedia", "android", "androidx", "kotlin", "java"} {
+		if strings.Contains(line, fw) {
+			return true
+		}
+	}
+	return false
 }

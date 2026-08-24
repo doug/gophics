@@ -1,0 +1,30 @@
+name: GophicsMirror
+options:
+  bundleIdPrefix: dev.gophics
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  GophicsMirror:
+    type: application
+    platform: iOS
+    sources:
+      - GophicsMirror
+    dependencies:
+      - framework: Mirrormobile.xcframework
+        embed: true
+    info:
+      path: GophicsMirror/Info.plist
+      properties:
+        CFBundleDisplayName: Mirror
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Without these two iOS terminates the process on first use rather
+        # than prompting — a crash, not a refusal.
+        NSCameraUsageDescription: Mirror shows you your own camera, warped by sound.
+        NSMicrophoneUsageDescription: Mirror warps the picture with the sound around you.
+    settings:
+      base:
+        ENABLE_BITCODE: NO
