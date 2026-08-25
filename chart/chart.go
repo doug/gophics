@@ -115,6 +115,14 @@ func (s *chartState) Dispose() {
 func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	w := s.W()
 	xs, ys := resolveScales(w)
+	// A chart whose marks have no domains at all — a pie, a donut — has no
+	// axes. resolveScales still has to return non-nil scales, so it invents
+	// 0..1; without hiding the axes here that invented domain reserves label
+	// margins and draws its own ticks, and a column of 0, 0.2, 0.4 ... appears
+	// beside the pie while the pie itself is squeezed into what is left.
+	if axisless(w) {
+		w.XAxis.Hide, w.YAxis.Hide = true, true
+	}
 	th := w.chrome(themeFor(ctx.DarkMode()))
 	p := ctx.Painter()
 	s.xs, s.ys = xs, ys
@@ -245,6 +253,27 @@ func margins(p *paint.Painter, w Chart, ys Scale) geom.Insets {
 		in.Bottom = p.MetricsIn("", labelSize).LineHeight() + 10
 	}
 	return in
+}
+
+// axisless reports that no mark supplies a domain on either axis, which is what
+// a chart made only of marks like SectorMark looks like: they are drawn from
+// their own values and have nothing to place against a scale.
+//
+// An explicit X or Y means the caller wants that scale, and its axis, whatever
+// the marks say — so this only applies to a chart that left both to inference.
+func axisless(w Chart) bool {
+	if w.X != nil || w.Y != nil || len(w.Marks) == 0 {
+		return false
+	}
+	for _, mk := range w.Marks {
+		if lo, hi, cats := mk.xDomain(); cats != nil || hi >= lo {
+			return false
+		}
+		if lo, hi := mk.yDomain(); hi >= lo {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveScales returns the X and Y scales, inferring them from the marks when
