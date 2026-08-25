@@ -1,12 +1,10 @@
 package widget
 
 import (
-	"fmt"
 	"image"
 	_ "image/gif" // decoders
 	_ "image/jpeg"
 	_ "image/png"
-	"net/http"
 	"slices"
 	"sync"
 	"time"
@@ -104,7 +102,6 @@ type imgLoader struct {
 	mu       sync.Mutex
 	cache    map[string]*imgCacheEntry
 	inflight map[string]chan struct{}
-	client   http.Client
 	gen      uint64        // bumped on every cache touch; entries remember their last touch
 	sem      chan struct{} // bounds concurrent fetch+decode work
 }
@@ -124,13 +121,20 @@ type loadResult struct {
 var imgLoad = &imgLoader{
 	cache:    map[string]*imgCacheEntry{},
 	inflight: map[string]chan struct{}{},
-	client:   http.Client{Timeout: 20 * time.Second},
 	sem:      make(chan struct{}, imgFetchConcurrency),
 }
 
 const (
 	imgCacheLimit       = 512
 	imgFetchConcurrency = 8
+	// imgFetchTimeout bounds one image fetch, on every platform.
+	//
+	// It has to exist on both or neither: fetch runs while holding one of the
+	// imgFetchConcurrency slots, so a request that never settles keeps its
+	// slot for the life of the process. Eight of those and no image ever
+	// loads again. The constant is shared so a platform cannot quietly lose
+	// its timeout while the other keeps one.
+	imgFetchTimeout = 20 * time.Second
 )
 
 func (l *imgLoader) fetch(url string) loadResult {
@@ -187,20 +191,4 @@ func (l *imgLoader) evictOldHalf() {
 			delete(l.cache, k)
 		}
 	}
-}
-
-func (l *imgLoader) do(url string) loadResult {
-	resp, err := l.client.Get(url)
-	if err != nil {
-		return loadResult{err: err}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return loadResult{err: fmt.Errorf("netimage: %s: %s", url, resp.Status)}
-	}
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		return loadResult{err: fmt.Errorf("netimage: decode %s: %w", url, err)}
-	}
-	return loadResult{img: img}
 }

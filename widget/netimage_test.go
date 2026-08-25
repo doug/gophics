@@ -26,7 +26,6 @@ func newTestLoader() *imgLoader {
 	return &imgLoader{
 		cache:    map[string]*imgCacheEntry{},
 		inflight: map[string]chan struct{}{},
-		client:   http.Client{Timeout: 10 * time.Second},
 		sem:      make(chan struct{}, imgFetchConcurrency),
 	}
 }
