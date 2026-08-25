@@ -55,14 +55,24 @@ type Options struct {
 	Tol Tolerance
 	// SafeInsets are the platform-obstructed edges. Zero by default.
 	SafeInsets geom.Insets
+
+	// size records a Size() call so it can be applied after every option has
+	// run. Options execute in the order they are written, and WithConfig
+	// replaces Config wholesale — so a Size() written before it used to be
+	// erased, the zero size fell back to the 320x240 default, and the test
+	// went on to assert against a phone layout it never asked for. Nothing
+	// failed; the assertions simply ran on the wrong tree.
+	size    geom.Size
+	sizeSet bool
 }
 
 // Option customises the harness.
 type Option func(*Options)
 
-// Size sets the logical window size. Default 320x240.
+// Size sets the logical window size. Default 320x240. It wins over a size in
+// WithConfig whichever order the two are written in.
 func Size(w, h float32) Option {
-	return func(o *Options) { o.Config.Size = geom.Size{W: w, H: h} }
+	return func(o *Options) { o.size, o.sizeSet = geom.Size{W: w, H: h}, true }
 }
 
 // Scale sets the device pixel ratio, so a test can assert on the 2x rendering
@@ -82,7 +92,8 @@ func Tol(t Tolerance) Option {
 }
 
 // WithConfig sets the app.Config, for tests that need a title, an AppID, or a
-// particular background. Size set here is used unless Size() overrides it.
+// particular background. Size set here is used unless Size() overrides it —
+// in either order.
 func WithConfig(c app.Config) Option {
 	return func(o *Options) { o.Config = c }
 }
@@ -105,6 +116,11 @@ func New(tb testing.TB, root widget.Widget, opts ...Option) *App {
 	}
 	for _, fn := range opts {
 		fn(&o)
+	}
+	// After the loop, so Size() holds whether it was written before or after a
+	// WithConfig that replaced the whole Config.
+	if o.sizeSet {
+		o.Config.Size = o.size
 	}
 	if o.Config.Size.W <= 0 || o.Config.Size.H <= 0 {
 		o.Config.Size = geom.Size{W: 320, H: 240}
