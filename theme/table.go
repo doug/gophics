@@ -48,7 +48,10 @@ type Table struct {
 	Cell func(row, col int) widget.Widget
 
 	// RowHeight is each body row's height in logical px (0 → a comfortable
-	// default derived from the body text size).
+	// default derived from the body text size). It is exact: a row is that
+	// tall whatever its cells measure, with their content centred, and cells
+	// taller than it are clipped rather than growing the row. Ask RowExtent
+	// for the resolved value rather than recomputing it.
 	RowHeight float32
 	// ColumnGap is the horizontal breathing room inside each cell (0 → 14).
 	ColumnGap float32
@@ -92,15 +95,7 @@ func (s *tableState) Build(ctx widget.Ctx) widget.Widget {
 	if gap == 0 {
 		gap = 14
 	}
-	line := th.Type.Body
-	vpad := float32(9)
-	if t.RowHeight > 0 {
-		vpad = (t.RowHeight - line) / 2
-		if vpad < 2 {
-			vpad = 2
-		}
-	}
-	rowH := line + 2*vpad
+	rowH := t.rowExtent(th)
 
 	header := widget.Padding{
 		Insets: geom.Insets{Top: 10, Bottom: 10},
@@ -114,7 +109,7 @@ func (s *tableState) Build(ctx widget.Ctx) widget.Widget {
 		Build: func(i int) widget.Widget {
 			return tableRow{
 				cols: t.Columns, row: i, cell: t.Cell,
-				gap: gap, vpad: vpad,
+				gap: gap, rowH: rowH,
 				selected: t.Selectable && i == t.Selected,
 				zebra:    t.Zebra, rowRule: t.RowRule,
 				onTap: t.rowTap(i),
@@ -125,6 +120,28 @@ func (s *tableState) Build(ctx widget.Ctx) widget.Widget {
 	col := widget.Column(header, rule, widget.Expand(body))
 	col.CrossAlign = layout.CrossStretch
 	return col
+}
+
+// RowExtent is the height of one body row in logical px, which is RowHeight
+// when that is set and a comfortable default derived from the body text size
+// when it is not.
+//
+// It exists because callers placing a table inside a scrolling parent have to
+// give that parent a height, and were reimplementing this arithmetic to get
+// it — including, before rows became exactly RowHeight tall, a count of how
+// many lines the tallest cell held. Multiply by Count for the body's height.
+func (t Table) RowExtent(th Theme) float32 { return t.rowExtent(th) }
+
+func (t Table) rowExtent(th Theme) float32 {
+	line := th.Type.Body
+	vpad := float32(9)
+	if t.RowHeight > 0 {
+		vpad = (t.RowHeight - line) / 2
+		if vpad < 2 {
+			vpad = 2
+		}
+	}
+	return line + 2*vpad
 }
 
 func (t Table) rowTap(i int) func() {
@@ -173,7 +190,7 @@ type tableRow struct {
 	row      int
 	cell     func(row, col int) widget.Widget
 	gap      float32
-	vpad     float32
+	rowH     float32
 	selected bool
 	zebra    bool
 	rowRule  bool
@@ -202,7 +219,13 @@ func (s *tableRowState) Build(ctx widget.Ctx) widget.Widget {
 	}
 
 	cells := cellsRow(r.cols, r.gap, func(c int) widget.Widget { return r.cell(r.row, c) })
-	content := widget.Padding{Insets: geom.Insets{Top: r.vpad, Bottom: r.vpad}, Child: cells}
+	// Exactly rowH tall, with the cells centred in it, rather than padded out
+	// from whatever they happen to measure. A cell holding a label over a
+	// caption is taller than one line, and padding such a row produced a row
+	// taller than RowHeight — so a caller sizing count*RowHeight came up short
+	// and lost its last rows, and LazyList's extent estimate was wrong by the
+	// same amount. Content taller than RowHeight is clipped: raise RowHeight.
+	content := widget.Sized{H: r.rowH, Child: widget.Align{X: 0, Y: 0.5, Child: cells}}
 	var row widget.Widget = widget.Decorated{Color: bg, Child: content}
 	if r.rowRule {
 		stack := widget.Column(row, widget.Fill{Color: th.Border.WithAlpha(0.5), Child: widget.Sized{H: 1}})
