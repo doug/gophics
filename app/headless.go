@@ -24,6 +24,12 @@ type Headless struct {
 	// gpu holds the lazily-created headless GPU renderer used by RenderGPU
 	// (gophics_gpu build only); typed any so this file stays tag-agnostic.
 	gpu any
+
+	// lastImage caches the surface returned by Render. Painter.Image() copies
+	// the whole backing pixmap into a fresh image.RGBA, so re-fetching it on a
+	// frame that skipped rasterization (nothing changed) would pay that copy
+	// for pixels that are byte-for-byte what was already returned.
+	lastImage image.Image
 }
 
 // NewHeadless builds a headless app at the given logical size and scale.
@@ -55,11 +61,12 @@ func (m *MemClipboard) ClipboardWrite(s string) error  { m.S = s; return nil }
 func (h *Headless) Render() image.Image {
 	h.core.drainPosted()
 	h.core.Layout(h.size)
-	if changed, damage := h.core.RecordScene(h.size, h.scale); changed {
+	if changed, damage := h.core.RecordScene(h.size, h.scale); changed || h.lastImage == nil {
 		c := h.core.Painter.BeginOffscreen(h.size, h.scale)
 		h.core.ReplayDamaged(c, damage)
+		h.lastImage = h.core.Painter.Image()
 	}
-	return h.core.Painter.Image()
+	return h.lastImage
 }
 
 // SetDarkMode sets the simulated platform color scheme and rebuilds.

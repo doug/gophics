@@ -258,6 +258,18 @@ type Painter struct {
 	w, h  int
 	scale float64
 
+	// surfaceImg is the last snapshot returned by Image/SurfaceRGBA and
+	// surfaceDirty reports whether it is stale. begin() is only called when a
+	// caller is about to draw (RecordScene skips it entirely on an unchanged
+	// frame), so "no begin since the last snapshot" means the retained pixmap
+	// is byte-for-byte what it was: the old snapshot is still correct and a
+	// fresh copy would just reproduce it. Without this, every frame — changed
+	// or not — pays a full-surface allocate-and-copy in Image/SurfaceRGBA,
+	// which app/present.go calls even on a skipped frame to re-present the
+	// retained surface.
+	surfaceImg   *image.RGBA
+	surfaceDirty bool
+
 	families  map[string]*text.Font
 	fallbacks []*text.Font
 	shapers   map[string]*text.Shaper
@@ -530,6 +542,7 @@ func (p *Painter) begin(size geom.Size, scale float32) Canvas {
 		p.dc.SetGPUDisabled(true)
 		p.w, p.h, p.scale = w, h, s
 	}
+	p.surfaceDirty = true
 	return &ggCanvas{p: p, dc: p.dc}
 }
 
@@ -538,7 +551,28 @@ func (p *Painter) Image() image.Image {
 	if p.dc == nil {
 		return nil
 	}
-	return p.dc.Image()
+	return p.surface()
+}
+
+// surface returns the current snapshot, refreshing it from the retained
+// pixmap only if something drew since the last snapshot (see surfaceDirty).
+func (p *Painter) surface() *image.RGBA {
+	if p.surfaceDirty || p.surfaceImg == nil {
+		p.surfaceImg = asRGBA(p.dc.Image())
+		p.surfaceDirty = false
+	}
+	return p.surfaceImg
+}
+
+// asRGBA returns img as an *image.RGBA, copying only if it isn't already one.
+func asRGBA(img image.Image) *image.RGBA {
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba
+	}
+	b := img.Bounds()
+	out := image.NewRGBA(b)
+	draw.Draw(out, b, img, b.Min, draw.Src)
+	return out
 }
 
 // PresentGPU composites the current surface to a GPU texture view of the given
@@ -559,17 +593,7 @@ func (p *Painter) SurfaceRGBA() *image.RGBA {
 	if p.dc == nil {
 		return nil
 	}
-	return asRGBA(p.dc.Image())
-}
-
-func asRGBA(img image.Image) *image.RGBA {
-	if rgba, ok := img.(*image.RGBA); ok {
-		return rgba
-	}
-	b := img.Bounds()
-	out := image.NewRGBA(b)
-	draw.Draw(out, b, img, b.Min, draw.Src)
-	return out
+	return p.surface()
 }
 
 // ggCanvas is the gg-backed Canvas.
