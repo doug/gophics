@@ -14,7 +14,14 @@ type BarMark struct {
 	Color  paint.Color // zero → series color
 	Corner float32     // top corner radius in px; 0 → a small default
 	Width  float32     // 0..1 fraction of the slot; 0 → 0.7
+	// Stack groups this mark with others carrying the same name: they
+	// accumulate on top of one another instead of dodging side by side, and
+	// the group occupies one slot in the band. Empty (the default) dodges.
+	Stack string
 }
+
+func (b BarMark) stackID() string    { return b.Stack }
+func (b BarMark) stackData() []Datum { return b.Data }
 
 func (b BarMark) xDomain() (lo, hi float64, c []string) {
 	if c = cats(b.Data); c != nil {
@@ -27,6 +34,15 @@ func (b BarMark) xDomain() (lo, hi float64, c []string) {
 func (b BarMark) yDomain() (lo, hi float64) {
 	lo, hi = minMaxY(b.Data)
 	return min(lo, 0), max(hi, 0) // bars anchor at zero
+}
+
+// stackBaseAt is this mark's baseline for datum x: the total of the marks
+// below it in the same stack, or zero when it does not stack.
+func stackBaseAt(p plot, x float64) float64 {
+	if p.base == nil {
+		return 0
+	}
+	return p.base[x]
 }
 
 func (b BarMark) draw(p plot) {
@@ -46,10 +62,11 @@ func (b BarMark) draw(p plot) {
 	sub := slot / float32(groups)                         // one series' share of the slot
 	off := (float32(p.group) - float32(groups-1)/2) * sub // this series' offset within the band
 	bw := sub * frac
-	y0 := p.py(0)
 	for _, d := range b.Data {
+		base := stackBaseAt(p, d.X)
+		y0 := p.py(base)
 		cx := p.px(d.X) + off
-		yTop := y0 + (p.py(d.Y)-y0)*p.T // grow from the baseline
+		yTop := y0 + (p.py(base+d.Y)-y0)*p.T // grow from this mark's baseline
 		top, bot := yTop, y0
 		if top > bot {
 			top, bot = bot, top
@@ -62,7 +79,21 @@ func (b BarMark) draw(p plot) {
 		if r.Dy() < corner*2 { // avoid an over-rounded sliver
 			corner = r.Dy() / 2
 		}
-		p.Canvas.FillRRect(r, corner, colorOr(d.Color, col))
+		fill := colorOr(d.Color, col)
+		if p.base != nil {
+			// Stacked: square, so adjacent segments meet without a seam. The
+			// top of the stack keeps its radius — drawn as a rounded rect with
+			// its lower corners squared off again, since the fill rounds all
+			// four and the bottom pair would show background through.
+			if p.stackTop && r.Dy() > corner {
+				p.Canvas.FillRRect(r, corner, fill)
+				p.Canvas.FillRect(geom.RectXYWH(r.Min.X, r.Max.Y-corner, r.Dx(), corner), fill)
+			} else {
+				p.Canvas.FillRect(r, fill)
+			}
+			continue
+		}
+		p.Canvas.FillRRect(r, corner, fill)
 	}
 }
 

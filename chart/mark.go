@@ -135,6 +135,13 @@ type plot struct {
 	group  int     // this bar series' index among grouped bars
 	groups int     // total grouped bar series (1 = ungrouped)
 	T      float32 // animation progress; 1 when settled
+	// base is this mark's stacked baseline per X — the total of the marks
+	// below it in its stack. Nil when the mark does not stack, which is the
+	// same as drawing from zero.
+	base map[float64]float64
+	// stackTop marks the last segment of a stack, the only one whose outer
+	// edge is rounded.
+	stackTop bool
 }
 
 // px maps a domain X to a pixel x within the plot area.

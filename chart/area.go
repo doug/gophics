@@ -15,7 +15,14 @@ type AreaMark struct {
 	Color paint.Color // zero → series color
 	Alpha float32     // fill opacity; 0 → 0.16
 	Line  float32     // top-edge stroke width in px; 0 → none
+	// Stack groups this mark with others carrying the same name: each rests on
+	// the sum of those before it instead of overlaying from zero. Empty (the
+	// default) fills from the baseline, overlapping whatever is behind it.
+	Stack string
 }
+
+func (a AreaMark) stackID() string    { return a.Stack }
+func (a AreaMark) stackData() []Datum { return a.Data }
 
 func (a AreaMark) xDomain() (lo, hi float64, c []string) {
 	if len(a.Data) == 0 {
@@ -57,19 +64,32 @@ func (a AreaMark) draw(p plot) {
 	// crosses the baseline still fills correctly, because FillPath uses
 	// non-zero winding and the sub-loop below the baseline simply winds the
 	// other way.
-	poly := paint.NewPath()
-	poly.MoveTo(geom.Pt{X: p.px(a.Data[0].X), Y: y0})
-	for _, d := range a.Data {
-		poly.LineTo(geom.Pt{X: p.px(d.X), Y: p.py(d.Y)})
+	// Stacked, the lower edge is not the flat baseline but the running total
+	// of the marks below, so it is walked back point by point rather than
+	// closed with one straight line. topAt/botAt collapse the two cases.
+	topAt := func(d Datum) float32 { return p.py(stackBaseAt(p, d.X) + d.Y) }
+	botAt := func(d Datum) float32 {
+		if p.base == nil {
+			return y0
+		}
+		return clamp(p.py(stackBaseAt(p, d.X)), p.Area.Min.Y, p.Area.Max.Y)
 	}
-	poly.LineTo(geom.Pt{X: p.px(a.Data[len(a.Data)-1].X), Y: y0})
+
+	poly := paint.NewPath()
+	poly.MoveTo(geom.Pt{X: p.px(a.Data[0].X), Y: botAt(a.Data[0])})
+	for _, d := range a.Data {
+		poly.LineTo(geom.Pt{X: p.px(d.X), Y: topAt(d)})
+	}
+	for i := len(a.Data) - 1; i >= 0; i-- {
+		poly.LineTo(geom.Pt{X: p.px(a.Data[i].X), Y: botAt(a.Data[i])})
+	}
 	p.Canvas.FillPath(poly.Close(), fill)
 
 	if a.Line > 0 {
 		for i := 1; i < len(a.Data); i++ {
 			p.Canvas.Line(
-				geom.Pt{X: p.px(a.Data[i-1].X), Y: p.py(a.Data[i-1].Y)},
-				geom.Pt{X: p.px(a.Data[i].X), Y: p.py(a.Data[i].Y)}, a.Line, base)
+				geom.Pt{X: p.px(a.Data[i-1].X), Y: topAt(a.Data[i-1])},
+				geom.Pt{X: p.px(a.Data[i].X), Y: topAt(a.Data[i])}, a.Line, base)
 		}
 	}
 }

@@ -128,16 +128,13 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	s.xs, s.ys = xs, ys
 
 	// The primary series is the first data-bearing mark — the one a press
-	// selects against. Meanwhile collect legend entries and count grouped bars.
+	// selects against. Meanwhile collect legend entries. Bar slots are worked
+	// out at draw time by stackSlots, which counts stacks rather than marks.
 	s.primary, s.selCol, s.legend = nil, paint.Color{}, nil
-	barGroups := 0
 	for i, mk := range w.Marks {
 		if sd, ok := mk.(selectable); ok && len(sd.seriesData()) > 0 && s.primary == nil {
 			s.primary = sd.seriesData()
 			s.selCol = th.color(i, sd.baseColor())
-		}
-		if _, ok := mk.(BarMark); ok {
-			barGroups++
 		}
 		if le, ok := mk.(legender); ok {
 			s.legend = append(s.legend, le.legendEntries(th)...)
@@ -166,12 +163,17 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 
 		pl := plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
 		c.PushClip(area)
-		gi := 0
+		// Slots are per stack, not per mark: marks sharing a Stack share one
+		// slot in the band rather than dodging into halves of it. bases give
+		// each stacked mark the total of the marks below it.
+		slots, slotOf := stackSlots(w.Marks)
+		bases := stackBases(w.Marks)
+		tops := stackTops(w.Marks)
 		for i, mk := range w.Marks {
 			pl.series = i
+			pl.base, pl.stackTop = bases[i], tops[i]
 			if _, ok := mk.(BarMark); ok {
-				pl.group, pl.groups = gi, barGroups
-				gi++
+				pl.group, pl.groups = slotOf[i], slots
 			} else {
 				pl.group, pl.groups = 0, 1
 			}
@@ -299,6 +301,12 @@ func resolveScales(w Chart) (xs, ys Scale) {
 	}
 	if xhi < xlo { // no numeric X anywhere
 		xlo, xhi = 0, 1
+	}
+	// A stack reaches the sum of its members, not its tallest one — without
+	// this a stack of 3 and 7 is plotted against a domain ending at 7 and
+	// draws straight out of the plot area.
+	if slo, shi, any := stackExtent(w.Marks); any {
+		ylo, yhi = math.Min(ylo, math.Min(slo, 0)), math.Max(yhi, shi)
 	}
 	if yhi < ylo {
 		ylo, yhi = 0, 1
