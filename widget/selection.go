@@ -336,6 +336,7 @@ type selAnchor struct {
 func (w selAnchor) createBox(Ctx) layout.Box            { return &selAnchorBox{reg: w.reg} }
 func (w selAnchor) updateBox(_ Ctx, b layout.Box)       { b.(*selAnchorBox).reg = w.reg }
 func (w selAnchor) childWidgets() []Widget              { return []Widget{w.child} }
+func (w selAnchor) soleChild() Widget                   { return w.child }
 func (w selAnchor) attach(b layout.Box, k []layout.Box) { b.(*selAnchorBox).child = first(k) }
 
 type selAnchorBox struct {

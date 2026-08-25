@@ -212,6 +212,7 @@ func (d dragOffset) updateBox(_ Ctx, box layout.Box) {
 	t.Dx, t.Dy = d.dx, d.dy
 }
 func (d dragOffset) childWidgets() []Widget { return []Widget{d.child} }
+func (d dragOffset) soleChild() Widget      { return d.child }
 func (d dragOffset) attach(box layout.Box, kids []layout.Box) {
 	box.(*layout.Translated).Child = first(kids)
 }

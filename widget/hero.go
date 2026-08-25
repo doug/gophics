@@ -26,6 +26,7 @@ func (h Hero) updateBox(ctx Ctx, b layout.Box) {
 	hb.reg, _ = Of[*heroRegistry](ctx) // nil outside a transition
 }
 func (h Hero) childWidgets() []Widget { return []Widget{h.Child} }
+func (h Hero) soleChild() Widget      { return h.Child }
 func (h Hero) attach(b layout.Box, kids []layout.Box) {
 	b.(*heroBox).childBox = first(kids)
 }

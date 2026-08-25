@@ -136,6 +136,7 @@ func (m measured) updateBox(_ Ctx, b layout.Box) {
 	mb.idx, mb.state = m.Index, m.state
 }
 func (m measured) childWidgets() []Widget { return []Widget{m.Child} }
+func (m measured) soleChild() Widget      { return m.Child }
 func (m measured) attach(b layout.Box, kids []layout.Box) {
 	b.(*measureBox).Child = first(kids)
 }

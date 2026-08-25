@@ -24,6 +24,16 @@ type renderWidget interface {
 	attach(box layout.Box, kids []layout.Box)
 }
 
+// singleChildWidget is an optional refinement of renderWidget for the very
+// common wrapper shape (Padding, Decorated, Sized, ...) that holds exactly
+// one child. widgetsOf uses it to read that child without going through
+// childWidgets(), which would box it into a freshly allocated []Widget every
+// frame just to hold one element.
+type singleChildWidget interface {
+	renderWidget
+	soleChild() Widget
+}
+
 // Owner owns an element tree: the build list, root, and app services.
 // It is Flutter's BuildOwner analog. All methods run on the UI goroutine.
 type Owner struct {
@@ -201,10 +211,12 @@ type element struct {
 	parent  *element
 	depth   int
 	widget  Widget
-	state   State      // non-nil for stateful
-	box     layout.Box // non-nil for render widgets
-	child   *element   // composite (stateless/stateful) child
-	kids    []*element // render-widget children
+	state   State        // non-nil for stateful
+	box     layout.Box   // non-nil for render widgets
+	child   *element     // composite (stateless/stateful) child
+	kids    []*element   // render-widget children
+	kidsBuf []*element   // previous frame's kids array, reused by reconcilePositional
+	boxBuf  []layout.Box // reused scratch buffer for attachKids
 	dirty   bool
 	mounted bool
 
@@ -213,6 +225,22 @@ type element struct {
 	// so cancelling an element cancels everything below it.
 	lifeCtx    context.Context
 	lifeCancel context.CancelFunc
+
+	// oneKid is scratch space widgetsOf reuses to hand a singleChildWidget's
+	// child to the reconciler as a []Widget without allocating one.
+	oneKid [1]Widget
+}
+
+// widgetsOf returns w's children as a slice. For the single-child case (the
+// overwhelming majority of render widgets — Padding, Decorated, Sized, ...)
+// it reuses el.oneKid instead of calling w.childWidgets(), which would
+// allocate a fresh one-element slice every frame for every such node.
+func (el *element) widgetsOf(w renderWidget) []Widget {
+	if sc, ok := w.(singleChildWidget); ok {
+		el.oneKid[0] = sc.soleChild()
+		return el.oneKid[:]
+	}
+	return w.childWidgets()
 }
 
 func (el *element) ctx() Ctx { return Ctx{el: el} }
@@ -341,7 +369,7 @@ func (o *Owner) mount(parent *element, w Widget) *element {
 
 func (el *element) mountRenderChildren(w renderWidget) {
 	el.markBoxChainDirty()
-	widgets := w.childWidgets()
+	widgets := el.widgetsOf(w)
 	el.kids = el.kids[:0]
 	for _, cw := range widgets {
 		if cw == nil {
@@ -352,12 +380,17 @@ func (el *element) mountRenderChildren(w renderWidget) {
 	el.attachKids(w)
 }
 
+// attachKids hands each attach implementation the children's render boxes.
+// boxBuf is retained on el and reused frame over frame: every attach
+// implementation we have copies out of the slice it's given (into its own
+// box's Children, or by extracting a single child), so nothing outlives this
+// call that would alias a mutated buffer.
 func (el *element) attachKids(w renderWidget) {
-	boxes := make([]layout.Box, len(el.kids))
-	for i, k := range el.kids {
-		boxes[i] = k.renderBox()
+	el.boxBuf = el.boxBuf[:0]
+	for _, k := range el.kids {
+		el.boxBuf = append(el.boxBuf, k.renderBox())
 	}
-	w.attach(el.box, boxes)
+	w.attach(el.box, el.boxBuf)
 }
 
 // update reconciles el (already type/key-matched) to the new widget value.
@@ -445,12 +478,34 @@ func warnDuplicateKey(key any) {
 // keyed children match by (type, key) anywhere in the old list; unkeyed
 // children match by position when types agree. A simplification of
 // Flutter's updateChildren; revisit with the M3 ADRs.
+//
+// Most child lists never use keys (Column(rows...) with plain widgets), so
+// the general algorithm below — which needs two maps to support arbitrary
+// key reordering — is skipped in favor of a map-free positional pass whenever
+// neither side carries a key. That pass is exactly the general algorithm
+// specialized to "no key ever matches, no element is ever marked used out of
+// position order": matches only ever happen at the current cursor, so the
+// cursor's final value is the whole matched prefix and everything after it is
+// stale.
 func (el *element) reconcileRenderChildren(w renderWidget) {
-	widgets := w.childWidgets()
+	widgets := el.widgetsOf(w)
 
-	byKey := map[any]*element{}
+	// Fast path: nothing in play (old or new) carries a reconciliation key,
+	// so matching reduces to a single positional cursor with no need for the
+	// byKey/used maps below. This is the overwhelmingly common case (plain
+	// unkeyed child lists), and skipping the maps avoids two allocations per
+	// render-widget per frame.
+	if !anyKeyedElements(el.kids) && !anyKeyedWidgets(widgets) {
+		el.reconcilePositional(w, widgets)
+		return
+	}
+
+	var byKey map[any]*element
 	for _, old := range el.kids {
 		if k := keyOf(old.widget); k != nil {
+			if byKey == nil {
+				byKey = map[any]*element{}
+			}
 			byKey[k] = old
 		}
 	}
@@ -505,6 +560,102 @@ func (el *element) reconcileRenderChildren(w renderWidget) {
 	}
 	el.kids = newKids
 	el.attachKids(w)
+}
+
+func anyKeyedElements(kids []*element) bool {
+	for _, k := range kids {
+		if keyOf(k.widget) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func anyKeyedWidgets(widgets []Widget) bool {
+	for _, w := range widgets {
+		if w != nil && keyOf(w) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// reconcilePositional is reconcileRenderChildren without keys anywhere in
+// play: every match happens at the current cursor position, so the matched
+// set is always the prefix el.kids[:pos] and the rest is stale. No map is
+// needed to track "used" or to look children up by key.
+//
+// It also skips attachKids — which allocates a fresh boxes slice — when
+// nothing a parent box cares about actually changed: same count, and every
+// matched kid's renderBox() pointer is exactly what it was before update(cw)
+// ran. A config-only change (e.g. a color field) mutates the existing box in
+// place and keeps its pointer, same as the box-swap check rebuild() already
+// does for the SetState path; only a kid whose root box type itself changed,
+// or an add/remove, needs the parent's box slice rebuilt.
+//
+// newKids itself is allocated lazily, only once the shape actually diverges
+// from last frame (a mismatch, or fewer live widgets than kids). The common
+// steady-state frame — same widgets, same order, only config fields changed —
+// matches every kid in place and never allocates: el.kids is already the
+// right slice with the right pointers. When the shape does diverge because of
+// an insert or type change, newKids is built into el.kidsBuf — the array
+// el.kids pointed to two frames ago — instead of a fresh allocation. It is a
+// distinct backing array from el.kids for the whole loop (the two are only
+// swapped at the end, and only when newKids was actually built from
+// kidsBuf), so appending here never clobbers the el.kids reads above,
+// including the el.kids[pos:] unmount loop below. A pure shrink needs no
+// buffer at all: el.kids[:pos:pos] is already the right slice.
+func (el *element) reconcilePositional(w renderWidget, widgets []Widget) {
+	var newKids []*element
+	usedBuf := false
+	pos := 0
+	boxesChanged := false
+	for _, cw := range widgets {
+		if cw == nil {
+			continue
+		}
+		if pos < len(el.kids) && canUpdate(el.kids[pos].widget, cw) {
+			kid := el.kids[pos]
+			before := kid.renderBox()
+			kid.update(cw)
+			if kid.renderBox() != before {
+				boxesChanged = true
+			}
+			if newKids != nil {
+				newKids = append(newKids, kid)
+			}
+			pos++
+			continue
+		}
+		if newKids == nil {
+			newKids = append(el.kidsBuf[:0], el.kids[:pos]...)
+			usedBuf = true
+		}
+		newKids = append(newKids, el.owner.mount(el, cw))
+		boxesChanged = true
+	}
+	if pos != len(el.kids) {
+		for _, old := range el.kids[pos:] {
+			old.unmount()
+		}
+		boxesChanged = true
+		if newKids == nil {
+			// Pure truncation: no mismatch occurred, so this subslice shares
+			// el.kids' own backing array. It must not be swapped into
+			// el.kidsBuf below — that would alias el.kids and el.kidsBuf.
+			newKids = el.kids[:pos:pos]
+		}
+	}
+	if newKids != nil {
+		if usedBuf {
+			el.kids, el.kidsBuf = newKids, el.kids
+		} else {
+			el.kids = newKids
+		}
+	}
+	if boxesChanged {
+		el.attachKids(w)
+	}
 }
 
 func (el *element) unmount() {

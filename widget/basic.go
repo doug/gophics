@@ -86,6 +86,7 @@ func (p Padding) updateBox(ctx Ctx, b layout.Box) {
 	b.(*layout.Padded).Insets = p.insets(DirectionOf(ctx))
 }
 func (p Padding) childWidgets() []Widget { return []Widget{p.Child} }
+func (p Padding) soleChild() Widget      { return p.Child }
 func (p Padding) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Padded).Child = first(kids)
 }
@@ -102,6 +103,7 @@ func (s Sized) updateBox(_ Ctx, b layout.Box) {
 	sb.W, sb.H = s.W, s.H
 }
 func (s Sized) childWidgets() []Widget { return []Widget{s.Child} }
+func (s Sized) soleChild() Widget      { return s.Child }
 func (s Sized) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Sized).Child = first(kids)
 }
@@ -126,6 +128,7 @@ func (d Decorated) updateBox(_ Ctx, b layout.Box) {
 	db.Blur = d.Blur
 }
 func (d Decorated) childWidgets() []Widget { return []Widget{d.Child} }
+func (d Decorated) soleChild() Widget      { return d.Child }
 func (d Decorated) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Decorated).Child = first(kids)
 }
@@ -153,6 +156,7 @@ func (a Align) updateBox(ctx Ctx, b layout.Box) {
 	ab.AlignX, ab.AlignY = x, a.Y
 }
 func (a Align) childWidgets() []Widget { return []Widget{a.Child} }
+func (a Align) soleChild() Widget      { return a.Child }
 func (a Align) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Aligned).Child = first(kids)
 }
@@ -202,6 +206,20 @@ func (f Flex) updateBox(ctx Ctx, b layout.Box) {
 }
 
 func (f Flex) childWidgets() []Widget {
+	// The common case has no Flexible wrappers to unwrap, so f.Children is
+	// already exactly the slice the reconciler wants — handing it back
+	// directly avoids a fresh allocate-and-copy every frame for every Row/
+	// Column in the tree.
+	hasFlexible := false
+	for _, c := range f.Children {
+		if _, ok := c.(Flexible); ok {
+			hasFlexible = true
+			break
+		}
+	}
+	if !hasFlexible {
+		return f.Children
+	}
 	out := make([]Widget, len(f.Children))
 	for i, c := range f.Children {
 		if fl, ok := c.(Flexible); ok {
@@ -926,6 +944,7 @@ type revealAnchor struct {
 func (w revealAnchor) createBox(Ctx) layout.Box            { return &revealAnchorBox{reveal: w.reveal} }
 func (w revealAnchor) updateBox(_ Ctx, b layout.Box)       { b.(*revealAnchorBox).reveal = w.reveal }
 func (w revealAnchor) childWidgets() []Widget              { return []Widget{w.child} }
+func (w revealAnchor) soleChild() Widget                   { return w.child }
 func (w revealAnchor) attach(b layout.Box, k []layout.Box) { b.(*revealAnchorBox).child = first(k) }
 
 type revealAnchorBox struct {
@@ -1188,6 +1207,7 @@ func (v viewport) updateBox(_ Ctx, b layout.Box) {
 	}
 }
 func (v viewport) childWidgets() []Widget { return []Widget{v.Child} }
+func (v viewport) soleChild() Widget      { return v.Child }
 func (v viewport) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Viewport).Child = first(kids)
 }
@@ -1283,6 +1303,7 @@ func (sw Semantics) updateBox(_ Ctx, b layout.Box) {
 	}
 }
 func (sw Semantics) childWidgets() []Widget { return []Widget{sw.Child} }
+func (sw Semantics) soleChild() Widget      { return sw.Child }
 func (sw Semantics) attach(b layout.Box, kids []layout.Box) {
 	b.(*semBox).Child = first(kids)
 }
@@ -1444,6 +1465,7 @@ func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 	}
 }
 func (iw Interactive) childWidgets() []Widget { return []Widget{iw.Child} }
+func (iw Interactive) soleChild() Widget      { return iw.Child }
 func (iw Interactive) attach(b layout.Box, kids []layout.Box) {
 	b.(*InteractiveBox).Child = first(kids)
 }

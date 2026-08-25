@@ -335,6 +335,7 @@ func (w pageW) updateBox(_ Ctx, b layout.Box) {
 	pb.offstage, pb.fracX, pb.reg = w.offstage, w.fracX, w.reg
 }
 func (w pageW) childWidgets() []Widget { return []Widget{w.child} }
+func (w pageW) soleChild() Widget      { return w.child }
 func (w pageW) attach(b layout.Box, kids []layout.Box) {
 	b.(*pageBox).child = first(kids)
 }
@@ -397,6 +398,7 @@ func (w translatedW) updateBox(_ Ctx, b layout.Box) {
 	b.(*layout.Translated).FracX = w.FracX
 }
 func (w translatedW) childWidgets() []Widget { return []Widget{w.Child} }
+func (w translatedW) soleChild() Widget      { return w.Child }
 func (w translatedW) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Translated).Child = first(kids)
 }

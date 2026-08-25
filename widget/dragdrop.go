@@ -456,6 +456,7 @@ func (z dropZone) updateBox(_ Ctx, b layout.Box) {
 	zb.reg = z.reg
 }
 func (z dropZone) childWidgets() []Widget { return []Widget{z.Child} }
+func (z dropZone) soleChild() Widget      { return z.Child }
 func (z dropZone) attach(b layout.Box, kids []layout.Box) {
 	b.(*dropZoneBox).Child = first(kids)
 }

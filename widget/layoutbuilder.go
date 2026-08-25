@@ -58,6 +58,7 @@ func (o constraintObserver) updateBox(_ Ctx, b layout.Box) {
 	b.(*observerBox).onCS = o.onCS
 }
 func (o constraintObserver) childWidgets() []Widget { return []Widget{o.Child} }
+func (o constraintObserver) soleChild() Widget      { return o.Child }
 func (o constraintObserver) attach(b layout.Box, kids []layout.Box) {
 	b.(*observerBox).Child = first(kids)
 }

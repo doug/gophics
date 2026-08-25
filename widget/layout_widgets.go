@@ -21,6 +21,7 @@ func (f Fill) updateBox(_ Ctx, b layout.Box) {
 	b.(*layout.Filled).Color = f.Color
 }
 func (f Fill) childWidgets() []Widget { return []Widget{f.Child} }
+func (f Fill) soleChild() Widget      { return f.Child }
 func (f Fill) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Filled).Child = first(kids)
 }
@@ -37,6 +38,7 @@ func (o Opacity) updateBox(_ Ctx, b layout.Box) {
 	b.(*layout.Opacity).Alpha = o.Alpha
 }
 func (o Opacity) childWidgets() []Widget { return []Widget{o.Child} }
+func (o Opacity) soleChild() Widget      { return o.Child }
 func (o Opacity) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Opacity).Child = first(kids)
 }
@@ -65,6 +67,7 @@ func (t Transform) updateBox(_ Ctx, b layout.Box) {
 	tb.T, tb.Center = t.T, t.Center
 }
 func (t Transform) childWidgets() []Widget { return []Widget{t.Child} }
+func (t Transform) soleChild() Widget      { return t.Child }
 func (t Transform) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.Transformed).Child = first(kids)
 }
@@ -80,6 +83,7 @@ func (a AspectRatio) updateBox(_ Ctx, b layout.Box) {
 	b.(*layout.AspectRatio).Ratio = a.Ratio
 }
 func (a AspectRatio) childWidgets() []Widget { return []Widget{a.Child} }
+func (a AspectRatio) soleChild() Widget      { return a.Child }
 func (a AspectRatio) attach(b layout.Box, kids []layout.Box) {
 	b.(*layout.AspectRatio).Child = first(kids)
 }

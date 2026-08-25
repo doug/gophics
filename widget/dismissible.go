@@ -274,6 +274,7 @@ func (b slideBox) updateBox(_ Ctx, box layout.Box) {
 	}
 }
 func (b slideBox) childWidgets() []Widget { return []Widget{b.child} }
+func (b slideBox) soleChild() Widget      { return b.child }
 func (b slideBox) attach(box layout.Box, kids []layout.Box) {
 	box.(*layout.Translated).Child = first(kids)
 }
