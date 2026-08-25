@@ -276,8 +276,26 @@ func runIOSOnDevice(o buildOpts, host, proj, scheme string) error {
 	// --console streams the app's stdout/stderr back, which is the device
 	// equivalent of simctl's --console-pty. Go's log output reaches it; note
 	// it does not reach the device syslog.
-	return run("", nil, "xcrun", "devicectl", "device", "process", "launch",
+	//
+	// GOPHICS_* variables are forwarded into the app. devicectl passes through
+	// anything prefixed DEVICECTL_CHILD_ in its own environment, which is how
+	// a knob like GOPHICS_PACING reaches a process on the phone — there is
+	// otherwise no way to set one there.
+	return run("", childEnv(os.Environ()), "xcrun", "devicectl", "device", "process", "launch",
 		"--device", dev.identifier, "--console", "--terminate-existing", bundleID)
+}
+
+// childEnv returns the DEVICECTL_CHILD_ re-exports for every GOPHICS_*
+// variable in env. Only the additions: run appends them to the real
+// environment itself.
+func childEnv(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "GOPHICS_") {
+			out = append(out, "DEVICECTL_CHILD_"+k+"="+v)
+		}
+	}
+	return out
 }
 
 func xcodeSelected() bool {

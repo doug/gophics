@@ -12,6 +12,7 @@ import (
 	"os"
 	"runtime/debug"
 	"slices"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -421,23 +422,28 @@ func (c *core) InspectTree() []layout.InspectNode {
 	return layout.Inspect(box)
 }
 
-// FrameStats returns the average and worst raster+record time (ms) over the
-// last frames — the honest frame-pacing readout (PLAN.md §6.4).
-func (c *core) FrameStats() (avg, worst float32) {
-	var sum, n float32
+// FrameStats summarises recent frame times (ms) as percentiles.
+//
+// Percentiles rather than a mean, because a mean answers the wrong question.
+// Stutter is a handful of frames far above the rest, and averaging them into
+// the sixty good ones around them is exactly how they stop being visible in
+// the number while staying visible on the screen. p50 says what the frame
+// normally costs; p99 and the worst say what is being felt.
+func (c *core) FrameStats() (p50, p95, p99, worst float32) {
+	var buf [len(c.frameTimes)]float32
+	n := 0
 	for _, t := range c.frameTimes {
 		if t > 0 {
-			sum += t
+			buf[n] = t
 			n++
-			if t > worst {
-				worst = t
-			}
 		}
 	}
-	if n > 0 {
-		avg = sum / n
+	if n == 0 {
+		return 0, 0, 0, 0
 	}
-	return avg, worst
+	sort.Slice(buf[:n], func(i, j int) bool { return buf[i] < buf[j] })
+	at := func(f float32) float32 { return buf[int(f*float32(n-1))] }
+	return at(0.50), at(0.95), at(0.99), buf[n-1]
 }
 
 func (c *core) recordFrameTime(ms float32) {
@@ -1011,8 +1017,9 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		// GOPHICS_PACING logs a rolling frame-time summary each time the
 		// 60-frame ring wraps — the on-device pacing readout (PLAN §6.4).
 		if h.core.frameHead == 0 && os.Getenv("GOPHICS_PACING") != "" {
-			avg, worst := h.core.FrameStats()
-			log.Printf("gophics pacing: avg %.2f ms  worst %.2f ms (60 frames)", avg, worst)
+			p50, p95, p99, worst := h.core.FrameStats()
+			log.Printf("gophics pacing: p50 %.2f  p95 %.2f  p99 %.2f  worst %.2f ms (60 frames)",
+				p50, p95, p99, worst)
 		}
 	}
 }
