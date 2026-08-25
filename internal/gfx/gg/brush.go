@@ -130,13 +130,21 @@ func (b SolidBrush) Lerp(other SolidBrush, t float64) SolidBrush {
 // BrushFromPattern converts a legacy Pattern to a Brush.
 // This is a compatibility helper for migrating from Pattern to Brush.
 //
-// If the pattern is a SolidPattern, it returns a SolidBrush.
-// Otherwise, it wraps the pattern in a CustomBrush.
+// If the pattern is a SolidPattern, it returns a SolidBrush. If the pattern
+// already implements Brush directly (e.g. *ImagePattern), it is returned as
+// itself — Paint.ColorAt's hot loop calls Brush.ColorAt on every pixel of a
+// pattern fill, so routing through a CustomBrush here would add a second
+// indirect call (interface dispatch to CustomBrush.ColorAt, then a closure
+// call to reach the pattern's own ColorAt) for every one of those samples.
+// Otherwise it wraps the pattern in a CustomBrush.
 //
 // Deprecated: Use Brush types directly instead of Pattern.
 func BrushFromPattern(p Pattern) Brush {
 	if sp, ok := p.(*SolidPattern); ok {
 		return SolidBrush{Color: sp.Color}
+	}
+	if b, ok := p.(Brush); ok {
+		return b
 	}
 	// Wrap non-solid patterns in a CustomBrush
 	return CustomBrush{

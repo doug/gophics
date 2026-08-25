@@ -494,6 +494,10 @@ type ImagePattern struct {
 	scaleY  float64 // vertical scale factor (0 means 1.0)
 }
 
+// brushMarker implements the sealed Brush interface, so BrushFromPattern can
+// hand out *ImagePattern directly instead of wrapping it in a CustomBrush.
+func (*ImagePattern) brushMarker() {}
+
 // SetAnchor sets the canvas position where the pattern is anchored.
 // This offsets all coordinate lookups so the image appears at (x, y)
 // on the canvas rather than tiled from the origin.

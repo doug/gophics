@@ -574,8 +574,20 @@ func (r *SoftwareRenderer) Fill(pixmap *Pixmap, p *Path, paint *Paint) error {
 		clipFn := paint.ClipCoverage
 		maskFn := paint.MaskCoverage
 		cm, cmW, cmX, cmY := paint.ClipMask, paint.ClipMaskW, paint.ClipMaskX, paint.ClipMaskY
+		// Premultiply once per fill rather than per fully-covered pixel: color
+		// is invariant across every row of this path, so the float64 multiply
+		// and clamp255 calls that SetPixel used to redo per pixel are hoisted
+		// here and reused via SetPixelPremul.
+		var pr, pg, pb, pa uint8
+		opaque := color.A == 1.0
+		if opaque {
+			pr = uint8(clamp255(color.R * 255))
+			pg = uint8(clamp255(color.G * 255))
+			pb = uint8(clamp255(color.B * 255))
+			pa = 255
+		}
 		r.analyticFiller.Fill(r.edgeBuilder, coreFillRule, func(y int, runs *raster.AlphaRuns) {
-			r.blendAlphaRunsFromCoreRuns(pixmap, y, runs, color, clipFn, maskFn, cm, cmW, cmX, cmY, bfn)
+			r.blendAlphaRunsFromCoreRuns(pixmap, y, runs, color, clipFn, maskFn, cm, cmW, cmX, cmY, bfn, opaque, pr, pg, pb, pa)
 		})
 	} else {
 		// Pattern/gradient path: per-pixel color sampling
@@ -958,7 +970,7 @@ func (r *SoftwareRenderer) clipXRange(width int) (lo, hi int) {
 func (r *SoftwareRenderer) blendAlphaRunsFromCoreRuns(pixmap *Pixmap, y int, runs *raster.AlphaRuns, color RGBA,
 	clipFn func(x, y float64) byte, maskFn func(x, y int) uint8,
 	clipMask []uint8, clipMaskW, clipMaskX, clipMaskY int,
-	bfn blendFunc,
+	bfn blendFunc, opaque bool, opaqueR, opaqueG, opaqueB, opaqueA uint8,
 ) {
 	if y < 0 || y >= pixmap.Height() {
 		return
@@ -970,67 +982,113 @@ func (r *SoftwareRenderer) blendAlphaRunsFromCoreRuns(pixmap *Pixmap, y int, run
 
 	// Non-SourceOver: dispatch via blend function.
 	if bfn != nil {
-		for x, alpha := range runs.Iter() {
-			if alpha == 0 || x < xlo || x >= xhi {
+		for rx := 0; rx < runs.Width(); {
+			run, ok := runs.RunAt(rx)
+			if !ok {
+				break
+			}
+			rx += run.Count
+			if run.Alpha == 0 {
 				continue
 			}
-			alpha = applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, alpha)
-			if alpha == 0 {
-				continue
+			x0, x1 := run.X, run.X+run.Count
+			if x0 < xlo {
+				x0 = xlo
 			}
-			alpha = applyMaskCoverage(maskFn, x, y, alpha)
-			if alpha == 0 {
-				continue
+			if x1 > xhi {
+				x1 = xhi
 			}
-			r.blendCoverageSolidMode(pixmap, x, y, alpha, color, bfn)
+			for x := x0; x < x1; x++ {
+				alpha := applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, run.Alpha)
+				if alpha == 0 {
+					continue
+				}
+				alpha = applyMaskCoverage(maskFn, x, y, alpha)
+				if alpha == 0 {
+					continue
+				}
+				r.blendCoverageSolidMode(pixmap, x, y, alpha, color, bfn)
+			}
 		}
 		return
 	}
 
 	// Fast path: SourceOver — inline float64 formula (zero overhead).
-	for x, alpha := range runs.Iter() {
-		if alpha == 0 {
+	// The full-coverage byte values (opaque, opaqueR/G/B/A) are precomputed
+	// once per Fill() call by the caller and passed in here, since this
+	// function itself runs once per scanline — recomputing them per row
+	// would just redo the same float muls and clamps on every opaque pixel,
+	// the dominant case for a solid fill.
+	//
+	// Iterated by whole run, not per pixel: each pixel of a run shares the
+	// same source alpha. Walked via RunAt/Width instead of IterRuns's
+	// range-over-func — the yield closure call itself, one per run, profiled
+	// as the single largest cost in a full repaint, more than the blending
+	// math it was calling into.
+	// Whether any per-pixel coverage modulation is active at all. When none
+	// is, a run's alpha is uniform across its whole span, so a fully-opaque
+	// run can be batch-written instead of dispatched pixel by pixel below.
+	noModulation := len(clipMask) == 0 && clipFn == nil && maskFn == nil
+
+	for rx := 0; rx < runs.Width(); {
+		run, ok := runs.RunAt(rx)
+		if !ok {
+			break
+		}
+		rx += run.Count
+		if run.Alpha == 0 {
 			continue
 		}
-		if x < xlo || x >= xhi {
+		x0, x1 := run.X, run.X+run.Count
+		if x0 < xlo {
+			x0 = xlo
+		}
+		if x1 > xhi {
+			x1 = xhi
+		}
+
+		if run.Alpha == 255 && opaque && noModulation {
+			pixmap.fillSpanPremul(x0, x1, y, opaqueR, opaqueG, opaqueB, opaqueA)
 			continue
 		}
 
-		// Apply clip coverage: pre-rasterized mask (Layer B, ADR-052) has
-		// priority over legacy closure. Unified with CoverageFiller path.
-		alpha = applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, alpha)
-		if alpha == 0 {
-			continue
+		for x := x0; x < x1; x++ {
+			// Apply clip coverage: pre-rasterized mask (Layer B, ADR-052) has
+			// priority over legacy closure. Unified with CoverageFiller path.
+			alpha := applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, run.Alpha)
+			if alpha == 0 {
+				continue
+			}
+
+			// Apply mask coverage if active.
+			alpha = applyMaskCoverage(maskFn, x, y, alpha)
+			if alpha == 0 {
+				continue
+			}
+
+			// Full coverage - just set the pixel
+			if alpha == 255 && opaque {
+				pixmap.SetPixelPremul(x, y, opaqueR, opaqueG, opaqueB, opaqueA)
+				continue
+			}
+
+			// Partial coverage - premultiplied source-over compositing
+			srcAlpha := color.A * float64(alpha) / 255.0
+			invSrcAlpha := 1.0 - srcAlpha
+
+			srcR := color.R * srcAlpha
+			srcG := color.G * srcAlpha
+			srcB := color.B * srcAlpha
+
+			dstR, dstG, dstB, dstA := pixmap.getPremul(x, y)
+
+			pixmap.setPremul(x, y,
+				srcR+dstR*invSrcAlpha,
+				srcG+dstG*invSrcAlpha,
+				srcB+dstB*invSrcAlpha,
+				srcAlpha+dstA*invSrcAlpha,
+			)
 		}
-
-		// Apply mask coverage if active.
-		alpha = applyMaskCoverage(maskFn, x, y, alpha)
-		if alpha == 0 {
-			continue
-		}
-
-		// Full coverage - just set the pixel
-		if alpha == 255 && color.A == 1.0 {
-			pixmap.SetPixel(x, y, color)
-			continue
-		}
-
-		// Partial coverage - premultiplied source-over compositing
-		srcAlpha := color.A * float64(alpha) / 255.0
-		invSrcAlpha := 1.0 - srcAlpha
-
-		srcR := color.R * srcAlpha
-		srcG := color.G * srcAlpha
-		srcB := color.B * srcAlpha
-
-		dstR, dstG, dstB, dstA := pixmap.getPremul(x, y)
-
-		pixmap.setPremul(x, y,
-			srcR+dstR*invSrcAlpha,
-			srcG+dstG*invSrcAlpha,
-			srcB+dstB*invSrcAlpha,
-			srcAlpha+dstA*invSrcAlpha,
-		)
 	}
 }
 
@@ -1053,71 +1111,97 @@ func (r *SoftwareRenderer) blendAlphaRunsFromCoreRunsPaint(pixmap *Pixmap, y int
 
 	// Non-SourceOver: dispatch via blend function.
 	if bfn != nil {
-		for x, alpha := range runs.Iter() {
-			if alpha == 0 || x < xlo || x >= xhi {
+		for rx := 0; rx < runs.Width(); {
+			run, ok := runs.RunAt(rx)
+			if !ok {
+				break
+			}
+			rx += run.Count
+			if run.Alpha == 0 {
 				continue
 			}
-			alpha = applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, alpha)
-			if alpha == 0 {
-				continue
+			x0, x1 := run.X, run.X+run.Count
+			if x0 < xlo {
+				x0 = xlo
 			}
-			alpha = applyMaskCoverage(maskFn, x, y, alpha)
-			if alpha == 0 {
-				continue
+			if x1 > xhi {
+				x1 = xhi
 			}
-			c := paint.ColorAt(float64(x)+0.5, float64(y)+0.5)
-			r.blendCoverageSolidMode(pixmap, x, y, alpha, c, bfn)
+			for x := x0; x < x1; x++ {
+				alpha := applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, run.Alpha)
+				if alpha == 0 {
+					continue
+				}
+				alpha = applyMaskCoverage(maskFn, x, y, alpha)
+				if alpha == 0 {
+					continue
+				}
+				c := paint.ColorAt(float64(x)+0.5, float64(y)+0.5)
+				r.blendCoverageSolidMode(pixmap, x, y, alpha, c, bfn)
+			}
 		}
 		return
 	}
 
 	// Fast path: SourceOver — inline float64 formula (zero overhead).
-	for x, alpha := range runs.Iter() {
-		if alpha == 0 {
+	// Walked via RunAt/Width, not IterRuns — see the comment in
+	// blendAlphaRunsFromCoreRuns.
+	for rx := 0; rx < runs.Width(); {
+		run, ok := runs.RunAt(rx)
+		if !ok {
+			break
+		}
+		rx += run.Count
+		if run.Alpha == 0 {
 			continue
 		}
-		if x < xlo || x >= xhi {
-			continue
+		x0, x1 := run.X, run.X+run.Count
+		if x0 < xlo {
+			x0 = xlo
 		}
-
-		// Apply clip coverage: mask > closure > no-op (ADR-052).
-		alpha = applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, alpha)
-		if alpha == 0 {
-			continue
+		if x1 > xhi {
+			x1 = xhi
 		}
+		for x := x0; x < x1; x++ {
+			// Apply clip coverage: mask > closure > no-op (ADR-052).
+			alpha := applyClipCoverageFromMaskOrFn(clipMask, clipMaskW, clipMaskX, clipMaskY, clipFn, x, y, run.Alpha)
+			if alpha == 0 {
+				continue
+			}
 
-		// Apply mask coverage if active.
-		alpha = applyMaskCoverage(maskFn, x, y, alpha)
-		if alpha == 0 {
-			continue
+			// Apply mask coverage if active.
+			alpha = applyMaskCoverage(maskFn, x, y, alpha)
+			if alpha == 0 {
+				continue
+			}
+
+			fx := float64(x) + 0.5
+			fy := float64(y) + 0.5
+
+			// Sample color from paint at pixel center
+			color := paint.ColorAt(fx, fy)
+
+			if alpha == 255 && color.A == 1.0 {
+				pixmap.SetPixel(x, y, color)
+				continue
+			}
+
+			srcAlpha := color.A * float64(alpha) / 255.0
+			invSrcAlpha := 1.0 - srcAlpha
+
+			srcR := color.R * srcAlpha
+			srcG := color.G * srcAlpha
+			srcB := color.B * srcAlpha
+
+			dstR, dstG, dstB, dstA := pixmap.getPremul(x, y)
+
+			pixmap.setPremul(x, y,
+				srcR+dstR*invSrcAlpha,
+				srcG+dstG*invSrcAlpha,
+				srcB+dstB*invSrcAlpha,
+				srcAlpha+dstA*invSrcAlpha,
+			)
 		}
-
-		fx := float64(x) + 0.5
-		fy := float64(y) + 0.5
-
-		// Sample color from paint at pixel center
-		color := paint.ColorAt(fx, fy)
-
-		if alpha == 255 && color.A == 1.0 {
-			pixmap.SetPixel(x, y, color)
-			continue
-		}
-
-		srcAlpha := color.A * float64(alpha) / 255.0
-		invSrcAlpha := 1.0 - srcAlpha
-
-		srcR := color.R * srcAlpha
-		srcG := color.G * srcAlpha
-		srcB := color.B * srcAlpha
-
-		dstR, dstG, dstB, dstA := pixmap.getPremul(x, y)
-
-		pixmap.setPremul(x, y,
-			srcR+dstR*invSrcAlpha,
-			srcG+dstG*invSrcAlpha,
-			srcB+dstB*invSrcAlpha,
-			srcAlpha+dstA*invSrcAlpha,
-		)
 	}
 }
 

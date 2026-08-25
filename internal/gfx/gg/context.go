@@ -1981,6 +1981,15 @@ func (c *Context) isClipActive() bool {
 // If no clip is active or the accelerator doesn't support ClipAware, the
 // returned function is a no-op.
 func (c *Context) setGPUClipRect() func() {
+	if c.gpuDisabled {
+		// A disabled context never fills through the GPU (tryGPUFill bails
+		// immediately), so setting clip state here — including the "backward
+		// compat" fallback to the process-global accelerator below — would
+		// only pay allocation cost for a scissor no draw call on this context
+		// ever consults, and would spuriously perturb the shared accelerator's
+		// clip state on behalf of a context that isn't using it.
+		return func() {}
+	}
 	if !c.isClipActive() {
 		return func() {}
 	}

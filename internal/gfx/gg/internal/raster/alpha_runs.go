@@ -288,6 +288,22 @@ func (ar *AlphaRuns) IterRuns() iter.Seq[AlphaRun] {
 	}
 }
 
+// RunAt returns the run starting exactly at position x, and whether one
+// exists there. Callers walk all runs with a plain for loop —
+// `for x := 0; x < ar.Width(); { run, ok := ar.RunAt(x); ...; x += run.Count }`
+// — instead of range-over-func, which costs one yield closure call per run
+// and profiled as the dominant cost of the blend hot path in a full repaint.
+func (ar *AlphaRuns) RunAt(x int) (run AlphaRun, ok bool) {
+	if x < 0 || x >= ar.width {
+		return AlphaRun{}, false
+	}
+	n := int(ar.runs[x])
+	if n <= 0 {
+		return AlphaRun{}, false
+	}
+	return AlphaRun{X: x, Alpha: ar.alpha[x], Count: n}, true
+}
+
 // GetAlpha returns the alpha value at position x.
 // Returns 0 if x is out of bounds.
 func (ar *AlphaRuns) GetAlpha(x int) uint8 {

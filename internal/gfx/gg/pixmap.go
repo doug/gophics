@@ -346,7 +346,21 @@ func (p *Pixmap) FillSpan(x1, x2, y int, c RGBA) {
 	b := uint8(clamp255(c.B * c.A * 255))
 	a := uint8(clamp255(c.A * 255))
 
-	// Calculate start position in data buffer
+	p.fillSpanPremul(x1, x2, y, r, g, b, a)
+}
+
+// fillSpanPremul fills [x1,x2) on row y with an already-premultiplied color,
+// using a doubling copy so long spans move geometrically more bytes per
+// iteration instead of writing one pixel at a time. Callers must guarantee
+// 0 <= x1 <= x2 <= p.width and 0 <= y < p.height; unlike FillSpan, no
+// clamping or bounds checking is performed here, since the hot per-run
+// callers in software.go already clamp against the clip rect and pixmap
+// bounds before calling this.
+func (p *Pixmap) fillSpanPremul(x1, x2, y int, r, g, b, a uint8) {
+	if x1 >= x2 {
+		return
+	}
+
 	startIdx := (y*p.width + x1) * 4
 	length := x2 - x1
 

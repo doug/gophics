@@ -47,6 +47,7 @@ type ImageBuf struct {
 	height int
 	stride int
 	format Format
+	bpp    int    // cached format.BytesPerPixel(), hot in per-pixel paths
 	genID  uint64 // Unique generation ID for GPU texture cache keying
 
 	// Lazy premultiplication cache
@@ -75,6 +76,7 @@ func NewImageBuf(width, height int, format Format) (*ImageBuf, error) {
 		height: height,
 		stride: stride,
 		format: format,
+		bpp:    format.BytesPerPixel(),
 	}, nil
 }
 
@@ -102,6 +104,7 @@ func NewImageBufWithStride(width, height int, format Format, stride int) (*Image
 		height: height,
 		stride: stride,
 		format: format,
+		bpp:    format.BytesPerPixel(),
 	}, nil
 }
 
@@ -133,6 +136,7 @@ func FromRaw(data []byte, width, height int, format Format, stride int) (*ImageB
 		height: height,
 		stride: stride,
 		format: format,
+		bpp:    format.BytesPerPixel(),
 	}, nil
 }
 
@@ -148,6 +152,7 @@ func (b *ImageBuf) Clone() *ImageBuf {
 		height: b.height,
 		stride: b.stride,
 		format: b.format,
+		bpp:    b.bpp,
 		// premul cache is not copied - will be recomputed if needed
 	}
 }
@@ -197,7 +202,7 @@ func (b *ImageBuf) RowBytes(y int) []byte {
 		return nil
 	}
 	start := y * b.stride
-	end := start + b.format.RowBytes(b.width)
+	end := start + b.width*b.bpp
 	return b.data[start:end]
 }
 
@@ -207,7 +212,7 @@ func (b *ImageBuf) PixelOffset(x, y int) int {
 	if x < 0 || x >= b.width || y < 0 || y >= b.height {
 		return -1
 	}
-	return y*b.stride + x*b.format.BytesPerPixel()
+	return y*b.stride + x*b.bpp
 }
 
 // PixelBytes returns a slice of the raw bytes for pixel (x, y).
@@ -217,8 +222,7 @@ func (b *ImageBuf) PixelBytes(x, y int) []byte {
 	if offset < 0 {
 		return nil
 	}
-	bpp := b.format.BytesPerPixel()
-	return b.data[offset : offset+bpp]
+	return b.data[offset : offset+b.bpp]
 }
 
 // SetPixelBytes sets the raw bytes for pixel (x, y).
@@ -229,8 +233,7 @@ func (b *ImageBuf) SetPixelBytes(x, y int, pixel []byte) error {
 	if offset < 0 {
 		return ErrOutOfBounds
 	}
-	bpp := b.format.BytesPerPixel()
-	copy(b.data[offset:offset+bpp], pixel)
+	copy(b.data[offset:offset+b.bpp], pixel)
 	b.InvalidatePremulCache()
 	return nil
 }
@@ -366,12 +369,10 @@ func (b *ImageBuf) PremultipliedData() []byte {
 // computePremultiplied fills premulData with premultiplied version.
 // Caller must hold premulMu write lock.
 func (b *ImageBuf) computePremultiplied() {
-	bpp := b.format.BytesPerPixel()
-
 	for y := range b.height {
 		srcRow := y * b.stride
 		for x := range b.width {
-			offset := srcRow + x*bpp
+			offset := srcRow + x*b.bpp
 			b.premulPixel(offset)
 		}
 	}
@@ -427,9 +428,9 @@ func (b *ImageBuf) SubImage(x, y, width, height int) *ImageBuf {
 	}
 
 	// Calculate new data slice starting at (x, y)
-	offset := y*b.stride + x*b.format.BytesPerPixel()
+	offset := y*b.stride + x*b.bpp
 	// Total bytes needed: (height-1)*stride + width*bpp
-	endOffset := (y+height-1)*b.stride + (x+width)*b.format.BytesPerPixel()
+	endOffset := (y+height-1)*b.stride + (x+width)*b.bpp
 
 	return &ImageBuf{
 		data:   b.data[offset:endOffset],
@@ -438,6 +439,7 @@ func (b *ImageBuf) SubImage(x, y, width, height int) *ImageBuf {
 		height: height,
 		stride: b.stride, // Keep original stride for proper row access
 		format: b.format,
+		bpp:    b.bpp,
 		// premul cache is not shared
 	}
 }
