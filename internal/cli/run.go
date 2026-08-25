@@ -12,6 +12,8 @@ func cmdRun(args []string) error {
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web server port (web platform)")
 	fs.StringVar(&o.host, "host", "", "mobile host project dir (default: sibling ios/ or android/ of the package)")
+	fs.BoolVar(&o.device, "device", false, "run on a connected device rather than a simulator (ios)")
+	fs.StringVar(&o.team, "team", "", "Apple Developer team ID for device signing (default: from the codesigning identity)")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}

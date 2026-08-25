@@ -50,6 +50,8 @@ type buildOpts struct {
 	out      string
 	pkg      string
 	host     string // mobile host project dir (run only; "" = sibling convention)
+	device   bool   // run on a connected physical device rather than a simulator/emulator
+	team     string // Apple Developer team ID for device signing ("" = detect)
 }
 
 // addBuildFlags registers the flags common to build/run/dev on fs. platName is

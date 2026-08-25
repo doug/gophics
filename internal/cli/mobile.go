@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -178,12 +180,6 @@ func runIOS(o buildOpts, host string) error {
 		return err
 	}
 
-	udid, dev, err := pickSimulator()
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "gophics: simulator %s\n", dev)
-
 	if fileExists(filepath.Join(host, "project.yml")) {
 		if !have("xcodegen") {
 			return fmt.Errorf("xcodegen not found — install with: brew install xcodegen")
@@ -200,6 +196,19 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
+	if o.device {
+		return runIOSOnDevice(o, host, proj, scheme)
+	}
+	return runIOSOnSimulator(host, proj, scheme)
+}
+
+// runIOSOnSimulator builds for the simulator SDK and installs with simctl.
+func runIOSOnSimulator(host, proj, scheme string) error {
+	udid, dev, err := pickSimulator()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "gophics: simulator %s\n", dev)
 	fmt.Fprintln(os.Stderr, "gophics: xcodebuild "+scheme)
 	if err := run(host, nil, "xcodebuild",
 		"-project", filepath.Base(proj), "-scheme", scheme,
@@ -221,6 +230,54 @@ func runIOS(o buildOpts, host string) error {
 	}
 	_ = exec.Command("xcrun", "simctl", "terminate", udid, bundleID).Run()
 	return run("", nil, "xcrun", "simctl", "launch", "--console-pty", udid, bundleID)
+}
+
+// runIOSOnDevice builds for the device SDK and installs with devicectl.
+//
+// Two things differ from the simulator beyond the SDK name. A device build is
+// signed, and the host projects here declare no signing at all — so the team
+// and automatic signing are passed on the command line rather than baked into
+// project.yml, which would put one developer's team in the repository.
+// -allowProvisioningUpdates lets Xcode create or refresh the profile rather
+// than failing on a machine that has never built this bundle ID for a device.
+func runIOSOnDevice(o buildOpts, host, proj, scheme string) error {
+	dev, err := pickDevice()
+	if err != nil {
+		return err
+	}
+	team := o.team
+	if team == "" {
+		if team, err = developmentTeam(); err != nil {
+			return fmt.Errorf("%w\npass one with -team <TEAMID>", err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "gophics: device %s (team %s)\n", dev.name, team)
+	fmt.Fprintln(os.Stderr, "gophics: xcodebuild "+scheme)
+	if err := run(host, nil, "xcodebuild",
+		"-project", filepath.Base(proj), "-scheme", scheme,
+		"-sdk", "iphoneos", "-configuration", "Debug",
+		"-destination", "id="+dev.udid, "-derivedDataPath", "build",
+		"-allowProvisioningUpdates",
+		"CODE_SIGN_STYLE=Automatic", "DEVELOPMENT_TEAM="+team,
+		"build"); err != nil {
+		return fmt.Errorf("xcodebuild: %w", err)
+	}
+
+	app := filepath.Join(host, "build", "Build", "Products", "Debug-iphoneos", scheme+".app")
+	bundleID, err := appBundleID(app)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "gophics: install + launch %s\n", bundleID)
+	if err := run("", nil, "xcrun", "devicectl", "device", "install", "app",
+		"--device", dev.identifier, app); err != nil {
+		return fmt.Errorf("devicectl install: %w", err)
+	}
+	// --console streams the app's stdout/stderr back, which is the device
+	// equivalent of simctl's --console-pty. Go's log output reaches it; note
+	// it does not reach the device syslog.
+	return run("", nil, "xcrun", "devicectl", "device", "process", "launch",
+		"--device", dev.identifier, "--console", "--terminate-existing", bundleID)
 }
 
 func xcodeSelected() bool {
@@ -644,4 +701,125 @@ func checkIOSPermissions(o buildOpts, host string) error {
 	b.WriteString("The text is shown to the user in the permission prompt and read at App Review,\n")
 	b.WriteString("so it cannot be generated.")
 	return errors.New(b.String())
+}
+
+// iosDevice is a paired device's two identities. They are not the same value
+// and the two tools disagree about which they want: xcodebuild's
+// -destination id= expects the hardware UDID, devicectl's --device expects
+// the identifier it assigns.
+type iosDevice struct {
+	udid       string // hardware UDID, for xcodebuild
+	identifier string // devicectl's handle
+	name       string
+}
+
+// pickDevice returns a paired iOS device, preferring one whose tunnel is
+// already up.
+func pickDevice() (iosDevice, error) {
+	tmp, err := os.CreateTemp("", "gophics-devices-*.json")
+	if err != nil {
+		return iosDevice{}, err
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	// devicectl only reports as JSON to a file, never to stdout.
+	if out, err := exec.Command("xcrun", "devicectl", "list", "devices",
+		"--json-output", tmp.Name()).CombinedOutput(); err != nil {
+		return iosDevice{}, fmt.Errorf("devicectl list devices: %w\n%s", err, out)
+	}
+	raw, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		return iosDevice{}, err
+	}
+	return selectDevice(raw)
+}
+
+// selectDevice picks a device out of devicectl's JSON: a paired iOS one,
+// preferring a connected tunnel over a merely paired device.
+func selectDevice(raw []byte) (iosDevice, error) {
+	var data struct {
+		Result struct {
+			Devices []struct {
+				Identifier         string                `json:"identifier"`
+				DeviceProperties   struct{ Name string } `json:"deviceProperties"`
+				HardwareProperties struct {
+					UDID     string `json:"udid"`
+					Platform string `json:"platform"`
+				} `json:"hardwareProperties"`
+				ConnectionProperties struct {
+					TunnelState  string `json:"tunnelState"`
+					PairingState string `json:"pairingState"`
+				} `json:"connectionProperties"`
+			} `json:"devices"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return iosDevice{}, fmt.Errorf("parse devicectl output: %w", err)
+	}
+	var first iosDevice
+	for _, d := range data.Result.Devices {
+		if d.HardwareProperties.Platform != "iOS" || d.ConnectionProperties.PairingState != "paired" {
+			continue
+		}
+		dev := iosDevice{
+			udid:       d.HardwareProperties.UDID,
+			identifier: d.Identifier,
+			name:       d.DeviceProperties.Name,
+		}
+		if d.ConnectionProperties.TunnelState == "connected" {
+			return dev, nil
+		}
+		if first.udid == "" {
+			first = dev
+		}
+	}
+	if first.udid == "" {
+		return iosDevice{}, fmt.Errorf("no paired iOS device found — connect one, unlock it, and trust this Mac")
+	}
+	return first, nil
+}
+
+// developmentTeam reads the Apple Developer team ID from the codesigning
+// identity in the keychain.
+//
+// It is the certificate's organizational unit, not the identifier in
+// parentheses in the identity's name — those differ, and using the visible one
+// produces a team that does not exist.
+func developmentTeam() (string, error) {
+	out, err := exec.Command("security", "find-identity", "-v", "-p", "codesigning").Output()
+	if err != nil {
+		return "", fmt.Errorf("security find-identity: %w", err)
+	}
+	var cn string
+	for _, line := range strings.Split(string(out), "\n") {
+		a := strings.Index(line, `"`)
+		b := strings.LastIndex(line, `"`)
+		if a < 0 || b <= a {
+			continue
+		}
+		n := line[a+1 : b]
+		if strings.HasPrefix(n, "Apple Development") || strings.HasPrefix(n, "iPhone Developer") {
+			cn = n
+			break
+		}
+	}
+	if cn == "" {
+		return "", fmt.Errorf("no Apple Development signing identity in the keychain")
+	}
+	pemBytes, err := exec.Command("security", "find-certificate", "-c", cn, "-p").Output()
+	if err != nil {
+		return "", fmt.Errorf("security find-certificate %q: %w", cn, err)
+	}
+	blk, _ := pem.Decode(pemBytes)
+	if blk == nil {
+		return "", fmt.Errorf("certificate for %q is not PEM", cn)
+	}
+	cert, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("parse certificate for %q: %w", cn, err)
+	}
+	if len(cert.Subject.OrganizationalUnit) == 0 {
+		return "", fmt.Errorf("certificate for %q carries no team (OU)", cn)
+	}
+	return cert.Subject.OrganizationalUnit[0], nil
 }
