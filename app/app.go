@@ -180,8 +180,31 @@ type core struct {
 // doubleTapWindow is how long a deferred single-tap waits for a second tap.
 const doubleTapWindow = 0.30
 
-// tapSlop is the drag distance that cancels a pending tap, in logical px.
+// tapSlop is the movement that cancels a pending tap or long-press, in logical
+// px, for a pointer that holds still — a mouse or a pen.
 const tapSlop = 4
+
+// touchTapSlop is the same for a finger, which does not.
+//
+// One threshold used to govern both. Four px is right for a mouse and far too
+// tight for a finger: a finger rolls a few points through any deliberate tap
+// and drifts further through a half-second hold, so taps went unnoticed and
+// long-presses were cancelled before they could fire. The symptoms do not look
+// related — rows that ignore being tapped, and text selection that never
+// starts, since its entry point on touch *is* a long press — which is what
+// made it hard to see as one cause.
+//
+// Ten points is about what the platforms allow: UIKit's long-press
+// allowableMovement defaults to 10, and Android's touch slop is around 8dp.
+const touchTapSlop = 10
+
+// slop is the movement this gesture is allowed before it stops being a tap.
+func (c *core) slop() float32 {
+	if c.downTouch {
+		return touchTapSlop
+	}
+	return tapSlop
+}
 
 // debugNoDamage forces a full-surface repaint every frame (GOPHICS_NO_DAMAGE),
 // bypassing damage culling — a diagnostic to isolate damage-tracking bugs.
@@ -669,7 +692,7 @@ func (c *core) Pointer(e shell.Pointer) {
 		// pending tap or long-press even on a widget with no drag handler.
 		if !c.moved && (c.pressed != nil || c.longPress != nil || len(c.dragCandidates) > 0) {
 			d := e.Pos.Sub(c.downPos)
-			if d.X*d.X+d.Y*d.Y > tapSlop*tapSlop {
+			if sl := c.slop(); d.X*d.X+d.Y*d.Y > sl*sl {
 				c.moved = true
 				c.pressed = nil
 				c.longPress = nil
