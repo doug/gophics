@@ -385,13 +385,31 @@ func (el *element) mountRenderChildren(w renderWidget) {
 // implementation we have copies out of the slice it's given (into its own
 // box's Children, or by extracting a single child), so nothing outlives this
 // call that would alias a mutated buffer.
+//
+// That is an invariant nothing enforces, and violating it fails quietly — a
+// retained slice reads the *next* frame's boxes, so a tree lays out against
+// children it no longer has, with no error. scrubAttachBuf exists to make it
+// loud instead; see its comment.
 func (el *element) attachKids(w renderWidget) {
 	el.boxBuf = el.boxBuf[:0]
 	for _, k := range el.kids {
 		el.boxBuf = append(el.boxBuf, k.renderBox())
 	}
 	w.attach(el.box, el.boxBuf)
+	if scrubAttachBuf {
+		// The contract is that attach has finished with the slice by now, so
+		// nulling it changes nothing — unless someone kept it, in which case
+		// the next layout walks into nils and the guard test says so. One
+		// branch per attach, off in every normal run.
+		for i := range el.boxBuf {
+			el.boxBuf[i] = nil
+		}
+	}
 }
+
+// scrubAttachBuf turns on the check described in attachKids. Tests set it; it
+// is never on in a running app.
+var scrubAttachBuf bool
 
 // update reconciles el (already type/key-matched) to the new widget value.
 func (el *element) update(w Widget) {
