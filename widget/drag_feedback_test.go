@@ -125,3 +125,65 @@ func TestTheDragGhostSitsUnderThePointer(t *testing.T) {
 		t.Errorf("the ghost is centred at %v, want it under the pointer at %v", *ghost, at)
 	}
 }
+
+// The ghost keeps following after the first move.
+//
+// The overlay rebuilds only when an entry is pushed, removed or updated. The
+// preview is pushed once, when the drag starts, and dragPreview.Build reads the
+// session's position — so the position it renders is whatever was current at
+// that push. Marking the *draggable* dirty on each move rebuilds the source
+// widget, which is a different subtree, and never the overlay.
+//
+// The earlier test could not see this: it moved once, and that move was the
+// one that pushed the overlay, so the first Build happened to read the
+// up-to-date position. Two moves are what it takes.
+func TestTheGhostKeepsUpAfterTheFirstMove(t *testing.T) {
+	h, err := app.NewHeadless(ghostApp{}, app.Config{
+		Size: geom.Size{W: 300, H: 300}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+
+	ghostAt := func() (geom.Pt, bool) {
+		var out []geom.Pt
+		for _, n := range h.Semantics() {
+			if n.Label == "CHIP" {
+				out = append(out, geom.Pt{
+					X: (n.Rect.Min.X + n.Rect.Max.X) / 2,
+					Y: (n.Rect.Min.Y + n.Rect.Max.Y) / 2,
+				})
+			}
+		}
+		if len(out) != 2 {
+			return geom.Pt{}, false
+		}
+		// The one that is not the chip left behind at its original position.
+		for _, p := range out {
+			if p != (geom.Pt{X: 150, Y: 20}) {
+				return p, true
+			}
+		}
+		return geom.Pt{}, false
+	}
+
+	h.Press(geom.Pt{X: 150, Y: 20})
+	h.Move(geom.Pt{X: 150, Y: 120}) // starts the drag; pushes the preview
+	h.Render()
+	if _, ok := ghostAt(); !ok {
+		t.Fatal("no ghost after the drag started")
+	}
+
+	// Carry on moving. This is the part that was never rebuilding.
+	second := geom.Pt{X: 60, Y: 220}
+	h.Move(second)
+	h.Render()
+	got, ok := ghostAt()
+	if !ok {
+		t.Fatal("the ghost vanished after the second move")
+	}
+	if got != second {
+		t.Errorf("after moving to %v the ghost is at %v — it stopped following the pointer "+
+			"once the overlay had been pushed", second, got)
+	}
+}

@@ -248,6 +248,15 @@ func (s *draggableState) haptic(k shell.HapticKind) {
 	}
 }
 
+// previewWidget is the entry the overlay carries for this drag.
+func (s *draggableState) previewWidget() Widget {
+	preview := s.W().Preview
+	if preview == nil {
+		preview = s.W().Child
+	}
+	return dragPreview{sess: s.sess, offset: s.W().PreviewOffset, Child: preview}
+}
+
 // showPreview puts the carried widget in the overlay, positioned by padding
 // from the top-left — the same mechanism menus and tooltips use.
 func (s *draggableState) showPreview() {
@@ -255,11 +264,7 @@ func (s *draggableState) showPreview() {
 	if !ok {
 		return
 	}
-	preview := s.W().Preview
-	if preview == nil {
-		preview = s.W().Child
-	}
-	s.tok = ov.Show(dragPreview{sess: s.sess, offset: s.W().PreviewOffset, Child: preview})
+	s.tok = ov.Show(s.previewWidget())
 }
 
 func (s *draggableState) finish(dropped bool) {
@@ -313,6 +318,16 @@ func (s *draggableState) Build(ctx Ctx) Widget {
 					s.start()
 				}
 				s.sess.update(at)
+				// Re-issue the overlay entry so the carried copy follows.
+				//
+				// The preview lives in the overlay, which sits *above* the
+				// DragHost — so neither the host's repaint nor this widget's
+				// own rebuild reaches it. The overlay rebuilds only when one
+				// of its entries is pushed, removed or updated, and the push
+				// happens once, when the drag starts. Without this the ghost
+				// renders at whatever position was current at that moment and
+				// stays there while the finger goes on without it.
+				s.tok.Update(s.previewWidget())
 			},
 			OnRelease: func() {
 				if !s.active {
