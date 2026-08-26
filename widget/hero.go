@@ -38,6 +38,13 @@ type heroRegistry struct {
 	child  map[string]Widget
 	flying map[string]bool
 	frac   float32 // main-axis translate fraction applied to this page
+	// origin is where the page's parent — the navigator's stack — sits in
+	// window coordinates. Hero rects are captured during paint and are
+	// therefore absolute, while the flight overlay is positioned relative to
+	// that stack. The two only agree when the navigator starts at the window
+	// origin; under a header, or inside the safe-area inset a notch imposes,
+	// they differ by exactly that much.
+	origin geom.Pt
 }
 
 func newHeroRegistry() *heroRegistry {

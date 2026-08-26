@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 )
 
 // A hero flight is placed by the same slide fractions that place the pages.
@@ -63,5 +64,69 @@ func TestRemovingAPageSlideAndPuttingItBackIsIdentity(t *testing.T) {
 			!near(got.Max.X, rc.Max.X) || !near(got.Max.Y, rc.Max.Y) {
 			t.Errorf("frac %v: round-tripped %v to %v, want it unchanged", frac, rc, got)
 		}
+	}
+}
+
+// A flight lands on its destination even when the navigator does not start at
+// the window origin.
+//
+// Hero rects are captured during paint and are therefore in window
+// coordinates, while the flight overlay is aligned to the navigator's own
+// stack. Those agree only when the navigator is the whole window. Put a header
+// above it — or run on a phone, where the safe-area inset a notch imposes does
+// the same thing — and every flight is displaced by exactly that offset, which
+// reads as the animation jerking sideways and not arriving where it should.
+func TestFlightOriginConvertsOutOfWindowCoordinates(t *testing.T) {
+	const headerH = 64
+	reg := newHeroRegistry()
+	reg.origin = geom.Pt{Y: headerH} // the stack sits below a header
+
+	// A hero painted 20pt down its page is at 84 in window coordinates.
+	const inPage = 20
+	captured := geom.RectXYWH(0, headerH+inPage, 50, 50)
+
+	// restRect with no slide leaves it alone; the origin conversion is what
+	// has to bring it back into the stack's space.
+	got := restRect(captured, 0, 400).Translate(geom.Pt{X: -reg.origin.X, Y: -reg.origin.Y})
+	if got.Min.Y != inPage {
+		t.Errorf("hero converted to y=%v in the stack's space, want %v — "+
+			"a flight placed at %v would sit a header below where it belongs",
+			got.Min.Y, float32(inPage), got.Min.Y)
+	}
+
+	// And with no header the conversion changes nothing, so the ordinary case
+	// is untouched.
+	plain := newHeroRegistry()
+	if plain.origin != (geom.Pt{}) {
+		t.Errorf("a fresh registry starts at origin %v, want zero", plain.origin)
+	}
+}
+
+// The page records where its stack sits, which is what makes the conversion
+// above possible.
+//
+// This is the wiring the arithmetic test cannot see: restRect and the origin
+// subtraction are only correct if something actually reports the stack's
+// position, and pageBox is the only thing that knows it — its own paint
+// position less the slide it is carrying.
+func TestAPageRecordsItsStackOrigin(t *testing.T) {
+	reg := newHeroRegistry()
+	b := &pageBox{reg: reg, fracX: 0.25}
+	b.Layout(layout.Tight(geom.Size{W: 400, H: 800}))
+
+	// Painted 64pt down — below a header — while sliding a quarter width.
+	b.Paint(nil, geom.Pt{X: 0, Y: 64})
+
+	// The origin is where the box was placed, slide included: the slide is
+	// applied to the child, not the box, and restRect already removes it from
+	// the captured rect. Subtracting it here too — which the first version of
+	// this did, in both the code and this assertion — moves every flight by
+	// the slide a second time, and the existing pixel test of a real flight is
+	// what caught it.
+	if want := (geom.Pt{Y: 64}); reg.origin != want {
+		t.Errorf("recorded stack origin %v, want %v", reg.origin, want)
+	}
+	if reg.frac != 0.25 {
+		t.Errorf("recorded frac %v, want 0.25", reg.frac)
 	}
 }

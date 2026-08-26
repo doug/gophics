@@ -293,6 +293,15 @@ func (s *navState) buildFlights(width float32) []Widget {
 		// the whole transition and only met it on the last frame.
 		src := restRect(fromRC, from.frac, width).Translate(geom.Pt{X: fromFrac * width})
 		dst := restRect(toRC, to.frac, width).Translate(geom.Pt{X: toFrac * width})
+		// Into the stack's coordinates. The rects came from paint and are in
+		// window coordinates; the overlay below is aligned to the stack's own
+		// top-left. Under a header — or inside a notch's safe-area inset —
+		// those differ, and the flight arrives offset by the difference
+		// instead of landing on the element it is flying to.
+		if o := to.origin; o != (geom.Pt{}) {
+			src = src.Translate(geom.Pt{X: -o.X, Y: -o.Y})
+			dst = dst.Translate(geom.Pt{X: -o.X, Y: -o.Y})
+		}
 		from.flying[tag], to.flying[tag] = true, true
 		cur := lerpRect(src, dst, t)
 		// The child is rebuilt at the origin (its natural size ≈ dst size);
@@ -366,6 +375,13 @@ func (b *pageBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 	if b.reg != nil {
 		b.reg.frac = b.fracX // matches the rects captured below this paint
+		// The stack's own origin, which is simply where this page's box was
+		// placed: the slide is applied to the child below, not to the box. Do
+		// not subtract it here — restRect already removes the slide from the
+		// captured rect, so subtracting it again moves the flight by the slide
+		// a second time and the hero drifts during every transition even when
+		// the navigator starts at the window origin.
+		b.reg.origin = at
 	}
 	if b.child != nil {
 		b.child.Paint(c, at.Add(b.offset()))
