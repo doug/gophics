@@ -22,8 +22,18 @@ import (
 // with the worst frames near 43ms. theme.Card{Solid: true} is the ready-made
 // version of this.
 type Chart struct {
-	Marks   []Mark
-	X, Y    Scale // optional; inferred from the marks when nil
+	Marks []Mark
+	X, Y  Scale // optional; inferred from the marks when nil
+	// XTime says the X values are instants from Seconds, so an inferred X
+	// scale is a Time rather than a Linear.
+	//
+	// It has to be said rather than detected: a Datum holds a float64, and
+	// seconds since the epoch are indistinguishable from any other large
+	// number. Without it a time series gets NewLinear, which snaps out to
+	// round bounds — round for a plain quantity, arbitrary for seconds — and
+	// the axis runs months past both ends of the data with labels for periods
+	// that hold none. Ignored when X is set explicitly.
+	XTime   bool
 	XAxis   Axis
 	YAxis   Axis
 	Legend  bool // show a color key for named marks
@@ -153,13 +163,14 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	// let a chart paint onto whatever surrounded it. On a scrolled page that
 	// was the header above it.
 	canvas := widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
-		area := m.Inset(geom.RectFromSize(size))
+		bounds := geom.RectFromSize(size)
+		area := m.Inset(bounds)
 		s.area = area
 		if area.IsEmpty() {
 			return
 		}
 		drawYAxis(c, area, ys, w.YAxis, th, p)
-		drawXAxis(c, area, xs, w.XAxis, th, p)
+		drawXAxis(c, area, bounds, xs, w.XAxis, th, p)
 
 		pl := plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
 		c.PushClip(area)
@@ -312,9 +323,12 @@ func resolveScales(w Chart) (xs, ys Scale) {
 		ylo, yhi = 0, 1
 	}
 	if xs == nil {
-		if bandCats != nil {
+		switch {
+		case bandCats != nil:
 			xs = NewBand(bandCats)
-		} else {
+		case w.XTime:
+			xs = NewTime(time.Unix(int64(xlo), 0).UTC(), time.Unix(int64(xhi), 0).UTC())
+		default:
 			xs = NewLinear(xlo, xhi)
 		}
 	}

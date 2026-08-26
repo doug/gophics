@@ -13,6 +13,11 @@ type Time struct {
 func NewTime(lo, hi time.Time) *Time { return &Time{Lo: lo, Hi: hi} }
 
 // Seconds is the Datum X value for a time instant.
+//
+// Set Chart.XTime alongside it, or pass an explicit Chart.X of NewTime. A
+// Datum holds a float64 and seconds are indistinguishable from any other large
+// number, so without one of those the chart infers a Linear scale and the axis
+// runs well past the data.
 func Seconds(t time.Time) float64 { return float64(t.Unix()) }
 
 func (s *Time) lo() float64 { return float64(s.Lo.Unix()) }

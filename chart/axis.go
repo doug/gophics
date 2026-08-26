@@ -66,13 +66,13 @@ const xLabelGap = 8
 // still mark the positions of the ticks that lost their label.
 //
 // The first tick always keeps its label, so an axis never comes back empty.
-func visibleXLabels(ticks []Tick, area geom.Rect, ax Axis, measure func(string) float32) []bool {
+func visibleXLabels(ticks []Tick, area, bounds geom.Rect, ax Axis, measure func(string) float32) []bool {
 	show := make([]bool, len(ticks))
 	prevRight := float32(0)
 	first := true
 	for i, t := range ticks {
 		w := measure(ax.label(t))
-		left := area.Min.X + t.Pos*area.Dx() - w/2
+		left := xLabelLeft(area.Min.X+t.Pos*area.Dx(), w, bounds)
 		if first || left >= prevRight+xLabelGap {
 			show[i] = true
 			prevRight = left + w
@@ -82,13 +82,36 @@ func visibleXLabels(ticks []Tick, area geom.Rect, ax Axis, measure func(string) 
 	return show
 }
 
-func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th chartTheme, p *paint.Painter) {
+// xLabelLeft is where a tick label of width w starts: centred under the tick,
+// but pulled back inside bounds at the ends.
+//
+// A tick at the far right of the plot sits on area.Max.X, so a centred label
+// runs half its width past it — into a right margin of 14pt, which is narrower
+// than any date. The overflow used to be clipped by the chart's own box and the
+// last label lost its tail: "Nov '25" rendered as "Nov '2". Clamping is what
+// the label needs rather than a wider margin, since the width depends on the
+// formatter and nothing reserves space per-tick.
+//
+// The same clamp runs in visibleXLabels, so overlap is judged on where labels
+// actually land rather than where an unclamped one would have.
+func xLabelLeft(tickX, w float32, bounds geom.Rect) float32 {
+	left := tickX - w/2
+	if right := left + w; right > bounds.Max.X {
+		left = bounds.Max.X - w
+	}
+	if left < bounds.Min.X {
+		left = bounds.Min.X
+	}
+	return left
+}
+
+func drawXAxis(c paint.Canvas, area, bounds geom.Rect, xs Scale, ax Axis, th chartTheme, p *paint.Painter) {
 	if ax.Hide {
 		return
 	}
 	met := p.MetricsIn("", labelSize)
 	ticks := xs.Ticks(ax.tickCount(6))
-	show := visibleXLabels(ticks, area, ax, func(lab string) float32 {
+	show := visibleXLabels(ticks, area, bounds, ax, func(lab string) float32 {
 		return p.MeasureWidthIn("", lab, labelSize)
 	})
 	for i, t := range ticks {
@@ -102,7 +125,8 @@ func drawXAxis(c paint.Canvas, area geom.Rect, xs Scale, ax Axis, th chartTheme,
 		}
 		lab := ax.label(t)
 		w := p.MeasureWidthIn("", lab, labelSize)
-		c.TextIn("", lab, geom.Pt{X: x - w/2, Y: area.Max.Y + met.Ascent + 6}, labelSize, th.text)
+		lx := xLabelLeft(x, w, bounds)
+		c.TextIn("", lab, geom.Pt{X: lx, Y: area.Max.Y + met.Ascent + 6}, labelSize, th.text)
 	}
 	c.Line(geom.Pt{X: area.Min.X, Y: area.Max.Y}, geom.Pt{X: area.Max.X, Y: area.Max.Y}, 1, th.axis)
 }
