@@ -63,6 +63,7 @@ func (s *DragSession) begin(payload any, at geom.Pt) {
 
 // update moves the drag and recomputes which target is under the pointer.
 func (s *DragSession) update(at geom.Pt) {
+	moved := at != s.pos
 	s.pos = at
 	var hit *dropReg
 	// Later registrations sit on top, matching paint order, so the last
@@ -76,6 +77,15 @@ func (s *DragSession) update(at geom.Pt) {
 		}
 	}
 	if hit == s.over {
+		// The target has not changed, but the pointer has, and the carried
+		// preview is positioned from s.pos — so it only follows the finger if
+		// something repaints. Returning here without notifying left the ghost
+		// pinned wherever the last target change put it, moving only when the
+		// pointer crossed into a different drop target and not at all when it
+		// crossed none.
+		if moved {
+			s.notify()
+		}
 		return
 	}
 	if s.over != nil {
