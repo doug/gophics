@@ -503,6 +503,10 @@ func (p *Painter) ParagraphIn(font, s string, size, maxWidth float32) []text.Lin
 	return p.shaperFor(font).Paragraph(s, size, maxWidth)
 }
 
+// isBreakRune reports the runes a wrapper may leave at the end of a line, and
+// which must not be rendered as part of it.
+func isBreakRune(r rune) bool { return r == ' ' || r == '\n' || r == '\r' }
+
 // WrapTextIn is WrapText in a named font family.
 func (p *Painter) WrapTextIn(font, s string, size, maxWidth float32) []string {
 	lines := p.ParagraphIn(font, s, size, maxWidth)
@@ -510,8 +514,15 @@ func (p *Painter) WrapTextIn(font, s string, size, maxWidth float32) []string {
 	out := make([]string, len(lines))
 	for i, l := range lines {
 		start, end := l.Start, l.End
-		// Trim the trailing break rune (space/newline) kept by the wrapper.
-		for end > start && (runes[end-1] == ' ' || runes[end-1] == '\n') {
+		// Trim the trailing break runes the wrapper keeps on the line.
+		//
+		// \r belongs here as much as \n: text arriving as CRLF — pasted from
+		// a Windows editor, read from a file, off a network — breaks after the
+		// \r, and a carriage return left on the line is shaped as a visible
+		// glyph. The line's content fits the width it was measured against and
+		// then overflows by the width of that glyph, which is how CRLF text
+		// spilled out of a box that plain LF text sat inside.
+		for end > start && isBreakRune(runes[end-1]) {
 			end--
 		}
 		out[i] = string(runes[start:end])
