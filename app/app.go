@@ -127,7 +127,14 @@ type core struct {
 	debugPaint     bool
 	inspect        bool        // interactive widget inspector (highlights box under pointer)
 	frameTimes     [60]float32 // ring of recent raster+record durations, ms
-	frameHead      int
+	// frameOps/frameBlurs record what each of those frames drew. A frame time
+	// on its own says a frame was slow; paired with the size of the scene it
+	// drew, it says whether the scene was bigger or the same scene cost more —
+	// which is the difference between a heavy page and a discrete event like a
+	// layer resolve or an atlas growth.
+	frameOps   [60]int32
+	frameBlurs [60]int32
+	frameHead  int
 
 	cur, prev     *scene.List
 	lastPaintSize geom.Size
@@ -429,25 +436,61 @@ func (c *core) InspectTree() []layout.InspectNode {
 // the sixty good ones around them is exactly how they stop being visible in
 // the number while staying visible on the screen. p50 says what the frame
 // normally costs; p99 and the worst say what is being felt.
-func (c *core) FrameStats() (p50, p95, p99, worst float32) {
+func (c *core) FrameStats() (s FrameSummary) {
 	var buf [len(c.frameTimes)]float32
-	n := 0
-	for _, t := range c.frameTimes {
-		if t > 0 {
-			buf[n] = t
-			n++
+	n, worstAt := 0, -1
+	for i, t := range c.frameTimes {
+		if t <= 0 {
+			continue
+		}
+		buf[n] = t
+		n++
+		if worstAt < 0 || t > c.frameTimes[worstAt] {
+			worstAt = i
 		}
 	}
 	if n == 0 {
-		return 0, 0, 0, 0
+		return s
 	}
 	sort.Slice(buf[:n], func(i, j int) bool { return buf[i] < buf[j] })
 	at := func(f float32) float32 { return buf[int(f*float32(n-1))] }
-	return at(0.50), at(0.95), at(0.99), buf[n-1]
+	s.P50, s.P95, s.P99, s.Worst = at(0.50), at(0.95), at(0.99), buf[n-1]
+	// The worst frame's own scene, not the window's: the question a spike
+	// raises is what *that* frame was drawing.
+	s.WorstOps, s.WorstBlurs = int(c.frameOps[worstAt]), int(c.frameBlurs[worstAt])
+	// The median scene size, to compare the worst frame against.
+	var ops [len(c.frameOps)]int32
+	m := 0
+	for i, t := range c.frameTimes {
+		if t > 0 {
+			ops[m] = c.frameOps[i]
+			m++
+		}
+	}
+	sort.Slice(ops[:m], func(i, j int) bool { return ops[i] < ops[j] })
+	s.MedianOps = int(ops[m/2])
+	return s
 }
 
-func (c *core) recordFrameTime(ms float32) {
+// FrameSummary is a window of frame times with what the worst frame drew.
+//
+// The ops counts are the point: a spike beside a median-sized scene is a
+// discrete event — a layer resolved, an atlas grown, a glyph rasterized for
+// the first time — where a spike beside a much larger scene is simply a
+// heavier frame. Reporting the time alone cannot tell those apart, which is
+// what made "occasional stutter" hard to act on.
+type FrameSummary struct {
+	P50, P95, P99, Worst float32
+	WorstOps, WorstBlurs int
+	MedianOps            int
+}
+
+func (c *core) recordFrameTime(ms float32) { c.recordFrame(ms, 0, 0) }
+
+func (c *core) recordFrame(ms float32, ops, blurs int) {
 	c.frameTimes[c.frameHead] = ms
+	c.frameOps[c.frameHead] = int32(ops)     //nolint:gosec // scene sizes are small
+	c.frameBlurs[c.frameHead] = int32(blurs) //nolint:gosec
 	c.frameHead = (c.frameHead + 1) % len(c.frameTimes)
 }
 
@@ -1013,13 +1056,15 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	}
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.
-		h.core.recordFrameTime(float32(time.Since(t0).Seconds() * 1000))
+		h.core.recordFrame(float32(time.Since(t0).Seconds()*1000),
+			h.core.prev.Len(), h.core.prev.BackdropBlurs())
 		// GOPHICS_PACING logs a rolling frame-time summary each time the
 		// 60-frame ring wraps — the on-device pacing readout (PLAN §6.4).
 		if h.core.frameHead == 0 && os.Getenv("GOPHICS_PACING") != "" {
-			p50, p95, p99, worst := h.core.FrameStats()
-			log.Printf("gophics pacing: p50 %.2f  p95 %.2f  p99 %.2f  worst %.2f ms (60 frames)",
-				p50, p95, p99, worst)
+			f := h.core.FrameStats()
+			log.Printf("gophics pacing: p50 %.2f  p95 %.2f  p99 %.2f  worst %.2f ms "+
+				"(60 frames; worst drew %d ops / %d blurs, median %d ops)",
+				f.P50, f.P95, f.P99, f.Worst, f.WorstOps, f.WorstBlurs, f.MedianOps)
 		}
 	}
 }
