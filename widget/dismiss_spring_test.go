@@ -2,7 +2,6 @@ package widget_test
 
 import (
 	"testing"
-	"time"
 
 	"golang.org/x/image/font/gofont/goregular"
 
@@ -47,16 +46,15 @@ func TestAShortSwipeSpringsBackPastItsPlace(t *testing.T) {
 
 	// A short, slow drag: well under the 0.4 threshold and nowhere near a
 	// flick, so it must come back rather than dismiss.
-	// Paced like a finger: Dismissible measures release speed off the wall
-	// clock, so moves dispatched microseconds apart look like a flick however
-	// short the distance.
+	// Paced by the frame clock: a step between moves is what makes this a slow
+	// drag rather than a flick. It used to need real sleeps, because release
+	// speed came from wall-clock stamps between pointer events.
 	h.Press(geom.Pt{X: 150, Y: 40})
 	for _, x := range []float32{160, 175, 190} {
-		time.Sleep(30 * time.Millisecond)
 		h.Move(geom.Pt{X: x, Y: 40})
+		h.Step(1.0 / 60)
 		h.Render()
 	}
-	time.Sleep(30 * time.Millisecond)
 	if left() <= rest {
 		t.Fatal("the card did not follow the finger; nothing is being released")
 	}
@@ -115,8 +113,8 @@ func TestADismissedCardNeverComesBack(t *testing.T) {
 	// Past the threshold, so this dismisses however fast the finger was.
 	h.Press(geom.Pt{X: 20, Y: 40})
 	for _, x := range []float32{80, 150, 220, 280} {
-		time.Sleep(20 * time.Millisecond)
 		h.Move(geom.Pt{X: x, Y: 40})
+		h.Step(1.0 / 60)
 		h.Render()
 	}
 	h.Release(geom.Pt{X: 280, Y: 40})

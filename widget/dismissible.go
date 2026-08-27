@@ -46,11 +46,20 @@ type dismissState struct {
 	dx       float32 // current horizontal translation (px)
 	width    float32 // last laid-out child width
 	velocity float32 // px/s along x
-	lastDrag time.Time
-	anim     *anim.Controller
-	from, to float32
-	gone     bool // dismiss animation is running/finished
-	fired    bool // OnDismissed already called
+	// pendingDX is movement accumulated since the last frame, turned into a
+	// speed by the frame clock. Wall-clock timestamps between pointer events
+	// were the obvious way to do this and the wrong one: the interval between
+	// two events is not the interval the motion is drawn over, it varies with
+	// how the platform batches input, and it cannot be driven from a test
+	// without sleeping in it. The frame clock is the clock the animation
+	// actually runs on.
+	pendingDX float32
+	dragging  bool
+	anim      *anim.Controller
+	speed     *dragSpeed
+	from, to  float32
+	gone      bool // dismiss animation is running/finished
+	fired     bool // OnDismissed already called
 }
 
 func (s *dismissState) Init(ctx Ctx) {
@@ -65,9 +74,34 @@ func (s *dismissState) Init(ctx Ctx) {
 		}
 	}}
 	ctx.AddTicker(s.anim)
+	s.speed = &dragSpeed{s: s}
+	ctx.AddTicker(s.speed)
 }
 
-func (s *dismissState) Dispose() { s.ctx.RemoveTicker(s.anim) }
+func (s *dismissState) Dispose() {
+	s.ctx.RemoveTicker(s.anim)
+	s.ctx.RemoveTicker(s.speed)
+}
+
+// dragSpeed turns the movement accumulated during a frame into px/s, on the
+// frame clock rather than on wall-clock stamps between pointer events.
+//
+// It reports itself inactive: a drag already produces frames, because moving
+// the row is a state change, so this rides those rather than asking for more.
+type dragSpeed struct{ s *dismissState }
+
+func (d *dragSpeed) Tick(dt float64) bool {
+	st := d.s
+	if !st.dragging || dt <= 0 {
+		return false
+	}
+	inst := st.pendingDX / float32(dt)
+	st.pendingDX = 0
+	// The same smoothing the wall-clock version used, so the release still
+	// carries the finger's recent speed rather than one frame's worth.
+	st.velocity = st.velocity*0.7 + inst*0.3
+	return false
+}
 
 func (s *dismissState) allow(dx float32) float32 {
 	switch s.W().Direction {
@@ -169,21 +203,16 @@ func (s *dismissState) Build(ctx Ctx) Widget {
 			DragAxis: DragHorizontal, // let a vertical scroll claim vertical drags
 			OnPress: func(geom.Pt) {
 				s.anim.Jump(1) // grab interrupts any spring/dismiss
-				s.velocity, s.lastDrag = 0, time.Now()
+				s.velocity, s.pendingDX, s.dragging = 0, 0, true
 			},
 			OnDrag: func(_, d geom.Pt) {
 				if s.gone {
 					return
 				}
 				s.SetState(func() { s.dx = s.allow(s.dx + d.X) })
-				now := time.Now()
-				dt := now.Sub(s.lastDrag).Seconds()
-				s.lastDrag = now
-				if dt > 0.001 && dt < 0.1 {
-					s.velocity = s.velocity*0.7 + (d.X/float32(dt))*0.3
-				}
+				s.pendingDX += d.X
 			},
-			OnRelease: func() { s.release() },
+			OnRelease: func() { s.dragging = false; s.release() },
 		},
 		Child: w.Child,
 	}}
