@@ -20,6 +20,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/input"
 	"github.com/doug/gophics/internal/gfx/gg"
+	"github.com/doug/gophics/internal/gfx/wgpu"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/scene"
@@ -134,7 +135,11 @@ type core struct {
 	// layer resolve or an atlas growth.
 	frameOps   [60]int32
 	frameBlurs [60]int32
-	frameHead  int
+	// frameMade records GPU resources — textures, pipelines — created during
+	// each frame. A spike on a median-sized scene is work that happens once,
+	// the first time something is needed, and this is what makes it visible.
+	frameMade [60]int32
+	frameHead int
 
 	cur, prev     *scene.List
 	lastPaintSize geom.Size
@@ -481,6 +486,7 @@ func (c *core) FrameStats() (s FrameSummary) {
 	// The worst frame's own scene, not the window's: the question a spike
 	// raises is what *that* frame was drawing.
 	s.WorstOps, s.WorstBlurs = int(c.frameOps[worstAt]), int(c.frameBlurs[worstAt])
+	s.WorstMade = int(c.frameMade[worstAt])
 	// The median scene size, to compare the worst frame against.
 	var ops [len(c.frameOps)]int32
 	m := 0
@@ -506,14 +512,19 @@ type FrameSummary struct {
 	P50, P95, P99, Worst float32
 	WorstOps, WorstBlurs int
 	MedianOps            int
+	// WorstMade is how many GPU resources the worst frame had to create.
+	WorstMade int
 }
 
 func (c *core) recordFrameTime(ms float32) { c.recordFrame(ms, 0, 0) }
 
-func (c *core) recordFrame(ms float32, ops, blurs int) {
+func (c *core) recordFrame(ms float32, ops, blurs int) { c.recordFrameMade(ms, ops, blurs, 0) }
+
+func (c *core) recordFrameMade(ms float32, ops, blurs, made int) {
 	c.frameTimes[c.frameHead] = ms
 	c.frameOps[c.frameHead] = int32(ops)     //nolint:gosec // scene sizes are small
 	c.frameBlurs[c.frameHead] = int32(blurs) //nolint:gosec
+	c.frameMade[c.frameHead] = int32(made)   //nolint:gosec
 	c.frameHead = (c.frameHead + 1) % len(c.frameTimes)
 }
 
@@ -1043,6 +1054,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		w.Invalidate() // animations or a held long-press: keep frames coming
 	}
 	t0 := time.Now()
+	tex0, pipe0 := wgpu.DeviceStats()
 	// Resolve the presentation target up front: a GPU target replays the whole
 	// scene, so the damage rect (and its per-text-op measurement) is never
 	// computed for it — see RecordSceneGPU.
@@ -1079,15 +1091,17 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	}
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.
-		h.core.recordFrame(float32(time.Since(t0).Seconds()*1000),
-			h.core.prev.Len(), h.core.prev.BackdropBlurs())
+		tex1, pipe1 := wgpu.DeviceStats()
+		h.core.recordFrameMade(float32(time.Since(t0).Seconds()*1000),
+			h.core.prev.Len(), h.core.prev.BackdropBlurs(),
+			int(tex1-tex0)+int(pipe1-pipe0)) //nolint:gosec // counts are small
 		// GOPHICS_PACING logs a rolling frame-time summary each time the
 		// 60-frame ring wraps — the on-device pacing readout (PLAN §6.4).
 		if h.core.frameHead == 0 && os.Getenv("GOPHICS_PACING") != "" {
 			f := h.core.FrameStats()
 			log.Printf("gophics pacing: p50 %.2f  p95 %.2f  p99 %.2f  worst %.2f ms "+
-				"(60 frames; worst drew %d ops / %d blurs, median %d ops)",
-				f.P50, f.P95, f.P99, f.Worst, f.WorstOps, f.WorstBlurs, f.MedianOps)
+				"(60 frames; worst drew %d ops / %d blurs, made %d gpu objects, median %d ops)",
+				f.P50, f.P95, f.P99, f.Worst, f.WorstOps, f.WorstBlurs, f.WorstMade, f.MedianOps)
 		}
 	}
 }

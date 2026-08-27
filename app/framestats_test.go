@@ -45,3 +45,35 @@ func TestFrameStatsOnAnEmptyRing(t *testing.T) {
 		t.Errorf("empty ring reported %+v, want zeros", f)
 	}
 }
+
+// The summary carries what the worst frame had to create.
+//
+// Scene size answers "did this frame draw more". It cannot answer the case the
+// device actually shows — a 55ms frame that drew fewer ops than the median —
+// because the work is not in the drawing. A pipeline compiled or a texture
+// allocated the first time something is needed costs a frame and appears in no
+// measure of what was drawn.
+//
+// The counters sit on Device.CreateTexture and Device.CreateRenderPipeline,
+// which every such allocation passes through, so unlike a counter on one code
+// path this cannot quietly measure nothing — which is exactly how the previous
+// attempt at this failed, having instrumented a text mode nothing here runs.
+func TestFrameStatsReportsWhatTheWorstFrameCreated(t *testing.T) {
+	c := &core{}
+	for range 59 {
+		c.recordFrameMade(5, 100, 0, 0) // steady frames make nothing
+	}
+	c.recordFrameMade(48, 99, 0, 7) // the spike, on a smaller scene, making 7
+
+	f := c.FrameStats()
+	if f.Worst != 48 {
+		t.Errorf("worst is %v, want the 48ms spike", f.Worst)
+	}
+	if f.WorstMade != 7 {
+		t.Errorf("worst frame made %d gpu objects, want 7", f.WorstMade)
+	}
+	if f.WorstOps > f.MedianOps {
+		t.Errorf("this fixture models a spike on a *smaller* scene; got worst %d vs median %d",
+			f.WorstOps, f.MedianOps)
+	}
+}

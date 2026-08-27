@@ -106,6 +106,7 @@ func (d *Device) CreateBuffer(desc *BufferDescriptor) (*Buffer, error) {
 
 // CreateTexture creates a GPU texture.
 func (d *Device) CreateTexture(desc *TextureDescriptor) (*Texture, error) {
+	texturesCreated.Add(1)
 	if d.released.Load() {
 		return nil, ErrReleased
 	}
@@ -497,6 +498,7 @@ func buildBindGroupEntryMap(entries []BindGroupEntry) map[uint32]*BindGroupEntry
 
 // CreateRenderPipeline creates a render pipeline.
 func (d *Device) CreateRenderPipeline(desc *RenderPipelineDescriptor) (*RenderPipeline, error) {
+	pipelinesCreated.Add(1)
 	if d.released.Load() {
 		return nil, ErrReleased
 	}
