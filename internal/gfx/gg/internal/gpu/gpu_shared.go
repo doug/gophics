@@ -69,6 +69,10 @@ func (s gpuRenderStrategy) String() string {
 // GPUShared is created once per application via RegisterAccelerator and
 // accessed by all gg.Context instances through the global singleton.
 type GPUShared struct {
+	// offscreen reuses the textures the layer and backdrop-blur passes render
+	// into, whose sizes repeat exactly frame to frame. See offscreen_pool.go.
+	offscreen offscreenPool
+
 	mu sync.Mutex
 
 	instance *wgpu.Instance // standalone mode only; nil when using external device
@@ -323,6 +327,8 @@ func (s *GPUShared) SetTexturePoolBudget(mb int) {
 // Close releases all shared GPU resources. After this call, GPU rendering
 // is no longer possible. Idempotent.
 func (s *GPUShared) Close() {
+	// Hand back every pooled offscreen before the device goes.
+	s.offscreen.destroyAll()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

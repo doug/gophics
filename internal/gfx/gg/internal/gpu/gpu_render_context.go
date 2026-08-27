@@ -1870,6 +1870,14 @@ func (rc *GPURenderContext) CreateOffscreenTexture(w, h int) (gpucontext.Texture
 		return gpucontext.TextureView{}, nil
 	}
 
+	// A texture of this size from a previous frame, if one is going spare.
+	// The blur and layer passes ask for the same handful of sizes every frame,
+	// so this is the common case once the first frame has been through.
+	if t, ok := rc.shared.offscreen.take(w, h); ok {
+		return gpucontext.NewTextureView(unsafe.Pointer(t.view)), //nolint:gosec // Go spec Rule 1 (ADR-018)
+			rc.releaseOffscreen(w, h, t)
+	}
+
 	tex, err := device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         "offscreen_cache",
 		Size:          wgpu.Extent3D{Width: uint32(w), Height: uint32(h), DepthOrArrayLayers: 1}, //nolint:gosec // bounded
@@ -1900,11 +1908,21 @@ func (rc *GPURenderContext) CreateOffscreenTexture(w, h int) (gpucontext.Texture
 		return gpucontext.TextureView{}, nil
 	}
 
-	release := func() {
-		view.Release()
-		tex.Release()
+	return gpucontext.NewTextureView(unsafe.Pointer(view)), //nolint:gosec // Go spec Rule 1 (ADR-018)
+		rc.releaseOffscreen(w, h, offscreenTex{tex: tex, view: view})
+}
+
+// releaseOffscreen returns the texture to the pool, or destroys it when the
+// pool for that size is full. Called a frame after the texture was rendered
+// into, which is when the submit that sampled it has completed.
+func (rc *GPURenderContext) releaseOffscreen(w, h int, t offscreenTex) func() {
+	return func() {
+		if rc.shared.offscreen.put(w, h, t) {
+			return
+		}
+		t.view.Release()
+		t.tex.Release()
 	}
-	return gpucontext.NewTextureView(unsafe.Pointer(view)), release //nolint:gosec // Go spec Rule 1 (ADR-018)
 }
 
 // Close releases this context's GPU resources. Shared resources are NOT
