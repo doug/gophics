@@ -26,8 +26,9 @@ import (
 // frees the previous frame's textures at the top of the next one, by which
 // time the submit that sampled them has completed.
 type offscreenPool struct {
-	mu   sync.Mutex
-	free map[offscreenKey][]offscreenTex
+	mu    sync.Mutex
+	free  map[offscreenKey][]offscreenTex
+	bytes int64 // total held, against poolByteBudget
 }
 
 type offscreenKey struct{ w, h int }
@@ -37,10 +38,26 @@ type offscreenTex struct {
 	view *wgpu.TextureView
 }
 
-// perSizeCap bounds the pool so a resize, or a frame that briefly needed many
-// layers, cannot pin memory indefinitely. Anything beyond it is destroyed on
-// return rather than kept.
-const perSizeCap = 4
+// The pool is bounded by bytes, not by count.
+//
+// A count is the wrong shape here because the sizes differ by orders of
+// magnitude: the full-surface capture is about 11MB at 1120x2432 while the
+// third downsample is under 200KB. Four of each sounds modest and is 44MB of
+// the large ones — retained, on a phone, where it was previously handed back
+// every frame. Trading a frame's allocation for a permanent 44MB reservation
+// is not obviously a good deal, and on a device under memory pressure it is
+// clearly a bad one.
+//
+// So: a total budget, and the largest textures simply do not fit many copies
+// of themselves into it. 24MB holds several of everything a normal frame asks
+// for, and about two full-surface captures.
+const (
+	poolByteBudget = 24 << 20
+	perSizeCap     = 4 // still bounded per size, so one size cannot own the budget
+)
+
+// bytesFor is the memory a w×h BGRA8 texture occupies.
+func bytesFor(w, h int) int64 { return int64(w) * int64(h) * 4 }
 
 // take returns a pooled texture for w×h, or false when none is available.
 func (p *offscreenPool) take(w, h int) (offscreenTex, bool) {
@@ -53,6 +70,7 @@ func (p *offscreenPool) take(w, h int) (offscreenTex, bool) {
 	}
 	t := p.free[k][n-1]
 	p.free[k] = p.free[k][:n-1]
+	p.bytes -= bytesFor(w, h)
 	return t, true
 }
 
@@ -65,10 +83,12 @@ func (p *offscreenPool) put(w, h int, t offscreenTex) bool {
 		p.free = map[offscreenKey][]offscreenTex{}
 	}
 	k := offscreenKey{w, h}
-	if len(p.free[k]) >= perSizeCap {
+	sz := bytesFor(w, h)
+	if len(p.free[k]) >= perSizeCap || p.bytes+sz > poolByteBudget {
 		return false
 	}
 	p.free[k] = append(p.free[k], t)
+	p.bytes += sz
 	return true
 }
 
@@ -84,4 +104,5 @@ func (p *offscreenPool) destroyAll() {
 		}
 		delete(p.free, k)
 	}
+	p.bytes = 0
 }
