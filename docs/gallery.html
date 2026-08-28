@@ -97,7 +97,7 @@
 
     <div class="card"><img class="thumb" src="thumbs/mirror.png" alt="voice-reactive mirror screenshot" loading="lazy"><div class="body">
       <h3>Mirror</h3>
-      <p>Your camera, warped every frame by what the microphone hears: columns of the image rise with the energy in their part of the spectrum, rows slide on a wave that grows with loudness, and the colour channels split as you get louder. The driver for the live-capture capabilities &mdash; frames arrive as <code>*image.RGBA</code> and the warp is a plain Go pixel loop, no shader. Needs camera and microphone permission; without them it runs on a drawn stand-in and says so.</p>
+      <p>Your camera, warped every frame by what the microphone hears: columns of the image rise with the energy in their part of the spectrum, rows slide on a wave that grows with loudness, and the colour channels split as you get louder. The driver for the live-capture capabilities &mdash; frames arrive as <code>*image.RGBA</code> and the warp is a plain Go pixel loop, no shader. Needs camera and microphone permission; without both it says so and offers nothing to press, rather than substituting a stand-in that would look like a working demo.</p>
       <div class="links"><a href="demo.html?demo=mirror">&#9654; run live</a><a href="source/mirror.html">source</a></div>
     </div></div>
 

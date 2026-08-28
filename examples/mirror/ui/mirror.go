@@ -333,6 +333,16 @@ func (m *mirror) idle(th theme.Theme) widget.Widget {
 	if !m.live() {
 		// No substitute, and no button for a stream that cannot open. Saying so
 		// is the honest thing a capability-gated demo does.
+		//
+		// The mark above it is a closed lens, not a preview: a ring, a pupil and
+		// a line through it. It exists because this state is what the gallery
+		// thumbnail renders — headless, with no devices — and a page of nothing
+		// but grey text reads as an app that crashed rather than one that
+		// declined. Drawing a face here instead is what the fallback used to do,
+		// and it is the reason the fallback was removed: it promised a working
+		// demo the platform could not deliver. A lens with a line through it
+		// promises nothing.
+		kids = append([]widget.Widget{closedLens(th), widget.Sized{H: 22}}, kids...)
 		kids = append(kids, widget.Text{
 			S:    "This platform has no camera and microphone available to the app yet, so there is nothing to mirror.",
 			Size: th.Type.Body, Color: th.Muted, Wrap: true,
@@ -347,6 +357,33 @@ func (m *mirror) idle(th theme.Theme) widget.Widget {
 	}
 	return widget.Center(widget.Sized{W: 420, Child: widget.Padding{All: 24,
 		Child: widget.Flex{Axis: layout.Vertical, CrossAlign: layout.CrossStart, Children: kids}}})
+}
+
+// closedLens draws the shut-camera mark shown when the app cannot run: a ring,
+// a pupil, and a line across. Circles come from a rounded rect whose radius is
+// half its side, which is the whole trick — there is no circle primitive and
+// this needs no path.
+func closedLens(th theme.Theme) widget.Widget {
+	const box = 64
+	return widget.Sized{W: box, H: box, Child: widget.Canvas{Draw: func(c paint.Canvas, size geom.Size) {
+		d := min(size.W, size.H)
+		if d <= 0 {
+			return
+		}
+		ring := th.Muted.WithAlpha(0.55)
+		full := geom.RectXYWH((size.W-d)/2, (size.H-d)/2, d, d)
+		c.StrokeRRect(full, d/2, d*0.055, ring)
+
+		pupil := d * 0.30
+		c.FillRRect(geom.RectXYWH(full.Min.X+(d-pupil)/2, full.Min.Y+(d-pupil)/2, pupil, pupil),
+			pupil/2, th.Muted.WithAlpha(0.28))
+
+		// The line runs corner to corner across the ring, inset so its round
+		// caps sit on the rim rather than poking past it.
+		in := d * 0.17
+		c.Line(geom.Pt{X: full.Min.X + in, Y: full.Max.Y - in},
+			geom.Pt{X: full.Max.X - in, Y: full.Min.Y + in}, d*0.055, ring)
+	}}}
 }
 
 func (m *mirror) controls(th theme.Theme) widget.Widget {
