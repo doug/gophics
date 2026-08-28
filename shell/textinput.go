@@ -9,10 +9,13 @@ package shell
 // key events already flow through Handler.OnKey and TextInput is typically nil).
 // All callbacks fire on the UI goroutine.
 //
-// STATUS: the web implementation (a focus-driven hidden input that raises the
-// mobile keyboard and forwards input/composition/edit-key events) is complete.
-// The native mobile piece — routing platform IME composition into the gophics
-// editor — is the larger remaining work; see docs/design-capabilities.md.
+// STATUS: web raises the keyboard with a focus-driven hidden input and forwards
+// input, composition and edit keys. Mobile does not route committed text
+// through this handler at all — text, editing keys and composition already
+// reach the editor through the Bridge, and calling the handler as well would
+// type everything twice. What the capability carries there is the other
+// direction: Show/Hide, the keyboard hint, and the surrounding text the IME
+// needs to correct against. See shell/mobile/textinput.go.
 
 // TextInputWindow is implemented by a Window that can present a soft keyboard.
 type TextInputWindow interface {
@@ -58,6 +61,17 @@ type TextInputHandler struct {
 	OnComposing func(string)
 	// OnEditKey reports editing keys the IME sends (backspace, enter, arrows).
 	OnEditKey func(EditKey)
+	// OnReplace replaces the text between two rune offsets.
+	//
+	// This is what autocorrect actually is: the IME does not type a correction
+	// at the caret, it replaces the word behind it. Both platforms express it
+	// that way — iOS through UITextInput's replace(_:withText:), Android
+	// through an InputConnection that deletes a span and commits over it — and
+	// neither can be expressed as OnText, which only ever inserts.
+	//
+	// Offsets are runes, matching SetText. A handler that leaves this nil gets
+	// no autocorrect and no predictive replacement; typing still works.
+	OnReplace func(startRune, endRune int, text string)
 }
 
 // EditKey is a non-text editing action from the IME.

@@ -29,7 +29,22 @@ type mobileGPU struct {
 	present gputypes.PresentMode
 	pw, ph  int
 	scale   float64
+
+	// Consecutive frames that could not reach the surface. A GPU that is
+	// configured but cannot present is the worst failure this path has: the
+	// host asks GPUActive, is told yes, renders, and shows nothing — a black
+	// screen with an explanation only in the log. Counting the failures lets it
+	// give up and hand the frame back to the CPU, which always works.
+	failed int
 }
+
+// gpuFailureLimit is how many consecutive unpresentable frames retire the GPU
+// surface. More than one because a swapchain can break transiently — a resize
+// or rotation in flight — and recover on the next frame; few enough that a
+// surface which is genuinely unusable costs a handful of dropped frames rather
+// than the whole session. Android emulators without working Vulkan fail every
+// frame from the first, so they cross it immediately.
+const gpuFailureLimit = 3
 
 // SetSurface gives the Bridge the native render surface to present to.
 // displayHandle/windowHandle are the platform's raw handles as int64 (iOS: 0,
@@ -61,7 +76,13 @@ func (b *Bridge) SetSurface(displayHandle, windowHandle int64, widthPx, heightPx
 // the host should present with the CPU path instead: call Snapshot each frame
 // and blit the returned pixels. GPU on device, CPU everywhere else, both from
 // the same (parity-tested) rasterizer.
-func (b *Bridge) GPUActive() bool { return b.gpu != nil }
+// GPUActive reports whether the next frame will actually reach the surface.
+//
+// Hosts must call this every frame rather than caching it at surface creation:
+// a surface can be configured successfully and still never present (a broken
+// Vulkan swapchain does exactly that), and the answer is only known after
+// trying. A host that caches it renders into nothing forever.
+func (b *Bridge) GPUActive() bool { return b.gpu != nil && !b.gpu.unusable() }
 
 // ClearSurface tears down the GPU surface (call when the host surface is
 // destroyed — backgrounding, rotation — before handing over a new one).
@@ -256,19 +277,42 @@ func (t mobileGPUTarget) RenderGPU(replay func(*gg.Context)) {
 	}
 	st, _, err := g.surface.GetCurrentTexture()
 	if err != nil {
-		log.Printf("gophics/mobile: get current texture: %v", err)
+		g.presentFailed("get current texture", err)
 		return
 	}
 	view, err := st.CreateView(nil)
 	if err != nil {
-		log.Printf("gophics/mobile: surface view: %v", err)
+		g.presentFailed("surface view", err)
 		return
 	}
 	if err := g.ggc.RenderDirect(gpucontext.NewTextureView(unsafe.Pointer(view)), uint32(g.pw), uint32(g.ph)); err != nil {
-		log.Printf("gophics/mobile: render direct: %v", err)
+		g.presentFailed("render direct", err)
+		return
 	}
 	_ = g.surface.Present(st)
+	g.failed = 0
 }
+
+// presentFailed records a frame that never reached the surface, and retires the
+// GPU once they stop being an accident.
+//
+// It logs the first failure and the retirement, and nothing in between: the
+// failing path runs every frame, so logging each one buries the cause under
+// sixty identical lines a second — which is exactly what an Android emulator
+// with no working Vulkan produced.
+func (g *mobileGPU) presentFailed(stage string, err error) {
+	g.failed++
+	switch {
+	case g.failed == 1:
+		log.Printf("gophics/mobile: %s: %v", stage, err)
+	case g.failed == gpuFailureLimit:
+		log.Printf("gophics/mobile: %s failed %d frames running — retiring the "+
+			"GPU surface and presenting on the CPU instead", stage, g.failed)
+	}
+}
+
+// unusable reports whether the surface has failed often enough to give up on.
+func (g *mobileGPU) unusable() bool { return g.failed >= gpuFailureLimit }
 
 // mobileProvider adapts the wgpu device/queue to gpucontext.DeviceProvider so
 // gg's accelerator and ggcanvas share this surface's device.

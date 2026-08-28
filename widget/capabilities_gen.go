@@ -11,6 +11,7 @@ import "github.com/doug/gophics/shell"
 type Capabilities struct {
 	Accessibility shell.Accessibility
 	Battery       shell.Battery
+	Biometric     shell.Biometric
 	Camera        shell.Camera
 	CameraPreview shell.CameraPreview
 	Connectivity  shell.Connectivity
@@ -24,6 +25,7 @@ type Capabilities struct {
 	Microphone    shell.Microphone
 	Notifier      shell.Notifier
 	Permissions   shell.Permissions
+	Photos        shell.Photos
 	Preferences   shell.Preferences
 	SecureStorage shell.SecureStorage
 	Share         shell.Share
@@ -31,6 +33,7 @@ type Capabilities struct {
 	Speakers      shell.Speakers
 	TextInput     shell.TextInput
 	Tray          shell.Tray
+	WakeLock      shell.WakeLock
 	WebView       shell.WebView
 	WindowControl shell.WindowControl
 }
@@ -42,6 +45,10 @@ func (c Ctx) Accessibility() shell.Accessibility { return c.el.owner.Accessibili
 // Battery returns the platform Battery capability (shell.Battery), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Battery() shell.Battery { return c.el.owner.Battery }
+
+// Biometric returns the platform Biometric capability (shell.Biometric), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Biometric() shell.Biometric { return c.el.owner.Biometric }
 
 // Camera returns the platform Camera capability (shell.Camera), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
@@ -95,6 +102,10 @@ func (c Ctx) Notifier() shell.Notifier { return c.el.owner.Notifier }
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Permissions() shell.Permissions { return c.el.owner.Permissions }
 
+// Photos returns the platform Photos capability (shell.Photos), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Photos() shell.Photos { return c.el.owner.Photos }
+
 // Preferences returns the platform Preferences capability (shell.Preferences), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Preferences() shell.Preferences { return c.el.owner.Preferences }
@@ -122,6 +133,10 @@ func (c Ctx) TextInput() shell.TextInput { return c.el.owner.TextInput }
 // Tray returns the platform Tray capability (shell.Tray), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Tray() shell.Tray { return c.el.owner.Tray }
+
+// WakeLock returns the platform WakeLock capability (shell.WakeLock), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) WakeLock() shell.WakeLock { return c.el.owner.WakeLock }
 
 // WebView returns the platform WebView capability (shell.WebView), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

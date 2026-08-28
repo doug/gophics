@@ -536,28 +536,31 @@ closing next, and why.
 <!-- planfacts:capabilities -->
 | Capability | desktop | web | mobile | terminal |
 |---|---|---|---|---|
-| `Accessibility` | yes | yes | — | — |
-| `Battery` | yes | yes | — | — |
+| `Accessibility` | yes | yes | yes | — |
+| `Battery` | yes | yes | yes | — |
+| `Biometric` | — | — | yes | — |
 | `Camera` | yes | yes | yes | — |
 | `CameraPreview` | yes | yes | yes | — |
-| `Connectivity` | yes | yes | — | — |
-| `FilePicker` | yes | yes | — | — |
+| `Connectivity` | yes | yes | yes | — |
+| `FilePicker` | yes | yes | yes | — |
 | `Gamepads` | yes | yes | hollow | — |
-| `Geolocation` | — | yes | — | — |
+| `Geolocation` | — | yes | yes | — |
 | `Haptic` | — | yes | yes | — |
 | `Lifecycle` | yes | yes | yes | — |
-| `Links` | yes | yes | — | — |
+| `Links` | yes | yes | yes | — |
 | `Menus` | yes | — | — | — |
 | `Microphone` | yes | yes | yes | yes |
-| `Notifier` | — | yes | — | — |
+| `Notifier` | — | yes | yes | — |
 | `Permissions` | — | yes | — | — |
-| `Preferences` | yes | yes | — | — |
-| `SecureStorage` | — | yes | — | — |
-| `Share` | — | yes | — | — |
+| `Photos` | — | — | yes | — |
+| `Preferences` | yes | yes | yes | — |
+| `SecureStorage` | — | yes | yes | — |
+| `Share` | — | yes | yes | — |
 | `Socket` | yes | yes | yes | — |
 | `Speakers` | yes | yes | yes | yes |
-| `TextInput` | — | yes | — | — |
+| `TextInput` | — | yes | yes | — |
 | `Tray` | yes | — | — | — |
+| `WakeLock` | — | — | yes | — |
 | `WebView` | — | yes | — | — |
 | `WindowControl` | yes | yes | — | — |
 
@@ -587,7 +590,7 @@ capability set.
 <!-- planfacts:widgets -->
 `Align`, `AspectRatio`, `Autocomplete`, `Canvas`, `Decorated`
 `Directionality`, `Dismissible`, `DragHost`, `Draggable`, `DropTarget`
-`Fill`, `Flexible`, `Grid`, `Hero`, `Image`, `Interactive`
+`EditAction`, `Fill`, `Flexible`, `Grid`, `Hero`, `Image`, `Interactive`
 `KeyboardAvoiding`, `LayoutBuilder`, `LazyList`, `Nav`, `Navigator`
 `NetworkImage`, `Opacity`, `Overlay`, `OverlayHost`, `Padding`
 `Reorderable`, `Rich`, `SafeArea`, `Scroll`, `ScrollController`

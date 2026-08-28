@@ -20,6 +20,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.BatteryWindow); ok {
 		o.Battery = shell.PostedBattery(x.Battery(), o.Post)
 	}
+	if x, ok := w.(shell.BiometricWindow); ok {
+		o.Biometric = shell.PostedBiometric(x.Biometric(), o.Post)
+	}
 	if x, ok := w.(shell.CameraPreviewWindow); ok {
 		o.CameraPreview = shell.PostedCameraPreview(x.CameraPreview(), o.Post)
 	}
@@ -59,6 +62,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	if x, ok := w.(shell.PermissionWindow); ok {
 		o.Permissions = shell.PostedPermissions(x.Permissions(), o.Post)
 	}
+	if x, ok := w.(shell.PhotosWindow); ok {
+		o.Photos = shell.PostedPhotos(x.Photos(), o.Post)
+	}
 	if x, ok := w.(shell.PreferencesWindow); ok {
 		o.Preferences = x.Preferences()
 	}
@@ -79,6 +85,9 @@ func wireCapabilities(o *widget.Owner, w shell.Window) {
 	}
 	if x, ok := w.(shell.TrayWindow); ok {
 		o.Tray = shell.PostedTray(x.Tray(), o.Post)
+	}
+	if x, ok := w.(shell.WakeLockWindow); ok {
+		o.WakeLock = shell.PostedWakeLock(x.WakeLock(), o.Post)
 	}
 	if x, ok := w.(shell.WebViewWindow); ok {
 		o.WebView = x.WebView()

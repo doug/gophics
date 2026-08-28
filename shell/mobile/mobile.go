@@ -18,6 +18,7 @@ import (
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/prefs"
 	"github.com/doug/gophics/shell"
 )
 
@@ -41,9 +42,46 @@ type Bridge struct {
 	dirty        atomic.Bool
 	dark         bool
 	a11y         []app.A11yNode
+	announce     []announcement     // pending live-region speech; see a11y.go
+	announceLast bool               // priority of the last TakeAnnouncement
 	opened       []string           // OpenURL requests for the host to perform
 	haptics      []shell.HapticKind // pending haptic events for the host to play
-	clip         string
+	prefs        *prefs.Store       // settings store; nil until SetFilesDir (prefs.go)
+
+	// Platform state the host pushes rather than Go requesting; see
+	// connectivity.go. Each "known" flag distinguishes "the host has not wired
+	// this" from a real value, so the capability can be nil rather than lying.
+	netKnown    bool
+	online      bool
+	netSubs     []func(bool)
+	batKnown    bool
+	batLevel    float32
+	batCharging bool
+	batSubs     []func()
+	initialLink string
+	shareHost   ShareHost
+	shareCb     map[int]func(error)
+	notifyHost  NotifyHost
+	notifyCb    map[int]func(shell.Permission)
+	secureHost  SecureHost
+	fileHost    FileHost
+	pickCb      map[int]func([]shell.PickedFile, error)
+	picked      map[int][]shell.PickedFile
+	saveCb      map[int]func(error)
+	locHost     LocationHost
+	locOnce     map[int]func(lat, lon, acc float64, err error)
+	locWatch    map[int]func(lat, lon, acc float64)
+	deviceHost  DeviceHost
+	wakeCount   int // outstanding screen-wake leases; see device.go
+	photoPermCb map[int]func(shell.Permission)
+	photoSaveCb map[int]func(error)
+	authCb      map[int]func(bool, error)
+	reqNext     int  // request ids for the capabilities in platform.go
+	linkStarted bool // a frame has run, so a later link is not the "initial" one
+	linkSubs    []func(string)
+
+	clip         string           // cached system pasteboard; see SetClipboardText
+	clipPending  bool             // app copied, host has not drained it yet
 	media        *mediaBridge     // shared one-shot request plumbing (see media.go)
 	gpu          *mobileGPU       // GPU surface the host renders to (see gpu.go)
 	dispHandle   int64            // retained native handles so Resize can full-rebuild
@@ -56,6 +94,18 @@ type Bridge struct {
 	lcMu    sync.Mutex
 	lcState shell.AppState
 	lcSubs  []func(shell.AppState)
+
+	// On-screen keyboard / IME state, written by the TextInput capability on
+	// the UI goroutine and read by the host through the accessors in
+	// textinput.go. No lock: every one of those runs on the host UI thread.
+	tiActive      bool
+	tiType        shell.TextInputType
+	tiAutocorrect bool
+	tiText        string
+	tiSelStart    int
+	tiSelEnd      int
+	tiRev         int
+	tiReplace     func(start, end int, s string) // the focused field's OnReplace
 
 	// Live microphone monitoring; see microphone.go. Guarded by its own mutex
 	// because PCM blocks arrive on the audio thread, not the UI thread.
@@ -125,6 +175,7 @@ func (b *Bridge) RenderFrame(dtSeconds float64) {
 		return
 	}
 	b.dirty.Store(false)
+	b.linkStarted = true
 	b.handler.Frame(b, &frame{b: b}, dtSeconds)
 }
 
@@ -141,6 +192,7 @@ func (b *Bridge) Snapshot(dtSeconds float64) []byte {
 		return nil
 	}
 	b.snapshotting = true
+	b.linkStarted = true
 	b.dirty.Store(false)
 	b.handler.Frame(b, &frame{b: b}, dtSeconds)
 	b.snapshotting = false
@@ -207,7 +259,16 @@ func (b *Bridge) SetKeyboardHeight(heightPx float32) {
 
 // TextInputActive reports whether the UI wants keyboard input; the host
 // shows/hides the on-screen keyboard on transitions.
+//
+// A field that goes through the TextInput capability says so explicitly
+// (Show/Hide), and that answer wins. The older inference — the handler reports
+// whether the focused widget accepts typed text — stays as the fallback,
+// because a widget can take text without being a TextField, and because hosts
+// built before the capability existed still rely on it.
 func (b *Bridge) TextInputActive() bool {
+	if b.tiActive {
+		return true
+	}
 	if ta, ok := b.handler.(interface{ TextInputActive() bool }); ok {
 		return ta.TextInputActive()
 	}
@@ -380,10 +441,42 @@ func (b *Bridge) TakeOpenedURL() string {
 	return u
 }
 
-// SetClipboard pushes the host clipboard content into the bridge (the host
-// syncs it); ClipboardText returns what the UI last wrote.
-func (b *Bridge) SetClipboard(s string) { b.clip = s }
-func (b *Bridge) ClipboardText() string { return b.clip }
+// Clipboard. The bridge holds a cached copy of the system pasteboard and the
+// host keeps it in step in both directions: SetClipboardText in,
+// TakeClipboardWrite out.
+//
+// A synchronous host call would also work — gomobile does bind host methods
+// that return values — but reading the pasteboard is not a free query on iOS:
+// since iOS 16 touching UIPasteboard.string can show the "pasted from" banner,
+// and older versions prompted. ClipboardRead is cheap enough to call from
+// Build, so a design that reached the pasteboard on every read would nag the
+// user once per frame. Refreshing on foreground is both cheaper and quieter.
+//
+// Until a host wires those two, copy and paste still work within the app and
+// simply do not reach other apps — which is what shipped before this comment
+// existed, undocumented.
+
+// SetClipboardText delivers the system pasteboard's contents. Hosts call it
+// when the app comes to the foreground and whenever the pasteboard changes
+// (iOS UIPasteboard.changedNotification, Android OnPrimaryClipChangedListener).
+func (b *Bridge) SetClipboardText(s string) { b.clip = s }
+
+// TakeClipboardWrite returns text the app has copied and the host has not yet
+// written to the system pasteboard, or "" when there is nothing pending. Hosts
+// drain it next to TakeOpenedURL and write the result to UIPasteboard /
+// ClipboardManager.
+//
+// Copying the empty string is indistinguishable from nothing pending. gomobile
+// allows a second result only when it is an error, so the alternative is a
+// second bound method to report pending-ness; clearing the pasteboard is not a
+// thing apps do, so the ambiguity is inert and one method is the better trade.
+func (b *Bridge) TakeClipboardWrite() string {
+	if !b.clipPending {
+		return ""
+	}
+	b.clipPending = false
+	return b.clip
+}
 
 // shell.Window implementation.
 
@@ -396,7 +489,10 @@ func (b *Bridge) OpenURL(u string) error {
 	return nil
 }
 func (b *Bridge) ClipboardRead() (string, error) { return b.clip, nil }
-func (b *Bridge) ClipboardWrite(s string) error  { b.clip = s; return nil }
+func (b *Bridge) ClipboardWrite(s string) error {
+	b.clip, b.clipPending = s, true
+	return nil
+}
 
 // SetDarkMode informs the UI of the host color scheme.
 func (b *Bridge) SetDarkMode(dark bool) {

@@ -157,34 +157,94 @@ no-op everywhere.
 
 ---
 
-## Capability status (2026-08-10)
+## Capability status
 
-Every capability follows the same three-layer pattern; "✅" = implemented and
-built (web = browser-verified or -verifiable — see the live-verification note
-below; desktop/mobile = compile-verified on the targets noted, not device-run),
-"~" = partial/best-effort, "stub" = interface + compile-checked `TODO(platform)`
-(no native code written that can't be verified here), "—" = not applicable.
+The matrix is generated from the tree by `scripts/tools/planfacts.py`, the same
+generator that fills PLAN.md, and `scripts/gates.sh` fails when it drifts.
 
-| Capability | Web | Desktop | Mobile | Notes |
+It is generated because the hand-maintained version it replaces was wrong in
+both directions at once: it called Share, Notifier, SecureStorage, Permissions,
+FilePicker, Preferences and WebView "stub" on mobile when the Bridge carried no
+such method at all, and called TextInput and Accessibility unimplemented there
+while the on-screen keyboard and the AT tree had been working for months. A
+status column beside the code it describes is a promise to notice, and nobody
+does.
+
+<!-- planfacts:capabilities -->
+| Capability | desktop | web | mobile | terminal |
 |---|---|---|---|---|
-| Clipboard, OpenURL, SafeInsets, Input, DarkMode | ✅ | ✅ | ✅ | pre-existing core |
-| Camera, Audio, Haptic | ✅ | stub | ✅ | mobile via bridge; still capture + clip recording |
-| **Microphone** (live capture) | ✅ | ✅ | ✅ | Implemented everywhere. Web: getUserMedia + two AnalyserNodes (a short one for level/bands, a wider one for `Samples`). Desktop: AudioQueue (macOS, device-verified), pa_simple (Linux), WASAPI (Windows), all zero-CGo via the same goffi path as audio output. Mobile: Android `AudioRecord` / iOS `AVAudioEngine` pushing PCM through `mobile.MonitorHost`. Every native shell shares one analyzer (`internal/mic`: ring buffer, level, FFT bands) so the three answers agree; the web shell shares its band folding. `Monitor.Samples` exposes raw time-domain PCM because `Bands` is folded for display and cannot support pitch analysis (see `sound/pitch`) |
-| **CameraPreview** (live capture) | ✅ | — | — | getUserMedia → canvas readback for frames; a separate capability from Camera because streaming and one-shot capture are independent. Native shells return nil |
-| **FilePicker** | ✅ | ✅ macOS / stub | stub | macOS = real NSOpenPanel/NSSavePanel via zero-CGo objc; linux/windows TODO |
-| **Preferences** (settings) | ✅ | ✅ all | stub | desktop = JSON under os.UserConfigDir; distinct from SecureStorage (never prompts) |
-| Share, Notifier, SecureStorage, Permissions | ✅ | stub | stub | native share sheet/notifications/keychain TODO |
-| **Socket** (WebSocket) | ✅ | ✅ | ✅ | pure-Go RFC 6455 client (`!js`), tested |
-| **Lifecycle** (fg/bg) | ✅ | ✅ | stub | desktop via focus routing |
-| **Links** (deep links) | ✅ | ~ | stub | desktop = os.Args; OnLink no-op |
-| **WindowControl** (title/fullscreen) | ✅ | ✅ | — | rides gogpu; tray/native-menus deliberately excluded |
-| **Connectivity** | ✅ | ~ | — | desktop best-effort (online=true) |
-| **Battery** | ✅ | stub | stub | |
-| **Gamepad** | ✅ | stub | stub | poll-style; empty without hardware |
-| **Geolocation** | ✅ | stub | stub | |
-| **TextInput** (IME) | ✅ | — | stub | hidden-input keyboard; mobile composition routing TODO |
-| **Accessibility** | ~ | stub | stub | Announce (aria-live) ✅; SetTree (AT-tree) TODO |
-| **WebView** | ✅ | stub | stub | iframe overlay; native subview TODO |
+| `Accessibility` | yes | yes | yes | — |
+| `Battery` | yes | yes | yes | — |
+| `Biometric` | — | — | yes | — |
+| `Camera` | yes | yes | yes | — |
+| `CameraPreview` | yes | yes | yes | — |
+| `Connectivity` | yes | yes | yes | — |
+| `FilePicker` | yes | yes | yes | — |
+| `Gamepads` | yes | yes | hollow | — |
+| `Geolocation` | — | yes | yes | — |
+| `Haptic` | — | yes | yes | — |
+| `Lifecycle` | yes | yes | yes | — |
+| `Links` | yes | yes | yes | — |
+| `Menus` | yes | — | — | — |
+| `Microphone` | yes | yes | yes | yes |
+| `Notifier` | — | yes | yes | — |
+| `Permissions` | — | yes | — | — |
+| `Photos` | — | — | yes | — |
+| `Preferences` | yes | yes | yes | — |
+| `SecureStorage` | — | yes | yes | — |
+| `Share` | — | yes | yes | — |
+| `Socket` | yes | yes | yes | — |
+| `Speakers` | yes | yes | yes | yes |
+| `TextInput` | — | yes | yes | — |
+| `Tray` | yes | — | — | — |
+| `WakeLock` | — | — | yes | — |
+| `WebView` | — | yes | — | — |
+| `WindowControl` | yes | yes | — | — |
+
+*Generated. `yes` means the shell publishes the accessor; `—` means `ctx.<Cap>()` is nil there, which is how an app is meant to ask. `hollow` means it returns a value whose methods do nothing — the one shape a caller cannot detect.*
+<!-- /planfacts -->
+
+Status is a fact about the tree, so it is generated. Why an implementation looks
+the way it does is judgment, so it stays here by hand:
+
+- **Microphone** — implemented everywhere. Web: getUserMedia + two AnalyserNodes
+  (a short one for level/bands, a wider one for `Samples`). Desktop: AudioQueue
+  (macOS, device-verified), pa_simple (Linux), WASAPI (Windows), all zero-CGo via
+  the same goffi path as audio output. Mobile: Android `AudioRecord` / iOS
+  `AVAudioEngine` pushing PCM through `mobile.MonitorHost`. Every native shell
+  shares one analyzer (`internal/mic`: ring buffer, level, FFT bands) so the three
+  answers agree; the web shell shares its band folding. `Monitor.Samples` exposes
+  raw time-domain PCM because `Bands` is folded for display and cannot support
+  pitch analysis (see `sound/pitch`).
+- **CameraPreview** — a separate capability from Camera because streaming and
+  one-shot capture are independent. Web reads frames back through a canvas.
+- **FilePicker** — desktop macOS is a real NSOpenPanel/NSSavePanel via zero-CGo
+  objc; Linux and Windows are still TODO.
+- **Preferences** — desktop stores JSON under `os.UserConfigDir`. Distinct from
+  SecureStorage because it never prompts.
+- **Socket** — a pure-Go RFC 6455 client behind `!js`, tested.
+- **Lifecycle** — desktop derives foreground/background from focus routing.
+- **Links** — desktop reads the launch URL from `os.Args`; `OnLink` is a no-op
+  there because there is no running-app deep-link channel to subscribe to.
+- **WindowControl** — rides gogpu. Tray and native menus are deliberately
+  excluded from mobile rather than merely unimplemented.
+- **Connectivity** — desktop is best-effort and reports `online = true`.
+- **Gamepads** — poll-style, and empty without hardware attached.
+- **TextInput** — web raises the keyboard with a focus-driven hidden input.
+  Mobile does not route the platform IME's committed text through the capability
+  at all: text, editing keys and composition already reach the editor through
+  `Bridge.Text`, `Key` and `Composition`, so the capability carries the other
+  direction — `Show`/`Hide` and the surrounding-text context the IME needs for
+  autocorrect and prediction. Calling the handler as well would type everything
+  twice. See `shell/mobile/textinput.go`.
+- **Accessibility** — the AT tree is pushed on the web (a DOM mirror) and pulled
+  on native (macOS asks a view for its children; Android queries an
+  `AccessibilityNodeProvider`; the mobile Bridge answers both from
+  `A11yProvider`). Mobile's `SetTree` is therefore a deliberate no-op and
+  `Announce` is the part the pull model cannot carry.
+- **WebView** — web is an iframe overlay. A native subview composited over the
+  GPU layer is unbuilt on purpose: Apple and Google both steer OAuth to
+  `ASWebAuthenticationSession` and Custom Tabs, which `OpenURL` already reaches.
 
 **Web live-verification (2026-08-10).** The `examples/capabilities` inspector now
 wires every capability, so the web implementations were exercised in a real

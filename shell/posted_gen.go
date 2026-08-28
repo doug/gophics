@@ -71,6 +71,36 @@ func (p postedBattery) OnChange(a0 func()) {
 	p.inner.OnChange(w0)
 }
 
+// PostedBiometric wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedBiometric(inner Biometric, post func(func())) Biometric {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedBiometric{inner, post}
+}
+
+type postedBiometric struct {
+	inner Biometric
+	post  func(func())
+}
+
+func (p postedBiometric) Available() BiometricKind {
+	return p.inner.Available()
+}
+
+func (p postedBiometric) Authenticate(a0 string, a1 bool, a2 func(ok bool, err error)) {
+	f2 := a2
+	var w2 func(ok bool, err error)
+	if f2 != nil {
+		w2 = func(c0 bool, c1 error) { p.post(func() { f2(c0, c1) }) }
+	}
+	p.inner.Authenticate(a0, a1, w2)
+}
+
 // PostedCamera wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -431,6 +461,41 @@ func (p postedPermissions) Request(a0 PermissionKind, a1 func(Permission)) {
 	p.inner.Request(a0, w1)
 }
 
+// PostedPhotos wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedPhotos(inner Photos, post func(func())) Photos {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedPhotos{inner, post}
+}
+
+type postedPhotos struct {
+	inner Photos
+	post  func(func())
+}
+
+func (p postedPhotos) Authorize(a0 func(Permission)) {
+	f0 := a0
+	var w0 func(Permission)
+	if f0 != nil {
+		w0 = func(c0 Permission) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.Authorize(w0)
+}
+
+func (p postedPhotos) Save(a0 []byte, a1 string, a2 func(err error)) {
+	f2 := a2
+	var w2 func(err error)
+	if f2 != nil {
+		w2 = func(c0 error) { p.post(func() { f2(c0) }) }
+	}
+	p.inner.Save(a0, a1, w2)
+}
+
 // PostedRecorder wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which
@@ -592,6 +657,10 @@ func (p postedTextInput) Show(a0 TextInputOptions, a1 TextInputHandler) {
 		g := s1.OnEditKey
 		w1.OnEditKey = func(c0 EditKey) { p.post(func() { g(c0) }) }
 	}
+	if s1.OnReplace != nil {
+		g := s1.OnReplace
+		w1.OnReplace = func(c0 int, c1 int, c2 string) { p.post(func() { g(c0, c1, c2) }) }
+	}
 	p.inner.Show(a0, w1)
 }
 
@@ -631,4 +700,29 @@ func (p postedTray) Show(a0 TrayItem, a1 func(id int)) {
 
 func (p postedTray) Hide() {
 	p.inner.Hide()
+}
+
+// PostedWakeLock wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func PostedWakeLock(inner WakeLock, post func(func())) WakeLock {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedWakeLock{inner, post}
+}
+
+type postedWakeLock struct {
+	inner WakeLock
+	post  func(func())
+}
+
+func (p postedWakeLock) Acquire(a0 string) func() {
+	return p.inner.Acquire(a0)
+}
+
+func (p postedWakeLock) Held() bool {
+	return p.inner.Held()
 }

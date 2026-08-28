@@ -15,6 +15,7 @@ import (
 	"github.com/doug/gophics/internal/gfx/gpucontext"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/prefs"
 	"github.com/doug/gophics/shell"
 )
 
@@ -212,7 +213,7 @@ type window struct {
 	app       *gogpu.App
 	appID     string
 	prefsOnce sync.Once
-	prefs     *filePrefs
+	prefs     *prefs.Store
 	mainMu    sync.Mutex
 	mainQ     []func()           // tasks awaiting the main thread; see mainthread.go
 	renderer  shell.RendererMode // resolved backend for this run

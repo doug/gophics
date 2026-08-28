@@ -111,6 +111,9 @@ var goSideOnly = map[string]bool{
 	"Speakers": true, "Battery": true, "Camera": true, "CameraPreview": true,
 	"Gamepads": true, "Geolocation": true, "Haptic": true, "Lifecycle": true,
 	"Links": true, "Microphone": true, "Socket": true,
+	"TextInput": true, "Accessibility": true, "Preferences": true, "Connectivity": true, "Share": true, "Notifier": true, "SecureStorage": true,
+	"FilePicker": true, "WakeLock": true, "Photos": true,
+	"Biometric": true,
 }
 
 type bridgeMethod struct {

@@ -34,6 +34,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 os.chdir(ROOT)
 
 PLAN = "PLAN.md"
+CAPDOC = "docs/design-capabilities.md"
 SHELLS = ["desktop", "web", "mobile", "terminal"]
 
 
@@ -360,16 +361,29 @@ BLOCKS = {
     "widgets": widget_catalog,
 }
 
+# Which generated spans each file is expected to carry.
+#
+# design-capabilities.md keeps its own prose notes per capability — why the web
+# implementation folds mic bands, why files cross as bytes — and only borrows
+# the status matrix. That table had drifted from the code in both directions:
+# it called seven mobile capabilities "stub" when the Bridge had no method at
+# all, and called TextInput and Accessibility unimplemented on mobile while the
+# keyboard and the AT tree were working. Prose is judgment and stays by hand;
+# status is a fact about the tree and is generated.
+FILES = {
+    PLAN: {"capabilities", "devices", "layout", "widgets"},
+    CAPDOC: {"capabilities"},
+}
+
 SPAN = re.compile(
     r"<!-- planfacts:(\w+) -->\n(?:.*?\n)??<!-- /planfacts -->", re.S
 )
 
 
-def main():
-    check = "-check" in sys.argv
-    text = read(PLAN)
-    stale = []
-    missing = []
+def rewrite_file(path, want):
+    """Rewrite path's generated spans. Returns (text, new_text, stale, error)."""
+    text = read(path)
+    stale, missing, seen = [], [], set()
 
     def rewrite(m):
         name = m.group(1)
@@ -377,38 +391,51 @@ def main():
         if fn is None:
             missing.append(name)
             return m.group(0)
+        seen.add(name)
         new = "<!-- planfacts:%s -->\n%s\n<!-- /planfacts -->" % (name, fn())
         if new != m.group(0):
             stale.append(name)
         return new
 
-    out, n = SPAN.subn(rewrite, text)
+    out, _ = SPAN.subn(rewrite, text)
 
     if missing:
-        print("planfacts: unknown block(s): %s" % ", ".join(missing), file=sys.stderr)
-        return 1
-    if n != len(BLOCKS):
-        print(
-            "planfacts: %s has %d marker pairs, expected %d (%s)"
-            % (PLAN, n, len(BLOCKS), ", ".join(sorted(BLOCKS))),
-            file=sys.stderr,
+        return text, out, stale, "unknown block(s): %s" % ", ".join(missing)
+    if seen != want:
+        return text, out, stale, "has spans %s, expected %s" % (
+            ", ".join(sorted(seen)) or "none",
+            ", ".join(sorted(want)),
         )
-        return 1
+    return text, out, stale, None
 
-    if check:
-        if stale:
-            print(
-                "planfacts: stale in %s: %s" % (PLAN, ", ".join(stale)),
-                file=sys.stderr,
-            )
-            return 1
-        return 0
 
-    if out != text:
-        with open(PLAN, "w", encoding="utf-8") as f:
-            f.write(out)
-        print("planfacts: rewrote %s" % ", ".join(stale))
-    return 0
+def main():
+    check = "-check" in sys.argv
+    failed = False
+    rewrote = []
+
+    for path, want in FILES.items():
+        text, out, stale, err = rewrite_file(path, want)
+        if err:
+            print("planfacts: %s %s" % (path, err), file=sys.stderr)
+            failed = True
+            continue
+        if check:
+            if stale:
+                print(
+                    "planfacts: stale in %s: %s" % (path, ", ".join(stale)),
+                    file=sys.stderr,
+                )
+                failed = True
+            continue
+        if out != text:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(out)
+            rewrote.append("%s (%s)" % (path, ", ".join(stale)))
+
+    if rewrote:
+        print("planfacts: rewrote %s" % "; ".join(rewrote))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

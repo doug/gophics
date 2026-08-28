@@ -108,7 +108,27 @@ var capabilityManifestPermissions = map[string]ManifestPermission{
 		Android:        []string{"android.permission.POST_NOTIFICATIONS"},
 		RuntimeRequest: true,
 	},
-	"Permissions":   {}, // the mechanism for asking, not something to ask for
+	// Biometry needs no manifest permission on either platform: iOS gates it on
+	// the same NSFaceIDUsageDescription string it shows in the prompt, and
+	// Android dropped USE_BIOMETRIC's runtime requirement. The iOS key is
+	// required only for Face ID — the app crashes without it on a Face ID
+	// device — so it is declared here and always synced.
+	"Biometric": {
+		IOSKeys: []string{"NSFaceIDUsageDescription"},
+	},
+	"Permissions": {}, // the mechanism for asking, not something to ask for
+	// Add-only access, deliberately: an app that saves a picture has no reason
+	// to enumerate the library, and the add-only key is the smaller ask.
+	"Photos": {
+		Android:        []string{"android.permission.WRITE_EXTERNAL_STORAGE"},
+		IOSKeys:        []string{"NSPhotoLibraryAddUsageDescription"},
+		RuntimeRequest: true,
+	},
+	// Keeping the screen awake needs a manifest permission on Android only when
+	// done with a PowerManager wake lock. The window flag FLAG_KEEP_SCREEN_ON,
+	// which is what the reference host uses, needs none — and is the right tool,
+	// because it is scoped to the window and cannot outlive it.
+	"WakeLock":      {},
 	"Preferences":   {},
 	"SecureStorage": {},
 	"Share":         {},

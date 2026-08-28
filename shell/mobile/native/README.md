@@ -1,4 +1,4 @@
-# Native media host reference (iOS / Android)
+# Native host reference (iOS / Android)
 
 There are **two** host interfaces, matching the two independent capabilities:
 `MediaHost` for one-shot capture (`shell.Camera` / `shell.Audio`) and
@@ -135,6 +135,73 @@ A preview that queues frames drifts further behind the longer it runs.
 
 Go copies out of the buffer immediately, so the same array can be reused every
 frame.
+
+## PlatformHost roles (share, notifications, keychain, files, location)
+
+`GophicsPlatform.swift` and `GophicsPlatform.kt` implement five small host
+interfaces in one object, because an app that wants any of them usually wants
+several and they share a presenting view controller / activity:
+
+| Interface | Go capability | You implement | You call back |
+|---|---|---|---|
+| `ShareHost` | `ctx.Share()` | `Share` | `DeliverShareResult(reqID, "")` |
+| `NotifyHost` | `ctx.Notifier()` | `AuthorizeNotify`, `Notify` | `DeliverNotifyPermission` |
+| `SecureHost` | `ctx.SecureStorage()` | `SecureGet`, `SecureHas`, `SecureSet`, `SecureDelete` | — (returns inline) |
+| `FileHost` | `ctx.FilePicker()` | `PickFiles`, `SaveFile` | `DeliverPickedFile`, `DeliverPickedDone`, `FailPick`, `DeliverSaveDone` |
+| `LocationHost` | `ctx.Geolocation()` | `StartLocation`, `StopLocation` | `DeliverLocation`, `FailLocation` |
+
+Register each with the matching `bridge.Set…Host(...)`. Register only what you
+implement: a capability with no host reads as nil in Go, which is how an app
+knows to hide the affordance rather than offer a button that does nothing.
+
+**`SecureHost` is the one synchronous interface on this bridge.**
+`shell.SecureStorage` returns values rather than taking callbacks, so Go calls
+straight through and blocks the UI goroutine for the length of a keychain
+lookup. That is affordable because the lookups are local and an app reads a
+token once at startup — but it means a host must not prompt inside these
+methods. A biometric-gated item should fail the call; an app can retry, and a
+frozen UI cannot be recovered.
+
+`SecureHas` exists because `SecureGet` alone cannot distinguish a stored empty
+string from a missing entry, and `shell.SecureStorage.Get` reports that
+difference.
+
+**Files cross as bytes, never as paths.** Android returns a `content://` URI
+readable only while its grant lasts and iOS a security-scoped URL that must be
+opened inside `startAccessingSecurityScopedResource`; both are read in the host,
+while they are valid, and only bytes reach Go. Multi-select arrives as repeated
+`DeliverPickedFile` calls then one `DeliverPickedDone`, because gomobile cannot
+carry a slice of structs. A cancelled dialog is `DeliverPickedDone` with no
+files — not a failure.
+
+### State the host pushes rather than answering
+
+Connectivity, battery and deep links have no host interface at all: the platform
+already knows and changes the answer on its own schedule, so the host pushes and
+the capability reads a field.
+
+- `bridge.SetOnline(...)` at startup and on every reachability change.
+- `bridge.SetBattery(level, charging)` at startup and on the battery broadcast.
+- `bridge.DeliverLink(url)` for the launch URL and every later deep link. The
+  first one delivered *before any frame* becomes `Links.Initial`.
+- `bridge.SetFilesDir(...)` once, enabling `ctx.Preferences()`.
+- `bridge.SetClipboardText(...)` on foreground, and drain
+  `bridge.TakeClipboardWrite()` each frame.
+- Drain `bridge.TakeAnnouncement()` each frame and post it to the AT
+  (`UIAccessibility.post(.announcement)` / `announceForAccessibility`).
+
+Each of these starts *unknown* rather than optimistic: until a host calls
+`SetOnline`, `ctx.Connectivity()` is nil. A phone that has not been told is not
+"online", and reporting it that way makes an app skip its offline path exactly
+at launch, which is when it matters.
+
+### Permissions these need
+
+- **iOS `Info.plist`:** `NSLocationWhenInUseUsageDescription` for location.
+  Notifications and the document picker need no usage string.
+- **Android manifest:** `POST_NOTIFICATIONS` (API 33+),
+  `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`. `gophics run` syncs these
+  from the capabilities your Go code actually reaches.
 
 ## GPU rendering (optional, recommended)
 
