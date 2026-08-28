@@ -342,6 +342,7 @@ func (o *Owner) updateChild(parent *element, old *element, w Widget) *element {
 }
 
 func (o *Owner) mount(parent *element, w Widget) *element {
+	w = o.asWidget(w)
 	el := &element{owner: o, parent: parent, widget: w, mounted: true}
 	if parent != nil {
 		el.depth = parent.depth + 1
@@ -361,10 +362,37 @@ func (o *Owner) mount(parent *element, w Widget) *element {
 		el.box = w.createBox(el.ctx())
 		w.updateBox(el.ctx(), el.box)
 		el.mountRenderChildren(w)
-	default:
-		panic(fmt.Sprintf("widget: %T implements none of Stateless, Stateful, or a render widget", w))
 	}
 	return el
+}
+
+// asWidget returns w, or a BuildError standing in for a value that is not a
+// widget at all.
+//
+// Widget is any, so a stray value — Padding{Child: "hello"}, a slice of the
+// wrong element type — type-checks and only fails here. It used to fail by
+// panicking, and that panic landed badly: safeBuild has already returned by
+// the time mount runs, so it escaped to the frame-level recover, which drops
+// the frame and logs at most once every five seconds. Every subsequent frame
+// did the same. The app did not crash and did not show an error; it simply
+// stopped changing, which reads as a hang and sends you looking anywhere but
+// at the widget you mistyped.
+//
+// Substituting is the policy safeBuild already states for a subtree that
+// fails: one bad subtree must not take down the app. The rest of the tree
+// keeps rendering and the broken part says what it is, in place.
+func (o *Owner) asWidget(w Widget) Widget {
+	switch w.(type) {
+	case Stateful, Stateless, renderWidget:
+		return w
+	}
+	msg := fmt.Sprintf("%T implements none of Stateless, Stateful, or a render widget", w)
+	if o.OnBuildPanic != nil {
+		o.OnBuildPanic(msg)
+	} else {
+		log.Printf("widget: %s", msg)
+	}
+	return BuildError{Message: msg}
 }
 
 func (el *element) mountRenderChildren(w renderWidget) {
