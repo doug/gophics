@@ -55,6 +55,14 @@ type MemClipboard struct{ S string }
 func (m *MemClipboard) ClipboardRead() (string, error) { return m.S, nil }
 func (m *MemClipboard) ClipboardWrite(s string) error  { m.S = s; return nil }
 
+// Clipboard returns the in-memory clipboard, so a test can seed what a paste
+// would find and read back what a copy wrote — the same reason OpenedURLs is
+// exposed. Never nil: NewHeadless always installs one.
+func (h *Headless) Clipboard() *MemClipboard {
+	cb, _ := h.core.Owner.Clipboard.(*MemClipboard)
+	return cb
+}
+
 // Render lays out and paints a frame through the damage-aware pipeline,
 // returning the physical-pixel image (retained across frames, so an
 // unchanged scene skips rasterization — check core.Skipped).

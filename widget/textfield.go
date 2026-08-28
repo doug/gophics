@@ -100,6 +100,23 @@ type textFieldState struct {
 	// caret navigation and hit testing.
 	lastWidth float32
 
+	// Where the current press landed, kept because OnLongPress reports no
+	// position: pressLocal indexes into the text, pressGlobal anchors the edit
+	// menu. dismissMenu closes an open one (nil when none is up).
+	pressLocal  geom.Pt
+	pressGlobal geom.Pt
+	dismissMenu func()
+
+	// handles is set when a finger made the selection, which is when the grips
+	// are worth drawing; dragHandle is which one a drag is currently moving
+	// (-1 none, 0 start, 1 end).
+	handles    bool
+	dragHandle int
+
+	// imeShown is what the platform was last told about this field's keyboard,
+	// so Build can drive Show/Hide idempotently.
+	imeShown bool
+
 	// reveal is the enclosing Scroll's caret-into-view service (nil when the
 	// field is not inside a Scroll); revealPending asks the next paint to scroll
 	// the caret into view after a user edit or caret move.
@@ -264,6 +281,194 @@ func (s *textFieldState) moveVertical(ctx Ctx, dir int, extend bool) {
 }
 
 // indexAtPt maps a box-local point to a rune index.
+// The clipboard operations, named once so the keyboard shortcuts and the
+// long-press edit menu cannot drift apart. They were inline in the key handler
+// and reachable only by Cmd+C/X/V, which on a phone — no Command key — meant
+// text could be selected and never copied.
+
+// Selection handles — the draggable grips at each end of a touch selection.
+//
+// A drawn editor gets none of the platform's, and without them a selection made
+// on a phone can only be replaced, never adjusted: there is no keyboard to
+// shift-arrow with. They are the other half of the long-press menu.
+//
+// They are shown only for a selection a finger made (handles set by
+// OnLongPress). A mouse user adjusts with shift-click and would find two dots
+// under their text puzzling.
+const (
+	selHandleRadius = 7
+	// A fingertip is a great deal larger than the dot it is aiming at, so the
+	// grab area is generous. Platforms do the same; the dot is a target, not a
+	// hitbox.
+	selHandleGrab = 18
+)
+
+// caretPt returns the local position of the caret for rune index idx: the top
+// of the caret, in the same space OnPress reports. It is the inverse of
+// indexAtPt, and follows the same single/multiline split.
+func (s *textFieldState) caretPt(pr *paint.Painter, idx int) geom.Pt {
+	f := s.W()
+	if !f.Multiline {
+		return geom.Pt{X: pr.ShapeIn("", s.ed.Text(), f.size()).CaretX(idx) - s.scrollX, Y: 0}
+	}
+	w := s.lastWidth
+	if w <= 0 {
+		w = 1e9
+	}
+	lines := pr.ParagraphIn("", s.ed.Text(), f.size(), w)
+	if len(lines) == 0 {
+		return geom.Pt{}
+	}
+	li := lineOf(lines, idx)
+	l := lines[li]
+	m := pr.MetricsIn("", f.size())
+	rel := idx - l.Start
+	if rel < 0 {
+		rel = 0
+	}
+	return geom.Pt{X: l.CaretX(rel), Y: float32(li) * m.LineHeight()}
+}
+
+// handleCentres returns the two handle positions in local coordinates, and
+// whether there is a selection to show them for.
+func (s *textFieldState) handleCentres(pr *paint.Painter) (lo, hi geom.Pt, ok bool) {
+	a, b := s.ed.Selection()
+	if a == b || !s.handles {
+		return lo, hi, false
+	}
+	m := pr.MetricsIn("", s.W().size())
+	drop := m.Ascent + m.Descent + selHandleRadius
+	lo = s.caretPt(pr, a)
+	hi = s.caretPt(pr, b)
+	lo.Y += drop
+	hi.Y += drop
+	return lo, hi, true
+}
+
+// moveHandle drags one end of the selection to p, keeping the other anchored.
+//
+// The ends swap when they cross, which is what a user doing it expects: drag
+// the left grip past the right one and the selection does not collapse, it
+// inverts. Tracking which handle is which through the swap is why this holds
+// the anchor explicitly rather than reusing MoveTo's extend flag.
+func (s *textFieldState) moveHandle(ctx Ctx, p geom.Pt) {
+	if s.moveHandleTo(s.indexAtPt(ctx, p)) {
+		s.SetState(nil)
+	}
+}
+
+// moveHandleTo is the drag itself, in text-index space: the hit testing that
+// produced idx is the caller's business, which is what makes this testable
+// without pixels.
+func (s *textFieldState) moveHandleTo(idx int) (changed bool) {
+	a, b := s.ed.Selection()
+	anchor := b
+	if s.dragHandle == 1 {
+		anchor = a
+	}
+	if idx == anchor {
+		return false // a zero-width selection would drop the handles mid-drag
+	}
+	if idx < anchor {
+		s.dragHandle = 0
+	} else {
+		s.dragHandle = 1
+	}
+	s.ed.MoveTo(anchor, false)
+	s.ed.MoveTo(idx, true)
+	return true
+}
+
+// handleAt reports which handle the point p is grabbing: -1 none, 0 the
+// selection start, 1 the end.
+func (s *textFieldState) handleAt(ctx Ctx, p geom.Pt) int {
+	return s.handleAtPt(ctx.Painter(), p)
+}
+
+func (s *textFieldState) handleAtPt(pr *paint.Painter, p geom.Pt) int {
+	lo, hi, ok := s.handleCentres(pr)
+	if !ok {
+		return -1
+	}
+	dl, dh := dist2(p, lo), dist2(p, hi)
+	grab := float32(selHandleGrab * selHandleGrab)
+	switch {
+	case dl <= grab && dl <= dh:
+		return 0
+	case dh <= grab:
+		return 1
+	}
+	return -1
+}
+
+func (s *textFieldState) copySelection(ctx Ctx) {
+	if !s.ed.HasSelection() {
+		return
+	}
+	if cb := ctx.Clipboard(); cb != nil {
+		_ = cb.ClipboardWrite(s.ed.SelectedText())
+	}
+}
+
+func (s *textFieldState) cutSelection(ctx Ctx) {
+	if !s.ed.HasSelection() {
+		return
+	}
+	s.copySelection(ctx)
+	s.ed.Insert("")
+	s.change(ctx)
+}
+
+func (s *textFieldState) pasteClipboard(ctx Ctx) {
+	cb := ctx.Clipboard()
+	if cb == nil {
+		return
+	}
+	t, err := cb.ClipboardRead()
+	if err != nil || t == "" {
+		return
+	}
+	if s.W().Multiline {
+		t = sanitizeMultiline(t)
+	} else {
+		t = sanitize(t)
+	}
+	if t == "" {
+		return
+	}
+	s.ed.Insert(t)
+	s.revealPending = true
+	s.change(ctx)
+}
+
+func (s *textFieldState) selectAll() {
+	s.ed.SelectAll()
+	s.SetState(nil)
+}
+
+// closeMenu dismisses an open edit menu, if any. Safe to call when none is up.
+func (s *textFieldState) closeMenu() {
+	if s.dismissMenu != nil {
+		s.dismissMenu()
+		s.dismissMenu = nil
+	}
+}
+
+// editOps exposes the field to the edit menu.
+func (s *textFieldState) editOps(ctx Ctx) selectionOps {
+	return selectionOps{
+		HasSelection: s.ed.HasSelection,
+		AllSelected: func() bool {
+			a, b := s.ed.Selection()
+			return a == 0 && b == len([]rune(s.ed.Text())) && b > 0
+		},
+		Cut:       func() { s.cutSelection(ctx) },
+		Copy:      func() { s.copySelection(ctx) },
+		Paste:     func() { s.pasteClipboard(ctx) },
+		SelectAll: s.selectAll,
+	}
+}
+
 func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
 	f := s.W()
 	if !f.Multiline {
@@ -353,31 +558,19 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			s.SetState(nil)
 		case shell.KeyA:
 			if k.Mods.Command() {
-				s.ed.SelectAll()
-				s.SetState(nil)
+				s.selectAll()
 			}
 		case shell.KeyC:
-			if k.Mods.Command() && s.ed.HasSelection() {
-				if cb := ctx.Clipboard(); cb != nil {
-					_ = cb.ClipboardWrite(s.ed.SelectedText())
-				}
+			if k.Mods.Command() {
+				s.copySelection(ctx)
 			}
 		case shell.KeyX:
-			if k.Mods.Command() && s.ed.HasSelection() {
-				if cb := ctx.Clipboard(); cb != nil {
-					_ = cb.ClipboardWrite(s.ed.SelectedText())
-				}
-				s.ed.Insert("")
-				s.change(ctx)
+			if k.Mods.Command() {
+				s.cutSelection(ctx)
 			}
 		case shell.KeyV:
 			if k.Mods.Command() {
-				if cb := ctx.Clipboard(); cb != nil {
-					if t, err := cb.ClipboardRead(); err == nil && t != "" {
-						s.ed.Insert(sanitize(t))
-						s.change(ctx)
-					}
-				}
+				s.pasteClipboard(ctx)
 			}
 		}
 	}
@@ -416,11 +609,47 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		Handler: Handler{
 			OnPress: func(p geom.Pt) {
 				s.activity()
+				s.closeMenu() // a new press replaces whatever the last one raised
+				// Both spaces: the index needs the local point, the edit menu
+				// needs the global one, and a long press reports neither.
+				s.pressLocal = p
+				s.pressGlobal = ctx.Input().Pointer()
+				// A press on a handle grabs it rather than moving the caret —
+				// otherwise reaching for the grip collapses the selection it is
+				// there to adjust.
+				if h := s.handleAt(ctx, p); h >= 0 {
+					s.dragHandle = h
+					s.SetState(nil)
+					return
+				}
+				s.dragHandle = -1
+				s.handles = false // a plain press ends the touch selection
 				s.ed.MoveTo(s.indexAtPt(ctx, p), false)
 				s.SetState(nil)
 			},
+			OnLongPress: func() {
+				// The touch idiom for reaching an editor's actions. A press on
+				// bare text selects the word under it first, so the menu that
+				// follows has something to act on — which is what both
+				// platforms do, and what makes Copy meaningful without a
+				// keyboard.
+				s.activity()
+				if !s.ed.HasSelection() {
+					s.ed.SelectWordAt(s.indexAtPt(ctx, s.pressLocal))
+				}
+				s.handles = true // a finger made this selection; give it grips
+				s.SetState(nil)
+				if acts := editActionsFor(ctx, s.editOps(ctx)); len(acts) > 0 {
+					s.dismissMenu = ShowEditMenu(ctx, s.pressGlobal, acts)
+				}
+			},
 			OnDrag: func(p, _ geom.Pt) {
 				s.activity()
+				s.closeMenu() // the selection is moving under it
+				if s.dragHandle >= 0 {
+					s.moveHandle(ctx, p)
+					return
+				}
 				s.ed.MoveTo(s.indexAtPt(ctx, p), true)
 				s.SetState(nil)
 			},
@@ -434,10 +663,27 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			OnText:        onText,
 			OnKey:         onKey,
 			OnComposition: onComposition,
+			OnPressEnd: func() {
+				if s.dragHandle >= 0 {
+					s.dragHandle = -1
+					// The range just changed, so re-offer the actions for it —
+					// the same thing both platforms do when a grip is let go.
+					if acts := editActionsFor(ctx, s.editOps(ctx)); len(acts) > 0 {
+						s.dismissMenu = ShowEditMenu(ctx, s.pressGlobal, acts)
+					}
+				}
+			},
 			OnFocus: func(v bool) {
 				s.focused = v
+				// Deliberately not closing the edit menu here. Pressing the menu
+				// takes focus away from the field, so dismissing on blur tears
+				// the menu down between the press and the release — and OnTap,
+				// which needs both on the same element, never fires. The menu
+				// looks like it works and does nothing.
+				//
+				// Outside taps are already handled by the menu's own scrim, and
+				// a fresh press in the field closes it there.
 				s.activity() // caret solid on focus, then blinks
-				s.softKeyboard(ctx, v, f, onText, onKey, onComposition)
 				if f.OnFocus != nil {
 					f.OnFocus(v)
 				}
@@ -445,6 +691,18 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			},
 		},
 		Child: fieldView{state: s},
+	}
+	// Raise or lower the keyboard from the built state rather than from the
+	// focus *event*, because a field can be focused without one ever firing: a
+	// focusable widget mounted while nothing has focus takes it silently. Doing
+	// this on the transition alone meant the first field on a screen — the
+	// common case on a phone — never got Show, so it never received the
+	// keyboard type, the autocorrect hint, or the OnReplace that autocorrect
+	// needs. TextInputActive still answered yes through its focus fallback,
+	// which is what hid it.
+	if s.focused != s.imeShown {
+		s.imeShown = s.focused
+		s.softKeyboard(ctx, s.focused, f, onText, onKey, onComposition)
 	}
 	// Anything that could have moved the text or the selection has happened by
 	// now, so this is where the IME's copy is brought back in step.
@@ -490,6 +748,25 @@ func (s *textFieldState) softKeyboard(
 		// The IME reports editing keys separately from text; the editor already
 		// knows how to apply them, so they are forwarded as the key presses it
 		// would have received from hardware.
+		// Autocorrect and predictive replacement. This is the one handler
+		// callback mobile uses: replacing a span cannot be expressed as an
+		// insertion, and it is what the IME does every time it fixes a word.
+		OnReplace: func(start, end int, t string) {
+			n := len([]rune(s.ed.Text()))
+			if start < 0 || end > n || start > end {
+				return // the IME's view lagged behind an edit; drop it
+			}
+			s.ed.MoveTo(start, false)
+			s.ed.MoveTo(end, true)
+			if s.W().Multiline {
+				t = sanitizeMultiline(t)
+			} else {
+				t = sanitize(t)
+			}
+			s.ed.Insert(t)
+			s.revealPending = true
+			s.change(ctx)
+		},
 		OnEditKey: func(k shell.EditKey) {
 			var code shell.KeyCode
 			switch k {
@@ -641,6 +918,29 @@ func (b *fieldBox) doReveal(absX, absTop, absBot float32) {
 	s.reveal.reveal(absTop-s.reveal.origin.Y, absBot-s.reveal.origin.Y)
 }
 
+// paintSelHandles draws the two grips under a touch selection.
+//
+// A filled dot with a short stem up to the text, which is the shape both
+// platforms use and reads as "grab me" at a glance. Drawn in the caret colour
+// so the selection, the caret and the grips are visibly one thing.
+func (b *fieldBox) paintSelHandles(c paint.Canvas, at geom.Pt) {
+	lo, hi, ok := b.state.handleCentres(b.painter)
+	if !ok {
+		return
+	}
+	_, caretC, _, _ := b.state.W().resolvedColors()
+	for _, p := range []geom.Pt{lo, hi} {
+		g := at.Add(p)
+		// Stem: from the dot up to roughly the text baseline, so the grip is
+		// attached to the selection rather than floating beneath it.
+		c.Line(geom.Pt{X: g.X, Y: g.Y - selHandleRadius*2}, geom.Pt{X: g.X, Y: g.Y}, 1.5, caretC)
+		c.FillRRect(geom.Rect{
+			Min: geom.Pt{X: g.X - selHandleRadius, Y: g.Y - selHandleRadius},
+			Max: geom.Pt{X: g.X + selHandleRadius, Y: g.Y + selHandleRadius},
+		}, selHandleRadius, caretC)
+	}
+}
+
 func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.state.W().Multiline {
 		b.paintMultiline(c, at)
@@ -690,6 +990,7 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		drawCaret(c, x, at.Y, at.Y+b.size.H, caretC)
 	}
 
+	b.paintSelHandles(c, at)
 	c.PopClip()
 
 	if b.state.revealPending {
@@ -760,6 +1061,7 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 		drawCaret(c, x, top, top+lineH, caretC)
 	}
 
+	b.paintSelHandles(c, at)
 	c.PopClip()
 
 	if b.state.revealPending {

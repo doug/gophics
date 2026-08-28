@@ -29,6 +29,11 @@ type selectableState struct {
 	ctx           Ctx
 	ref           *selRef
 	anchor, focus int // linear rune offsets over the wrapped-line model
+
+	// Where the press landed, for anchoring the edit menu (OnLongPress and
+	// OnPressEnd report no position), and the menu's dismiss.
+	pressGlobal geom.Pt
+	dismissMenu func()
 }
 
 type selRef struct{ box *selectableBox }
@@ -48,15 +53,33 @@ func (s *selectableState) Build(ctx Ctx) Widget {
 	return Interactive{
 		Handler: Handler{
 			OnPress: func(p geom.Pt) {
+				s.closeMenu()
+				s.pressGlobal = ctx.Input().Pointer()
 				if s.ref.box != nil {
 					o := s.ref.box.offsetAt(p)
 					s.SetState(func() { s.anchor, s.focus = o, o })
 				}
 			},
 			OnDrag: func(pos, _ geom.Pt) {
+				s.closeMenu() // the selection is still moving under it
 				if s.ref.box != nil {
 					o := s.ref.box.offsetAt(pos)
 					s.SetState(func() { s.focus = o })
+				}
+			},
+			// Long-press takes the word and offers Copy. Without it this text
+			// is selectable on a phone and copyable only with a Command key
+			// the device does not have.
+			OnLongPress: func() {
+				if s.ref.box != nil {
+					lo, hi := s.ref.box.wordAt(s.focus)
+					s.SetState(func() { s.anchor, s.focus = lo, hi })
+				}
+				s.showMenu(ctx)
+			},
+			OnPressEnd: func() {
+				if lo, hi := s.sel(); lo != hi {
+					s.showMenu(ctx)
 				}
 			},
 			OnKey: func(k shell.Key) {
@@ -77,6 +100,28 @@ func (s *selectableState) Build(ctx Ctx) Widget {
 			text: t.S, font: t.Font, size: t.size(), color: t.Color,
 			wrap: t.Wrap, selColor: t.selectionColor(), lo: lo, hi: hi, ref: s.ref,
 		},
+	}
+}
+
+// showMenu offers Copy for the current selection. Read-only text, so there is
+// no Cut or Paste.
+func (s *selectableState) showMenu(ctx Ctx) {
+	s.closeMenu()
+	acts := editActionsFor(ctx, selectionOps{
+		HasSelection: func() bool { lo, hi := s.sel(); return lo != hi },
+		AllSelected:  func() bool { return false },
+		Copy:         s.copy,
+	})
+	if len(acts) > 0 {
+		s.dismissMenu = ShowEditMenu(ctx, s.pressGlobal, acts)
+	}
+}
+
+// closeMenu dismisses an open edit menu, if any.
+func (s *selectableState) closeMenu() {
+	if s.dismissMenu != nil {
+		s.dismissMenu()
+		s.dismissMenu = nil
 	}
 }
 

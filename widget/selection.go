@@ -30,6 +30,11 @@ type selectionAreaState struct {
 	StateBase[SelectionArea]
 	ctx Ctx
 	reg *selectionRegistry
+
+	// Where the press landed, for anchoring the edit menu (OnLongPress and
+	// OnPressEnd report no position), and the menu's dismiss.
+	pressGlobal geom.Pt
+	dismissMenu func()
 }
 
 func (s *selectionAreaState) Init(ctx Ctx) {
@@ -58,6 +63,8 @@ func (s *selectionAreaState) Build(ctx Ctx) Widget {
 				return r.pressedText
 			},
 			OnPress: func(p geom.Pt) {
+				s.closeMenu()
+				s.pressGlobal = ctx.Input().Pointer()
 				// Record the caret and clear any prior selection; the drag (mouse)
 				// or long-press (touch) turns it into a visible selection.
 				if pt, ok := r.locate(p); ok {
@@ -72,27 +79,71 @@ func (s *selectionAreaState) Build(ctx Ctx) Widget {
 			// touch entry point; on desktop it's a harmless bonus). A subsequent
 			// drag then extends it via DragPriority.
 			OnLongPress: func() {
-				if r.pressedText {
-					s.SetState(func() { r.selectWord(); r.has, r.selecting = true, true })
+				if !r.pressedText {
+					return
 				}
+				s.SetState(func() { r.selectWord(); r.has, r.selecting = true, true })
+				// The word is selected; now offer something to do with it. On a
+				// phone this is the only route to Copy — there is no Cmd+C.
+				s.showMenu(ctx)
 			},
 			OnDrag: func(pos, _ geom.Pt) {
+				// The selection is moving under the menu, so take it away and
+				// bring it back when the finger lifts. Both platforms do this;
+				// a menu anchored to a selection that is still growing is worse
+				// than no menu.
+				s.closeMenu()
 				if pt, ok := r.locate(pos); ok {
 					s.SetState(func() { r.focus, r.has = pt, true })
 				}
 			},
+			OnPressEnd: func() {
+				if r.selecting && r.selectedText() != "" {
+					s.showMenu(ctx)
+				}
+			},
 			OnKey: func(k shell.Key) {
 				if k.Kind == shell.KeyPress && k.Mods.Command() && k.Code == shell.KeyC {
-					if txt := r.selectedText(); txt != "" {
-						if cb := s.ctx.Clipboard(); cb != nil {
-							_ = cb.ClipboardWrite(txt)
-						}
-					}
+					s.copySelection()
 				}
 			},
 		},
 		Child: selAnchor{reg: r, child: s.W().Child},
 	}}
+}
+
+// copySelection puts the selected text on the clipboard.
+func (s *selectionAreaState) copySelection() {
+	txt := s.reg.selectedText()
+	if txt == "" {
+		return
+	}
+	if cb := s.ctx.Clipboard(); cb != nil {
+		_ = cb.ClipboardWrite(txt)
+	}
+}
+
+// showMenu raises the edit menu for a read-only selection: Copy, and Select All
+// where the area has more than the selection in it. There is no Cut or Paste —
+// this text is not editable, and offering either would be a lie.
+func (s *selectionAreaState) showMenu(ctx Ctx) {
+	s.closeMenu()
+	acts := editActionsFor(ctx, selectionOps{
+		HasSelection: func() bool { return s.reg.selectedText() != "" },
+		AllSelected:  func() bool { return false },
+		Copy:         s.copySelection,
+	})
+	if len(acts) > 0 {
+		s.dismissMenu = ShowEditMenu(ctx, s.pressGlobal, acts)
+	}
+}
+
+// closeMenu dismisses an open edit menu, if any.
+func (s *selectionAreaState) closeMenu() {
+	if s.dismissMenu != nil {
+		s.dismissMenu()
+		s.dismissMenu = nil
+	}
 }
 
 // selPoint is a position in the selection model: a fragment index (in paint
