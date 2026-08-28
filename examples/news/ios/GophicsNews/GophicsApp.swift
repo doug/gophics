@@ -63,10 +63,16 @@ class GophicsView: UIView, UIKeyInput {
     private var keyboardVisible = false
     private var surfaceSet = false
 
-    // CPU present fallback: when the GPU surface can't be created (iOS
-    // Simulator — its Metal lacks the HAL wgpu needs), the Go side rasterizes
-    // each frame on the CPU and we blit it into this layer instead. Same
-    // parity-tested rasterizer; GPU on device, CPU in the Simulator.
+    // CPU present fallback: when the GPU surface cannot be created, or is
+    // created and then cannot present, the Go side rasterizes each frame on the
+    // CPU and we blit it into this layer instead. Same parity-tested
+    // rasterizer, so the two paths agree pixel for pixel.
+    //
+    // gpuActive() is asked every frame rather than once, because "configured"
+    // and "able to present" are different facts: an Android emulator without
+    // working Vulkan configures a surface happily and then fails every
+    // acquire, and a host that cached the first answer would render into
+    // nothing forever. The iOS Simulator does render on the GPU as of iOS 26.
     private let cpuLayer = CALayer()
     private let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
 

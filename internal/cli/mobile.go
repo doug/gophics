@@ -68,6 +68,12 @@ func gomobileBind(o buildOpts, target, out string) error {
 	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
 	}
+	// The app's own package, generated when it does not carry one (bindgen.go).
+	bindPkg, err := resolveBindPkg(o)
+	if err != nil {
+		return err
+	}
+
 	// Bind the shell bridge alongside the app's package.
 	//
 	// gomobile exports only the packages it is given, so without this a host
@@ -79,7 +85,7 @@ func gomobileBind(o buildOpts, target, out string) error {
 	// when it is an error, and gobind copies Go doc comments into Javadoc where
 	// prose containing a slash-star closes the comment early. Both are checked
 	// by scripts/gates.sh so they fail here rather than in a gradle log.
-	args = append(args, o.pkg, bridgePkg)
+	args = append(args, bindPkg, bridgePkg)
 	if err := run("", nil, "gomobile", args...); err != nil {
 		return fmt.Errorf("gomobile bind: %w", err)
 	}
@@ -92,16 +98,16 @@ const bridgePkg = "github.com/doug/gophics/shell/mobile"
 
 // runMobile is the `gophics run` path for ios/android: bind the Go side into
 // the host project, build it, and install + launch on a simulator/device — the
-// whole loop, no per-project scripts. The host project is the sibling ios/ or
-// android/ directory next to the bind package (override with -host).
+// whole loop, no per-project scripts.
+//
+// The host project is the app's own ios/ or android/ directory when it has one
+// (override with -host); an app that has neither gets a stock host generated
+// under build/, so `gophics run -p ios` works on an app that is nothing but a
+// main.go and a ui package.
 func runMobile(o buildOpts) error {
-	host, err := hostDirFor(o)
+	host, err := ensureHost(o)
 	if err != nil {
 		return err
-	}
-	if _, err := os.Stat(host); err != nil {
-		return fmt.Errorf("host project not found at %s\n"+
-			"scaffold one with `gophics create`, or pass -host <dir>", host)
 	}
 	switch o.platform.name {
 	case "ios":
@@ -112,7 +118,14 @@ func runMobile(o buildOpts) error {
 }
 
 // hostDirFor resolves the platform host project directory: -host if given, else
-// the sibling ios/ or android/ next to the bind package.
+// the ios/ or android/ belonging to the app.
+//
+// Which directory that is depends on what was named on the command line. A bind
+// package (./examples/news/mobile) has the host as its *sibling*; an app root
+// (./examples/mirror), which is what a mobile build normally names now that the
+// bind package is generated, has the host *inside* it. Getting this wrong picks
+// up the directory one level too high — examples/ios rather than
+// examples/mirror/ios — and reports a missing host project for one that exists.
 func hostDirFor(o buildOpts) (string, error) {
 	if o.host != "" {
 		return filepath.Abs(o.host)
@@ -121,7 +134,14 @@ func hostDirFor(o buildOpts) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(dir), o.platform.name), nil
+	name, err := packageName(o.pkg)
+	if err != nil {
+		return "", err
+	}
+	if name != "main" {
+		dir = filepath.Dir(dir) // bind package: the host sits beside it
+	}
+	return filepath.Join(dir, o.platform.name), nil
 }
 
 // packageDir returns the filesystem directory of a Go package pattern.
@@ -150,7 +170,15 @@ func packageName(pkg string) (string, error) {
 // package's name, capitalized (package hnmobile → Hnmobile). The host's
 // project.yml references <Name>.xcframework and Swift `import <Name>`.
 func frameworkName(o buildOpts) (string, error) {
-	name, err := packageName(o.pkg)
+	// Resolve through the same path the bind itself takes, so a generated bind
+	// package is named the same here as it is there. Reading o.pkg directly
+	// answers "Main" for an app root, and the host then looks for a framework
+	// that was never built under a name nothing produces.
+	pkg, err := resolveBindPkg(o)
+	if err != nil {
+		return "", err
+	}
+	name, err := packageName(pkg)
 	if err != nil {
 		return "", err
 	}
@@ -380,7 +408,14 @@ func runAndroid(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	name, err := packageName(o.pkg)
+	// The .aar is named for the bind package, which the app's build.gradle
+	// references by that name — so resolve it the same way the bind does rather
+	// than from o.pkg, which is "main" when an app root was named.
+	bindPkg, err := resolveBindPkg(o)
+	if err != nil {
+		return err
+	}
+	name, err := packageName(bindPkg)
 	if err != nil {
 		return err
 	}
@@ -390,6 +425,16 @@ func runAndroid(o buildOpts, host string) error {
 
 	fmt.Fprintln(os.Stderr, "gophics: binding Go → app/libs/"+name+".aar")
 	aar := filepath.Join(host, "app", "libs", name+".aar")
+	// Clear any other .aar first. build.gradle includes libs/*.aar by pattern
+	// rather than by name — deliberately, so the CLI can name the artifact after
+	// the bind package — which means a leftover from a previous name is not
+	// ignored but *added*, and gradle fails with pages of "Duplicate class
+	// go.Seq" that name neither the stale file nor the cause. Renaming an app,
+	// or switching between a hand-written mobile/ package and a generated one,
+	// is enough to produce one.
+	if err := pruneStaleAARs(filepath.Dir(aar), filepath.Base(aar)); err != nil {
+		return err
+	}
 	if err := gomobileBind(o, "android", aar); err != nil {
 		return err
 	}
@@ -414,15 +459,20 @@ func runAndroid(o buildOpts, host string) error {
 			"  %s install -r %s\n", apk, adb, apk)
 		return nil
 	}
+	target, err := adbTarget(adb, o.serial)
+	if err != nil {
+		return err
+	}
 	appID, err := gradleApplicationID(filepath.Join(host, "app", "build.gradle"))
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "gophics: install + launch %s\n", appID)
-	if err := run("", nil, adb, "install", "-r", apk); err != nil {
+	if err := run("", nil, adb, append(append([]string{}, target...), "install", "-r", apk)...); err != nil {
 		return fmt.Errorf("adb install: %w", err)
 	}
-	return run("", nil, adb, "shell", "am", "start", "-n", launchActivity(adb, appID))
+	launch := append(append([]string{}, target...), "shell", "am", "start", "-n", launchActivity(adb, appID))
+	return run("", nil, adb, launch...)
 }
 
 // launchActivity resolves the app's launcher activity (e.g.
@@ -550,18 +600,79 @@ func javaMajor(home string) int {
 	return n
 }
 
-func deviceConnected(adb string) bool {
+func deviceConnected(adb string) bool { return len(adbDevices(adb)) > 0 }
+
+// adbDevices lists the serials adb reports as ready, in adb's own order —
+// which puts physical devices before emulators.
+func adbDevices(adb string) []string {
 	out, err := exec.Command(adb, "devices").Output()
 	if err != nil {
-		return false
+		return nil
 	}
+	var serials []string
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	for _, ln := range lines[1:] { // skip "List of devices attached"
-		if strings.Contains(ln, "\tdevice") {
-			return true
+		serial, state, ok := strings.Cut(strings.TrimSpace(ln), "\t")
+		if ok && strings.TrimSpace(state) == "device" {
+			serials = append(serials, serial)
 		}
 	}
-	return false
+	return serials
+}
+
+// adbTarget returns the adb arguments that pin every later command to one
+// device.
+//
+// adb refuses to install when more than one is attached, with an error that
+// names neither of them — and a tablet plugged in beside a running emulator is
+// the normal state of anyone debugging on hardware. -device picks explicitly;
+// otherwise a physical device wins over an emulator, because someone who has
+// just plugged one in means to use it.
+func adbTarget(adb string, want string) ([]string, error) {
+	serial, err := pickADBSerial(adbDevices(adb), want)
+	if err != nil || serial == "" {
+		return nil, err
+	}
+	return []string{"-s", serial}, nil
+}
+
+// pickADBSerial chooses among the attached devices. Separate from adbTarget so
+// the choice can be tested without an adb to attach anything to.
+func pickADBSerial(serials []string, want string) (string, error) {
+	if len(serials) == 0 {
+		return "", nil
+	}
+	if want != "" {
+		for _, s := range serials {
+			if s == want {
+				return s, nil
+			}
+		}
+		return "", fmt.Errorf("no connected device with serial %q; attached: %s",
+			want, strings.Join(serials, ", "))
+	}
+	if len(serials) == 1 {
+		return serials[0], nil
+	}
+	var physical []string
+	for _, s := range serials {
+		if !strings.HasPrefix(s, "emulator-") {
+			physical = append(physical, s)
+		}
+	}
+	switch len(physical) {
+	case 1:
+		fmt.Fprintf(os.Stderr, "gophics: %d devices attached; using %s "+
+			"(pass -serial to choose)\n", len(serials), physical[0])
+		return physical[0], nil
+	case 0:
+		fmt.Fprintf(os.Stderr, "gophics: %d emulators attached; using %s "+
+			"(pass -serial to choose)\n", len(serials), serials[0])
+		return serials[0], nil
+	default:
+		return "", fmt.Errorf("%d devices attached (%s); pass -serial <serial>",
+			len(serials), strings.Join(physical, ", "))
+	}
 }
 
 var reApplicationID = regexp.MustCompile(`applicationId\s+['"]([^'"]+)['"]`)
@@ -609,7 +720,11 @@ func syncAndroidPermissions(o buildOpts, host string) error {
 		return nil // a host project that keeps its manifest elsewhere
 	}
 
-	dir, err := packageDir(o.pkg)
+	// Scan the bind package, not what was named on the command line. An app
+	// root is package main, and a main package does not type-check for a mobile
+	// GOOS — it wants external cgo linking that is not enabled — so scanning it
+	// reports nothing and capscan correctly refuses to under-report.
+	dir, err := bindPkgDir(o)
 	if err != nil {
 		return err
 	}
@@ -691,7 +806,7 @@ func checkIOSPermissions(o buildOpts, host string) error {
 	if plist == "" {
 		return nil
 	}
-	dir, err := packageDir(o.pkg)
+	dir, err := bindPkgDir(o) // see the note in syncAndroidPermissions
 	if err != nil {
 		return err
 	}

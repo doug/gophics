@@ -1,6 +1,9 @@
 package {{.AndroidPkg}}
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -24,39 +27,52 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.nio.ByteBuffer
 import {{.MobilePkg}}.{{.Framework}}
+import mobile.Bridge
 
 /**
  * Thin host for the gophics HN app (M9 embedding model): the Go side owns
  * the UI; this activity owns the surface, vsync, input, IME, and intents.
  */
+// One bridge per process, at file scope because MainActivity and the surface
+// view are separate classes and both drive it. gomobile assumes one anyway:
+// Start builds the app once.
+private lateinit var bridge: Bridge
+
 class MainActivity : Activity() {
     private var view: GophicsView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val err = {{.Framework}}.start()
-        if (err.isNotEmpty()) throw RuntimeException("gophics start: $err")
+        bridge = {{.Framework}}.start()
         val v = GophicsView(this)
         view = v
         setContentView(v)
         ViewCompat.setOnApplyWindowInsetsListener(v) { _, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
-            {{.Framework}}.setInsets(
-                bars.top.toDouble(), bars.right.toDouble(),
-                bars.bottom.toDouble(), bars.left.toDouble())
+            bridge.setInsets(
+                bars.top.toFloat(), bars.right.toFloat(),
+                bars.bottom.toFloat(), bars.left.toFloat())
             insets
         }
     }
 
     override fun onPause() {
         super.onPause()
-        {{.Framework}}.focused(false)
+        bridge.focused(false)
     }
 
     override fun onResume() {
         super.onResume()
-        {{.Framework}}.focused(true)
+        bridge.focused(true)
+        // The clipboard can change while another app is frontmost, and the Go
+        // side answers ClipboardRead from a cache, so refresh it on the way in.
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0).coerceToText(this).toString()
+        } else ""
+        bridge.setClipboardText(text)
     }
 }
 
@@ -70,7 +86,10 @@ class GophicsView(private val activity: Activity) :
     private var frameTimeSum = 0.0
     private var nativeWin = 0L    // ANativeWindow*, from NativeSurface
     private var surfaceSet = false
-    private var gpuActive = false  // false → CPU-blit present (emulator, GPU-less)
+    // Whether the surface was configured. The per-frame decision asks
+    // bridge.gpuActive() instead: a surface can configure successfully and
+    // still never present, and caching the answer renders into nothing forever.
+    private var gpuConfigured = false
     private var blitBitmap: Bitmap? = null
 
     init {
@@ -80,39 +99,85 @@ class GophicsView(private val activity: Activity) :
     }
 
     // --- IME: the view is a text editor whose InputConnection forwards
-    // committed and composing text into the bridge. ---
+    // committed and composing text into the bridge, and answers the IME's
+    // questions about the document from it. ---
+    //
+    // The read half matters as much as the write half and is easy to leave out,
+    // because leaving it out looks like it works: typing lands correctly and
+    // only autocorrect, predictive text and "replace the word behind the
+    // cursor" quietly operate on nothing. An IME that cannot see the document
+    // guesses from its own history instead.
 
     override fun onCheckIsTextEditor(): Boolean = true
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        outAttrs.inputType = EditorInfo.TYPE_CLASS_TEXT
+        outAttrs.inputType = when (bridge.textInputKind().toInt()) {
+            1 -> EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            2 -> EditorInfo.TYPE_CLASS_NUMBER
+            3 -> EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_URI
+            4 -> EditorInfo.TYPE_CLASS_TEXT
+            else -> EditorInfo.TYPE_CLASS_TEXT
+        }
+        if (!bridge.textInputAutocorrect()) {
+            outAttrs.inputType = outAttrs.inputType or EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN
+        // Tell the IME where the caret is to begin with, so its first
+        // suggestion is not made blind.
+        outAttrs.initialSelStart = bridge.textInputSelStart().toInt()
+        outAttrs.initialSelEnd = bridge.textInputSelEnd().toInt()
         return object : BaseInputConnection(this, false) {
+            // The read half: the document, as the Go side sees it.
+            private fun doc() = bridge.textInputText()
+            private fun selStart() = bridge.textInputSelStart().toInt().coerceIn(0, doc().length)
+            private fun selEnd() = bridge.textInputSelEnd().toInt().coerceIn(0, doc().length)
+
+            override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence {
+                val end = minOf(selStart(), selEnd())
+                return doc().substring(maxOf(0, end - n), end)
+            }
+
+            override fun getTextAfterCursor(n: Int, flags: Int): CharSequence {
+                val d = doc()
+                val start = maxOf(selStart(), selEnd())
+                return d.substring(start, minOf(d.length, start + n))
+            }
+
+            override fun getSelectedText(flags: Int): CharSequence? {
+                val a = minOf(selStart(), selEnd())
+                val b = maxOf(selStart(), selEnd())
+                if (a == b) return null // null, not "": the IME reads them differently
+                return doc().substring(a, b)
+            }
+
+            override fun getCursorCapsMode(reqModes: Int): Int =
+                android.text.TextUtils.getCapsMode(doc(), minOf(selStart(), selEnd()), reqModes)
+
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                {{.Framework}}.composition(2, "", 0, "") // end any preedit
-                {{.Framework}}.text(text.toString())
+                bridge.composition(2, "", 0, "") // end any preedit
+                bridge.text(text.toString())
                 return true
             }
             override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
-                {{.Framework}}.composition(1, text.toString(), text.length.toLong().toInt().toLong(), "")
+                bridge.composition(1, text.toString(), text.length.toLong().toInt().toLong(), "")
                 return true
             }
             override fun finishComposingText(): Boolean {
-                {{.Framework}}.composition(2, "", 0, "")
+                bridge.composition(2, "", 0, "")
                 return true
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-                repeat(beforeLength) { {{.Framework}}.key(2, true) } // KeyBackspace
+                repeat(beforeLength) { bridge.key(2, true) } // KeyBackspace
                 return true
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     when (event.keyCode) {
-                        KeyEvent.KEYCODE_DEL -> {{.Framework}}.key(2, true)
-                        KeyEvent.KEYCODE_ENTER -> {{.Framework}}.key(1, true)
+                        KeyEvent.KEYCODE_DEL -> bridge.key(2, true)
+                        KeyEvent.KEYCODE_ENTER -> bridge.key(1, true)
                         else -> {
                             val ch = event.unicodeChar
-                            if (ch != 0) {{.Framework}}.text(String(Character.toChars(ch)))
+                            if (ch != 0) bridge.text(String(Character.toChars(ch)))
                         }
                     }
                 }
@@ -121,8 +186,25 @@ class GophicsView(private val activity: Activity) :
         }
     }
 
+    // The IME caches the selection it was last told about; a caret that moves
+    // for any other reason — a tap, an edit, a dragged handle — has to be
+    // reported or autocorrect replaces the wrong span. The revision is what
+    // makes this affordable to check every frame.
+    private var imeRevision = -1
+
+    private fun syncIMESelection() {
+        val rev = bridge.textInputRevision().toInt()
+        if (rev == imeRevision) return
+        imeRevision = rev
+        val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.updateSelection(this, bridge.textInputSelStart().toInt(), bridge.textInputSelEnd().toInt(), -1, -1)
+    }
+
     private fun syncIME() {
-        val want = {{.Framework}}.textInputActive()
+        val want = bridge.textInputActive()
+        if (want) {
+            syncIMESelection() // cheap: guarded by the revision
+        }
         if (want == imeShown) return
         imeShown = want
         val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -140,31 +222,51 @@ class GophicsView(private val activity: Activity) :
         running = true
         val dark = (resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        {{.Framework}}.setDarkMode(dark)
+        bridge.setDarkMode(dark)
         nativeWin = NativeSurface.acquire(holder.surface) // ANativeWindow* for the GPU
         Choreographer.getInstance().postFrameCallback(this)
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, w: Int, h: Int) {
-        val d = resources.displayMetrics.density.toDouble()
+        // density is already a Float, which is what the bridge takes — the
+        // scale parameters are float32 on the Go side.
+        val d = resources.displayMetrics.density
         // Hand the surface to the Go side once it has a size; the GPU renders
         // directly to it. Resize thereafter reconfigures the surface.
         if (!surfaceSet && nativeWin != 0L) {
-            {{.Framework}}.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
-            gpuActive = {{.Framework}}.gpuActive()
+            bridge.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
+            gpuConfigured = bridge.gpuActive()
             surfaceSet = true
-            Log.i("gophics", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
+            Log.i("gophics", if (gpuConfigured) "GPU present" else "GPU unavailable — CPU blit")
         }
-        {{.Framework}}.resize(w.toLong(), h.toLong(), d)
+        bridge.resize(w.toLong(), h.toLong(), d)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         running = false
         Choreographer.getInstance().removeFrameCallback(this)
-        {{.Framework}}.clearSurface()
+        bridge.clearSurface()
         NativeSurface.release(nativeWin)
         nativeWin = 0L
         surfaceSet = false
+    }
+
+    // Hand the Surface back to the CPU after the GPU gives up on it.
+    //
+    // A Surface can only be driven by one API at a time: while it is connected
+    // to Vulkan through the ANativeWindow, holder.lockCanvas throws
+    // IllegalArgumentException, so the CPU fallback draws nothing and the screen
+    // stays black — with the real cause three stack frames down in a
+    // SurfaceHolder log nobody is reading. Disconnecting first is what makes the
+    // fallback actually a fallback.
+    private fun releaseGPUSurface() {
+        if (nativeWin == 0L) return
+        bridge.clearSurface()
+        NativeSurface.release(nativeWin)
+        nativeWin = 0L
+        surfaceSet = false
+        gpuConfigured = false
+        Log.i("gophics", "GPU surface released — presenting on the CPU")
     }
 
     override fun doFrame(frameNanos: Long) {
@@ -172,11 +274,12 @@ class GophicsView(private val activity: Activity) :
         val dt = if (lastNanos == 0L) 1.0 / 60 else (frameNanos - lastNanos) / 1e9
         lastNanos = frameNanos
 
-        if ({{.Framework}}.needsFrame()) {
+        if (bridge.needsFrame()) {
             val t0 = System.nanoTime()
-            if (gpuActive) {
-                {{.Framework}}.renderFrame(dt) // GPU-presents directly to the ANativeWindow
+            if (bridge.gpuActive()) {
+                bridge.renderFrame(dt) // GPU-presents directly to the ANativeWindow
             } else {
+                releaseGPUSurface() // no-op unless the GPU just retired
                 presentCPU(dt) // emulator / no GPU: rasterize on CPU and blit
             }
             // Frame pacing: log a rolling average every 60 rendered frames.
@@ -186,23 +289,45 @@ class GophicsView(private val activity: Activity) :
                 frameCount = 0
                 frameTimeSum = 0.0
             }
-            while (true) {
-                val url = {{.Framework}}.takeOpenedURL()
-                if (url.isEmpty()) break
-                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            }
+            drainHostWork()
         }
         syncIME()
         Choreographer.getInstance().postFrameCallback(this)
     }
 
-    // presentCPU rasterizes one frame on the Go side ({{.Framework}}.snapshot →
+    // Everything the Go side has queued for the platform, drained once per
+    // rendered frame. Each is a request the UI made that only Android can carry
+    // out; polling is how the bridge stays free of callbacks into Kotlin.
+    private fun drainHostWork() {
+        while (true) {
+            val url = bridge.takeOpenedURL()
+            if (url.isEmpty()) break
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+        // Copy: the app wrote to the clipboard and the system has not caught up.
+        val copied = bridge.takeClipboardWrite()
+        if (copied.isNotEmpty()) {
+            clipboard.setPrimaryClip(ClipData.newPlainText(null, copied))
+        }
+        // Live-region speech. TalkBack drops these when it is not running, so
+        // this costs nothing when it is off.
+        while (true) {
+            val msg = bridge.takeAnnouncement()
+            if (msg.isEmpty()) break
+            announceForAccessibility(msg)
+        }
+    }
+
+    private val clipboard: ClipboardManager
+        get() = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+    // presentCPU rasterizes one frame on the Go side (bridge.snapshot →
     // RGBA8888) and blits it into the SurfaceView with lockCanvas — the present
     // path when the GPU surface is unavailable (emulator). The frame is
     // physical-pixel sized, matching the surface, so it blits 1:1.
     private fun presentCPU(dt: Double) {
-        val px = {{.Framework}}.snapshot(dt) ?: return
-        val w = {{.Framework}}.frameWidth().toInt(); val h = {{.Framework}}.frameHeight().toInt()
+        val px = bridge.snapshot(dt) ?: return
+        val w = bridge.frameWidth().toInt(); val h = bridge.frameHeight().toInt()
         if (w == 0 || h == 0 || px.size < w * h * 4) return
         var bmp = blitBitmap
         if (bmp == null || bmp.width != w || bmp.height != h) {
@@ -218,6 +343,72 @@ class GophicsView(private val activity: Activity) :
         }
     }
 
+    // --- Physical keys ---
+    //
+    // A hardware keyboard does not go through the InputConnection: injected and
+    // physical key events are dispatched to the View, and a view that only
+    // implements an InputConnection silently drops every one of them. On a
+    // tablet with a keyboard case, a Chromebook, or DeX, that is an app you
+    // cannot type into — and it looks like the app is frozen rather than like a
+    // missing handler. `adb shell input text` lands here too, which is how this
+    // was noticed.
+    //
+    // Codes are shell.KeyCode: 1 Enter, 2 Backspace, 3 Delete, 4 Escape,
+    // 5 Tab, 6 Left, 7 Right, 8 Up, 9 Down, 10 Home, 11 End.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val code = when (keyCode) {
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> 1L
+            KeyEvent.KEYCODE_DEL -> 2L
+            KeyEvent.KEYCODE_FORWARD_DEL -> 3L
+            KeyEvent.KEYCODE_ESCAPE -> 4L
+            KeyEvent.KEYCODE_TAB -> 5L
+            KeyEvent.KEYCODE_DPAD_LEFT -> 6L
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 7L
+            KeyEvent.KEYCODE_DPAD_UP -> 8L
+            KeyEvent.KEYCODE_DPAD_DOWN -> 9L
+            KeyEvent.KEYCODE_MOVE_HOME -> 10L
+            KeyEvent.KEYCODE_MOVE_END -> 11L
+            else -> 0L
+        }
+        if (code != 0L) {
+            bridge.key(code, true)
+            return true
+        }
+        // Printable characters arrive as text, not as key codes — the same
+        // split the Go side makes, where plain typing is Text and only
+        // shortcuts are keys.
+        val ch = event.unicodeChar
+        if (ch != 0) {
+            bridge.text(String(Character.toChars(ch)))
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        // The Go side tracks press/release for modifiers; releases for the keys
+        // above are reported so a held arrow does not look stuck down.
+        val code = when (keyCode) {
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> 1L
+            KeyEvent.KEYCODE_DEL -> 2L
+            KeyEvent.KEYCODE_FORWARD_DEL -> 3L
+            KeyEvent.KEYCODE_ESCAPE -> 4L
+            KeyEvent.KEYCODE_TAB -> 5L
+            KeyEvent.KEYCODE_DPAD_LEFT -> 6L
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 7L
+            KeyEvent.KEYCODE_DPAD_UP -> 8L
+            KeyEvent.KEYCODE_DPAD_DOWN -> 9L
+            KeyEvent.KEYCODE_MOVE_HOME -> 10L
+            KeyEvent.KEYCODE_MOVE_END -> 11L
+            else -> 0L
+        }
+        if (code != 0L) {
+            bridge.key(code, false)
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val phase = when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> 0L
@@ -225,7 +416,7 @@ class GophicsView(private val activity: Activity) :
             MotionEvent.ACTION_UP -> 2L
             else -> 3L
         }
-        {{.Framework}}.touch(phase, e.x.toDouble(), e.y.toDouble())
+        bridge.touch(phase, e.x, e.y)
         return true
     }
 
@@ -239,13 +430,13 @@ class GophicsView(private val activity: Activity) :
     private var rootId = -1
 
     private fun refreshA11y() {
-        val count = {{.Framework}}.a11yRefresh().toInt()
+        val count = bridge.a11yRefresh().toInt()
         idToIndex.clear()
         rootId = -1
         for (i in 0 until count) {
-            val id = {{.Framework}}.a11yID(i.toLong()).toInt()
+            val id = bridge.a11yID(i.toLong()).toInt()
             idToIndex[id] = i
-            if ({{.Framework}}.a11yParent(i.toLong()).toInt() == -1) rootId = id
+            if (bridge.a11yParent(i.toLong()).toInt() == -1) rootId = id
         }
     }
 
@@ -260,9 +451,9 @@ class GophicsView(private val activity: Activity) :
                 onInitializeAccessibilityNodeInfo(info)
                 val ri = idToIndex[rootId]
                 if (ri != null) {
-                    val cc = {{.Framework}}.a11yChildCount(ri.toLong()).toInt()
+                    val cc = bridge.a11yChildCount(ri.toLong()).toInt()
                     for (j in 0 until cc) {
-                        info.addChild(this@GophicsView, {{.Framework}}.a11yChild(ri.toLong(), j.toLong()).toInt())
+                        info.addChild(this@GophicsView, bridge.a11yChild(ri.toLong(), j.toLong()).toInt())
                     }
                 }
                 return info
@@ -272,32 +463,32 @@ class GophicsView(private val activity: Activity) :
             val i = idx.toLong()
             val info = AccessibilityNodeInfo.obtain(this@GophicsView, virtualViewId)
             info.packageName = context.packageName
-            info.className = "gophics." + {{.Framework}}.a11yRole(i)
-            val label = {{.Framework}}.a11yLabel(i)
-            val value = {{.Framework}}.a11yValue(i)
+            info.className = "gophics." + bridge.a11yRole(i)
+            val label = bridge.a11yLabel(i)
+            val value = bridge.a11yValue(i)
             info.contentDescription = if (value.isNotEmpty()) "$label, $value" else label
-            val x = {{.Framework}}.a11yX(i).toInt()
-            val y = {{.Framework}}.a11yY(i).toInt()
+            val x = bridge.a11yX(i).toInt()
+            val y = bridge.a11yY(i).toInt()
             info.setBoundsInScreen(Rect(loc[0] + x, loc[1] + y,
-                loc[0] + x + {{.Framework}}.a11yW(i).toInt(), loc[1] + y + {{.Framework}}.a11yH(i).toInt()))
+                loc[0] + x + bridge.a11yW(i).toInt(), loc[1] + y + bridge.a11yH(i).toInt()))
             info.isVisibleToUser = true
             info.isFocusable = true
-            val parent = {{.Framework}}.a11yParent(i).toInt()
+            val parent = bridge.a11yParent(i).toInt()
             info.setParent(this@GophicsView, if (parent == rootId) HOST_VIEW_ID else parent)
-            if ({{.Framework}}.a11yTappable(i)) {
+            if (bridge.a11yTappable(i)) {
                 info.isClickable = true
                 info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
             }
-            val cc = {{.Framework}}.a11yChildCount(i).toInt()
+            val cc = bridge.a11yChildCount(i).toInt()
             for (j in 0 until cc) {
-                info.addChild(this@GophicsView, {{.Framework}}.a11yChild(i, j.toLong()).toInt())
+                info.addChild(this@GophicsView, bridge.a11yChild(i, j.toLong()).toInt())
             }
             return info
         }
 
         override fun performAction(virtualViewId: Int, action: Int, arguments: android.os.Bundle?): Boolean {
             if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-                {{.Framework}}.a11yActivate(virtualViewId.toLong())
+                bridge.a11yActivate(virtualViewId.toLong())
                 return true
             }
             return false

@@ -83,10 +83,10 @@ func cmdCreate(args []string) error {
 		next.WriteString("  gophics run -p terminal    # in the terminal\n")
 	}
 	if plats["ios"] {
-		next.WriteString("  gophics run -p ios ./mobile      # iOS Simulator (needs Xcode + xcodegen)\n")
+		next.WriteString("  gophics run -p ios               # iOS Simulator (needs Xcode + xcodegen)\n")
 	}
 	if plats["android"] {
-		next.WriteString("  gophics run -p android ./mobile  # Android device/emulator (needs the SDK)\n")
+		next.WriteString("  gophics run -p android           # Android device/emulator (needs the SDK)\n")
 	}
 	fmt.Printf(`created %s (%s)
 
@@ -210,38 +210,28 @@ var scaffold = map[string]string{
 }
 
 const mainTmpl = `// Command {{.Name}} is a gophics app. One codebase runs on desktop, web,
-// terminal, and mobile; the shell is chosen by build tags at compile time.
+// terminal and mobile; the shell is chosen by build tags at compile time.
 //
-// Root and Config are split out so the widget tree stays easy to test and
-// import independently of the shell entry point.
+//	gophics run                  # desktop
+//	gophics run -p web           # browser
+//	gophics build -p ios         # .xcframework
+//	gophics build -p android     # .aar
+//
+// The widget tree and the config live in ./ui rather than here, because
+// gomobile cannot bind package main: the CLI generates the mobile bind surface
+// from ui.Root and ui.Config, so a phone build and this one cannot drift.
 package main
 
 import (
 	"log"
 
-	"golang.org/x/image/font/gofont/goregular"
-
 	"github.com/doug/gophics/app"
-	"github.com/doug/gophics/geom"
-	"github.com/doug/gophics/widget"
 
 	"{{.Module}}/ui"
 )
 
-// Root returns the app's root widget.
-func Root() widget.Widget { return ui.Root() }
-
-// Config returns the app's window/runtime configuration.
-func Config() app.Config {
-	return app.Config{
-		Title: "{{.Name}}",
-		Size:  geom.Size{W: 480, H: 720},
-		Font:  goregular.TTF,
-	}
-}
-
 func main() {
-	if err := app.Run(Root(), Config()); err != nil {
+	if err := app.Run(ui.Root(), ui.Config()); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -264,6 +254,9 @@ package ui
 import (
 	"fmt"
 
+	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/widget"
@@ -280,6 +273,18 @@ var (
 	colAccent = paint.RGB(0.20, 0.45, 0.95)
 	colOnAcc  = paint.RGB(1, 1, 1)
 )
+
+// Config is the app's window and runtime configuration. It lives here beside
+// Root, not in main, because gomobile cannot bind package main — the generated
+// mobile bind surface reads both from this package, so the phone build and the
+// desktop build cannot drift apart.
+func Config() app.Config {
+	return app.Config{
+		Title: "{{.Name}}",
+		Size:  geom.Size{W: 480, H: 720},
+		Font:  goregular.TTF,
+	}
+}
 
 // Root returns the app's root widget. Edit this and save: "gophics dev"
 // live-reloads (web) or hot-restarts (desktop), landing back where you were.

@@ -13,6 +13,7 @@ func cmdRun(args []string) error {
 	fs.IntVar(&port, "port", 8080, "web server port (web platform)")
 	fs.StringVar(&o.host, "host", "", "mobile host project dir (default: sibling ios/ or android/ of the package)")
 	fs.BoolVar(&o.device, "device", false, "run on a connected device rather than a simulator (ios)")
+	fs.StringVar(&o.serial, "serial", "", "adb serial to target when several Android devices are attached")
 	fs.StringVar(&o.team, "team", "", "Apple Developer team ID for device signing (default: from the codesigning identity)")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err

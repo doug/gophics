@@ -17,8 +17,6 @@
 package healthmobile
 
 import (
-	"golang.org/x/image/font/gofont/goregular"
-
 	"github.com/doug/gophics/app"
 	healthui "github.com/doug/gophics/examples/health/ui"
 	"github.com/doug/gophics/shell/mobile"
@@ -35,10 +33,7 @@ var dev *healthui.DeviceProvider
 // because the second is an error, which is the one shape gomobile allows.
 func Start(storeName string) (*mobile.Bridge, error) {
 	dev = healthui.NewDeviceProvider(storeName)
-	h, err := app.NewHandler(healthui.App{Provider: dev}, app.Config{
-		Font:       goregular.TTF,
-		Background: healthui.BG,
-	})
+	h, err := app.NewHandler(healthui.App{Provider: dev}, healthui.Config())
 	if err != nil {
 		return nil, err
 	}

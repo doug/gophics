@@ -2,8 +2,8 @@
 // what the microphone hears.
 //
 // The app itself lives in ./ui so the same tree can be built as a desktop
-// command and bound into a mobile host (./mobile) — gomobile cannot bind
-// package main.
+// command and bound into a mobile host — gomobile cannot bind package main, so
+// the CLI generates a bind package from ui.Root and ui.Config.
 package main
 
 import (
@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	if err := app.Run(ui.App{}, ui.Config()); err != nil {
+	if err := app.Run(ui.Root(), ui.Config()); err != nil {
 		log.Fatal(err)
 	}
 }

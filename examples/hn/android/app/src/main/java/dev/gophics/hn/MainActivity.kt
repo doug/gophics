@@ -86,7 +86,10 @@ class GophicsView(private val activity: Activity) :
     private var frameTimeSum = 0.0
     private var nativeWin = 0L    // ANativeWindow*, from NativeSurface
     private var surfaceSet = false
-    private var gpuActive = false  // false → CPU-blit present (emulator, GPU-less)
+    // Whether the surface was configured. The per-frame decision asks
+    // bridge.gpuActive() instead: a surface can configure successfully and
+    // still never present, and caching the answer renders into nothing forever.
+    private var gpuConfigured = false
     private var blitBitmap: Bitmap? = null
 
     init {
@@ -168,9 +171,9 @@ class GophicsView(private val activity: Activity) :
         // directly to it. Resize thereafter reconfigures the surface.
         if (!surfaceSet && nativeWin != 0L) {
             bridge.setSurface(0, nativeWin, w.toLong(), h.toLong(), d)
-            gpuActive = bridge.gpuActive()
+            gpuConfigured = bridge.gpuActive()
             surfaceSet = true
-            Log.i("gophics", if (gpuActive) "GPU present" else "GPU unavailable — CPU blit")
+            Log.i("gophics", if (gpuConfigured) "GPU present" else "GPU unavailable — CPU blit")
         }
         bridge.resize(w.toLong(), h.toLong(), d)
     }
@@ -184,6 +187,24 @@ class GophicsView(private val activity: Activity) :
         surfaceSet = false
     }
 
+    // Hand the Surface back to the CPU after the GPU gives up on it.
+    //
+    // A Surface can only be driven by one API at a time: while it is connected
+    // to Vulkan through the ANativeWindow, holder.lockCanvas throws
+    // IllegalArgumentException, so the CPU fallback draws nothing and the screen
+    // stays black — with the real cause three stack frames down in a
+    // SurfaceHolder log nobody is reading. Disconnecting first is what makes the
+    // fallback actually a fallback.
+    private fun releaseGPUSurface() {
+        if (nativeWin == 0L) return
+        bridge.clearSurface()
+        NativeSurface.release(nativeWin)
+        nativeWin = 0L
+        surfaceSet = false
+        gpuConfigured = false
+        Log.i("gophics", "GPU surface released — presenting on the CPU")
+    }
+
     override fun doFrame(frameNanos: Long) {
         if (!running) return
         val dt = if (lastNanos == 0L) 1.0 / 60 else (frameNanos - lastNanos) / 1e9
@@ -191,9 +212,10 @@ class GophicsView(private val activity: Activity) :
 
         if (bridge.needsFrame()) {
             val t0 = System.nanoTime()
-            if (gpuActive) {
+            if (bridge.gpuActive()) {
                 bridge.renderFrame(dt) // GPU-presents directly to the ANativeWindow
             } else {
+                releaseGPUSurface() // no-op unless the GPU just retired
                 presentCPU(dt) // emulator / no GPU: rasterize on CPU and blit
             }
             // Frame pacing: log a rolling average every 60 rendered frames.
@@ -256,6 +278,72 @@ class GophicsView(private val activity: Activity) :
         } finally {
             holder.unlockCanvasAndPost(canvas)
         }
+    }
+
+    // --- Physical keys ---
+    //
+    // A hardware keyboard does not go through the InputConnection: injected and
+    // physical key events are dispatched to the View, and a view that only
+    // implements an InputConnection silently drops every one of them. On a
+    // tablet with a keyboard case, a Chromebook, or DeX, that is an app you
+    // cannot type into — and it looks like the app is frozen rather than like a
+    // missing handler. `adb shell input text` lands here too, which is how this
+    // was noticed.
+    //
+    // Codes are shell.KeyCode: 1 Enter, 2 Backspace, 3 Delete, 4 Escape,
+    // 5 Tab, 6 Left, 7 Right, 8 Up, 9 Down, 10 Home, 11 End.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val code = when (keyCode) {
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> 1L
+            KeyEvent.KEYCODE_DEL -> 2L
+            KeyEvent.KEYCODE_FORWARD_DEL -> 3L
+            KeyEvent.KEYCODE_ESCAPE -> 4L
+            KeyEvent.KEYCODE_TAB -> 5L
+            KeyEvent.KEYCODE_DPAD_LEFT -> 6L
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 7L
+            KeyEvent.KEYCODE_DPAD_UP -> 8L
+            KeyEvent.KEYCODE_DPAD_DOWN -> 9L
+            KeyEvent.KEYCODE_MOVE_HOME -> 10L
+            KeyEvent.KEYCODE_MOVE_END -> 11L
+            else -> 0L
+        }
+        if (code != 0L) {
+            bridge.key(code, true)
+            return true
+        }
+        // Printable characters arrive as text, not as key codes — the same
+        // split the Go side makes, where plain typing is Text and only
+        // shortcuts are keys.
+        val ch = event.unicodeChar
+        if (ch != 0) {
+            bridge.text(String(Character.toChars(ch)))
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        // The Go side tracks press/release for modifiers; releases for the keys
+        // above are reported so a held arrow does not look stuck down.
+        val code = when (keyCode) {
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> 1L
+            KeyEvent.KEYCODE_DEL -> 2L
+            KeyEvent.KEYCODE_FORWARD_DEL -> 3L
+            KeyEvent.KEYCODE_ESCAPE -> 4L
+            KeyEvent.KEYCODE_TAB -> 5L
+            KeyEvent.KEYCODE_DPAD_LEFT -> 6L
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 7L
+            KeyEvent.KEYCODE_DPAD_UP -> 8L
+            KeyEvent.KEYCODE_DPAD_DOWN -> 9L
+            KeyEvent.KEYCODE_MOVE_HOME -> 10L
+            KeyEvent.KEYCODE_MOVE_END -> 11L
+            else -> 0L
+        }
+        if (code != 0L) {
+            bridge.key(code, false)
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {

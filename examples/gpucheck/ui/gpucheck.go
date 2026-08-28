@@ -18,6 +18,9 @@ import (
 	"image/color"
 	"math"
 
+	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/widget"
@@ -26,6 +29,16 @@ import (
 // Root is the scene widget; Background is its clear color.
 func Root() widget.Widget     { return Check{} }
 func Background() paint.Color { return paint.RGB(0.06, 0.07, 0.10) }
+
+// Config is the bring-up scene's own configuration, so a mobile build can swap
+// this in for the real app's without either side hand-rolling an app.Config.
+func Config() app.Config {
+	return app.Config{
+		Title:      "gophics · gpucheck",
+		Background: Background(),
+		Font:       goregular.TTF,
+	}
+}
 
 type Check struct{}
 

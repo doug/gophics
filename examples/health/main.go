@@ -9,20 +9,12 @@ package main
 import (
 	"log"
 
-	"golang.org/x/image/font/gofont/goregular"
-
 	"github.com/doug/gophics/app"
 	healthui "github.com/doug/gophics/examples/health/ui"
-	"github.com/doug/gophics/geom"
 )
 
 func main() {
-	if err := app.Run(healthui.App{}, app.Config{
-		Title:      "Health",
-		Size:       geom.Size{W: 390, H: 760}, // phone-portrait, signalling the mobile target
-		Background: healthui.BG,
-		Font:       goregular.TTF,
-	}); err != nil {
+	if err := app.Run(healthui.Root(), healthui.Config()); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -454,6 +454,10 @@ func (m *mirror) drawSpectrum(c paint.Canvas, sz geom.Size) {
 	}
 }
 
+// Root is the app's widget tree. It lives here rather than in main so that the
+// desktop entry point and the generated mobile bind surface build the same one.
+func Root() widget.Widget { return App{} }
+
 // Config is the app's window and font configuration, shared by the desktop
 // command and the mobile bind surface so the two cannot drift.
 func Config() app.Config {

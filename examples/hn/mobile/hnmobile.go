@@ -10,9 +10,6 @@
 package hnmobile
 
 import (
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/goregular"
-
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/shell/mobile"
 )
@@ -23,12 +20,8 @@ import (
 // the error to show — two results because the second is an error, which is the
 // one shape gomobile allows.
 func Start() (*mobile.Bridge, error) {
-	root, bg := scene()
-	h, err := app.NewHandler(root, app.Config{
-		Font:         goregular.TTF,
-		FontFamilies: map[string][]byte{"bold": gobold.TTF},
-		Background:   bg,
-	})
+	root, cfg := scene()
+	h, err := app.NewHandler(root, cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -51,6 +51,7 @@ type buildOpts struct {
 	pkg      string
 	host     string // mobile host project dir (run only; "" = sibling convention)
 	device   bool   // run on a connected physical device rather than a simulator/emulator
+	serial   string // adb serial to target when several Android devices are attached
 	team     string // Apple Developer team ID for device signing ("" = detect)
 }
 
