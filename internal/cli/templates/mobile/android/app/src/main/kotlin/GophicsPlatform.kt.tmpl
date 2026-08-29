@@ -5,6 +5,7 @@
 //
 //     val platform = GophicsPlatform(bridge, this)   // `this` = the Activity
 //     bridge.setShareHost(platform)
+//     bridge.setClipboardHost(platform)
 //     bridge.setNotifyHost(platform)
 //     bridge.setSecureHost(platform)
 //     bridge.setFileHost(platform)
@@ -35,6 +36,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -65,6 +67,7 @@ import javax.crypto.spec.GCMParameterSpec
 import android.provider.MediaStore
 import android.view.WindowManager
 import mobile.Bridge
+import mobile.ClipboardHost
 import mobile.DeviceHost
 import mobile.FileHost
 import mobile.LocationHost
@@ -75,7 +78,7 @@ import mobile.ShareHost
 class GophicsPlatform(
     private val bridge: Bridge,
     private val activity: Activity,
-) : ShareHost, NotifyHost, SecureHost, FileHost, LocationHost, DeviceHost {
+) : ShareHost, NotifyHost, SecureHost, FileHost, LocationHost, DeviceHost, ClipboardHost {
 
     private companion object {
         const val CHANNEL_ID = "gophics"
@@ -594,6 +597,25 @@ class GophicsPlatform(
             override fun onLowMemory() {}
         }
         activity.application.registerComponentCallbacks(localeCallbacks)
+    }
+
+    // ---- Clipboard ----
+    //
+    // Read on demand, not cached. Since Android 12 reading the primary clip
+    // shows the user a "pasted from your clipboard" toast when the data came
+    // from another app, so filling a cache in onResume meant a toast on every
+    // foreground for an app that had never pasted anything. The same mistake
+    // iOS punishes with a prompt.
+    //
+    // Go asks only when the user actually pastes. Whether to offer Paste at all
+    // is answered from the clip *description*, which is metadata and toasts for
+    // nothing — see MainActivity.onResume.
+
+    override fun clipboardText(): String {
+        val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip ?: return ""
+        if (clip.itemCount == 0) return ""
+        return clip.getItemAt(0).coerceToText(activity).toString()
     }
 
     private fun reportLocale() {

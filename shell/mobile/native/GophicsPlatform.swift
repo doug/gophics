@@ -42,7 +42,8 @@ public final class GophicsPlatform: NSObject,
     MobileSecureHostProtocol,
     MobileFileHostProtocol,
     MobileLocationHostProtocol,
-    MobileDeviceHostProtocol
+    MobileDeviceHostProtocol,
+    MobileClipboardHostProtocol
 {
     private let bridge: MobileBridge
     /// The view controller used to present sheets. Weak: the platform host
@@ -477,6 +478,19 @@ extension GophicsPlatform {
             forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main,
         ) { [weak self] _ in self?.reportLocale() }
     }
+
+    // ---- Clipboard ----
+    //
+    // Read on demand rather than cached, because on iOS the read is the cost:
+    // since iOS 16 touching UIPasteboard.string raises the system "would like to
+    // paste" prompt. Filling a cache on foreground meant raising it at every
+    // launch, for an app that had never asked to paste anything.
+    //
+    // So Go asks only when the user actually pastes — where the prompt is the
+    // expected, Apple-sanctioned behaviour — and the edit menu decides whether
+    // to offer Paste from hasStrings, which prompts for nothing.
+
+    public func clipboardText() -> String { UIPasteboard.general.string ?? "" }
 
     private func reportLocale() {
         // Locale.current.identifier is the underscore form ("de_DE"), which

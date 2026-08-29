@@ -51,6 +51,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         b.setFileHost(p)
         b.setLocationHost(p)
         b.setDeviceHost(p)
+        b.setClipboardHost(p) // reads the pasteboard only when the user pastes
         p.observe() // reachability, battery, locale — pushed as they change
         // Preferences needs somewhere to write, and Go cannot ask for it.
         b.setFilesDir(NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? "")
@@ -61,9 +62,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         bridge.focused(true)
-        // The pasteboard can change while another app is frontmost, and the Go
-        // side answers ClipboardRead from a cache, so refresh it on the way in.
-        bridge.setClipboardText(UIPasteboard.general.string ?? "")
+        // hasStrings, never .string. The pasteboard can change while another app
+        // is frontmost, so the Go side has to be told on the way in — but since
+        // iOS 16 *reading* the pasteboard is what raises the system "would like
+        // to paste" prompt, and doing it here raised it on every launch and
+        // every foreground, before the user had asked for anything. hasStrings
+        // answers the only question the edit menu asks and prompts for nothing;
+        // the text itself is read on demand, in clipboardText() below.
+        bridge.setClipboardHasText(UIPasteboard.general.hasStrings)
     }
 }
 
@@ -109,7 +115,7 @@ class GophicsView: UIView, UITextInput {
             layer.addSublayer(cpuLayer)
         }
         bridge.setDarkMode(traitCollection.userInterfaceStyle == .dark)
-        bridge.setClipboardText(UIPasteboard.general.string ?? "")
+        bridge.setClipboardHasText(UIPasteboard.general.hasStrings)
         observeKeyboard()
         let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
         link.add(to: .main, forMode: .common)

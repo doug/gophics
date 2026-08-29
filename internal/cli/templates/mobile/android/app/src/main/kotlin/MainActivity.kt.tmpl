@@ -2,6 +2,7 @@ package {{.AndroidPkg}}
 
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -57,6 +58,7 @@ class MainActivity : Activity() {
         bridge.setFileHost(platform)
         bridge.setLocationHost(platform)
         bridge.setDeviceHost(platform)
+        bridge.setClipboardHost(platform) // reads the clip only when the user pastes
         platform?.observe() // reachability, battery, locale — pushed as they change
         // Preferences needs somewhere to write; Go cannot ask, because HOME is
         // not reliably set on Android.
@@ -104,14 +106,18 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         bridge.focused(true)
-        // The clipboard can change while another app is frontmost, and the Go
-        // side answers ClipboardRead from a cache, so refresh it on the way in.
+        // Whether there is text to paste — from the description, never the clip
+        // itself. The clipboard can change while another app is frontmost, so
+        // the Go side has to be told on the way in, but since Android 12
+        // *reading* another app's clip shows a "pasted from your clipboard"
+        // toast, and doing it here showed one on every foreground for an app
+        // that had never pasted. The description is metadata and costs nothing.
+        // The text is read on demand, in GophicsPlatform.clipboardText().
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = cm.primaryClip
-        val text = if (clip != null && clip.itemCount > 0) {
-            clip.getItemAt(0).coerceToText(this).toString()
-        } else ""
-        bridge.setClipboardText(text)
+        bridge.setClipboardHasText(
+            cm.hasPrimaryClip() &&
+                cm.primaryClipDescription?.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) == true
+        )
     }
 }
 

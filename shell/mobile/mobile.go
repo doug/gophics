@@ -83,6 +83,9 @@ type Bridge struct {
 	linkSubs    []func(string)
 
 	clip         string           // cached system pasteboard; see SetClipboardText
+	clipHas      bool             // host's answer to "is there text?"; see SetClipboardHasText
+	clipHasSet   bool             // whether the host has ever answered, so "" stays distinguishable
+	clipHost     ClipboardHost    // reads the pasteboard on demand; nil until a host registers
 	clipPending  bool             // app copied, host has not drained it yet
 	media        *mediaBridge     // shared one-shot request plumbing (see media.go)
 	gpu          *mobileGPU       // GPU surface the host renders to (see gpu.go)
@@ -473,7 +476,43 @@ func (b *Bridge) capabilitiesChanged() {
 // SetClipboardText delivers the system pasteboard's contents. Hosts call it
 // when the app comes to the foreground and whenever the pasteboard changes
 // (iOS UIPasteboard.changedNotification, Android OnPrimaryClipChangedListener).
-func (b *Bridge) SetClipboardText(s string) { b.clip = s }
+func (b *Bridge) SetClipboardText(s string) { b.clip, b.clipHas, b.clipHasSet = s, s != "", true }
+
+// ClipboardHost reads the system pasteboard on demand, implemented by the host.
+//
+// Registered only where an eager cache does not work. On Android the host
+// pushes the text with SetClipboardText and this stays nil, because reading a
+// ClipboardManager costs nothing and prompts for nothing. On iOS it is the
+// whole point: UIPasteboard.string cannot be read to fill a cache without
+// showing the user a "pasted from" prompt they did not ask for.
+//
+// Runs on the UI thread and must return promptly.
+type ClipboardHost interface {
+	// ClipboardText returns the pasteboard's text, or "" when it holds none.
+	ClipboardText() string
+}
+
+// SetClipboardHost registers the pasteboard reader. Call once during setup.
+func (b *Bridge) SetClipboardHost(h ClipboardHost) { b.clipHost = h }
+
+// SetClipboardHasText reports whether the pasteboard holds text.
+//
+// Split from SetClipboardText so a host can answer the question the edit menu
+// actually asks without paying to read. iOS has UIPasteboard.hasStrings for
+// exactly this, and it raises no prompt; a host that pushes the text instead
+// answers both at once and need not call this.
+func (b *Bridge) SetClipboardHasText(v bool) { b.clipHas, b.clipHasSet = v, true }
+
+// ClipboardHasText makes the Bridge a widget.ClipboardPeeker.
+//
+// Falls back to the cache when no host has answered, so a host wired the old
+// way — pushing text and nothing else — keeps working unchanged.
+func (b *Bridge) ClipboardHasText() bool {
+	if b.clipHasSet {
+		return b.clipHas
+	}
+	return b.clip != ""
+}
 
 // TakeClipboardWrite returns text the app has copied and the host has not yet
 // written to the system pasteboard, or "" when there is nothing pending. Hosts
@@ -502,9 +541,23 @@ func (b *Bridge) OpenURL(u string) error {
 	b.opened = append(b.opened, u)
 	return nil
 }
-func (b *Bridge) ClipboardRead() (string, error) { return b.clip, nil }
+func (b *Bridge) ClipboardRead() (string, error) {
+	// Through the host where one is registered, because the cache cannot be
+	// kept fresh on iOS without prompting: the only way to know what the
+	// pasteboard holds is to read it, and reading is what raises the prompt.
+	// Callers reach this from an explicit paste, where a prompt is the expected
+	// behaviour rather than a surprise; the edit menu asks ClipboardHasText.
+	if b.clipHost != nil {
+		return b.clipHost.ClipboardText(), nil
+	}
+	return b.clip, nil
+}
 func (b *Bridge) ClipboardWrite(s string) error {
+	// The peek answer moves with the write, or a copy inside the app leaves it
+	// stale: the host's last push said "no text", and the edit menu would go on
+	// hiding Paste for something the user just copied.
 	b.clip, b.clipPending = s, true
+	b.clipHas, b.clipHasSet = s != "", true
 	return nil
 }
 

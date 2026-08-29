@@ -176,10 +176,10 @@ func editActionsFor(ctx Ctx, sel selectionOps) []EditAction {
 	if hasSel && sel.Copy != nil {
 		out = append(out, EditAction{Label: ctx.Message(MsgCopy), OnTap: sel.Copy})
 	}
-	if cb != nil && sel.Paste != nil {
-		if t, err := cb.ClipboardRead(); err == nil && t != "" {
-			out = append(out, EditAction{Label: ctx.Message(MsgPaste), OnTap: sel.Paste})
-		}
+	// Peeked, not read: this runs on every build of the menu, and on iOS a read
+	// is what raises the system paste prompt.
+	if cb != nil && sel.Paste != nil && clipboardHasText(cb) {
+		out = append(out, EditAction{Label: ctx.Message(MsgPaste), OnTap: sel.Paste})
 	}
 	if sel.SelectAll != nil && !sel.AllSelected() {
 		out = append(out, EditAction{Label: ctx.Message(MsgSelectAll), OnTap: sel.SelectAll})

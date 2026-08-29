@@ -1521,6 +1521,8 @@ widget.Center func
 widget.Clipboard type
 widget.Clipboard.ClipboardRead method
 widget.Clipboard.ClipboardWrite method
+widget.ClipboardPeeker type
+widget.ClipboardPeeker.ClipboardHasText method
 widget.Column func
 widget.Ctx type
 widget.Ctx.Accessibility method

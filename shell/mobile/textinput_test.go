@@ -171,8 +171,8 @@ func TestAnnouncementsQueueForTheHost(t *testing.T) {
 }
 
 // Copy and paste reached other apps only if a host wired both directions; the
-// bridge holds the cache because ClipboardRead answers synchronously and a bound
-// host call cannot.
+// bridge holds the cache for a host that pushes text, which is what Android
+// does.
 func TestClipboardRoundTripsThroughTheHost(t *testing.T) {
 	b := mobile.NewBridge(nil)
 
@@ -254,5 +254,86 @@ func TestReplaceTextIsInertWithoutAField(t *testing.T) {
 	b.ReplaceText(0, 3, "nope") // must not panic
 	if got := b.TextInputText(); got != "" {
 		t.Errorf("IME text = %q with no field focused", got)
+	}
+}
+
+// The bridge must satisfy widget.ClipboardPeeker or the edit menu silently
+// falls back to reading — which is the prompt this whole change removes, and it
+// would come back with every test still green. The interface is restated rather
+// than imported because shell/ does not depend on widget/.
+var _ interface{ ClipboardHasText() bool } = (*mobile.Bridge)(nil)
+
+// fakeClipHost counts reads, so a test can prove the pasteboard is touched only
+// when someone actually pastes.
+type fakeClipHost struct {
+	text  string
+	reads int
+}
+
+func (h *fakeClipHost) ClipboardText() string { h.reads++; return h.text }
+
+// The edit menu must decide whether to offer Paste without reading the
+// clipboard, because on both platforms the read is the thing that costs: iOS
+// shows a "would like to paste" prompt since 16, Android a "pasted from your
+// clipboard" toast since 12. Both hosts used to fill a cache on foreground, so
+// every launch raised one for an app that had never pasted.
+func TestClipboardPeekDoesNotReadThePasteboard(t *testing.T) {
+	h := &fakeClipHost{text: "from Safari"}
+	b := mobile.NewBridge(nil)
+	b.SetClipboardHost(h)
+
+	// What the host pushes on foreground: the answer, not the text.
+	b.SetClipboardHasText(true)
+	if !b.ClipboardHasText() {
+		t.Error("ClipboardHasText = false after the host reported text")
+	}
+	if h.reads != 0 {
+		t.Errorf("peeking read the pasteboard %d times; it must not read at all", h.reads)
+	}
+
+	// An actual paste is where the read belongs, and where a prompt is expected.
+	if got, _ := b.ClipboardRead(); got != "from Safari" {
+		t.Errorf("ClipboardRead = %q, want %q", got, "from Safari")
+	}
+	if h.reads != 1 {
+		t.Errorf("ClipboardRead did %d host reads, want 1", h.reads)
+	}
+
+	// An empty pasteboard is reported as such rather than guessed from a cache
+	// that is no longer being filled.
+	b.SetClipboardHasText(false)
+	if b.ClipboardHasText() {
+		t.Error("ClipboardHasText = true after the host reported none")
+	}
+}
+
+// A copy inside the app has to move the peek answer with it. The host's last
+// push said "no text"; without this the edit menu would go on hiding Paste for
+// something the user just copied.
+func TestCopyingInAppMakesPasteAvailable(t *testing.T) {
+	b := mobile.NewBridge(nil)
+	b.SetClipboardHasText(false)
+	if err := b.ClipboardWrite("copied in app"); err != nil {
+		t.Fatal(err)
+	}
+	if !b.ClipboardHasText() {
+		t.Error("ClipboardHasText = false right after the app copied text")
+	}
+}
+
+// A host wired the old way — pushing text and never answering the peek — must
+// keep working, since that is every host built before ClipboardHasText existed.
+func TestPeekFallsBackToTheCachedText(t *testing.T) {
+	b := mobile.NewBridge(nil)
+	if b.ClipboardHasText() {
+		t.Error("ClipboardHasText = true on a bridge no host has told anything")
+	}
+	b.SetClipboardText("from Safari")
+	if !b.ClipboardHasText() {
+		t.Error("ClipboardHasText = false after a text-pushing host reported text")
+	}
+	// And with no host registered, reads still come from that cache.
+	if got, _ := b.ClipboardRead(); got != "from Safari" {
+		t.Errorf("ClipboardRead = %q, want %q", got, "from Safari")
 	}
 }

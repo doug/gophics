@@ -14,7 +14,7 @@ numbers in this table cannot quietly drift from the code.
 
 | Tier | Packages | Names | After 1.0 |
 |---|---|---:|---|
-| **1 — App** | `app` `widget` `theme` `chart` `paint` `geom` `anim` `intl` `apptest` `sound`+4 | 1,293 | **Frozen.** Additive only, no signature changes, no removals. |
+| **1 — App** | `app` `widget` `theme` `chart` `paint` `geom` `anim` `intl` `apptest` `sound`+4 | 1,295 | **Frozen.** Additive only, no signature changes, no removals. |
 | **2 — Extension** | `layout` `text` `input` | 200 | **Stable.** For custom widgets and embedding hosts. Breaks only with a major version and a migration note. |
 | **3 — Platform** | `shell` `shell/{desktop,terminal,web}` | 454 | **Additive only.** A backend may gain capabilities; existing ones do not change shape. |
 | — Excluded | `shell/mobile` | — | Versioned with the host app, not with this module. |
@@ -85,7 +85,7 @@ A module split would fight the build rather than help it: `gomobile bind` binds
 records that consolidating *into* one module is what fixed the
 gomobile-ignores-`go.work` trap. So it is a documented exclusion and an
 exclusion from the generated manifest, which is why the total above is
-1,947 rather than well over 2,000.
+1,949 rather than well over 2,000.
 
 ## How this is kept honest
 

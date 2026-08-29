@@ -127,6 +127,36 @@ type Clipboard interface {
 	ClipboardWrite(text string) error
 }
 
+// ClipboardPeeker reports whether the clipboard holds text without reading it.
+//
+// A separate interface rather than a third method on Clipboard, because
+// Clipboard is implemented by every shell in this module and by out-of-tree
+// hosts: adding a method would break all of them at once, which is the one kind
+// of addition Go interfaces do not permit. A backend implements this or it does
+// not, the same way shell.BatteryWindow is opt-in.
+//
+// It exists because reading is not free everywhere. Since iOS 16, touching
+// UIPasteboard.string shows the system "pasted from" prompt — and the edit menu
+// asks whether to offer Paste every time it is built, which would nag the user
+// for something they never did. UIPasteboard.hasStrings answers exactly that
+// question and prompts for nothing.
+type ClipboardPeeker interface {
+	ClipboardHasText() bool
+}
+
+// clipboardHasText reports whether Paste has anything to offer.
+//
+// Prefers the peek where a backend can do one; otherwise reads, which is what
+// every backend did before this existed and is free on the platforms that do
+// not implement the peek.
+func clipboardHasText(cb Clipboard) bool {
+	if p, ok := cb.(ClipboardPeeker); ok {
+		return p.ClipboardHasText()
+	}
+	t, err := cb.ClipboardRead()
+	return err == nil && t != ""
+}
+
 // Clipboard returns the platform clipboard, or nil before the app runner
 // provides one.
 func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
