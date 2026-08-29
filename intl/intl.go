@@ -108,9 +108,34 @@ var locales = map[string]Locale{
 	"ko-KR": {Tag: "ko-KR", Decimal: ".", Group: ",", GroupSize: 3, GroupRest: 3, CurrencyBefore: true, DateOrder: YMD, DateSep: ". "},
 }
 
-// Lookup returns the locale for a BCP-47 tag, falling back to the language alone
-// ("de" → de-DE) and finally to Default. The second result reports an exact or
-// language-level match, so a caller can tell "I know this place" from "I guessed".
+// primaryRegion is the region a bare or unlisted-region tag resolves to.
+//
+// Without it the fallback below scanned every tag sharing the language and took
+// the alphabetically first, which is not a choice so much as an accident of
+// sorting: "en" — and every English region the table does not carry, en-DE,
+// en-IE, en-NZ, en-ZA — resolved to en-AU, so an American with the region unset
+// got day-first dates. Lookup reported ok=true while doing it, telling the
+// caller the table knew the place when it had guessed alphabetically.
+//
+// Found on an iOS simulator whose language was English and region Germany: the
+// platform reported en-DE and gophics formatted as Australian.
+//
+// The regions are CLDR's likely-subtag defaults, which is what other i18n
+// stacks resolve a bare language to. Only languages the table carries in more
+// than one region need an entry; anything else already resolves through the
+// lang-LANG rule or is unambiguous. This does change "pt" from pt-PT to pt-BR —
+// the old answer came from the lang-LANG rule rather than from a decision, and
+// Brazil is both CLDR's default and the large majority of Portuguese speakers.
+var primaryRegion = map[string]string{
+	"en": "US",
+	"pt": "BR",
+	"zh": "CN",
+}
+
+// Lookup returns the locale for a BCP-47 tag, falling back to the language's
+// primary region ("de" → de-DE, "en" → en-US) and finally to Default. The
+// second result reports an exact or language-level match, so a caller can tell
+// "I know this place" from "I guessed".
 func Lookup(tag string) (Locale, bool) {
 	if tag == "" {
 		return Default, false
@@ -126,6 +151,11 @@ func Lookup(tag string) (Locale, bool) {
 		lang = norm[:i]
 	}
 	lang = strings.ToLower(lang)
+	if r, ok := primaryRegion[lang]; ok {
+		if l, ok := locales[lang+"-"+r]; ok {
+			return l, true
+		}
+	}
 	if l, ok := locales[lang+"-"+strings.ToUpper(lang)]; ok {
 		return l, true
 	}

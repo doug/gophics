@@ -88,6 +88,16 @@ func cmdCreate(args []string) error {
 	if plats["android"] {
 		next.WriteString("  gophics run -p android           # Android device/emulator (needs the SDK)\n")
 	}
+	// gomobile binds from the app's own module, so x/mobile has to be a
+	// dependency of the app rather than of gophics. Printed rather than added
+	// here: `go get` needs the network, and create is otherwise offline. Left
+	// unsaid it is a wall — `gophics run -p android` fails at the bind step
+	// with an error about a module the user never mentioned.
+	var mobileDep string
+	if plats["ios"] || plats["android"] {
+		mobileDep = "  # gomobile binds from this module, so it needs x/mobile here:\n" +
+			"  #   go get -tool golang.org/x/mobile/cmd/gobind\n"
+	}
 	fmt.Printf(`created %s (%s)
 
 Next:
@@ -95,8 +105,8 @@ Next:
   # add the gophics dependency (not yet published), e.g. a replace to a local checkout:
   #   go mod edit -require=github.com/doug/gophics@v0.0.0
   #   go mod edit -replace=github.com/doug/gophics=/path/to/gophics
-  #   go mod tidy
-%s`, name, platforms, name, next.String())
+%s  #   go mod tidy
+%s`, name, platforms, name, mobileDep, next.String())
 	return nil
 }
 

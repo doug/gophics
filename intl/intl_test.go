@@ -214,3 +214,41 @@ func TestGroupSeparatorIsNonBreaking(t *testing.T) {
 		t.Errorf("fr-FR money %q contains an ordinary space; digits could wrap", got)
 	}
 }
+
+// A language with no region, or a region the table does not carry, must resolve
+// to that language's primary region rather than to whichever tag sorts first.
+//
+// The alphabetical scan used to answer "en" with en-AU, so an app on a device
+// set to plain English — or to English in an unlisted region — formatted dates
+// day-first for an American audience. It reported ok=true while doing it, which
+// is the part that made it hard to see: the caller was told the table knew the
+// place. Found on an iOS simulator reporting en-DE.
+func TestBareLanguageResolvesToItsPrimaryRegion(t *testing.T) {
+	for _, c := range []struct{ tag, want string }{
+		{"en", "en-US"},
+		{"en-DE", "en-US"}, // English language, region we do not carry
+		{"en-IE", "en-US"},
+		{"en-GB", "en-GB"}, // a region we do carry still wins
+		{"en-AU", "en-AU"},
+		{"de", "de-DE"},
+		{"de-AT", "de-DE"},
+		{"pt", "pt-BR"},
+		{"pt-PT", "pt-PT"},
+		{"fr", "fr-FR"},
+		{"zh", "zh-CN"},
+		{"ja", "ja-JP"},
+	} {
+		got, ok := Lookup(c.tag)
+		if got.Tag != c.want {
+			t.Errorf("Lookup(%q) = %q, want %q", c.tag, got.Tag, c.want)
+		}
+		if !ok {
+			t.Errorf("Lookup(%q) reported no match; a language-level match is still a match", c.tag)
+		}
+	}
+	// An unknown language is a guess, and must say so rather than claiming a
+	// match the way the alphabetical scan did.
+	if l, ok := Lookup("xx-YY"); ok {
+		t.Errorf("Lookup(\"xx-YY\") = %q with ok=true; an unknown language is not a match", l.Tag)
+	}
+}
