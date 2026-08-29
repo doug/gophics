@@ -185,6 +185,7 @@ does.
 | `Haptic` | — | yes | yes | — |
 | `Lifecycle` | yes | yes | yes | — |
 | `Links` | yes | yes | yes | — |
+| `Locale` | — | yes | yes | — |
 | `Menus` | yes | — | — | — |
 | `Microphone` | yes | yes | yes | yes |
 | `Notifier` | — | yes | yes | — |
