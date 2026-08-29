@@ -37,7 +37,7 @@ func tightPixels(img *image.RGBA) []byte {
 		return img.Pix[:rowLen*h]
 	}
 	out := make([]byte, rowLen*h)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		src := (b.Min.Y+y)*img.Stride + b.Min.X*4
 		copy(out[y*rowLen:], img.Pix[src:src+rowLen])
 	}
@@ -49,7 +49,7 @@ func subRect(img *image.RGBA, r image.Rectangle) []byte {
 	w, h := r.Dx(), r.Dy()
 	rowLen := w * 4
 	out := make([]byte, rowLen*h)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		src := (r.Min.Y+y)*img.Stride + r.Min.X*4
 		copy(out[y*rowLen:], img.Pix[src:src+rowLen])
 	}

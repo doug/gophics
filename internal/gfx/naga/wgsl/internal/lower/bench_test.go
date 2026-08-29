@@ -1,10 +1,11 @@
 package lower
 
 import (
-	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/parser"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/doug/gophics/internal/gfx/naga/wgsl/internal/parser"
 )
 
 // ---------------------------------------------------------------------------

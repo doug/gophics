@@ -76,6 +76,20 @@ func load() error {
 	if symSelRegister, err = ffi.GetSymbol(lib, "sel_registerName"); err != nil {
 		return fmt.Errorf("objc: sel_registerName: %w", err)
 	}
+	// Foundation, always. NSObject lives in libobjc, but everything this
+	// package hands callers — String, NewArray, the NSNumber unwrapping —
+	// is Foundation, and objc_getClass only sees classes from images that are
+	// loaded.
+	//
+	// Until Go 1.27 something in the runtime pulled CoreFoundation in, so this
+	// worked by accident: Class("NSString") resolved in any process. It stopped,
+	// and the failure is quiet — Class returns nil and every Send on it is a
+	// no-op, so a battery readout simply reported nothing rather than erroring.
+	// Loading it here is a dlopen of an already-resident system image.
+	if err := loadFramework("Foundation"); err != nil {
+		return fmt.Errorf("objc: load Foundation: %w", err)
+	}
+
 	ptr := []*types.TypeDescriptor{types.PointerTypeDescriptor}
 	if err := ffi.PrepareCallInterface(&cifGetClass, types.DefaultCall, types.PointerTypeDescriptor, ptr); err != nil {
 		return fmt.Errorf("objc: prepare objc_getClass: %w", err)
@@ -92,6 +106,13 @@ func LoadFramework(name string) error {
 	if err := Init(); err != nil {
 		return err
 	}
+	return loadFramework(name)
+}
+
+// loadFramework is LoadFramework without the Init, so load can call it while
+// initOnce is still running — going through the exported one there would
+// deadlock on the very Once that is executing.
+func loadFramework(name string) error {
 	if _, done := frameworks.Load(name); done {
 		return nil
 	}
@@ -317,7 +338,7 @@ func Array(a ID) []ID {
 	}
 	n := a.SendUInt("count")
 	out := make([]ID, 0, n)
-	for i := uint64(0); i < n; i++ {
+	for i := range n {
 		out = append(out, a.Send("objectAtIndex:", UInt(i)))
 	}
 	return out

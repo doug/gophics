@@ -36,19 +36,19 @@ func (k *kittyTerm) apply(t *testing.T, data []byte) {
 			return
 		}
 		rest := s[i+3:]
-		j := strings.Index(rest, "\x1b\\")
-		if j < 0 {
+		before, after, ok := strings.Cut(rest, "\x1b\\")
+		if !ok {
 			return
 		}
-		k.command(t, rest[:j])
-		s = rest[j+2:]
+		k.command(t, before)
+		s = after
 	}
 }
 
 func (k *kittyTerm) command(t *testing.T, body string) {
 	ctrl, payload := body, ""
-	if semi := strings.IndexByte(body, ';'); semi >= 0 {
-		ctrl, payload = body[:semi], body[semi+1:]
+	if before, after, ok := strings.Cut(body, ";"); ok {
+		ctrl, payload = before, after
 	}
 	keys := parseKeys(ctrl)
 
@@ -101,7 +101,7 @@ func (k *kittyTerm) process(t *testing.T, keys map[string]string, data []byte) {
 	case "f": // compose a rectangle onto the root frame in place
 		x, y := atoi(keys["x"]), atoi(keys["y"])
 		w, h := atoi(keys["s"]), atoi(keys["v"])
-		for row := 0; row < h; row++ {
+		for row := range h {
 			dst := ((y+row)*k.w + x) * 4
 			src := row * w * 4
 			copy(k.buf[dst:dst+w*4], data[src:src+w*4])
@@ -114,9 +114,9 @@ func (k *kittyTerm) pixels() []byte { return k.buf }
 
 func parseKeys(ctrl string) map[string]string {
 	m := map[string]string{}
-	for _, kv := range strings.Split(ctrl, ",") {
-		if eq := strings.IndexByte(kv, '='); eq >= 0 {
-			m[kv[:eq]] = kv[eq+1:]
+	for kv := range strings.SplitSeq(ctrl, ",") {
+		if before, after, ok := strings.Cut(kv, "="); ok {
+			m[before] = after
 		}
 	}
 	return m
@@ -188,9 +188,32 @@ func TestPartialUpdateSendsOnlyDamage(t *testing.T) {
 	if !strings.Contains(out.String(), "a=f") {
 		t.Errorf("small change should compose (a=f), got: %q", firstBytes(out.String()))
 	}
-	// One 64×64 tile vs a 256×256 frame — the update should be a fraction.
-	if out.Len()*4 >= firstLen {
-		t.Errorf("partial update (%d B) not meaningfully smaller than full frame (%d B)", out.Len(), firstLen)
+	small := out.Len()
+
+	// The claim is that the update carries the damage, not the frame. Asserting
+	// a fraction of the full frame measured the compressor instead: a solid
+	// 256×256 base is almost pure redundancy, and Go 1.27's flate shrank it far
+	// more than the one-tile patch — which is mostly escape sequences and
+	// base64 — so the ratio moved while both got smaller.
+	//
+	// The invariant that actually holds is that the same one-tile change costs
+	// the same on a much bigger canvas.
+	const w2, h2 = 1024, 1024 // 16× the area
+	base2 := solid(w2, h2, 20, 20, 20)
+	next2 := clone(base2)
+	fillRect(next2, 100, 100, 4, 4, 255, 255, 255)
+
+	var out2 bytes.Buffer
+	ts2 := &termState{out: &out2, imageID: 1}
+	ts2.present(base2)
+	out2.Reset()
+	ts2.present(next2)
+
+	t.Logf("one-tile change: %d B on %dx%d, %d B on %dx%d (full base was %d B)",
+		small, w, h, out2.Len(), w2, h2, firstLen)
+	if out2.Len() > small*2 {
+		t.Errorf("one-tile update grew from %d B to %d B on a 16× larger frame; "+
+			"it should carry the damage, not the frame", small, out2.Len())
 	}
 }
 
@@ -236,8 +259,8 @@ func TestScatteredChangesSendFewTiles(t *testing.T) {
 
 func gradient(w, h int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			o := y*img.Stride + x*4
 			img.Pix[o], img.Pix[o+1], img.Pix[o+2], img.Pix[o+3] =
 				byte(x*6), byte(y*8), byte(x+y), 255
@@ -261,8 +284,8 @@ func clone(src *image.RGBA) *image.RGBA {
 }
 
 func fillRect(img *image.RGBA, x, y, w, h int, r, g, b byte) {
-	for dy := 0; dy < h; dy++ {
-		for dx := 0; dx < w; dx++ {
+	for dy := range h {
+		for dx := range w {
 			o := (y+dy)*img.Stride + (x+dx)*4
 			img.Pix[o], img.Pix[o+1], img.Pix[o+2], img.Pix[o+3] = r, g, b, 255
 		}

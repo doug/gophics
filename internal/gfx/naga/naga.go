@@ -97,7 +97,11 @@ func CompileWithOptions(source string, opts CompileOptions) ([]byte, error) {
 			return nil, fmt.Errorf("validation error: %w", err)
 		}
 		if len(validationErrors) > 0 {
-			return nil, fmt.Errorf("validation failed: %w", &validationErrors[0])
+			// The value, not its address: ValidationError's Error method has a
+			// value receiver, so wrapping the pointer makes errors.Is and
+			// errors.As against a ValidationError fail to match. Go 1.27's vet
+			// reports it.
+			return nil, fmt.Errorf("validation failed: %w", validationErrors[0])
 		}
 	}
 

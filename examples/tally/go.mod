@@ -9,7 +9,7 @@
 // money; nothing GPL-licensed, so it is distributable through the app stores.
 module github.com/doug/tally
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/doug/gophics v0.0.0-00010101000000-000000000000

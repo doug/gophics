@@ -1,6 +1,6 @@
 module github.com/doug/gophics
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/go-text/typesetting v0.3.4
