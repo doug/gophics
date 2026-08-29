@@ -1,63 +1,35 @@
-package layout
+package layoutbox
 
 import (
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
-)
-
-// Axis is a layout direction. The zero value is Vertical: the natural
-// default for scrolling and for a zero-value Flex (a column).
-type Axis uint8
-
-const (
-	Vertical Axis = iota
-	Horizontal
-)
-
-// MainAlign distributes free space along the main axis when no child flexes.
-type MainAlign uint8
-
-const (
-	MainStart MainAlign = iota
-	MainCenter
-	MainEnd
-	MainSpaceBetween
-)
-
-// CrossAlign positions children across the main axis.
-type CrossAlign uint8
-
-const (
-	CrossStart CrossAlign = iota
-	CrossCenter
-	CrossEnd
-	CrossStretch
 )
 
 // FlexChild is one flex participant. Flex 0 children get their intrinsic
 // size; Flex > 0 children split the remaining main-axis space by weight.
 type FlexChild struct {
-	Box  Box
+	Box  layout.Box
 	Flex int
 }
 
 // Flexible wraps b with a flex weight.
-func Flexible(flex int, b Box) FlexChild { return FlexChild{Box: b, Flex: flex} }
+func Flexible(flex int, b layout.Box) FlexChild { return FlexChild{Box: b, Flex: flex} }
 
 // Flex lays out children along an axis: Flutter's Row/Column.
 //
 // Layout: fixed children are measured with the main axis unbounded and the
-// cross axis loosened (or tightened when CrossStretch). Remaining bounded
+// cross axis loosened (or tightened when layout.CrossStretch). Remaining bounded
 // main-axis space is split among flexed children by weight, tightly. The
 // flex extent fills bounded main constraints and shrink-wraps unbounded ones.
 type Flex struct {
 	Base
-	Axis       Axis
-	MainAlign  MainAlign
-	CrossAlign CrossAlign
+	Axis       layout.Axis
+	MainAlign  layout.MainAlign
+	CrossAlign layout.CrossAlign
 	// Reverse runs the main axis the other way: the first child is placed at
 	// the far end. Children keep their given order — only the direction of
-	// travel flips — so MainStart still means "packed against the start", it
+	// travel flips — so layout.MainStart still means "packed against the start", it
 	// is just that the start is now the right (or bottom) edge. This is what
 	// mirrors a row for a right-to-left reading direction.
 	Reverse  bool
@@ -66,13 +38,13 @@ type Flex struct {
 }
 
 // Row returns a horizontal Flex over plain children.
-func Row(children ...Box) *Flex { return newFlex(Horizontal, children) }
+func Row(children ...layout.Box) *Flex { return newFlex(layout.Horizontal, children) }
 
 // Column returns a vertical Flex over plain children.
-func Column(children ...Box) *Flex { return newFlex(Vertical, children) }
+func Column(children ...layout.Box) *Flex { return newFlex(layout.Vertical, children) }
 
-func newFlex(axis Axis, children []Box) *Flex {
-	f := &Flex{Axis: axis, CrossAlign: CrossCenter}
+func newFlex(axis layout.Axis, children []layout.Box) *Flex {
+	f := &Flex{Axis: axis, CrossAlign: layout.CrossCenter}
 	for _, c := range children {
 		f.Children = append(f.Children, FlexChild{Box: c})
 	}
@@ -80,43 +52,43 @@ func newFlex(axis Axis, children []Box) *Flex {
 }
 
 func (f *Flex) main(s geom.Size) float32 {
-	if f.Axis == Horizontal {
+	if f.Axis == layout.Horizontal {
 		return s.W
 	}
 	return s.H
 }
 
 func (f *Flex) cross(s geom.Size) float32 {
-	if f.Axis == Horizontal {
+	if f.Axis == layout.Horizontal {
 		return s.H
 	}
 	return s.W
 }
 
 func (f *Flex) size(main, cross float32) geom.Size {
-	if f.Axis == Horizontal {
+	if f.Axis == layout.Horizontal {
 		return geom.Size{W: main, H: cross}
 	}
 	return geom.Size{W: cross, H: main}
 }
 
 func (f *Flex) pt(main, cross float32) geom.Pt {
-	if f.Axis == Horizontal {
+	if f.Axis == layout.Horizontal {
 		return geom.Pt{X: main, Y: cross}
 	}
 	return geom.Pt{X: cross, Y: main}
 }
 
-func (f *Flex) Layout(cs Constraints) geom.Size {
+func (f *Flex) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := f.Skip(cs); ok {
 		return sz
 	}
 	maxMain := f.main(cs.Max)
 	maxCross := f.cross(cs.Max)
-	boundedMain := maxMain != Inf
+	boundedMain := maxMain != layout.Inf
 
-	childCross := Constraints{Max: f.size(Inf, maxCross)}
-	if f.CrossAlign == CrossStretch && maxCross != Inf {
+	childCross := layout.Constraints{Max: f.size(layout.Inf, maxCross)}
+	if f.CrossAlign == layout.CrossStretch && maxCross != layout.Inf {
 		childCross.Min = f.size(0, maxCross)
 	}
 
@@ -168,11 +140,11 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 	free := max0(ownMain - usedMain)
 	var pos, gap float32
 	switch f.MainAlign {
-	case MainCenter:
+	case layout.MainCenter:
 		pos = free / 2
-	case MainEnd:
+	case layout.MainEnd:
 		pos = free
-	case MainSpaceBetween:
+	case layout.MainSpaceBetween:
 		if n := len(f.Children); n > 1 {
 			gap = free / float32(n-1)
 		}
@@ -182,9 +154,9 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 		s := c.Box.Size()
 		var crossPos float32
 		switch f.CrossAlign {
-		case CrossCenter:
+		case layout.CrossCenter:
 			crossPos = (ownCross - f.cross(s)) / 2
-		case CrossEnd:
+		case layout.CrossEnd:
 			crossPos = ownCross - f.cross(s)
 		}
 		f.offsets = append(f.offsets, f.pt(pos, crossPos))
@@ -193,12 +165,12 @@ func (f *Flex) Layout(cs Constraints) geom.Size {
 	if f.Reverse {
 		// Mirror the main axis about the flex's own extent. Doing it after
 		// placement rather than by walking the children backwards keeps every
-		// other rule — flex distribution, MainAlign, the gaps — computed once
+		// other rule — flex distribution, layout.MainAlign, the gaps — computed once
 		// and identically in both directions.
 		for i := range f.offsets {
 			s := f.Children[i].Box.Size()
 			o := f.offsets[i]
-			if f.Axis == Horizontal {
+			if f.Axis == layout.Horizontal {
 				o.X = ownMain - o.X - s.W
 			} else {
 				o.Y = ownMain - o.Y - s.H
@@ -215,7 +187,7 @@ func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
 	// record pass — e.g. a scrolled Column only records its on-screen rows.
 	// The test uses ink bounds, not the layout rect, so children that paint
 	// outside their layout box (Translated, Transformed, Stack, unclipped
-	// Canvas — see InkBounder) are never wrongly dropped. ClipBounds is
+	// Canvas — see layout.InkBounder) are never wrongly dropped. ClipBounds is
 	// geom.Unbounded when unclipped or under a transform, so
 	// unclipped/transformed content still paints in full (nothing is dropped).
 	clip := c.ClipBounds()
@@ -224,14 +196,14 @@ func (f *Flex) Paint(c paint.Canvas, at geom.Pt) {
 			break // children changed since last layout; skip until relaid
 		}
 		pos := at.Add(f.offsets[i])
-		if !InkBounds(ch.Box).Translate(pos).Overlaps(clip) {
+		if !layout.InkBounds(ch.Box).Translate(pos).Overlaps(clip) {
 			continue
 		}
 		ch.Box.Paint(c, pos)
 	}
 }
 
-func (f *Flex) AddHits(p geom.Pt, hits *[]Hit) {
+func (f *Flex) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !f.contains(p) {
 		return
 	}
@@ -241,5 +213,5 @@ func (f *Flex) AddHits(p geom.Pt, hits *[]Hit) {
 	for i := n - 1; i >= 0; i-- {
 		f.Children[i].Box.AddHits(p.Sub(f.offsets[i]), hits)
 	}
-	*hits = append(*hits, Hit{f, p})
+	*hits = append(*hits, layout.Hit{Box: f, Pos: p})
 }

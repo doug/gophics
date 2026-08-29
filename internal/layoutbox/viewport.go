@@ -1,7 +1,8 @@
-package layout
+package layoutbox
 
 import (
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
 
@@ -10,7 +11,7 @@ import (
 // it back (or MaxOffset) after layout for scrollbar geometry.
 type Viewport struct {
 	Base
-	Axis   Axis // Vertical: content scrolls up as Offset grows
+	Axis   layout.Axis // layout.Vertical: content scrolls up as Offset grows
 	Offset float32
 	// Lead is extra space revealed at the leading edge (top/left) by
 	// translating content along the main axis without clamping — pull-to-
@@ -23,28 +24,28 @@ type Viewport struct {
 	// chat-log layout — appended content stays pinned to the end for free,
 	// since the offset origin is the end.
 	Reverse bool
-	Child   Box
+	Child   layout.Box
 
 	content geom.Size
 }
 
 // MaxOffset is the maximum scroll offset as of the last layout.
 func (v *Viewport) MaxOffset() float32 {
-	if v.Axis == Horizontal {
+	if v.Axis == layout.Horizontal {
 		return max0(v.content.W - v.Size().W)
 	}
 	return max0(v.content.H - v.Size().H)
 }
 
-func (v *Viewport) Layout(cs Constraints) geom.Size {
+func (v *Viewport) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := v.Skip(cs); ok {
 		return sz
 	}
 	inner := cs.Loosen()
-	if v.Axis == Horizontal {
-		inner.Max.W = Inf
+	if v.Axis == layout.Horizontal {
+		inner.Max.W = layout.Inf
 	} else {
-		inner.Max.H = Inf
+		inner.Max.H = layout.Inf
 	}
 	if v.Child != nil {
 		v.content = v.Child.Layout(inner)
@@ -58,7 +59,7 @@ func (v *Viewport) Layout(cs Constraints) geom.Size {
 }
 
 func (v *Viewport) scrollPt() geom.Pt {
-	if v.Axis == Horizontal {
+	if v.Axis == layout.Horizontal {
 		x := -v.Offset
 		if v.Reverse {
 			x = v.Size().W - v.content.W + v.Offset
@@ -81,12 +82,12 @@ func (v *Viewport) Paint(c paint.Canvas, at geom.Pt) {
 	c.PopClip()
 }
 
-func (v *Viewport) AddHits(p geom.Pt, hits *[]Hit) {
+func (v *Viewport) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !v.contains(p) {
 		return
 	}
 	if v.Child != nil {
 		v.Child.AddHits(p.Sub(v.scrollPt()), hits)
 	}
-	*hits = append(*hits, Hit{v, p})
+	*hits = append(*hits, layout.Hit{Box: v, Pos: p})
 }

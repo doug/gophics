@@ -1,6 +1,7 @@
-package layout
+package layoutbox
 
 import (
+	"github.com/doug/gophics/layout"
 	"testing"
 
 	"github.com/doug/gophics/geom"
@@ -23,7 +24,7 @@ func TestTranslatedShiftsByAFractionOfItsOwnSize(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := &Translated{FracX: tc.fracX, FracY: tc.fracY, Child: &Sized{W: 80, H: 40}}
-			if got := b.Layout(Loose(geom.Size{W: 200, H: 200})); got != (geom.Size{W: 80, H: 40}) {
+			if got := b.Layout(layout.Loose(geom.Size{W: 200, H: 200})); got != (geom.Size{W: 80, H: 40}) {
 				t.Fatalf("laid out %v, want the child's 80x40", got)
 			}
 			if got := b.offsetPt(); got != tc.want {

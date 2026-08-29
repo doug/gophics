@@ -1,6 +1,7 @@
-package layout
+package layoutbox
 
 import (
+	"github.com/doug/gophics/layout"
 	"strings"
 
 	"github.com/doug/gophics/geom"
@@ -32,7 +33,7 @@ type TextBox struct {
 	// Selection, when set (by a Text inside a widget.SelectionArea), makes this
 	// text a selectable fragment: it registers each frame and paints the
 	// selected runes' highlight.
-	Selection SelectionSink
+	Selection layout.SelectionSink
 
 	lines    []string
 	baseline float32 // first-line baseline
@@ -51,7 +52,7 @@ type textMemo struct {
 	text     string
 	font     string
 	size     float32
-	maxW     float32 // effective wrap/ellipsis width (Inf when line content is width-independent)
+	maxW     float32 // effective wrap/ellipsis width (layout.Inf when line content is width-independent)
 	wrap     bool
 	maxLines int
 	ellipsis bool
@@ -84,7 +85,7 @@ func (b *TextBox) memoHit(maxW float32) bool {
 		m.wrap == b.Wrap && m.maxLines == b.MaxLines && m.ellipsis == b.Ellipsis
 }
 
-func (b *TextBox) Layout(cs Constraints) geom.Size {
+func (b *TextBox) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
@@ -96,7 +97,7 @@ func (b *TextBox) Layout(cs Constraints) geom.Size {
 	// Effective width: line content depends on cs.Max.W only when wrapping
 	// or ellipsizing against a bounded width; otherwise it is a single
 	// untruncated line regardless of constraints.
-	maxW := Inf
+	maxW := layout.Inf
 	if cs.BoundedW() && (b.Wrap || b.Ellipsis) {
 		maxW = cs.Max.W
 	}
@@ -139,7 +140,7 @@ func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {
 	selLo, selHi := 0, 0
 	var selCol paint.Color
 	if b.Selection != nil {
-		selLo, selHi, selCol = b.Selection.RegisterText(TextFragment{
+		selLo, selHi, selCol = b.Selection.RegisterText(layout.TextFragment{
 			Origin: at, Lines: b.lines, Font: b.Font, Size: b.TextSize,
 			LineH: b.lineH, Ascent: b.baseline, Descent: b.descent, Painter: b.Painter,
 		})
@@ -179,9 +180,9 @@ func (b *TextBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 }
 
-func (b *TextBox) AddHits(p geom.Pt, hits *[]Hit) {
+func (b *TextBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !b.contains(p) {
 		return
 	}
-	*hits = append(*hits, Hit{b, p})
+	*hits = append(*hits, layout.Hit{Box: b, Pos: p})
 }

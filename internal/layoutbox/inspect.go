@@ -1,8 +1,10 @@
-package layout
+package layoutbox
 
 import (
 	"fmt"
+	"github.com/doug/gophics/layout"
 	"reflect"
+	"strings"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
@@ -10,14 +12,14 @@ import (
 
 // Walk visits every box in the tree with its rect in root coordinates,
 // depth-first (a box before its children). Boxes expose their children via
-// ChildVisitor; leaves are visited without recursing. This powers the
+// layout.ChildVisitor; leaves are visited without recursing. This powers the
 // debug-paint overlay and the tree inspector.
-func Walk(root Box, visit func(b Box, rect geom.Rect, depth int)) {
-	var rec func(b Box, at geom.Pt, depth int)
-	rec = func(b Box, at geom.Pt, depth int) {
+func Walk(root layout.Box, visit func(b layout.Box, rect geom.Rect, depth int)) {
+	var rec func(b layout.Box, at geom.Pt, depth int)
+	rec = func(b layout.Box, at geom.Pt, depth int) {
 		visit(b, geom.Rect{Min: at, Max: at.Add(b.Size().Pt())}, depth)
-		if v, ok := b.(ChildVisitor); ok {
-			v.VisitChildren(func(child Box, off geom.Pt) {
+		if v, ok := b.(layout.ChildVisitor); ok {
+			v.VisitChildren(func(child layout.Box, off geom.Pt) {
 				rec(child, at.Add(off), depth+1)
 			})
 		}
@@ -30,17 +32,17 @@ type InspectNode struct {
 	Type  string    // box type, e.g. "*layout.Flex"
 	Rect  geom.Rect // in root coordinates
 	Depth int
-	Role  Role   // semantic role, if the box contributes one
-	Label string // semantic label, if any
+	Role  layout.Role // semantic role, if the box contributes one
+	Label string      // semantic label, if any
 }
 
 // Inspect returns the render tree as a flat, depth-ordered slice — the data
 // behind a widget inspector. Runs headless; no display needed.
-func Inspect(root Box) []InspectNode {
+func Inspect(root layout.Box) []InspectNode {
 	var out []InspectNode
-	Walk(root, func(b Box, rect geom.Rect, depth int) {
+	Walk(root, func(b layout.Box, rect geom.Rect, depth int) {
 		n := InspectNode{Type: boxTypeName(b), Rect: rect, Depth: depth}
-		if s, ok := b.(Semantic); ok {
+		if s, ok := b.(layout.Semantic); ok {
 			info := s.Semantics()
 			n.Role, n.Label = info.Role, info.Label
 		}
@@ -49,16 +51,16 @@ func Inspect(root Box) []InspectNode {
 	return out
 }
 
-func boxTypeName(b Box) string { return reflect.TypeOf(b).String() }
+func boxTypeName(b layout.Box) string { return reflect.TypeOf(b).String() }
 
 // DeepestAt returns the smallest-area box whose bounds contain p (root
 // coordinates) and its rect — the target an interactive inspector highlights.
-func DeepestAt(root Box, p geom.Pt) (Box, geom.Rect, bool) {
-	var box Box
+func DeepestAt(root layout.Box, p geom.Pt) (layout.Box, geom.Rect, bool) {
+	var box layout.Box
 	var rect geom.Rect
 	best := float32(1e18)
 	found := false
-	Walk(root, func(b Box, r geom.Rect, _ int) {
+	Walk(root, func(b layout.Box, r geom.Rect, _ int) {
 		if b.Size().IsEmpty() || !r.Contains(p) {
 			return
 		}
@@ -72,7 +74,7 @@ func DeepestAt(root Box, p geom.Pt) (Box, geom.Rect, bool) {
 // InspectOverlay draws the interactive inspector: it highlights the deepest
 // box under p and labels it with its type and size — Flutter's widget
 // inspector, drawn straight onto the frame after content.
-func InspectOverlay(root Box, p geom.Pt, c paint.Canvas, painter *paint.Painter) {
+func InspectOverlay(root layout.Box, p geom.Pt, c paint.Canvas, painter *paint.Painter) {
 	b, rect, ok := DeepestAt(root, p)
 	if !ok {
 		return
@@ -98,8 +100,8 @@ func InspectOverlay(root Box, p geom.Pt, c paint.Canvas, painter *paint.Painter)
 // DebugPaint strokes every box's bounds over the frame (Flutter's
 // debugPaintSize). Nested boxes get progressively lighter hues so the
 // hierarchy reads at a glance. Draw it after the app content.
-func DebugPaint(root Box, c paint.Canvas) {
-	Walk(root, func(b Box, rect geom.Rect, depth int) {
+func DebugPaint(root layout.Box, c paint.Canvas) {
+	Walk(root, func(b layout.Box, rect geom.Rect, depth int) {
 		if b.Size().IsEmpty() {
 			return
 		}
@@ -146,14 +148,14 @@ func mod(a, b float32) float32 { return a - b*float32(int(a/b)) }
 
 // String renders an InspectNode as an indented tree line.
 func (n InspectNode) String() string {
-	pad := ""
+	var pad strings.Builder
 	for i := 0; i < n.Depth; i++ {
-		pad += "  "
+		pad.WriteString("  ")
 	}
 	label := ""
 	if n.Label != "" {
 		label = fmt.Sprintf(" %q", n.Label)
 	}
-	return fmt.Sprintf("%s%s [%.0fx%.0f @%.0f,%.0f]%s", pad, n.Type,
+	return fmt.Sprintf("%s%s [%.0fx%.0f @%.0f,%.0f]%s", pad.String(), n.Type,
 		n.Rect.Dx(), n.Rect.Dy(), n.Rect.Min.X, n.Rect.Min.Y, label)
 }

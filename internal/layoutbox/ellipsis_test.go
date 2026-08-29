@@ -1,6 +1,7 @@
-package layout
+package layoutbox
 
 import (
+	"github.com/doug/gophics/layout"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestSingleLineEllipsis(t *testing.T) {
 	p := tbPainter(t)
 	long := "this is a very long single line of text that will not fit"
 	tb := &TextBox{Painter: p, Text: long, TextSize: 14, Ellipsis: true}
-	tb.Layout(Loose(geom.Size{W: 120, H: 100}))
+	tb.Layout(layout.Loose(geom.Size{W: 120, H: 100}))
 	if len(tb.lines) != 1 {
 		t.Fatalf("lines = %d", len(tb.lines))
 	}
@@ -36,7 +37,7 @@ func TestSingleLineEllipsis(t *testing.T) {
 	// Fits: no ellipsis.
 	tb2 := &TextBox{Painter: p, Text: "short", TextSize: 14, Ellipsis: true}
 	tb2.MarkDirty()
-	tb2.Layout(Loose(geom.Size{W: 120, H: 100}))
+	tb2.Layout(layout.Loose(geom.Size{W: 120, H: 100}))
 	if strings.HasSuffix(tb2.lines[0], "…") {
 		t.Fatalf("short text should not ellipsize: %q", tb2.lines[0])
 	}
@@ -46,7 +47,7 @@ func TestMaxLinesWithEllipsis(t *testing.T) {
 	p := tbPainter(t)
 	para := "the quick brown fox jumps over the lazy dog and keeps running well past the edge of the box"
 	tb := &TextBox{Painter: p, Text: para, TextSize: 14, Wrap: true, MaxLines: 2, Ellipsis: true}
-	tb.Layout(Loose(geom.Size{W: 120, H: 1000}))
+	tb.Layout(layout.Loose(geom.Size{W: 120, H: 1000}))
 	if len(tb.lines) != 2 {
 		t.Fatalf("lines = %d, want 2 (capped)", len(tb.lines))
 	}

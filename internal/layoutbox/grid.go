@@ -1,6 +1,9 @@
-package layout
+package layoutbox
 
 import (
+	"github.com/doug/gophics/layout"
+	"slices"
+
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 )
@@ -10,7 +13,7 @@ import (
 type AspectRatio struct {
 	Base
 	Ratio float32 // width / height; <= 0 means 1
-	Child Box
+	Child layout.Box
 }
 
 func (b *AspectRatio) ratio() float32 {
@@ -20,7 +23,7 @@ func (b *AspectRatio) ratio() float32 {
 	return b.Ratio
 }
 
-func (b *AspectRatio) Layout(cs Constraints) geom.Size {
+func (b *AspectRatio) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
@@ -36,7 +39,7 @@ func (b *AspectRatio) Layout(cs Constraints) geom.Size {
 	}
 	size := cs.Constrain(geom.Size{W: w, H: h})
 	if b.Child != nil {
-		b.Child.Layout(Tight(size))
+		b.Child.Layout(layout.Tight(size))
 	}
 	return b.Done(cs, size)
 }
@@ -47,17 +50,17 @@ func (b *AspectRatio) Paint(c paint.Canvas, at geom.Pt) {
 	}
 }
 
-func (b *AspectRatio) AddHits(p geom.Pt, hits *[]Hit) {
+func (b *AspectRatio) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !b.contains(p) {
 		return
 	}
 	if b.Child != nil {
 		b.Child.AddHits(p, hits)
 	}
-	*hits = append(*hits, Hit{b, p})
+	*hits = append(*hits, layout.Hit{Box: b, Pos: p})
 }
 
-func (b *AspectRatio) VisitChildren(visit func(Box, geom.Pt)) {
+func (b *AspectRatio) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	if b.Child != nil {
 		visit(b.Child, geom.Pt{})
 	}
@@ -69,10 +72,10 @@ func (b *AspectRatio) VisitChildren(visit func(Box, geom.Pt)) {
 type Filled struct {
 	Base
 	Color paint.Color
-	Child Box
+	Child layout.Box
 }
 
-func (b *Filled) Layout(cs Constraints) geom.Size {
+func (b *Filled) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
@@ -85,7 +88,7 @@ func (b *Filled) Layout(cs Constraints) geom.Size {
 	}
 	size = cs.Constrain(size)
 	if b.Child != nil {
-		b.Child.Layout(Tight(size))
+		b.Child.Layout(layout.Tight(size))
 	}
 	return b.Done(cs, size)
 }
@@ -99,17 +102,17 @@ func (b *Filled) Paint(c paint.Canvas, at geom.Pt) {
 	}
 }
 
-func (b *Filled) AddHits(p geom.Pt, hits *[]Hit) {
+func (b *Filled) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !b.contains(p) {
 		return
 	}
 	if b.Child != nil {
 		b.Child.AddHits(p, hits)
 	}
-	*hits = append(*hits, Hit{b, p})
+	*hits = append(*hits, layout.Hit{Box: b, Pos: p})
 }
 
-func (b *Filled) VisitChildren(visit func(Box, geom.Pt)) {
+func (b *Filled) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	if b.Child != nil {
 		visit(b.Child, geom.Pt{})
 	}
@@ -122,10 +125,10 @@ func (b *Filled) VisitChildren(visit func(Box, geom.Pt)) {
 type Opacity struct {
 	Base
 	Alpha float32
-	Child Box
+	Child layout.Box
 }
 
-func (b *Opacity) Layout(cs Constraints) geom.Size {
+func (b *Opacity) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
@@ -152,7 +155,7 @@ func (b *Opacity) Paint(c paint.Canvas, at geom.Pt) {
 	c.PopOpacity()
 }
 
-func (b *Opacity) AddHits(p geom.Pt, hits *[]Hit) {
+func (b *Opacity) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if b.Alpha <= 0 {
 		return // transparent groups don't receive input
 	}
@@ -161,7 +164,7 @@ func (b *Opacity) AddHits(p geom.Pt, hits *[]Hit) {
 	}
 }
 
-func (b *Opacity) VisitChildren(visit func(Box, geom.Pt)) {
+func (b *Opacity) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	if b.Child != nil {
 		visit(b.Child, geom.Pt{})
 	}
@@ -175,7 +178,7 @@ type Grid struct {
 	Base
 	Columns  int
 	Spacing  float32
-	Children []Box
+	Children []layout.Box
 	offsets  []geom.Pt
 }
 
@@ -186,7 +189,7 @@ func (b *Grid) cols() int {
 	return b.Columns
 }
 
-func (b *Grid) Layout(cs Constraints) geom.Size {
+func (b *Grid) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
@@ -199,7 +202,7 @@ func (b *Grid) Layout(cs Constraints) geom.Size {
 	if cellW < 0 {
 		cellW = 0
 	}
-	cellCS := Constraints{Max: geom.Size{W: cellW, H: Inf}}
+	cellCS := layout.Constraints{Max: geom.Size{W: cellW, H: layout.Inf}}
 
 	b.offsets = b.offsets[:0]
 	var x, y, rowH float32
@@ -239,26 +242,26 @@ func (b *Grid) Paint(c paint.Canvas, at geom.Pt) {
 			break // children changed since last layout; skip until relaid
 		}
 		pos := at.Add(b.offsets[i])
-		if !InkBounds(ch).Translate(pos).Overlaps(clip) {
+		if !layout.InkBounds(ch).Translate(pos).Overlaps(clip) {
 			continue
 		}
 		ch.Paint(c, pos)
 	}
 }
 
-func (b *Grid) AddHits(p geom.Pt, hits *[]Hit) {
+func (b *Grid) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !b.contains(p) {
 		return
 	}
-	for i := len(b.Children) - 1; i >= 0; i-- {
+	for i, v := range slices.Backward(b.Children) {
 		if i < len(b.offsets) {
-			b.Children[i].AddHits(p.Sub(b.offsets[i]), hits)
+			v.AddHits(p.Sub(b.offsets[i]), hits)
 		}
 	}
-	*hits = append(*hits, Hit{b, p})
+	*hits = append(*hits, layout.Hit{Box: b, Pos: p})
 }
 
-func (b *Grid) VisitChildren(visit func(Box, geom.Pt)) {
+func (b *Grid) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	for i, ch := range b.Children {
 		if i < len(b.offsets) {
 			visit(ch, b.offsets[i])
@@ -266,7 +269,7 @@ func (b *Grid) VisitChildren(visit func(Box, geom.Pt)) {
 	}
 }
 
-// Wrap flows children along the main axis (Horizontal by default),
+// Wrap flows children along the main axis (layout.Horizontal by default),
 // wrapping to a new run when the next child would overflow. Runs are packed
 // along the cross axis. Spacing separates children; RunSpacing separates
 // runs. Shrink-wraps the cross axis.
@@ -274,19 +277,19 @@ type Wrap struct {
 	Base
 	Spacing    float32
 	RunSpacing float32
-	Children   []Box
+	Children   []layout.Box
 	offsets    []geom.Pt
 }
 
-func (b *Wrap) Layout(cs Constraints) geom.Size {
+func (b *Wrap) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
 	maxW := cs.Max.W
 	if !cs.BoundedW() {
-		maxW = Inf // the unbounded sentinel, so a child's BoundedW() stays false
+		maxW = layout.Inf // the unbounded sentinel, so a child's BoundedW() stays false
 	}
-	childCS := Constraints{Max: geom.Size{W: maxW, H: Inf}}
+	childCS := layout.Constraints{Max: geom.Size{W: maxW, H: layout.Inf}}
 
 	b.offsets = b.offsets[:0]
 	var x, y, rowH, widest float32
@@ -322,26 +325,26 @@ func (b *Wrap) Paint(c paint.Canvas, at geom.Pt) {
 			break // children changed since last layout; skip until relaid
 		}
 		pos := at.Add(b.offsets[i])
-		if !InkBounds(ch).Translate(pos).Overlaps(clip) {
+		if !layout.InkBounds(ch).Translate(pos).Overlaps(clip) {
 			continue
 		}
 		ch.Paint(c, pos)
 	}
 }
 
-func (b *Wrap) AddHits(p geom.Pt, hits *[]Hit) {
+func (b *Wrap) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if !b.contains(p) {
 		return
 	}
-	for i := len(b.Children) - 1; i >= 0; i-- {
+	for i, v := range slices.Backward(b.Children) {
 		if i < len(b.offsets) {
-			b.Children[i].AddHits(p.Sub(b.offsets[i]), hits)
+			v.AddHits(p.Sub(b.offsets[i]), hits)
 		}
 	}
-	*hits = append(*hits, Hit{b, p})
+	*hits = append(*hits, layout.Hit{Box: b, Pos: p})
 }
 
-func (b *Wrap) VisitChildren(visit func(Box, geom.Pt)) {
+func (b *Wrap) VisitChildren(visit func(layout.Box, geom.Pt)) {
 	for i, ch := range b.Children {
 		if i < len(b.offsets) {
 			visit(ch, b.offsets[i])

@@ -1,11 +1,12 @@
-package layout
+package layoutbox
 
 import (
+	"github.com/doug/gophics/layout"
 	"testing"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/scene"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/scene"
 )
 
 // paintCounter is a fixed-size test box that counts how many times it painted.
@@ -15,11 +16,11 @@ type paintCounter struct {
 	paints int
 }
 
-func (l *paintCounter) Layout(cs Constraints) geom.Size {
+func (l *paintCounter) Layout(cs layout.Constraints) geom.Size {
 	return l.Done(cs, cs.Constrain(geom.Size{W: l.w, H: l.h}))
 }
-func (l *paintCounter) Paint(c paint.Canvas, at geom.Pt) { l.paints++ }
-func (l *paintCounter) AddHits(p geom.Pt, hits *[]Hit)   {}
+func (l *paintCounter) Paint(c paint.Canvas, at geom.Pt)      { l.paints++ }
+func (l *paintCounter) AddHits(p geom.Pt, hits *[]layout.Hit) {}
 
 // TestFlexViewportCulling verifies that a scrolled Column paints only its
 // on-screen rows (viewport culling) while still painting every row that is even
@@ -31,14 +32,14 @@ func TestFlexViewportCulling(t *testing.T) {
 		viewH  = 100
 		offset = 310 // rows straddle both viewport edges at this offset
 	)
-	rows := make([]Box, nRows)
+	rows := make([]layout.Box, nRows)
 	counters := make([]*paintCounter, nRows)
 	for i := range counters {
 		counters[i] = &paintCounter{w: 100, h: rowH}
 		rows[i] = counters[i]
 	}
-	vp := &Viewport{Axis: Vertical, Child: Column(rows...)}
-	vp.Layout(Tight(sz(100, viewH)))
+	vp := &Viewport{Axis: layout.Vertical, Child: Column(rows...)}
+	vp.Layout(layout.Tight(sz(100, viewH)))
 	vp.Offset = offset
 
 	var list scene.List
@@ -76,13 +77,13 @@ func TestFlexViewportCulling(t *testing.T) {
 func TestTranslatedInkNotCulled(t *testing.T) {
 	inked := &paintCounter{w: 100, h: 50}
 	plain := &paintCounter{w: 100, h: 50}
-	vp := &Viewport{Axis: Vertical, Child: Column(
+	vp := &Viewport{Axis: layout.Vertical, Child: Column(
 		&paintCounter{w: 100, h: 100}, // filler occupying the viewport
 		// Layout rect y=[100,150) — offscreen; ink shifted to y=[25,75) — visible.
 		&Translated{Dy: -75, Child: inked},
 		plain, // layout rect y=[150,200) — offscreen, no ink shift
 	)}
-	vp.Layout(Tight(sz(100, 100)))
+	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
 	vp.Paint(list.Recorder(), geom.Pt{})
@@ -100,7 +101,7 @@ func TestTranslatedInkNotCulled(t *testing.T) {
 // into view must not be culled.
 func TestNestedTranslatedTransformedInkNotCulled(t *testing.T) {
 	inked := &paintCounter{w: 100, h: 25}
-	vp := &Viewport{Axis: Vertical, Child: Column(
+	vp := &Viewport{Axis: layout.Vertical, Child: Column(
 		&paintCounter{w: 100, h: 150}, // pushes the next row below the fold
 		// Layout rect y=[150,175). Transformed scales the 25-tall child to 50
 		// about its top-left; Translated then lifts it by 125: ink y=[25,75).
@@ -109,7 +110,7 @@ func TestNestedTranslatedTransformedInkNotCulled(t *testing.T) {
 			Child: inked,
 		}},
 	)}
-	vp.Layout(Tight(sz(100, 100)))
+	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
 	vp.Paint(list.Recorder(), geom.Pt{})
@@ -128,14 +129,14 @@ func TestGridCulling(t *testing.T) {
 		viewH  = 100
 		offset = 100
 	)
-	cells := make([]Box, n)
+	cells := make([]layout.Box, n)
 	counters := make([]*paintCounter, n)
 	for i := range counters {
 		counters[i] = &paintCounter{w: 50, h: cellH}
 		cells[i] = counters[i]
 	}
-	vp := &Viewport{Axis: Vertical, Child: &Grid{Columns: 2, Children: cells}}
-	vp.Layout(Tight(sz(100, viewH)))
+	vp := &Viewport{Axis: layout.Vertical, Child: &Grid{Columns: 2, Children: cells}}
+	vp.Layout(layout.Tight(sz(100, viewH)))
 	vp.Offset = offset
 
 	var list scene.List
@@ -162,15 +163,15 @@ func TestWrapCulling(t *testing.T) {
 		viewH  = 100
 		offset = 100
 	)
-	kids := make([]Box, n)
+	kids := make([]layout.Box, n)
 	counters := make([]*paintCounter, n)
 	for i := range counters {
 		counters[i] = &paintCounter{w: 50, h: childH}
 		kids[i] = counters[i]
 	}
 	// Width 100 fits two 50-wide children per run: same geometry as the grid.
-	vp := &Viewport{Axis: Vertical, Child: &Wrap{Children: kids}}
-	vp.Layout(Tight(sz(100, viewH)))
+	vp := &Viewport{Axis: layout.Vertical, Child: &Wrap{Children: kids}}
+	vp.Layout(layout.Tight(sz(100, viewH)))
 	vp.Offset = offset
 
 	var list scene.List
@@ -195,15 +196,15 @@ func TestWrapCulling(t *testing.T) {
 func TestStackCulling(t *testing.T) {
 	offscreen := &paintCounter{w: 100, h: 50}
 	visible := &paintCounter{w: 100, h: 50}
-	vp := &Viewport{Axis: Vertical, Child: Column(
+	vp := &Viewport{Axis: layout.Vertical, Child: Column(
 		&paintCounter{w: 100, h: 200}, // pushes the Stack below the fold
-		&Stack{Children: []Box{
+		&Stack{Children: []layout.Box{
 			offscreen, // ink y=[200,250) — offscreen
 			// Ink lifted to y=[50,100) — visible.
 			&Translated{Dy: -150, Child: visible},
 		}},
 	)}
-	vp.Layout(Tight(sz(100, 100)))
+	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
 	vp.Paint(list.Recorder(), geom.Pt{})
@@ -221,21 +222,21 @@ func TestStackCulling(t *testing.T) {
 // is never culled no matter where it sits.
 func TestUnboundedInkNeverCulled(t *testing.T) {
 	c := &unboundedInkBox{}
-	vp := &Viewport{Axis: Vertical, Child: Column(
+	vp := &Viewport{Axis: layout.Vertical, Child: Column(
 		&paintCounter{w: 100, h: 500}, // pushes c far below the fold
 		c,
 	)}
-	vp.Layout(Tight(sz(100, 100)))
+	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
 	vp.Paint(list.Recorder(), geom.Pt{})
 
 	if c.paints == 0 {
-		t.Error("box with Unbounded ink was culled — unclipped-Canvas semantics broken")
+		t.Error("box with layout.Unbounded ink was culled — unclipped-Canvas semantics broken")
 	}
 }
 
-// unboundedInkBox mimics an unclipped widget.Canvas: it reports Unbounded ink.
+// unboundedInkBox mimics an unclipped widget.Canvas: it reports layout.Unbounded ink.
 type unboundedInkBox struct {
 	paintCounter
 }
