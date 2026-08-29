@@ -465,6 +465,26 @@ extension GophicsPlatform {
                 forName: name, object: nil, queue: .main,
             ) { [weak self] _ in self?.reportBattery() }
         }
+
+        // Locale, for the same reason as the two above and with one difference:
+        // staying silent here is not a neutral default. LC_ALL and LANG do not
+        // exist on iOS, so intl.Auto() finds nothing and falls back to en-US —
+        // a device set to German formats money and dates as American, and
+        // nothing reports it, because a fallback that worked looks exactly like
+        // a read that succeeded.
+        reportLocale()
+        NotificationCenter.default.addObserver(
+            forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main,
+        ) { [weak self] _ in self?.reportLocale() }
+    }
+
+    private func reportLocale() {
+        // Locale.current.identifier is the underscore form ("de_DE"), which
+        // intl.Lookup does not recognise — it would take the en-US fallback
+        // that this capability exists to close, and do it silently. BCP-47 uses
+        // a hyphen. identifier(.bcp47) says that directly but is iOS 16+, and
+        // this file targets 15.
+        bridge.setLocale(Locale.current.identifier.replacingOccurrences(of: "_", with: "-"))
     }
 
     private func reportBattery() {

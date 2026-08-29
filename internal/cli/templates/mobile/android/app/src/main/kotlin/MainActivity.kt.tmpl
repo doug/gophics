@@ -57,7 +57,7 @@ class MainActivity : Activity() {
         bridge.setFileHost(platform)
         bridge.setLocationHost(platform)
         bridge.setDeviceHost(platform)
-        platform?.observe() // reachability + battery, pushed as they change
+        platform?.observe() // reachability, battery, locale — pushed as they change
         // Preferences needs somewhere to write; Go cannot ask, because HOME is
         // not reliably set on Android.
         bridge.setFilesDir(filesDir.absolutePath)

@@ -51,7 +51,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         b.setFileHost(p)
         b.setLocationHost(p)
         b.setDeviceHost(p)
-        p.observe() // reachability + battery, pushed as they change
+        p.observe() // reachability, battery, locale — pushed as they change
         // Preferences needs somewhere to write, and Go cannot ask for it.
         b.setFilesDir(NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? "")
         return true

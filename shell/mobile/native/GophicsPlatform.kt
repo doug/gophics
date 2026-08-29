@@ -42,6 +42,8 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.content.BroadcastReceiver
+import android.content.ComponentCallbacks
+import android.content.res.Configuration
 import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
@@ -536,7 +538,7 @@ class GophicsPlatform(
         bridge.deliverAuth(reqID, false, "biometrics need androidx.biometric; see GophicsPlatform.kt")
     }
 
-    // ---- Pushed state: connectivity and battery ----
+    // ---- Pushed state: connectivity, battery and locale ----
     //
     // Neither is a host interface, because neither is a question Go can
     // usefully ask: the platform knows already and changes the answer on its
@@ -574,14 +576,44 @@ class GophicsPlatform(
         // ACTION_BATTERY_CHANGED is sticky, so registering delivers the current
         // state immediately as well as every later change.
         activity.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+
+        // Locale is pushed for the same reason, but it is the one of the three
+        // where staying silent is not a neutral default. LC_ALL and LANG do not
+        // exist on Android, so intl.Auto() finds nothing and falls back to
+        // en-US: a device set to German formats money and dates as American,
+        // and nothing anywhere reports a failure, because a fallback that
+        // worked looks exactly like a read that succeeded.
+        reportLocale()
+        localeCallbacks = object : ComponentCallbacks {
+            // Fires when the user changes the system language, which they can
+            // do while the app runs. Android usually recreates the activity
+            // too, but per-app language (API 33+) changes the configuration
+            // without one, so observing is not redundant with the fresh report
+            // above.
+            override fun onConfigurationChanged(newConfig: Configuration) = reportLocale()
+            override fun onLowMemory() {}
+        }
+        activity.application.registerComponentCallbacks(localeCallbacks)
+    }
+
+    private fun reportLocale() {
+        // locales[0] is the user's first preference, which is what every other
+        // app on the device formats with. toLanguageTag gives BCP-47 ("de-DE");
+        // Locale.toString gives the underscore form, which intl.Lookup does not
+        // recognise and would silently take the en-US fallback path this whole
+        // capability exists to close.
+        bridge.setLocale(activity.resources.configuration.locales[0].toLanguageTag())
     }
 
     private var batteryReceiver: BroadcastReceiver? = null
+    private var localeCallbacks: ComponentCallbacks? = null
 
-    /** Stops the battery receiver. Call from the activity's onDestroy. */
+    /** Stops the battery and locale observers. Call from the activity's onDestroy. */
     fun stopObserving() {
         batteryReceiver?.let { activity.unregisterReceiver(it) }
         batteryReceiver = null
+        localeCallbacks?.let { activity.application.unregisterComponentCallbacks(it) }
+        localeCallbacks = null
     }
 
 }
