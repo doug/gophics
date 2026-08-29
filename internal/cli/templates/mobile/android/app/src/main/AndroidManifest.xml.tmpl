@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- gophics:permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- observe() registers a default-network callback; without this the
+         activity throws a SecurityException from onCreate. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- /gophics:permissions -->
     <application android:label="{{.Name}}" android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".MainActivity" android:exported="true"

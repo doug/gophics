@@ -167,8 +167,22 @@ var capabilityManifestPermissions = map[string]Permission{
 // at install with no prompt and no review friction; and the failure it prevents
 // — an app that installs and cannot resolve a hostname — is one nobody enjoys
 // diagnosing.
+//
+// ACCESS_NETWORK_STATE is baseline for a sharper reason: without it the
+// scaffolded app does not merely lose a feature, it dies. The reference host's
+// observe() calls registerDefaultNetworkCallback unconditionally, and the
+// scaffolded MainActivity calls observe() unconditionally, so a fresh `gophics
+// create -platform android` app threw a SecurityException from onCreate and
+// never drew a frame. Deriving it from the capability set could not have
+// prevented that, because the call is in the host and the host does not consult
+// the Go capability graph — the permission is a property of what the template
+// runs, not of what the app reaches. It is also a normal permission: install
+// time, no prompt.
 var Baseline = Permission{
-	Android:         []string{"android.permission.INTERNET"},
+	Android: []string{
+		"android.permission.INTERNET",
+		"android.permission.ACCESS_NETWORK_STATE",
+	},
 	MacEntitlements: []string{"com.apple.security.network.client"},
 }
 
