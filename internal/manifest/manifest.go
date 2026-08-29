@@ -1,6 +1,9 @@
-package shell
+package manifest
 
-import "sort"
+import (
+	"maps"
+	"sort"
+)
 
 // What each capability has to be declared as, per platform.
 //
@@ -22,9 +25,9 @@ import "sort"
 // capability has an entry, so adding one without deciding its permissions fails
 // rather than silently declaring nothing.
 
-// ManifestPermission is what one capability requires from each platform that has a
+// Permission is what one capability requires from each platform that has a
 // permission model. Every field is optional; most capabilities need nothing.
-type ManifestPermission struct {
+type Permission struct {
 	// Android names for <uses-permission>, fully qualified.
 	Android []string
 	// AndroidMaxSDK caps a permission at an API level, for ones the platform
@@ -50,7 +53,7 @@ type ManifestPermission struct {
 // Entries are deliberately present-and-empty rather than absent when a
 // capability needs nothing: absent would be indistinguishable from forgotten,
 // and the test that guards this table cannot tell those apart either.
-var capabilityManifestPermissions = map[string]ManifestPermission{
+var capabilityManifestPermissions = map[string]Permission{
 	"Accessibility": {},
 	// Output only, and now that is true. While recording lived on Audio this
 	// entry was a live bug: an app calling Audio.Record without ever touching
@@ -145,7 +148,7 @@ var capabilityManifestPermissions = map[string]ManifestPermission{
 	"WindowControl": {},
 }
 
-// BaselineManifestPermission is what every gophics app needs, whatever it does.
+// Baseline is what every gophics app needs, whatever it does.
 //
 // This is not derived from the capability set, and the reason is worth
 // recording. The obvious design was to look for net/http in the import graph
@@ -160,32 +163,20 @@ var capabilityManifestPermissions = map[string]ManifestPermission{
 // at install with no prompt and no review friction; and the failure it prevents
 // — an app that installs and cannot resolve a hostname — is one nobody enjoys
 // diagnosing.
-var BaselineManifestPermission = ManifestPermission{
+var Baseline = Permission{
 	Android:         []string{"android.permission.INTERNET"},
 	MacEntitlements: []string{"com.apple.security.network.client"},
 }
 
-// ManifestPermissionFor returns what a capability must declare, and whether the
+// For returns what a capability must declare, and whether the
 // capability is known at all.
-func ManifestPermissionFor(capability string) (ManifestPermission, bool) {
+func For(capability string) (Permission, bool) {
 	p, ok := capabilityManifestPermissions[capability]
 	return p, ok
 }
 
 // CapabilitiesWithPermissions lists the capabilities that require any
 // declaration, sorted. Used by tests and by `gophics doctor`.
-func CapabilitiesWithPermissions() []string {
-	var out []string
-	for name, p := range capabilityManifestPermissions {
-		if len(p.Android) > 0 || len(p.IOSKeys) > 0 || len(p.MacEntitlements) > 0 {
-			out = append(out, name)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// KnownCapabilities lists every capability the table covers, sorted.
 func KnownCapabilities() []string {
 	out := make([]string, 0, len(capabilityManifestPermissions))
 	for name := range capabilityManifestPermissions {
@@ -195,10 +186,10 @@ func KnownCapabilities() []string {
 	return out
 }
 
-// MergeManifest folds the permissions for a set of capabilities into one deduplicated,
+// Merge folds the permissions for a set of capabilities into one deduplicated,
 // sorted result. Unknown names are ignored; the caller has already decided what
 // to do about them.
-func MergeManifest(capabilities []string, extra ...ManifestPermission) ManifestPermission {
+func Merge(capabilities []string, extra ...Permission) Permission {
 	var (
 		android = map[string]bool{}
 		iosKeys = map[string]bool{}
@@ -206,7 +197,7 @@ func MergeManifest(capabilities []string, extra ...ManifestPermission) ManifestP
 		maxSDK  = map[string]int{}
 		runtime bool
 	)
-	add := func(p ManifestPermission) {
+	add := func(p Permission) {
 		for _, a := range p.Android {
 			android[a] = true
 		}
@@ -216,9 +207,7 @@ func MergeManifest(capabilities []string, extra ...ManifestPermission) ManifestP
 		for _, e := range p.MacEntitlements {
 			macEnts[e] = true
 		}
-		for k, v := range p.AndroidMaxSDK {
-			maxSDK[k] = v
-		}
+		maps.Copy(maxSDK, p.AndroidMaxSDK)
 		runtime = runtime || p.RuntimeRequest
 	}
 	for _, c := range capabilities {
@@ -230,10 +219,10 @@ func MergeManifest(capabilities []string, extra ...ManifestPermission) ManifestP
 		add(p)
 	}
 
-	out := ManifestPermission{RuntimeRequest: runtime}
-	out.Android = sortedKeys(android)
-	out.IOSKeys = sortedKeys(iosKeys)
-	out.MacEntitlements = sortedKeys(macEnts)
+	out := Permission{RuntimeRequest: runtime,
+		Android:         sortedKeys(android),
+		IOSKeys:         sortedKeys(iosKeys),
+		MacEntitlements: sortedKeys(macEnts)}
 	if len(maxSDK) > 0 {
 		out.AndroidMaxSDK = maxSDK
 	}

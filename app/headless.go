@@ -4,8 +4,8 @@ import (
 	"image"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/scene"
 	"github.com/doug/gophics/layout"
-	"github.com/doug/gophics/scene"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
@@ -55,6 +55,23 @@ type MemClipboard struct{ S string }
 func (m *MemClipboard) ClipboardRead() (string, error) { return m.S, nil }
 func (m *MemClipboard) ClipboardWrite(s string) error  { m.S = s; return nil }
 
+// Skipped reports whether the last Render reused the retained surface instead
+// of rasterizing — the scene was unchanged.
+//
+// Render's doc has cited this since it was written, as "check core.Skipped",
+// naming a field on an unexported struct that no caller could reach. It is the
+// assertion a damage-tracking test actually wants: not that the pixels match,
+// but that the work was skipped.
+func (h *Headless) Skipped() bool { return h.core.Skipped }
+
+// SetDebugPaint toggles the box-bounds overlay at runtime.
+//
+// Config.Debug sets it at construction; this changes it on a running app, which
+// is what an embedded host needs — it cannot restart with a different Config.
+// Same story as Skipped: core.SetDebugPaint has been named in Config.Debug's
+// doc all along and was unreachable.
+func (h *Headless) SetDebugPaint(on bool) { h.core.SetDebugPaint(on) }
+
 // Clipboard returns the in-memory clipboard, so a test can seed what a paste
 // would find and read back what a copy wrote — the same reason OpenedURLs is
 // exposed. Never nil: NewHeadless always installs one.
@@ -65,7 +82,7 @@ func (h *Headless) Clipboard() *MemClipboard {
 
 // Render lays out and paints a frame through the damage-aware pipeline,
 // returning the physical-pixel image (retained across frames, so an
-// unchanged scene skips rasterization — check core.Skipped).
+// unchanged scene skips rasterization — check Skipped).
 func (h *Headless) Render() image.Image {
 	h.core.drainPosted()
 	h.core.Layout(h.size)

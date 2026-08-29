@@ -29,10 +29,6 @@ func (a *app) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// routes it to whichever target the frame offers (in real apps the app
 	// runtime does this dance for you — see app.present).
 	switch t := f.Target().(type) {
-	case shell.GPUTarget:
-		if err := a.painter.PresentGPU(t.View, t.W, t.H); err != nil {
-			log.Printf("paint: %v", err)
-		}
 	case shell.PixelTarget:
 		if s := a.painter.SurfaceRGBA(); s != nil {
 			t.Put(s)

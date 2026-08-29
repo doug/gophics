@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/internal/manifest"
 )
 
 const manifestWithMarkers = `<?xml version="1.0" encoding="utf-8"?>
@@ -38,7 +38,7 @@ func writeTemp(t *testing.T, name, content string) string {
 // would either lose them or mean modelling all of them.
 func TestAndroidManifestWritesOnlyTheMarkedSpan(t *testing.T) {
 	path := writeTemp(t, "AndroidManifest.xml", manifestWithMarkers)
-	perm := shell.MergeManifest([]string{"Camera", "Microphone"}, shell.BaselineManifestPermission)
+	perm := manifest.Merge([]string{"Camera", "Microphone"}, manifest.Baseline)
 
 	changed, err := AndroidManifest(path, perm, false)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestAndroidManifestWritesOnlyTheMarkedSpan(t *testing.T) {
 // gate fires on a tree nobody changed.
 func TestAndroidManifestIsIdempotent(t *testing.T) {
 	path := writeTemp(t, "AndroidManifest.xml", manifestWithMarkers)
-	perm := shell.MergeManifest([]string{"Camera"}, shell.BaselineManifestPermission)
+	perm := manifest.Merge([]string{"Camera"}, manifest.Baseline)
 
 	if _, err := AndroidManifest(path, perm, false); err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestAndroidManifestIsIdempotent(t *testing.T) {
 // -check is what a gate calls: it must report drift without touching the file.
 func TestAndroidManifestCheckDoesNotWrite(t *testing.T) {
 	path := writeTemp(t, "AndroidManifest.xml", manifestWithMarkers)
-	perm := shell.MergeManifest([]string{"Camera"}, shell.BaselineManifestPermission)
+	perm := manifest.Merge([]string{"Camera"}, manifest.Baseline)
 
 	before, _ := os.ReadFile(path)
 	changed, err := AndroidManifest(path, perm, true)
@@ -123,7 +123,7 @@ func TestAndroidManifestCheckDoesNotWrite(t *testing.T) {
 func TestAndroidManifestWithoutMarkersIsAnError(t *testing.T) {
 	path := writeTemp(t, "AndroidManifest.xml",
 		"<manifest><application/></manifest>\n")
-	_, err := AndroidManifest(path, shell.BaselineManifestPermission, false)
+	_, err := AndroidManifest(path, manifest.Baseline, false)
 	if err == nil {
 		t.Fatal("a manifest with no markers was accepted")
 	}
@@ -207,7 +207,7 @@ func TestIOSCapabilityWithoutKeyNeedsNothing(t *testing.T) {
 // The entitlements file must be valid plist and carry the sandbox key, or
 // codesign rejects it.
 func TestMacEntitlementsShape(t *testing.T) {
-	perm := shell.MergeManifest([]string{"Camera", "Microphone"}, shell.BaselineManifestPermission)
+	perm := manifest.Merge([]string{"Camera", "Microphone"}, manifest.Baseline)
 	out := MacEntitlements(perm)
 
 	for _, want := range []string{

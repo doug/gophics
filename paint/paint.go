@@ -15,7 +15,6 @@ import (
 
 	"github.com/doug/gophics/internal/gfx/gg"
 	ggtext "github.com/doug/gophics/internal/gfx/gg/text"
-	"github.com/doug/gophics/internal/gfx/gpucontext"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/text"
@@ -532,7 +531,7 @@ func (p *Painter) WrapTextIn(font, s string, size, maxWidth float32) []string {
 
 // BeginOffscreen starts drawing into a surface of the given logical size and
 // scale, (re)allocating the context if either changed. Retrieve the result
-// with Image/SurfaceRGBA, or present it with PresentGPU. This is the only
+// with Image/SurfaceRGBA. This is the only
 // entry point: the painter is platform-agnostic — the app runtime owns the
 // shell frame/target dance (app.present), keeping the paint→shell dependency
 // out of the drawing layer.
@@ -586,20 +585,6 @@ func asRGBA(img image.Image) *image.RGBA {
 	return out
 }
 
-// PresentGPU composites the current surface to a GPU texture view of the given
-// physical size — gg's GPU compositor path, usable when the gg/gpu accelerator
-// is registered (the default; see paint/accel.go). A no-op before the first
-// Begin. The app runtime routes a shell.GPUTarget here (app.present).
-func (p *Painter) PresentGPU(view gpucontext.TextureView, w, h int) error {
-	if p.dc == nil {
-		return nil
-	}
-	return p.dc.FlushGPUWithViewDamage(view, uint32(w), uint32(h), image.Rectangle{})
-}
-
-// SurfaceRGBA returns the current surface as an *image.RGBA (physical pixels),
-// converting if the backing store has another format; nil before the first
-// Begin. The app runtime hands this to a shell.PixelTarget (app.present).
 func (p *Painter) SurfaceRGBA() *image.RGBA {
 	if p.dc == nil {
 		return nil
@@ -717,7 +702,7 @@ func (c *ggCanvas) gradientStrips(r geom.Rect, radius float32, from, to Color, h
 		span = r.Dx()
 	}
 	step := span / n
-	for i := 0; i < n; i++ {
+	for i := range n {
 		t := (float32(i) + 0.5) / n
 		c.dc.SetColor(Lerp(from, to, t).nrgba())
 		if horizontal {

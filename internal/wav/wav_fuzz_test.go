@@ -1,13 +1,13 @@
-package shell
+package wav
 
 import "testing"
 
-// DecodeWAV parses bytes the program did not produce: a clip arrives from a
+// Decode parses bytes the program did not produce: a clip arrives from a
 // file picker, a download, or a mobile host handing back whatever the platform
 // recorder wrote. Its chunk sizes are read from the input and then used as
 // slice bounds, which is the shape that panics.
 //
-// The contract being fuzzed is narrow and total: for any input, DecodeWAV
+// The contract being fuzzed is narrow and total: for any input, Decode
 // returns or errors, and never panics. Nothing is asserted about the samples —
 // a malformed file has no correct answer, only a safe one.
 func FuzzDecodeWAV(f *testing.F) {
@@ -16,17 +16,17 @@ func FuzzDecodeWAV(f *testing.F) {
 	f.Add([]byte("RIFF\x00\x00\x00\x00WAVE"))
 	// A minimal well-formed 16-bit mono file, so the fuzzer starts from
 	// something that reaches the sample loop rather than only the guards.
-	f.Add(EncodeWAV([]int16{0, 1, -1, 32767, -32768}, 44100))
+	f.Add(Encode([]int16{0, 1, -1, 32767, -32768}, 44100))
 	// A header claiming far more data than it carries, which is the classic
 	// way a length-prefixed parser walks off the end.
-	bad := EncodeWAV([]int16{1, 2, 3}, 8000)
+	bad := Encode([]int16{1, 2, 3}, 8000)
 	if len(bad) > 44 {
 		bad[40], bad[41], bad[42], bad[43] = 0xff, 0xff, 0xff, 0x7f
 		f.Add(bad)
 	}
 
 	f.Fuzz(func(t *testing.T, b []byte) {
-		pcm, rate, err := DecodeWAV(b)
+		pcm, rate, err := Decode(b)
 		if err != nil {
 			return
 		}
@@ -38,8 +38,8 @@ func FuzzDecodeWAV(f *testing.F) {
 	})
 }
 
-// FuzzWAVRoundTrip checks the pair rather than the parser: whatever EncodeWAV
-// writes, DecodeWAV must read back. The two are used across every backend and
+// FuzzWAVRoundTrip checks the pair rather than the parser: whatever Encode
+// writes, Decode must read back. The two are used across every backend and
 // a clip recorded on one platform is played on another, so a disagreement
 // between them is a portability bug rather than a local one.
 func FuzzWAVRoundTrip(f *testing.F) {
@@ -54,7 +54,7 @@ func FuzzWAVRoundTrip(f *testing.F) {
 		for i := range pcm {
 			pcm[i] = int16(raw[i*2]) | int16(raw[i*2+1])<<8
 		}
-		got, gotRate, err := DecodeWAV(EncodeWAV(pcm, rate))
+		got, gotRate, err := Decode(Encode(pcm, rate))
 		if err != nil {
 			t.Fatalf("a clip we encoded does not decode: %v", err)
 		}

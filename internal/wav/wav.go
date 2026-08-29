@@ -1,14 +1,14 @@
-package shell
+package wav
 
 import (
 	"encoding/binary"
 	"errors"
 )
 
-// EncodeWAV encodes mono 16-bit PCM samples as a RIFF/PCM WAV file. It is the
+// Encode encodes mono 16-bit PCM samples as a RIFF/PCM WAV file. It is the
 // portable audio-clip format the media shell standardizes on, so a Clip
 // recorded on one platform plays on any other.
-func EncodeWAV(pcm []int16, sampleRate int) []byte {
+func Encode(pcm []int16, sampleRate int) []byte {
 	if sampleRate <= 0 {
 		sampleRate = 44100
 	}
@@ -34,9 +34,9 @@ func EncodeWAV(pcm []int16, sampleRate int) []byte {
 	return buf
 }
 
-// DecodeWAV parses a 16-bit PCM WAV, returning mono samples (stereo is
+// Decode parses a 16-bit PCM WAV, returning mono samples (stereo is
 // downmixed) and the sample rate. Extra RIFF chunks are skipped.
-func DecodeWAV(b []byte) (pcm []int16, sampleRate int, err error) {
+func Decode(b []byte) (pcm []int16, sampleRate int, err error) {
 	if len(b) < 12 || string(b[0:4]) != "RIFF" || string(b[8:12]) != "WAVE" {
 		return nil, 0, errors.New("wav: not a RIFF/WAVE file")
 	}
@@ -75,7 +75,7 @@ func DecodeWAV(b []byte) (pcm []int16, sampleRate int, err error) {
 	}
 	n := len(data) / 2
 	raw := make([]int16, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		raw[i] = int16(binary.LittleEndian.Uint16(data[i*2:]))
 	}
 	if channels == 1 {
@@ -83,7 +83,7 @@ func DecodeWAV(b []byte) (pcm []int16, sampleRate int, err error) {
 	}
 	frames := n / channels
 	mono := make([]int16, frames)
-	for i := 0; i < frames; i++ {
+	for i := range frames {
 		var sum int
 		for c := 0; c < channels; c++ {
 			sum += int(raw[i*channels+c])
@@ -96,7 +96,7 @@ func DecodeWAV(b []byte) (pcm []int16, sampleRate int, err error) {
 // Envelope downsamples |pcm| into at most buckets peak values in 0..1, for the
 // waveform an app draws beside a recording.
 //
-// It lives here, beside EncodeWAV, because every backend that produces a Clip
+// It lives here, beside Encode, because every backend that produces a Clip
 // needs it and they must agree: a waveform computed one way on desktop and
 // another on Android would make the same recording look different depending on
 // where it was made.
@@ -108,10 +108,7 @@ func Envelope(pcm []int16, buckets int) []float32 {
 		buckets = len(pcm)
 	}
 	out := make([]float32, buckets)
-	per := len(pcm) / buckets
-	if per < 1 {
-		per = 1
-	}
+	per := max(len(pcm)/buckets, 1)
 	for i := range out {
 		var peak int
 		start := i * per

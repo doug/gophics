@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/sound"
 )
 
@@ -66,7 +66,7 @@ func TestRenderPreviewWAV(t *testing.T) {
 		}
 		frame += n
 	}
-	if err := os.WriteFile(out, shell.EncodeWAV(pcm, sound.SampleRate), 0o644); err != nil {
+	if err := os.WriteFile(out, wav.Encode(pcm, sound.SampleRate), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

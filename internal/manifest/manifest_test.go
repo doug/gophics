@@ -1,4 +1,4 @@
-package shell
+package manifest
 
 import (
 	"go/ast"
@@ -20,7 +20,7 @@ import (
 // stale.
 func capabilitiesFromInterfaces(t *testing.T) []string {
 	t.Helper()
-	files, err := filepath.Glob("*.go")
+	files, err := filepath.Glob("../../shell/*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestEveryCapabilityHasAPermissionEntry(t *testing.T) {
 	}
 
 	for _, c := range caps {
-		if _, ok := ManifestPermissionFor(c); !ok {
+		if _, ok := For(c); !ok {
 			t.Errorf("capability %q has no entry in the permission table — add "+
 				"one, empty if it needs nothing, so \"needs nothing\" is a "+
 				"decision rather than an omission", c)
@@ -111,7 +111,7 @@ func TestPermissionTableHasNoStaleEntries(t *testing.T) {
 // declares them gets a silent denial rather than an error.
 func TestRuntimeRequestMarkedForPromptingPermissions(t *testing.T) {
 	for _, c := range []string{"Camera", "CameraPreview", "Microphone", "Geolocation", "Notifier"} {
-		p, ok := ManifestPermissionFor(c)
+		p, ok := For(c)
 		if !ok {
 			t.Fatalf("%s missing from the table", c)
 		}
@@ -123,7 +123,7 @@ func TestRuntimeRequestMarkedForPromptingPermissions(t *testing.T) {
 	// The inverse: something that never prompts must not claim it does, or the
 	// build nags about a request that cannot be made.
 	for _, c := range []string{"Haptic", "Connectivity", "Socket"} {
-		p, _ := ManifestPermissionFor(c)
+		p, _ := For(c)
 		if p.RuntimeRequest {
 			t.Errorf("%s is an install-time permission but is marked RuntimeRequest", c)
 		}
@@ -134,7 +134,7 @@ func TestRuntimeRequestMarkedForPromptingPermissions(t *testing.T) {
 // the loader enforces and the only kind that needs app-supplied prose.
 func TestIOSKeysAreUsageDescriptions(t *testing.T) {
 	for _, c := range KnownCapabilities() {
-		p, _ := ManifestPermissionFor(c)
+		p, _ := For(c)
 		for _, k := range p.IOSKeys {
 			if !strings.HasPrefix(k, "NS") || !strings.HasSuffix(k, "UsageDescription") {
 				t.Errorf("%s declares iOS key %q, which is not an "+
@@ -148,7 +148,7 @@ func TestIOSKeysAreUsageDescriptions(t *testing.T) {
 // permission must produce it once, sorted, so the generated manifest is stable
 // and a rebuild does not churn the file.
 func TestMergeDeduplicatesAndSorts(t *testing.T) {
-	got := MergeManifest([]string{"CameraPreview", "Camera", "Microphone"})
+	got := Merge([]string{"CameraPreview", "Camera", "Microphone"})
 
 	want := []string{"android.permission.CAMERA", "android.permission.RECORD_AUDIO"}
 	if len(got.Android) != len(want) {
@@ -168,7 +168,7 @@ func TestMergeDeduplicatesAndSorts(t *testing.T) {
 // loudly to complain, and a merge that panicked would take the build down over
 // a name it could simply skip.
 func TestMergeIgnoresUnknown(t *testing.T) {
-	got := MergeManifest([]string{"NotACapability"})
+	got := Merge([]string{"NotACapability"})
 	if len(got.Android) != 0 || len(got.IOSKeys) != 0 {
 		t.Errorf("an unknown capability produced permissions: %+v", got)
 	}
@@ -179,7 +179,7 @@ func TestMergeIgnoresUnknown(t *testing.T) {
 // package imports net/http for NetworkImage.
 func TestBaselineManifestPermissionCoversNetwork(t *testing.T) {
 	found := false
-	for _, a := range BaselineManifestPermission.Android {
+	for _, a := range Baseline.Android {
 		if a == "android.permission.INTERNET" {
 			found = true
 		}
@@ -190,7 +190,7 @@ func TestBaselineManifestPermissionCoversNetwork(t *testing.T) {
 	}
 	// Merging it alongside a capability that also wants INTERNET must not
 	// duplicate it, or the manifest grows a second identical line each build.
-	got := MergeManifest([]string{"Socket"}, BaselineManifestPermission)
+	got := Merge([]string{"Socket"}, Baseline)
 	n := 0
 	for _, a := range got.Android {
 		if a == "android.permission.INTERNET" {

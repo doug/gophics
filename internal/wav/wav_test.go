@@ -1,4 +1,4 @@
-package shell
+package wav
 
 import "testing"
 
@@ -8,14 +8,14 @@ func TestWAVRoundTrip(t *testing.T) {
 		// a couple of cycles of a triangle-ish signal spanning the range
 		pcm[i] = int16((i%200)*300 - 30000)
 	}
-	wav := EncodeWAV(pcm, 48000)
+	wav := Encode(pcm, 48000)
 	if string(wav[0:4]) != "RIFF" || string(wav[8:12]) != "WAVE" {
 		t.Fatalf("bad RIFF/WAVE header")
 	}
 	if len(wav) != 44+len(pcm)*2 {
 		t.Fatalf("length = %d, want %d", len(wav), 44+len(pcm)*2)
 	}
-	got, rate, err := DecodeWAV(wav)
+	got, rate, err := Decode(wav)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,10 +33,10 @@ func TestWAVRoundTrip(t *testing.T) {
 }
 
 func TestWAVDefaultRateAndErrors(t *testing.T) {
-	if _, rate, _ := DecodeWAV(EncodeWAV([]int16{0, 1, -1}, 0)); rate != 44100 {
+	if _, rate, _ := Decode(Encode([]int16{0, 1, -1}, 0)); rate != 44100 {
 		t.Fatalf("default sample rate = %d, want 44100", rate)
 	}
-	if _, _, err := DecodeWAV([]byte("not a wav")); err == nil {
+	if _, _, err := Decode([]byte("not a wav")); err == nil {
 		t.Fatalf("expected error for non-WAV input")
 	}
 }
@@ -49,9 +49,9 @@ func TestWAVStereoDownmix(t *testing.T) {
 		pcm = append(pcm, f.l, f.r)
 	}
 	// Reuse the encoder's layout but stamp 2 channels into the fmt chunk.
-	wav := EncodeWAV(pcm, 44100)
+	wav := Encode(pcm, 44100)
 	wav[22] = 2 // channels = 2
-	got, _, err := DecodeWAV(wav)
+	got, _, err := Decode(wav)
 	if err != nil {
 		t.Fatal(err)
 	}

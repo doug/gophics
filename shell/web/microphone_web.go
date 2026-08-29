@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/internal/dsp"
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 )
 
@@ -500,7 +501,7 @@ func (r *webRecorder) Stop(done func(shell.Clip, error)) {
 		dur = time.Duration(len(samples)) * time.Second / time.Duration(rate)
 	}
 	done(shell.Clip{
-		Data:     shell.EncodeWAV(samples, rate),
+		Data:     wav.Encode(samples, rate),
 		Mime:     "audio/wav",
 		Duration: dur,
 		Envelope: envelope,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/internal/audio"
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 )
 
@@ -25,7 +26,7 @@ import (
 // capture is the same zero-CGo FFI the microphone uses (AudioQueue, pa_simple,
 // WASAPI) and output is the same driver set behind sound.
 //
-// Clips are WAV, encoded by shell.EncodeWAV, which is what the mobile and web
+// Clips are WAV, encoded by wav.Encode, which is what the mobile and web
 // backends produce too. A recording made on one platform therefore plays on
 // any other, and the waveform beside it is computed by one shared function.
 
@@ -72,7 +73,7 @@ func (deviceSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
 	// Decoded up front rather than handed straight to the driver, because Seek
 	// has to restart the player at an offset and the driver has no notion of
 	// one. Decoding once here is also what makes a seek cheap.
-	pcm, rate, err := shell.DecodeWAV(clip.Data)
+	pcm, rate, err := wav.Decode(clip.Data)
 	if err != nil {
 		done(nil, err)
 		return
@@ -120,11 +121,8 @@ func (p *devicePlayback) playFrom(off time.Duration) error {
 	if off > p.duration {
 		off = p.duration
 	}
-	i := int(off * time.Duration(p.rate) / time.Second)
-	if i > len(p.pcm) {
-		i = len(p.pcm)
-	}
-	pl, err := p.ctx.PlayWAV(shell.EncodeWAV(p.pcm[i:], p.rate))
+	i := min(int(off*time.Duration(p.rate)/time.Second), len(p.pcm))
+	pl, err := p.ctx.PlayWAV(wav.Encode(p.pcm[i:], p.rate))
 	if err != nil {
 		return err
 	}
@@ -186,10 +184,7 @@ func (p *devicePlayback) Stop() {
 		p.mu.Unlock()
 		return
 	}
-	p.offset = p.offset + time.Since(p.started)
-	if p.offset > p.duration {
-		p.offset = p.duration
-	}
+	p.offset = min(p.offset+time.Since(p.started), p.duration)
 	p.stopped = true
 	pl := p.player
 	p.player = nil

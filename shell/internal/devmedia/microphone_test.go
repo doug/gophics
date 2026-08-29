@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 )
 
@@ -27,10 +28,7 @@ func TestRecorderAssemblesChunksInOrder(t *testing.T) {
 	}
 	// Delivered in odd-sized blocks, as a real audio callback would.
 	for i := 0; i < n; i += 333 {
-		end := i + 333
-		if end > n {
-			end = n
-		}
+		end := min(i+333, n)
 		r.write(in[i:end])
 	}
 
@@ -106,7 +104,7 @@ func TestStopProducesAPlayableClip(t *testing.T) {
 	}
 	// The clip has to survive the round trip, or it is not portable to the
 	// other backends that decode the same WAV.
-	pcm, rate, err := shell.DecodeWAV(got.Data)
+	pcm, rate, err := wav.Decode(got.Data)
 	if err != nil {
 		t.Fatalf("the clip we just encoded does not decode: %v", err)
 	}

@@ -8,8 +8,8 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/scene"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/scene"
 )
 
 // renderWith renders a draw func that also receives the painter as a Measurer,

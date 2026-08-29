@@ -11,7 +11,7 @@
 //
 //   - Networking. It is not detected here at all. The core widget package
 //     imports net/http for NetworkImage, so every app has it in the graph and
-//     a check would be true always — see shell.BaselineManifestPermission.
+//     a check would be true always — see manifest.Baseline.
 //
 //   - Anything reached from a dependency the scan cannot see. It scans the
 //     whole build, dependencies included, but a capability reached by
@@ -28,7 +28,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/internal/manifest"
 )
 
 // ctxType is the type whose methods are capability accessors.
@@ -126,7 +126,7 @@ func Scan(dir, pattern string, target Target) (Result, error) {
 			// are capabilities; the rest are ordinary framework calls and
 			// declaring anything for them would be noise.
 			name := sel.Obj().Name()
-			if _, ok := shell.ManifestPermissionFor(name); ok {
+			if _, ok := manifest.For(name); ok {
 				found[name] = true
 			}
 		}

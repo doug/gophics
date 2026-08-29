@@ -9,8 +9,8 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/scene"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/scene"
 )
 
 // drawScene paints a representative scene: fills, gradient, stroke, line,

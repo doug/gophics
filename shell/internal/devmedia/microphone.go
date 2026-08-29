@@ -9,6 +9,7 @@ import (
 
 	"github.com/doug/gophics/internal/audio"
 	"github.com/doug/gophics/internal/dsp"
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 )
 
@@ -250,10 +251,10 @@ func (r *deviceRecorder) Stop(done func(shell.Clip, error)) {
 		return
 	}
 	done(shell.Clip{
-		Data:     shell.EncodeWAV(pcm, rate),
+		Data:     wav.Encode(pcm, rate),
 		Mime:     "audio/wav",
 		Duration: time.Duration(len(pcm)) * time.Second / time.Duration(rate),
-		Envelope: shell.Envelope(pcm, 120),
+		Envelope: wav.Envelope(pcm, 120),
 	}, nil)
 }
 

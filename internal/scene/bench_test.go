@@ -5,15 +5,15 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/scene"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/scene"
 )
 
 // recordFrame records a representative ~300-op frame: fills, gradients,
 // strokes, lines, text, images, sprites, clips, and one opacity group.
 func recordFrame(c paint.Canvas, path *paint.Path) {
 	c.FillRect(geom.RectXYWH(0, 0, 800, 600), paint.RGB(0.1, 0.1, 0.12))
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		y := float32(i * 20)
 		c.FillRect(geom.RectXYWH(0, y, 800, 20), paint.RGB(0.15, 0.15, 0.18))
 		c.FillRRect(geom.RectXYWH(10, y+2, 100, 16), 4, paint.RGB(0.3, 0.3, 0.4))

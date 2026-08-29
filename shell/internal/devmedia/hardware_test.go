@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 )
 
@@ -47,7 +48,7 @@ func TestHardwareRecordAndPlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	pcm, rate, err := shell.DecodeWAV(clip.Data)
+	pcm, rate, err := wav.Decode(clip.Data)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}

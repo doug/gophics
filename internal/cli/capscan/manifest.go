@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/internal/manifest"
 )
 
 // Writing what a scan found into a host project.
@@ -38,7 +38,7 @@ var androidSpan = regexp.MustCompile(
 //
 // It reports whether the file changed. With check set, nothing is written and a
 // changed file is an error instead — that is what a build gate calls.
-func AndroidManifest(path string, perm shell.ManifestPermission, check bool) (bool, error) {
+func AndroidManifest(path string, perm manifest.Permission, check bool) (bool, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return false, fmt.Errorf("read %s: %w", path, err)
@@ -99,7 +99,7 @@ func CheckIOSUsageDescriptions(plistPath string, capabilities []string) ([]Missi
 	// Which capability asked for which key, so the error can say why.
 	need := map[string][]string{}
 	for _, c := range capabilities {
-		p, ok := shell.ManifestPermissionFor(c)
+		p, ok := manifest.For(c)
 		if !ok {
 			continue
 		}
@@ -136,7 +136,7 @@ func hasNonEmptyPlistString(plist, key string) bool {
 //
 // Returned rather than written: an entitlements file belongs to whatever signs
 // the app, and there is no single conventional path to rewrite.
-func MacEntitlements(perm shell.ManifestPermission) string {
+func MacEntitlements(perm manifest.Permission) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	b.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ` +
@@ -152,6 +152,6 @@ func MacEntitlements(perm shell.ManifestPermission) string {
 
 // Permissions folds a scan into the declaration a build needs, including the
 // baseline every gophics app requires.
-func Permissions(r Result) shell.ManifestPermission {
-	return shell.MergeManifest(r.Capabilities, shell.BaselineManifestPermission)
+func Permissions(r Result) manifest.Permission {
+	return manifest.Merge(r.Capabilities, manifest.Baseline)
 }
