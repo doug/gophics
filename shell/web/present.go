@@ -25,6 +25,7 @@ import (
 	"github.com/doug/gophics/internal/gfx/gputypes"
 	"github.com/doug/gophics/internal/gfx/wgpu"
 
+	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/shell"
 )
 
@@ -234,15 +235,51 @@ func (p *presenter) target() shell.Target {
 type pendingTarget struct{}
 
 // putCPU blits a CPU-rasterized frame via 2d putImageData.
-func (p *presenter) putCPU(img *image.RGBA) {
+// putCPU blits the frame to the 2D canvas, copying only the rows that changed.
+//
+// This is the path the damage rect was added for. Both halves used to be
+// whole-surface every frame: CopyBytesToJS marshalled the entire pixel buffer
+// across the JS boundary, and putImageData repainted the whole canvas — for a
+// frame in which one button had changed colour. The ImageData buffer is
+// retained between frames, so rows outside the damage are already correct and
+// only the damaged band has to cross.
+func (p *presenter) putCPU(img *image.RGBA, damage geom.Rect) {
 	pw, ph := img.Rect.Dx(), img.Rect.Dy()
-	if p.buf.IsUndefined() || p.bufW != pw || p.bufH != ph {
+	fresh := p.buf.IsUndefined() || p.bufW != pw || p.bufH != ph
+	if fresh {
 		p.buf = js.Global().Get("Uint8ClampedArray").New(len(img.Pix))
 		p.imageData = js.Global().Get("ImageData").New(p.buf, pw, ph)
 		p.bufW, p.bufH = pw, ph
 	}
-	js.CopyBytesToJS(p.buf, img.Pix)
-	p.ctx2d.Call("putImageData", p.imageData, 0, 0)
+
+	// Clamp to the surface, and treat an empty rect as "nothing changed" —
+	// except on a fresh buffer, which holds no previous frame to keep.
+	y0, y1 := int(damage.Min.Y), int(damage.Max.Y)
+	if fresh || y1 <= y0 {
+		if !fresh {
+			p.signalFirstFrame()
+			return
+		}
+		y0, y1 = 0, ph
+	}
+	y0 = max(y0, 0)
+	y1 = min(y1, ph)
+	if y1 <= y0 {
+		p.signalFirstFrame()
+		return
+	}
+
+	// Whole rows: the pixel buffer is row-major, so a row range is one
+	// contiguous span and one CopyBytesToJS. Copying a sub-rect's columns would
+	// be a call per row, which costs more than the bytes it saves.
+	stride := img.Stride
+	lo, hi := y0*stride, y1*stride
+	if hi > len(img.Pix) {
+		hi = len(img.Pix)
+	}
+	js.CopyBytesToJS(p.buf.Call("subarray", lo, hi), img.Pix[lo:hi])
+	// putImageData's dirty rect is in ImageData coordinates, so the same band.
+	p.ctx2d.Call("putImageData", p.imageData, 0, 0, 0, y0, pw, y1-y0)
 	p.signalFirstFrame()
 }
 

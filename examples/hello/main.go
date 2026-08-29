@@ -31,7 +31,8 @@ func (a *app) Frame(w shell.Window, f shell.Frame, dt float64) {
 	switch t := f.Target().(type) {
 	case shell.PixelTarget:
 		if s := a.painter.SurfaceRGBA(); s != nil {
-			t.Put(s)
+			// The whole surface: this example paints every pixel each frame.
+			t.Put(s, geom.RectFromSize(f.Size()))
 		}
 	}
 	w.Invalidate() // continuous animation: request the next frame

@@ -528,7 +528,10 @@ func (f *frame) Target() shell.Target {
 	if !f.b.snapshotting && f.b.gpu != nil {
 		return mobileGPUTarget{f.b.gpu}
 	}
-	return shell.PixelTarget{Put: func(img *image.RGBA) { f.b.frame = img }}
+	// The damage rect is ignored: the host reads the whole frame back through
+	// Snapshot and blits it, so there is no retained destination here to
+	// partially update.
+	return shell.PixelTarget{Put: func(img *image.RGBA, _ geom.Rect) { f.b.frame = img }}
 }
 
 // gpuCaptureTarget is the offscreen render target CaptureGPU installs. It is

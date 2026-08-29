@@ -77,6 +77,18 @@ type Config struct {
 	// debugPaintSize). Toggle at runtime via Headless.SetDebugPaint, or on a
 	// live app through the handler returned by NewHandler.
 	Debug bool
+	// Transparent clears to a translucent background instead of forcing the
+	// background opaque, for a UI composited over host content — a HUD over a
+	// game, an overlay window.
+	//
+	// It costs the retained surface. The background normally goes down as a
+	// blended FillRect over pixels kept from the previous frame, so a
+	// translucent one composites over stale content and ghosts; the only way to
+	// make translucency correct is to replay the whole scene every frame. That
+	// is a real cost, and a small one in the case this serves: an overlay host
+	// is redrawing its frame and re-compositing every tick anyway, so damage
+	// tracking was buying it little.
+	Transparent bool
 	// Renderer selects the rasterization backend: Auto (default) prefers the
 	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
 	// rasterizer. The GOPHICS_RENDERER env var overrides this at startup.
@@ -128,6 +140,7 @@ type core struct {
 	root           widget.Widget
 	size           geom.Size
 	debugPaint     bool
+	transparent    bool        // Config.Transparent: translucent bg, no surface retention
 	inspect        bool        // interactive widget inspector (highlights box under pointer)
 	frameTimes     [60]float32 // ring of recent raster+record durations, ms
 	// frameOps/frameBlurs record what each of those frames drew. A frame time
@@ -317,6 +330,7 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 	}
 	c.Owner.Post = c.Post
 	c.debugPaint = cfg.Debug
+	c.transparent = cfg.Transparent
 	applyGraphicsLog(cfg.GraphicsLog)
 	return c, nil
 }
@@ -571,10 +585,15 @@ func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed boo
 	surface := geom.RectFromSize(size)
 	// Background as FillRect, not Clear: Clear ignores clips, which would
 	// wipe retained pixels outside the damage region during partial replay.
-	// The background is always opaque — the surface is retained across
-	// frames, so a translucent background would ghost previous frames.
+	//
+	// Opaque unless the app asked otherwise: the surface is retained across
+	// frames, so a translucent background composites over the previous frame
+	// and ghosts. Config.Transparent opts into translucency and turns retention
+	// off to pay for it.
 	bg := c.bg()
-	bg.A = 1
+	if !c.transparent {
+		bg.A = 1
+	}
 	rec.FillRect(surface, bg)
 	if box := c.Owner.RootBox(); box != nil {
 		box.Paint(rec, geom.Pt{})
@@ -593,6 +612,12 @@ func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed boo
 	damage, changed = c.cur.Diff(c.prev, m)
 	if debugNoDamage && changed {
 		damage = surface // debug: force full repaint to isolate damage bugs
+	}
+	if c.transparent && changed {
+		// Translucency and partial replay are incompatible: a blended
+		// background over pixels kept from the previous frame ghosts it. A
+		// changed frame is replayed whole.
+		damage = surface
 	}
 	if size != c.lastPaintSize || scale != c.lastScale {
 		changed, damage = true, surface

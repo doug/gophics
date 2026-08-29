@@ -109,7 +109,7 @@ func (h *shellHandler) present(f shell.Frame, tgt shell.Target, changed bool, da
 	}
 	// Present even when skipped: the painter's surface is retained, and the
 	// swapchain still needs this frame's image.
-	if err := presentSurface(h.core.Painter, tgt); err != nil {
+	if err := presentSurface(h.core.Painter, tgt, damage); err != nil {
 		log.Printf("gophics: present: %v", err)
 	}
 }
@@ -117,11 +117,11 @@ func (h *shellHandler) present(f shell.Frame, tgt shell.Target, changed bool, da
 // presentSurface hands the painter's finished CPU surface to the shell's
 // target. The target type-switch lives here — in the app runtime — so the
 // paint package stays platform-agnostic (it no longer imports shell).
-func presentSurface(p *paint.Painter, tgt shell.Target) error {
+func presentSurface(p *paint.Painter, tgt shell.Target, damage geom.Rect) error {
 	switch t := tgt.(type) {
 	case shell.PixelTarget:
 		if s := p.SurfaceRGBA(); s != nil {
-			t.Put(s)
+			t.Put(s, damage)
 		}
 	}
 	return nil
@@ -138,5 +138,7 @@ func (h *shellHandler) presentDropped(f shell.Frame, tgt shell.Target) {
 		}
 		return
 	}
-	_ = presentSurface(h.core.Painter, tgt)
+	// Nothing was drawn, so nothing is damaged: the host re-presents whatever
+	// it already had.
+	_ = presentSurface(h.core.Painter, tgt, geom.Rect{})
 }

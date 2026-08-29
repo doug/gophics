@@ -140,8 +140,19 @@ type Target any
 
 // PixelTarget presents by handing finished physical-pixel frames to Put
 // (e.g. a browser canvas or a test sink).
+//
+// damage is the region of img that changed since the previous Put, in physical
+// pixels. A host whose destination retains the last frame may upload only that
+// rect; one that cannot must upload all of img and ignore it. It is the whole
+// surface after a resize or the first frame, and empty when nothing changed —
+// an empty rect means the host may skip the upload entirely.
+//
+// The runtime has always computed this: present() calls ReplayDamaged with the
+// rect and redraws only the dirty region, then used to hand Put the whole
+// surface, so every embedder re-uploaded every pixel of a frame that had
+// changed one button. The damage was computed and thrown away at the last step.
 type PixelTarget struct {
-	Put func(img *image.RGBA)
+	Put func(img *image.RGBA, damage geom.Rect)
 }
 
 // Handler receives frames and events. All calls happen on the UI goroutine.

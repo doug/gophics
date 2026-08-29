@@ -16,6 +16,7 @@ import (
 	"github.com/doug/gophics/internal/gfx/gg/integration/ggcanvas"
 	"github.com/doug/gophics/internal/gfx/gogpu"
 
+	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/shell"
 )
 
@@ -62,7 +63,12 @@ func (f *frame) Target() shell.Target {
 		}
 		// GPU canvas not ready yet; fall through to the CPU blit for now.
 	}
-	return shell.PixelTarget{Put: func(img *image.RGBA) {
+	// The damage rect is ignored here: this path uploads a whole new texture
+	// per frame (NewTextureFromImage), so there is no retained destination to
+	// update a sub-rect of. Honouring it would mean keeping a persistent
+	// texture across frames and updating a region of it — worth doing, and a
+	// change to the desktop present path rather than to this signature.
+	return shell.PixelTarget{Put: func(img *image.RGBA, _ geom.Rect) {
 		r := f.dc.Renderer()
 		tex, err := r.NewTextureFromImage(img)
 		if err != nil {

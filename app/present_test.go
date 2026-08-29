@@ -193,7 +193,7 @@ func TestPaintPanicDropsFrameKeepsAppAlive(t *testing.T) {
 	sh, w := newPresentHarness(t, root)
 	puts := 0
 	f := &fakeFrame{size: geom.Size{W: 200, H: 150}, scale: 1,
-		tgt: shell.PixelTarget{Put: func(*image.RGBA) { puts++ }}}
+		tgt: shell.PixelTarget{Put: func(*image.RGBA, geom.Rect) { puts++ }}}
 
 	sh.Frame(w, f, 1.0/60) // healthy frame renders and presents
 	if puts != 1 {

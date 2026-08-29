@@ -427,4 +427,10 @@ func (f *frame) Scale() float32 {
 	}
 	return rs
 }
-func (f *frame) Target() shell.Target { return shell.PixelTarget{Put: f.ts.present} }
+
+// The damage rect is ignored: termState.present does its own tile-level diff
+// against the last frame it sent, which is finer than a single rect and is what
+// makes an update cost bytes proportional to the change rather than the screen.
+func (f *frame) Target() shell.Target {
+	return shell.PixelTarget{Put: func(img *image.RGBA, _ geom.Rect) { f.ts.present(img) }}
+}
