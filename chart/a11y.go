@@ -3,14 +3,16 @@ package chart
 import (
 	"fmt"
 	"strings"
+
+	"github.com/doug/gophics/intl"
 )
 
 // semanticsLabel produces a spoken summary of the chart's data for the
 // accessibility tree (a Canvas is otherwise invisible to screen readers).
-func (w Chart) semanticsLabel() string {
+func (w Chart) semanticsLabel(loc intl.Locale) string {
 	for _, mk := range w.Marks {
 		if sm, ok := mk.(SectorMark); ok && len(sm.Data) > 0 {
-			return "Pie chart. " + summarize(sm.Data)
+			return "Pie chart. " + summarize(sm.Data, loc)
 		}
 	}
 	for _, mk := range w.Marks {
@@ -29,7 +31,7 @@ func (w Chart) semanticsLabel() string {
 		case PointMark:
 			kind = "Scatter chart"
 		}
-		return kind + ". " + summarize(sd.seriesData())
+		return kind + ". " + summarize(sd.seriesData(), loc)
 	}
 	for _, mk := range w.Marks {
 		if rm, ok := mk.(RectMark); ok {
@@ -44,7 +46,7 @@ func (w Chart) semanticsLabel() string {
 
 // summarize lists categorical points (capped), or the count and value range for
 // continuous data.
-func summarize(d []Datum) string {
+func summarize(d []Datum, loc intl.Locale) string {
 	if len(d) == 0 {
 		return ""
 	}
@@ -55,7 +57,7 @@ func summarize(d []Datum) string {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			fmt.Fprintf(&b, "%s %s", d[i].Label, fmtNumber(d[i].Y))
+			fmt.Fprintf(&b, "%s %s", d[i].Label, fmtNumber(d[i].Y, loc))
 		}
 		if len(d) > 10 {
 			b.WriteString(", and more")
@@ -63,5 +65,5 @@ func summarize(d []Datum) string {
 		return b.String()
 	}
 	lo, hi := minMaxY(d)
-	return fmt.Sprintf("%d points, %s to %s", len(d), fmtNumber(lo), fmtNumber(hi))
+	return fmt.Sprintf("%d points, %s to %s", len(d), fmtNumber(lo, loc), fmtNumber(hi, loc))
 }

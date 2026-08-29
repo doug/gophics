@@ -11,6 +11,8 @@
 package chart
 
 import (
+	"github.com/doug/gophics/intl"
+
 	"math"
 	"strconv"
 )
@@ -164,20 +166,29 @@ func niceStep(lo, hi float64, target int) float64 {
 
 // fmtNumber renders a tick value compactly: no trailing zeros, thousands
 // separators, and k/M suffixes for large magnitudes.
-func fmtNumber(v float64) string {
+//
+// The separators come from loc, so a chart's numbers read the way every other
+// number on the device does — 1,5k in German, not 1.5k. The k and M suffixes
+// do not: they are SI-ish shorthand that intl has no data for, and inventing a
+// per-language table here would be worse than the honest inconsistency.
+func fmtNumber(v float64, loc intl.Locale) string {
 	a := math.Abs(v)
 	switch {
 	case a >= 1e6:
-		return trim(v/1e6) + "M"
+		return trim(v/1e6, loc) + "M"
 	case a >= 1e3:
-		return trim(v/1e3) + "k"
+		return trim(v/1e3, loc) + "k"
 	default:
-		return trim(v)
+		return trim(v, loc)
 	}
 }
 
-func trim(v float64) string {
-	return strconv.FormatFloat(v, 'f', -1, 64)
+func trim(v float64, loc intl.Locale) string {
+	s := strconv.FormatFloat(v, 'f', -1, 64)
+	if loc.Decimal == "" {
+		return s // zero Locale: an axis built outside a widget tree
+	}
+	return loc.Number(s)
 }
 
 // Log is a base-10 logarithmic scale over [Lo, Hi] (both > 0), snapped to

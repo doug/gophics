@@ -1,6 +1,8 @@
 package chart
 
 import (
+	"github.com/doug/gophics/intl"
+
 	"strings"
 	"testing"
 )
@@ -22,7 +24,7 @@ func TestSemanticsLabel(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := c.chart.semanticsLabel()
+			got := c.chart.semanticsLabel(intl.Default)
 			for _, sub := range c.wantSub {
 				if !strings.Contains(got, sub) {
 					t.Fatalf("label %q missing %q", got, sub)

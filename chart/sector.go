@@ -56,7 +56,7 @@ func (s SectorMark) legendEntries(th chartTheme) []legendEntry {
 	for i, d := range s.Data {
 		label := d.Label
 		if label == "" {
-			label = fmtNumber(d.Y)
+			label = fmtNumber(d.Y, th.loc)
 		}
 		out = append(out, legendEntry{label, s.sliceColor(i, th)})
 	}

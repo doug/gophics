@@ -124,6 +124,11 @@ func (s *chartState) Dispose() {
 
 func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	w := s.W()
+	// Numbers on a chart should read the way every other number on the device
+	// does, so the locale is resolved once here and handed to the axes and the
+	// spoken summary rather than asked of each caller — most would forget, and
+	// a German chart would go on reading 1,234.5.
+	loc := ctx.IntlLocale()
 	xs, ys := resolveScales(w)
 	// A chart whose marks have no domains at all — a pie, a donut — has no
 	// axes. resolveScales still has to return non-nil scales, so it invents
@@ -134,6 +139,7 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		w.XAxis.Hide, w.YAxis.Hide = true, true
 	}
 	th := w.chrome(themeFor(ctx.DarkMode()))
+	th.loc = loc
 	p := ctx.Painter()
 	s.xs, s.ys = xs, ys
 
@@ -169,8 +175,8 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		if area.IsEmpty() {
 			return
 		}
-		drawYAxis(c, area, ys, w.YAxis, th, p)
-		drawXAxis(c, area, bounds, xs, w.XAxis, th, p)
+		drawYAxis(c, area, ys, w.YAxis.withLocale(loc), th, p)
+		drawXAxis(c, area, bounds, xs, w.XAxis.withLocale(loc), th, p)
 
 		pl := plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
 		c.PushClip(area)
@@ -219,7 +225,7 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 			Child: canvas,
 		}
 	}
-	if label := w.semanticsLabel(); label != "" {
+	if label := w.semanticsLabel(loc); label != "" {
 		root = widget.Semantics{Role: layout.RoleGroup, Label: label, Child: root}
 	}
 	return root

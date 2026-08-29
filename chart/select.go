@@ -17,7 +17,7 @@ func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col pa
 
 	label := d.Label
 	if label == "" {
-		label = fmtNumber(d.X)
+		label = fmtNumber(d.X, th.loc)
 	}
 	drawTooltip(c, p, area, geom.Pt{X: x, Y: y}, label, yaxis.label(Tick{Value: d.Y}), th)
 }

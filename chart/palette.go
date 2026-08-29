@@ -1,6 +1,9 @@
 package chart
 
-import "github.com/doug/gophics/paint"
+import (
+	"github.com/doug/gophics/intl"
+	"github.com/doug/gophics/paint"
+)
 
 // chartTheme is the resolved set of chrome colors + the series palette for a
 // given light/dark mode. (Named chartTheme, not theme, so it can't be mistaken
@@ -10,6 +13,11 @@ type chartTheme struct {
 	axis   paint.Color // axis baselines
 	grid   paint.Color // gridlines
 	series []paint.Color
+	// loc formats default numeric labels — axis ticks, and a legend row that
+	// falls back to its value. It rides on the theme because the theme is
+	// already threaded through every drawing path, and a chart's numbers should
+	// follow the device the way its colours follow dark mode.
+	loc intl.Locale
 }
 
 func gray(v, a float32) paint.Color { return paint.Color{R: v, G: v, B: v, A: a} }

@@ -1,6 +1,8 @@
 package chart
 
 import (
+	"github.com/doug/gophics/intl"
+
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
 )
@@ -11,6 +13,19 @@ type Axis struct {
 	Grid   bool                 // X axis: draw vertical gridlines at the ticks. (Horizontal Y gridlines are always drawn as chart chrome, so this field has no effect on the Y axis.)
 	Ticks  int                  // target tick count; 0 → a sensible default
 	Format func(float64) string // tick label formatter for numeric values
+
+	// loc formats the default numeric labels. Set by Chart.Build from
+	// ctx.IntlLocale(), not by the app: a chart's axis numbers should follow
+	// the device like every other number on screen, and asking each caller to
+	// pass a locale would mean most of them forget and a German chart would go
+	// on reading 1,234.5. An app that wants something else sets Format.
+	loc intl.Locale
+}
+
+// withLocale returns a copy that formats numbers for loc.
+func (a Axis) withLocale(loc intl.Locale) Axis {
+	a.loc = loc
+	return a
 }
 
 const labelSize = float32(12)
@@ -31,7 +46,7 @@ func (a Axis) label(t Tick) string {
 	if a.Format != nil {
 		return a.Format(t.Value)
 	}
-	return fmtNumber(t.Value)
+	return fmtNumber(t.Value, a.loc)
 }
 
 // drawYAxis draws horizontal gridlines and right-aligned value labels.
