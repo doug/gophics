@@ -333,6 +333,36 @@ func (p postedLinks) OnLink(a0 func(url string)) {
 	p.inner.OnLink(w0)
 }
 
+// postedLocale wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func postedLocaleOf(inner shell.Locale, post func(func())) shell.Locale {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedLocale{inner, post}
+}
+
+type postedLocale struct {
+	inner shell.Locale
+	post  func(func())
+}
+
+func (p postedLocale) Tag() string {
+	return p.inner.Tag()
+}
+
+func (p postedLocale) OnChange(a0 func(tag string)) {
+	f0 := a0
+	var w0 func(tag string)
+	if f0 != nil {
+		w0 = func(c0 string) { p.post(func() { f0(c0) }) }
+	}
+	p.inner.OnChange(w0)
+}
+
 // postedMenus wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which

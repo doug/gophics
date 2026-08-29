@@ -839,6 +839,11 @@ shell.Links.Initial method
 shell.Links.OnLink method
 shell.LinksWindow type
 shell.LinksWindow.Links method
+shell.Locale type
+shell.Locale.OnChange method
+shell.Locale.Tag method
+shell.LocaleWindow type
+shell.LocaleWindow.Locale method
 shell.Menu type
 shell.Menu.Items field
 shell.Menu.Title field
@@ -1533,11 +1538,14 @@ widget.Ctx.Gamepads method
 widget.Ctx.Geolocation method
 widget.Ctx.Haptic method
 widget.Ctx.Input method
+widget.Ctx.IntlLocale method
 widget.Ctx.Invalidate method
 widget.Ctx.KeyboardInset method
 widget.Ctx.Lifecycle method
 widget.Ctx.Links method
+widget.Ctx.Locale method
 widget.Ctx.Menus method
+widget.Ctx.Message method
 widget.Ctx.Microphone method
 widget.Ctx.MustOf method
 widget.Ctx.Notifier method
@@ -1708,6 +1716,10 @@ widget.LazyList.Refreshing field
 widget.LazyList.Reverse field
 widget.Left const
 widget.MarshalWidget func
+widget.MsgCopy const
+widget.MsgCut const
+widget.MsgPaste const
+widget.MsgSelectAll const
 widget.Nav type
 widget.Nav.Depth method
 widget.Nav.Pop method
@@ -1754,6 +1766,7 @@ widget.Owner.KeyboardInset field
 widget.Owner.KeyboardTarget field
 widget.Owner.Lifecycle method
 widget.Owner.Links method
+widget.Owner.Locale method
 widget.Owner.Menus method
 widget.Owner.Microphone method
 widget.Owner.NeedsBuild method

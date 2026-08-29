@@ -51,6 +51,9 @@ func (o *Owner) WireCapabilities(w shell.Window) {
 	if x, ok := w.(shell.LinksWindow); ok {
 		o.links = postedLinksOf(x.Links(), o.Post)
 	}
+	if x, ok := w.(shell.LocaleWindow); ok {
+		o.locale = postedLocaleOf(x.Locale(), o.Post)
+	}
 	if x, ok := w.(shell.MenuWindow); ok {
 		o.menus = postedMenusOf(x.Menus(), o.Post)
 	}
@@ -145,6 +148,10 @@ func (o *Owner) Lifecycle() shell.Lifecycle { return o.lifecycle }
 // Links returns the platform Links capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.Links().
 func (o *Owner) Links() shell.Links { return o.links }
+
+// Locale returns the platform Locale capability, or nil when the running
+// platform cannot provide it. Widgets read it through Ctx.Locale().
+func (o *Owner) Locale() shell.Locale { return o.locale }
 
 // Menus returns the platform Menus capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.Menus().

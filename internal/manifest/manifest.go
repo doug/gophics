@@ -119,6 +119,10 @@ var capabilityManifestPermissions = map[string]Permission{
 	"Biometric": {
 		IOSKeys: []string{"NSFaceIDUsageDescription"},
 	},
+	// Reading the display language needs no permission anywhere: it is a
+	// formatting preference rather than personal data, and every platform
+	// exposes it to any app.
+	"Locale":      {},
 	"Permissions": {}, // the mechanism for asking, not something to ask for
 	// Add-only access, deliberately: an app that saves a picture has no reason
 	// to enumerate the library, and the add-only key is the smaller ask.

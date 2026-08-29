@@ -58,6 +58,8 @@ type Bridge struct {
 	batLevel    float32
 	batCharging bool
 	batSubs     []func()
+	localeTag   string // BCP-47 from the host; see locale.go
+	localeSub   func(string)
 	initialLink string
 	shareHost   ShareHost
 	shareCb     map[int]func(error)

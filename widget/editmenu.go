@@ -171,18 +171,18 @@ func editActionsFor(ctx Ctx, sel selectionOps) []EditAction {
 	hasSel := sel.HasSelection()
 
 	if hasSel && sel.Cut != nil {
-		out = append(out, EditAction{Label: "Cut", OnTap: sel.Cut})
+		out = append(out, EditAction{Label: ctx.Message(MsgCut), OnTap: sel.Cut})
 	}
 	if hasSel && sel.Copy != nil {
-		out = append(out, EditAction{Label: "Copy", OnTap: sel.Copy})
+		out = append(out, EditAction{Label: ctx.Message(MsgCopy), OnTap: sel.Copy})
 	}
 	if cb != nil && sel.Paste != nil {
 		if t, err := cb.ClipboardRead(); err == nil && t != "" {
-			out = append(out, EditAction{Label: "Paste", OnTap: sel.Paste})
+			out = append(out, EditAction{Label: ctx.Message(MsgPaste), OnTap: sel.Paste})
 		}
 	}
 	if sel.SelectAll != nil && !sel.AllSelected() {
-		out = append(out, EditAction{Label: "Select All", OnTap: sel.SelectAll})
+		out = append(out, EditAction{Label: ctx.Message(MsgSelectAll), OnTap: sel.SelectAll})
 	}
 	return out
 }

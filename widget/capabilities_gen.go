@@ -21,6 +21,7 @@ type Capabilities struct {
 	haptic        shell.Haptic
 	lifecycle     shell.Lifecycle
 	links         shell.Links
+	locale        shell.Locale
 	menus         shell.Menus
 	microphone    shell.Microphone
 	notifier      shell.Notifier
@@ -85,6 +86,10 @@ func (c Ctx) Lifecycle() shell.Lifecycle { return c.el.owner.lifecycle }
 // Links returns the platform Links capability (shell.Links), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Links() shell.Links { return c.el.owner.links }
+
+// Locale returns the platform Locale capability (shell.Locale), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Locale() shell.Locale { return c.el.owner.locale }
 
 // Menus returns the platform Menus capability (shell.Menus), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
