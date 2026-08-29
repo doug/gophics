@@ -82,7 +82,12 @@ drive prioritization throughout:
    from a schema you do not own is the first; forty per-app functions because
    a package was factored wrong is the second, and the fix is the factoring.
 7. **Small surface, Go-style stability.** A distilled API and the Go 1
-   compatibility ethos after 1.0 — no upgrade treadmill.
+   compatibility ethos after 1.0 — no upgrade treadmill. The promise is per
+   tier, because an app naming `widget.Text` and a backend implementing
+   `shell.Window` cannot usefully be frozen at the same moment: see
+   [docs/api-tiers.md](docs/api-tiers.md). The surface itself is generated into
+   `design/api-surface.txt` and a test fails when it drifts, so the number in
+   this promise is measured rather than asserted.
 
 The corollary is a center of gravity: desktop tools, UIs embedded inside
 larger Go programs, server-side rendering, single-binary distribution. Mobile
