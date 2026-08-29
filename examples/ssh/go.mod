@@ -1,9 +1,8 @@
 // Separate module so the SSH server dependency (gliderlabs/ssh) stays out of
-// gophics core. It replaces gophics and the gogpu forks with the local
-// checkouts, mirroring the parent module's replace directives.
+// gophics core.
 module gophics-ssh-example
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/doug/gophics v0.0.0
@@ -21,12 +20,3 @@ require (
 )
 
 replace github.com/doug/gophics => ../..
-
-replace (
-	github.com/doug/gg => ../../../third_party/gg
-	github.com/doug/gogpu => ../../../third_party/gogpu
-	github.com/doug/gpucontext => ../../../third_party/gpucontext
-	github.com/doug/gputypes => ../../../third_party/gputypes
-	github.com/doug/naga => ../../../third_party/naga
-	github.com/doug/wgpu => ../../../third_party/wgpu
-)

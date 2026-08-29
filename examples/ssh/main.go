@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	srv := &ssh.Server{Addr: ":2222", Gestures: handleSession}
+	srv := &ssh.Server{Addr: ":2222", Handler: handleSession}
 	srv.AddHostKey(signer)
 	log.Println("gophics SSH demo on :2222 — connect with:  ssh -p 2222 localhost")
 	log.Fatal(srv.ListenAndServe())

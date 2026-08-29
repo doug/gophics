@@ -78,3 +78,9 @@ examples/*/ios/*.xcframework/
 # Untracked debug dumps from TestVelloComputeGolden (regenerated each run).
 # Other files under internal/gfx/gg/tmp/ are tracked golden references.
 internal/gfx/gg/tmp/compute_*.png
+
+# Binaries from a separate-module example, which are named after the module
+# rather than the directory and so are missed by the per-example list above.
+# `go build ./...` inside examples/ssh or examples/embed-ebiten drops one; both
+# reached the index that way, at 19 MB and 27 MB.
+examples/*/gophics-*
