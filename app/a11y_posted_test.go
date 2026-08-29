@@ -37,13 +37,13 @@ func TestA11yActivateIsPosted(t *testing.T) {
 	var queue []func()
 	o.Post = func(fn func()) { queue = append(queue, fn) }
 
-	wireCapabilities(o, fakeA11yWindow{at: at})
-	if o.Accessibility == nil {
+	o.WireCapabilities(fakeA11yWindow{at: at})
+	if o.Accessibility() == nil {
 		t.Fatal("wireCapabilities did not pick up the bridge")
 	}
 
 	activated := 0
-	o.Accessibility.SetTree(nil, func(id int) { activated = id })
+	o.Accessibility().SetTree(nil, func(id int) { activated = id })
 	if at.activate == nil {
 		t.Fatal("bridge was handed no activate callback")
 	}
@@ -70,20 +70,20 @@ func TestA11yActivateIsPosted(t *testing.T) {
 func TestA11yPostedNilSafe(t *testing.T) {
 	o := &widget.Owner{}
 	o.Post = func(fn func()) { fn() }
-	wireCapabilities(o, fakeA11yWindow{at: nil})
-	if o.Accessibility != nil {
+	o.WireCapabilities(fakeA11yWindow{at: nil})
+	if o.Accessibility() != nil {
 		t.Error("a nil bridge produced a non-nil Accessibility")
 	}
 
 	// No Post: callbacks fire inline, which is the documented fallback.
 	at := &fakeAT{}
 	o2 := &widget.Owner{}
-	wireCapabilities(o2, fakeA11yWindow{at: at})
-	if o2.Accessibility == nil {
+	o2.WireCapabilities(fakeA11yWindow{at: at})
+	if o2.Accessibility() == nil {
 		t.Fatal("bridge dropped when Post was nil")
 	}
 	got := 0
-	o2.Accessibility.SetTree(nil, func(id int) { got = id })
+	o2.Accessibility().SetTree(nil, func(id int) { got = id })
 	at.activate(3)
 	if got != 3 {
 		t.Errorf("with no Post, activate should run inline; got = %d, want 3", got)

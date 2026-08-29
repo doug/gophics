@@ -35,8 +35,8 @@ type labelApp struct {
 func (a labelApp) Build(widget.Ctx) widget.Widget {
 	tapped := a.tapped
 	return widget.Padding{All: 8, Child: widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { *tapped++ }},
-		Child:   widget.Text{S: *a.label},
+		Gestures: widget.Gestures{OnTap: func() { *tapped++ }},
+		Child:    widget.Text{S: *a.label},
 	}}
 }
 
@@ -53,11 +53,30 @@ func newLabelApp(t *testing.T) (*Headless, *string, *int) {
 	return h, &label, &tapped
 }
 
+// atWindow is a Window whose only capability is accessibility, used to install
+// the fake through the real wiring.
+//
+// The tests used to write core.Owner.Accessibility directly. That field is
+// unexported now, and the rewrite is an improvement rather than a workaround:
+// going through WireCapabilities exercises the type-assert and the posted
+// wrapper too, so what is under test is the path the runtime actually takes.
+type atWindow struct {
+	shell.Window
+	at shell.Accessibility
+}
+
+func (w atWindow) Accessibility() shell.Accessibility { return w.at }
+
+// installAT wires at into h through the same path a real shell uses.
+func installAT(h *Headless, at shell.Accessibility) {
+	h.core.Owner.WireCapabilities(atWindow{at: at})
+}
+
 func TestPublishA11yOnlyOnChange(t *testing.T) {
 	h, _, _ := newLabelApp(t)
 
 	at := &fakeAT{}
-	h.core.Owner.Accessibility = at
+	installAT(h, at)
 	sh := &shellHandler{core: h.core}
 
 	sh.publishA11y()
@@ -81,7 +100,7 @@ func TestPublishA11yRepublishesWhenLabelChanges(t *testing.T) {
 	h, label, _ := newLabelApp(t)
 
 	at := &fakeAT{}
-	h.core.Owner.Accessibility = at
+	installAT(h, at)
 	sh := &shellHandler{core: h.core}
 	sh.publishA11y()
 
@@ -103,7 +122,7 @@ func TestPublishA11yActivateRoutesToWidget(t *testing.T) {
 	h, _, tapped := newLabelApp(t)
 
 	at := &fakeAT{}
-	h.core.Owner.Accessibility = at
+	installAT(h, at)
 	sh := &shellHandler{core: h.core}
 	sh.publishA11y()
 
@@ -120,8 +139,17 @@ func TestPublishA11yActivateRoutesToWidget(t *testing.T) {
 		t.Fatal("no tappable node published")
 	}
 	at.activate(btn)
+	// Posted, not inline. The activate callback arrives from whatever thread the
+	// platform's assistive technology runs on, so the wrapper routes it through
+	// Owner.Post and it lands on the next drain — which is the whole point of
+	// the wrapper, and something the old test could not see because it wrote the
+	// capability field directly and bypassed it.
+	if *tapped != 0 {
+		t.Errorf("activate ran inline (tapped = %d); it must be posted to the UI goroutine", *tapped)
+	}
+	h.core.drainPosted()
 	if *tapped != 1 {
-		t.Errorf("tapped = %d, want 1", *tapped)
+		t.Errorf("tapped = %d after draining, want 1", *tapped)
 	}
 }
 

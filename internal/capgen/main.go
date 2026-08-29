@@ -38,6 +38,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -79,6 +80,44 @@ type gen struct {
 	// field, or a field that is itself wrappable) and so must be rebuilt with
 	// each callback field posted when passed as a parameter.
 	callbackStructs map[string]bool
+	// shellDecls is every top-level type name declared in package shell, used to
+	// qualify them when the wrappers are emitted into widget.
+	shellDecls map[string]bool
+}
+
+// collectShellDecls records every type name declared in package shell.
+//
+// Not just the interfaces and structs parseShell keeps: a named enum
+// (Permission, AppState, BiometricKind) appears in a wrapped signature and has
+// to be qualified too. Missing one is a compile error in generated code rather
+// than anything subtle, but the list has to be complete for the generator to be
+// re-runnable without hand edits.
+func (g *gen) collectShellDecls(dir string) {
+	g.shellDecls = map[string]bool{}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		fail(err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(g.fset, filepath.Join(dir, e.Name()), nil, 0)
+		if err != nil {
+			fail(err)
+		}
+		for _, decl := range f.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				if ts, ok := spec.(*ast.TypeSpec); ok {
+					g.shellDecls[ts.Name.Name] = true
+				}
+			}
+		}
+	}
 }
 
 func main() {
@@ -88,6 +127,7 @@ func main() {
 	}
 	g := &gen{fset: token.NewFileSet(), ifaces: map[string]*ifaceInfo{}, structs: map[string]*structInfo{}}
 	g.parseShell(filepath.Join(root, "shell"))
+	g.collectShellDecls(filepath.Join(root, "shell"))
 	if len(g.caps) == 0 {
 		fail(fmt.Errorf("no capability windows found under shell/"))
 	}
@@ -318,8 +358,8 @@ func (g *gen) computeWrappers() {
 
 // funcFields returns the (name, type) of each func-typed field of a struct, in
 // source order — the callbacks that a Posted wrapper must re-post.
-func (g *gen) funcFields(name string) [][2]interface{} {
-	var out [][2]interface{}
+func (g *gen) funcFields(name string) [][2]any {
+	var out [][2]any
 	s := g.structs[name]
 	if s == nil {
 		return out
@@ -330,7 +370,7 @@ func (g *gen) funcFields(name string) [][2]interface{} {
 			continue
 		}
 		for _, n := range f.Names {
-			out = append(out, [2]interface{}{n.Name, ft})
+			out = append(out, [2]any{n.Name, ft})
 		}
 	}
 	return out
@@ -347,10 +387,10 @@ func (g *gen) postedClosure(origExpr string, cft *ast.FuncType) string {
 	cparams := fieldTypes(cft.Params)
 	var csig, cargs []string
 	for j, cp := range cparams {
-		csig = append(csig, fmt.Sprintf("c%d %s", j, g.exprStr(cp)))
+		csig = append(csig, fmt.Sprintf("c%d %s", j, g.qualify(g.exprStr(cp))))
 		arg := fmt.Sprintf("c%d", j)
 		if id, ok := cp.(*ast.Ident); ok && g.wrappers[id.Name] {
-			arg = fmt.Sprintf("Posted%s(c%d, p.post)", id.Name, j)
+			arg = fmt.Sprintf("posted%sOf(c%d, p.post)", id.Name, j)
 		}
 		cargs = append(cargs, arg)
 	}
@@ -365,6 +405,26 @@ func (g *gen) exprStr(e ast.Expr) string {
 	}
 	return b.String()
 }
+
+// qualify rewrites bare shell type names as shell-qualified ones.
+//
+// The posted wrappers are parsed out of package shell, where its own types are
+// written bare, and emitted into package widget, where they are not. Rewriting
+// the rendered string is enough because the input is a type expression: the
+// identifiers in it are type names, and the ones that need qualifying are
+// exactly the ones declared in shell.
+func (g *gen) qualify(s string) string {
+	return identRE.ReplaceAllStringFunc(s, func(id string) string {
+		if g.shellDecls[id] {
+			return "shell." + id
+		}
+		return id
+	})
+}
+
+// identRE matches a Go identifier not already preceded by a dot, so an
+// already-qualified name (time.Duration) is left alone.
+var identRE = regexp.MustCompile(`\b[A-Za-z_][A-Za-z0-9_]*\b`)
 
 // fieldTypes expands a field list into one type per parameter/result (a field
 // with n names contributes n entries).
@@ -399,13 +459,13 @@ func (g *gen) writeWidget(root string) {
 	b.WriteString("// Regenerate with: go generate ./...\n")
 	b.WriteString("type Capabilities struct {\n")
 	for _, c := range g.caps {
-		fmt.Fprintf(&b, "\t%s shell.%s\n", c.Field, c.Type)
+		fmt.Fprintf(&b, "\t%s shell.%s\n", lowerFirst(c.Field), c.Type)
 	}
 	b.WriteString("}\n\n")
 	for _, c := range g.caps {
 		fmt.Fprintf(&b, "// %s returns the platform %s capability (shell.%s), or nil when the running\n", c.Field, c.Field, c.Type)
 		fmt.Fprintf(&b, "// platform can't provide it. See shell/*.go for its contract.\n")
-		fmt.Fprintf(&b, "func (c Ctx) %s() shell.%s { return c.el.owner.%s }\n\n", c.Field, c.Type, c.Field)
+		fmt.Fprintf(&b, "func (c Ctx) %s() shell.%s { return c.el.owner.%s }\n\n", c.Field, c.Type, lowerFirst(c.Field))
 	}
 	writeFormatted(filepath.Join(root, "widget", "capabilities_gen.go"), b.Bytes())
 }
@@ -413,28 +473,43 @@ func (g *gen) writeWidget(root string) {
 func (g *gen) writeApp(root string) {
 	var b bytes.Buffer
 	b.WriteString("// Code generated by internal/capgen; DO NOT EDIT.\n\n")
-	b.WriteString("package app\n\n")
-	b.WriteString("import (\n\t\"github.com/doug/gophics/shell\"\n\t\"github.com/doug/gophics/widget\"\n)\n\n")
-	b.WriteString("// wireCapabilities publishes each capability the Window opts into (by\n")
+	b.WriteString("package widget\n\n")
+	b.WriteString("import \"github.com/doug/gophics/shell\"\n\n")
+	b.WriteString("// WireCapabilities publishes each capability the Window opts into (by\n")
 	b.WriteString("// implementing the matching shell.<X>Window) to the widget Owner. A window that\n")
 	b.WriteString("// doesn't implement a given interface leaves that capability nil. Callback-\n")
-	b.WriteString("// carrying capabilities are wrapped in their shell.Posted<Cap> adapter so every\n")
+	b.WriteString("// carrying capabilities are wrapped in a posted adapter so every\n")
 	b.WriteString("// callback is delivered on the UI goroutine via Owner.Post, regardless of which\n")
 	b.WriteString("// goroutine the platform implementation completes on.\n")
-	b.WriteString("func wireCapabilities(o *widget.Owner, w shell.Window) {\n")
+	b.WriteString("// It is a method on Owner rather than a function in app because it uses\n")
+	b.WriteString("// nothing from app: only shell, the Owner it writes to, and Owner.Post. Living\n")
+	b.WriteString("// here is what lets the Capabilities fields and the posted wrappers stay\n")
+	b.WriteString("// unexported \xe2\x80\x94 an app names ctx.<Cap>(), never the plumbing.\n")
+	b.WriteString("func (o *Owner) WireCapabilities(w shell.Window) {\n")
 	for _, win := range g.windows {
 		fmt.Fprintf(&b, "\tif x, ok := w.(shell.%s); ok {\n", win.Name)
 		for _, c := range win.Caps {
 			if g.wrappers[c.Type] {
-				fmt.Fprintf(&b, "\t\to.%s = shell.Posted%s(x.%s(), o.Post)\n", c.Field, c.Type, c.Field)
+				fmt.Fprintf(&b, "\t\to.%s = posted%sOf(x.%s(), o.Post)\n", lowerFirst(c.Field), c.Type, c.Field)
 			} else {
-				fmt.Fprintf(&b, "\t\to.%s = x.%s()\n", c.Field, c.Field)
+				fmt.Fprintf(&b, "\t\to.%s = x.%s()\n", lowerFirst(c.Field), c.Field)
 			}
 		}
 		b.WriteString("\t}\n")
 	}
 	b.WriteString("}\n")
-	writeFormatted(filepath.Join(root, "app", "capabilities_gen.go"), b.Bytes())
+	// The runtime reads a few capabilities directly — the app runner publishes
+	// the accessibility tree, for instance — and it is a different package, so
+	// the unexported fields need readers. One per capability, generated, rather
+	// than re-exporting the fields: a reader is a promise about a value, a field
+	// is a promise about a layout.
+	b.WriteString("\n")
+	for _, c := range g.caps {
+		fmt.Fprintf(&b, "// %s returns the platform %s capability, or nil when the running\n", c.Field, c.Field)
+		fmt.Fprintf(&b, "// platform cannot provide it. Widgets read it through Ctx.%s().\n", c.Field)
+		fmt.Fprintf(&b, "func (o *Owner) %s() shell.%s { return o.%s }\n\n", c.Field, c.Type, lowerFirst(c.Field))
+	}
+	writeFormatted(filepath.Join(root, "widget", "wire_gen.go"), b.Bytes())
 }
 
 func (g *gen) writePosted(root string) {
@@ -480,32 +555,31 @@ func (g *gen) writePosted(root string) {
 
 	var b bytes.Buffer
 	b.WriteString("// Code generated by internal/capgen; DO NOT EDIT.\n\n")
-	b.WriteString("package shell\n\n")
-	if len(paths) > 0 {
-		b.WriteString("import (\n")
-		for _, p := range paths {
-			fmt.Fprintf(&b, "\t%q\n", p)
-		}
-		b.WriteString(")\n\n")
+	b.WriteString("package widget\n\n")
+	b.WriteString("import (\n")
+	for _, p := range paths {
+		fmt.Fprintf(&b, "\t%q\n", p)
 	}
+	b.WriteString("\n\t\"github.com/doug/gophics/shell\"\n")
+	b.WriteString(")\n\n")
 	for _, n := range names {
 		g.writeWrapper(&b, n)
 	}
-	writeFormatted(filepath.Join(root, "shell", "posted_gen.go"), b.Bytes())
+	writeFormatted(filepath.Join(root, "widget", "posted_gen.go"), b.Bytes())
 }
 
 // writeWrapper emits Posted<T> + the forwarding struct for one interface.
 func (g *gen) writeWrapper(b *bytes.Buffer, name string) {
 	info := g.ifaces[name]
-	fmt.Fprintf(b, "// Posted%s wraps inner so every callback it (or anything it hands out)\n", name)
+	fmt.Fprintf(b, "// posted%s wraps inner so every callback it (or anything it hands out)\n", name)
 	fmt.Fprintf(b, "// invokes is delivered through post — the app runner passes Owner.Post, making\n")
 	fmt.Fprintf(b, "// the \"callbacks fire on the UI goroutine\" contract hold no matter which\n")
 	fmt.Fprintf(b, "// goroutine the platform implementation completes on. Nil-safe: a nil inner\n")
 	fmt.Fprintf(b, "// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).\n")
-	fmt.Fprintf(b, "func Posted%s(inner %s, post func(func())) %s {\n", name, name, name)
+	fmt.Fprintf(b, "func posted%sOf(inner shell.%s, post func(func())) shell.%s {\n", name, name, name)
 	fmt.Fprintf(b, "\tif inner == nil || post == nil {\n\t\treturn inner\n\t}\n")
 	fmt.Fprintf(b, "\treturn posted%s{inner, post}\n}\n\n", name)
-	fmt.Fprintf(b, "type posted%s struct {\n\tinner %s\n\tpost  func(func())\n}\n\n", name, name)
+	fmt.Fprintf(b, "type posted%s struct {\n\tinner shell.%s\n\tpost  func(func())\n}\n\n", name, name)
 
 	for _, m := range info.it.Methods.List {
 		if len(m.Names) != 1 {
@@ -522,11 +596,11 @@ func (g *gen) writeMethod(b *bytes.Buffer, recv, mname string, ft *ast.FuncType)
 	// Signature.
 	var sig []string
 	for i, p := range params {
-		sig = append(sig, fmt.Sprintf("a%d %s", i, g.exprStr(p)))
+		sig = append(sig, fmt.Sprintf("a%d %s", i, g.qualify(g.exprStr(p))))
 	}
 	var res []string
 	for _, r := range results {
-		res = append(res, g.exprStr(r))
+		res = append(res, g.qualify(g.exprStr(r)))
 	}
 	fmt.Fprintf(b, "func (p posted%s) %s(%s)", recv, mname, strings.Join(sig, ", "))
 	if len(res) == 1 {
@@ -544,7 +618,7 @@ func (g *gen) writeMethod(b *bytes.Buffer, recv, mname string, ft *ast.FuncType)
 		switch pt := p.(type) {
 		case *ast.FuncType:
 			fmt.Fprintf(b, "\tf%d := a%d\n", i, i)
-			fmt.Fprintf(b, "\tvar w%d %s\n", i, g.exprStr(pt))
+			fmt.Fprintf(b, "\tvar w%d %s\n", i, g.qualify(g.exprStr(pt)))
 			fmt.Fprintf(b, "\tif f%d != nil {\n\t\tw%d = %s\n\t}\n",
 				i, i, g.postedClosure(fmt.Sprintf("f%d", i), pt))
 			callArgs[i] = fmt.Sprintf("w%d", i)
@@ -588,7 +662,7 @@ func (g *gen) writeMethod(b *bytes.Buffer, recv, mname string, ft *ast.FuncType)
 		rn := fmt.Sprintf("r%d", i)
 		rnames = append(rnames, rn)
 		if id, ok := r.(*ast.Ident); ok && g.wrappers[id.Name] {
-			rets = append(rets, fmt.Sprintf("Posted%s(%s, p.post)", id.Name, rn))
+			rets = append(rets, fmt.Sprintf("posted%sOf(%s, p.post)", id.Name, rn))
 		} else {
 			rets = append(rets, rn)
 		}
@@ -612,4 +686,13 @@ func writeFormatted(path string, src []byte) {
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "capgen:", err)
 	os.Exit(1)
+}
+
+// lowerFirst unexports a name: the Capabilities fields and posted wrappers are
+// plumbing that only generated code in this package writes.
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
 }

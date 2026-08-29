@@ -32,7 +32,7 @@ func TestDraggingPlaysHaptics(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h, _ := newDnD(t)
 			hap := &recordingHaptic{}
-			h.Owner().Haptic = hap
+			h.Owner().WireCapabilities(hapticWindow{h: hap})
 			h.Render()
 
 			h.Drag(geom.Pt{X: 100, Y: srcY}, tc.to)
@@ -52,9 +52,20 @@ func TestDraggingPlaysHaptics(t *testing.T) {
 
 // Haptics are a best-effort hint, and desktop has no engine at all: a nil
 // capability must be a no-op, not a crash mid-drag.
+// hapticWindow is a Window whose only capability is haptics, so the fake is
+// installed through the real wiring rather than by writing the Owner field —
+// which is unexported now, and was always the wrong seam: going through
+// WireCapabilities exercises the type-assert and the posted wrapper too.
+type hapticWindow struct {
+	shell.Window
+	h shell.Haptic
+}
+
+func (w hapticWindow) Haptic() shell.Haptic { return w.h }
+
 func TestDraggingWithoutHapticsIsFine(t *testing.T) {
 	h, r := newDnD(t)
-	h.Owner().Haptic = nil
+	h.Owner().WireCapabilities(hapticWindow{h: nil})
 	h.Render()
 
 	h.Drag(geom.Pt{X: 100, Y: srcY}, geom.Pt{X: 100, Y: acceptY})

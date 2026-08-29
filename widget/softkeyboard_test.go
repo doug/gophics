@@ -35,7 +35,7 @@ func (f *fakeTextInput) SetText(t string, a, b int) {
 func TestFocusRaisesAndDismissesTheSoftKeyboard(t *testing.T) {
 	ti := &fakeTextInput{}
 	o := newOwner()
-	o.TextInput = ti
+	o.textInput = ti
 
 	// A focusable widget mounted while nothing has focus takes it, so mounting
 	// the field is what focuses it.
@@ -74,7 +74,7 @@ func TestNoTextInputCapabilityIsHarmless(t *testing.T) {
 func TestIMEIsToldAboutTextAndSelectionChanges(t *testing.T) {
 	ti := &fakeTextInput{}
 	o := newOwner()
-	o.TextInput = ti
+	o.textInput = ti
 
 	o.SetRoot(TextField{Value: "hello"})
 	o.FlushBuilds()
@@ -106,7 +106,7 @@ func TestIMEIsToldAboutTextAndSelectionChanges(t *testing.T) {
 func TestIMENotToldWhenNothingChanged(t *testing.T) {
 	ti := &fakeTextInput{}
 	o := newOwner()
-	o.TextInput = ti
+	o.textInput = ti
 
 	o.SetRoot(TextField{Value: "x"})
 	o.FlushBuilds()
