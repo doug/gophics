@@ -93,7 +93,7 @@ func TestLazyListMeasuredHeightCaching(t *testing.T) {
 		t.Fatalf("heights len = %d, want 200", len(ls.heights))
 	}
 	// The first rows were built and laid out: measured, not estimated.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if got := ls.heights[i]; got != rowH(i) {
 			t.Fatalf("heights[%d] = %v, want measured %v", i, got, rowH(i))
 		}

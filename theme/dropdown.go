@@ -133,7 +133,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	}}
 
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			// The popup must hang from the control's own edge. A press reports
 			// its position in the control's local coordinates, and Input reports
 			// the same point globally, so the difference is the control's origin
@@ -158,7 +158,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 // outside or Escape closes. onClose fires whenever the popup dismisses (a pick
 // or an outside tap), so the caller can drop its open state.
 func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, border paint.Color, borderWidth float32, options []string, selected int, onPick func(int), onClose func()) (dismiss func()) {
-	ov := widget.MustOf[widget.Overlay](ctx)
+	ov := ctx.MustOf[widget.Overlay]()
 	th := Of(ctx)
 	var tok widget.OverlayToken
 	closed := false

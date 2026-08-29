@@ -13,8 +13,8 @@ type keyOnly struct{}
 
 func (keyOnly) Build(widget.Ctx) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{OnKey: func(shell.Key) {}},
-		Child:   widget.Sized{W: 10, H: 10},
+		Gestures: widget.Gestures{OnKey: func(shell.Key) {}},
+		Child:    widget.Sized{W: 10, H: 10},
 	}
 }
 

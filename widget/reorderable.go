@@ -2,6 +2,7 @@ package widget
 
 import (
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/shell"
 )
@@ -98,7 +99,7 @@ func (s *reorderState) row(i int) Widget {
 	}
 
 	return Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			DragAxis: axis,
 			OnPress:  func(geom.Pt) { s.SetState(func() { s.from, s.delta = i, 0 }) },
 			OnDrag: func(_, d geom.Pt) {
@@ -206,13 +207,13 @@ type dragOffset struct {
 	child  Widget
 }
 
-func (d dragOffset) createBox(Ctx) layout.Box { return &layout.Translated{} }
+func (d dragOffset) createBox(Ctx) layout.Box { return &layoutbox.Translated{} }
 func (d dragOffset) updateBox(_ Ctx, box layout.Box) {
-	t := box.(*layout.Translated)
+	t := box.(*layoutbox.Translated)
 	t.Dx, t.Dy = d.dx, d.dy
 }
 func (d dragOffset) childWidgets() []Widget { return []Widget{d.child} }
 func (d dragOffset) soleChild() Widget      { return d.child }
 func (d dragOffset) attach(box layout.Box, kids []layout.Box) {
-	box.(*layout.Translated).Child = first(kids)
+	box.(*layoutbox.Translated).Child = first(kids)
 }

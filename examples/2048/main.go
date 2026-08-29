@@ -132,8 +132,8 @@ func (s *game) reset() {
 
 func (s *game) addRandomTile() {
 	var empty [][2]int
-	for r := 0; r < boardN; r++ {
-		for c := 0; c < boardN; c++ {
+	for r := range boardN {
+		for c := range boardN {
 			if s.grid[r][c] == 0 {
 				empty = append(empty, [2]int{r, c})
 			}
@@ -189,8 +189,8 @@ func (s *game) afterSlide() {
 }
 
 func (s *game) movesAvailable() bool {
-	for r := 0; r < boardN; r++ {
-		for c := 0; c < boardN; c++ {
+	for r := range boardN {
+		for c := range boardN {
 			if s.grid[r][c] == 0 {
 				return true
 			}
@@ -209,8 +209,8 @@ func (s *game) movesAvailable() bool {
 // (the edge tiles pile against). dir: 0 left, 1 right, 2 up, 3 down.
 func lineCoords(dir int) [boardN][boardN][2]int {
 	var out [boardN][boardN][2]int
-	for i := 0; i < boardN; i++ {
-		for j := 0; j < boardN; j++ {
+	for i := range boardN {
+		for j := range boardN {
 			var r, c int
 			switch dir {
 			case 0:
@@ -302,7 +302,7 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Auto(ctx)
 	s.th = th
 	content := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnKey: func(k shell.Key) {
 				if k.Kind != shell.KeyPress {
 					return
@@ -397,8 +397,8 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	xy := func(r, cc int) (float32, float32) {
 		return bx + gap + float32(cc)*(cell+gap), by + gap + float32(r)*(cell+gap)
 	}
-	for r := 0; r < boardN; r++ {
-		for cc := 0; cc < boardN; cc++ {
+	for r := range boardN {
+		for cc := range boardN {
 			x, y := xy(r, cc)
 			c.FillRRect(geom.RectXYWH(x, y, cell, cell), 5, th.Surface)
 		}
@@ -433,8 +433,8 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 			drawTile(m.v, lerp(fx, tx, t), lerp(fy, ty, t), 1)
 		}
 	} else {
-		for r := 0; r < boardN; r++ {
-			for cc := 0; cc < boardN; cc++ {
+		for r := range boardN {
+			for cc := range boardN {
 				scale := float32(1)
 				switch {
 				case s.spawning && r == s.spR && cc == s.spC:

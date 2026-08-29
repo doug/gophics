@@ -24,7 +24,7 @@ func TestLedgerRenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Settle any mount animations.
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		h.Step(0.05)
 	}
 	img := h.Render()

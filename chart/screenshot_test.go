@@ -85,8 +85,8 @@ func TestChartShot(t *testing.T) {
 	shot(t, dir+"/range.png", geom.Size{W: 620, H: 380}, white, rng)
 
 	var cells []Cell
-	for x := 0; x < 20; x++ {
-		for y := 0; y < 7; y++ {
+	for x := range 20 {
+		for y := range 7 {
 			cells = append(cells, Cell{X: x, Y: y, V: float64((x*3 + y*5 + x*y) % 6)})
 		}
 	}

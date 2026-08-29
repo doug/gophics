@@ -6,8 +6,9 @@
 package gpu
 
 import (
-	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"testing"
+
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 )
 
 // TestFDot6Conversion tests raster.FDot6 conversion functions.

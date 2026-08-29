@@ -384,7 +384,7 @@ func (c *Capture) deliver(src []byte, w, h, stride int) {
 // end when it was not; this one is the same code and was fixed with them
 // rather than waiting to be caught separately.
 func bgraToRGBA(src []byte, img *image.RGBA, w, h, stride int) {
-	for y := 0; y < h; y++ {
+	for y := range h {
 		off := y * stride
 		if off < 0 || off+w*4 > len(src) {
 			continue

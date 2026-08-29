@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 )
 
@@ -90,7 +91,7 @@ func FuzzReconcileBetweenTrees(f *testing.F) {
 		// Every box the walk reaches must be laid out and finite: a stale
 		// child left behind by reconciliation shows up here as a box that
 		// never received a size, or one carrying garbage.
-		for _, n := range layout.Inspect(box) {
+		for _, n := range layoutbox.Inspect(box) {
 			w, h := n.Rect.Dx(), n.Rect.Dy()
 			if w < 0 || h < 0 {
 				t.Fatalf("%s laid out to a negative size %v", n.Type, n.Rect)

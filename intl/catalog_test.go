@@ -136,14 +136,12 @@ func TestCatalogConcurrentReads(t *testing.T) {
 	c.SetForms("items", Forms{One: "{n} item", Other: "{n} items"})
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 200 {
 				_ = c.Plural("items", i)
 				_ = c.Get("items")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

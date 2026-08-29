@@ -39,7 +39,7 @@
 //   - Composition: Stateless/Stateful widgets compose the catalog; this is
 //     the primary way to build apps and covers almost everything.
 //   - Custom painting: Canvas hands user code a paint.Canvas each frame.
-//   - Input: Interactive attaches a Handler (taps, drags, keys, focus) to
+//   - Input: Interactive attaches a Gestures (taps, drags, keys, focus) to
 //     any subtree.
 //   - Gesture dispatch: GestureTarget is the sealed seam through which the
 //     app runner delivers pointer gestures; *InteractiveBox is its only

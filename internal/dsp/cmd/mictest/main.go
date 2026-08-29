@@ -40,7 +40,7 @@ func main() {
 		if h, derr := device.Open(mx); derr == nil {
 			defer h.Close()
 			go func() {
-				for i := 0; i < 6; i++ {
+				for range 6 {
 					mx.PlaySource(sound.Tone(440, 0.6, 0.5), sound.PlayOptions{})
 					time.Sleep(500 * time.Millisecond)
 				}
@@ -54,7 +54,7 @@ func main() {
 	buf := make([]float32, an.WindowSize())
 	bands := make([]float32, 8)
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		time.Sleep(250 * time.Millisecond)
 		n := an.Samples(buf)
 		r := det.Detect(buf[:n])

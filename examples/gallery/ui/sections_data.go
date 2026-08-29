@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/doug/gophics/geom"
@@ -311,12 +312,7 @@ func (s *dragDropDemo) bin(th theme.Theme, title string, items []string, toDone 
 			}
 			// A bin does not accept what it already holds: dropping a chip back
 			// where it started should read as a no-op, not a move.
-			for _, v := range items {
-				if v == item {
-					return false
-				}
-			}
-			return true
+			return !slices.Contains(items, item)
 		},
 		OnDrop: func(p any, _ geom.Pt) {
 			if item, ok := p.(string); ok {

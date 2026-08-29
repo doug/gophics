@@ -6,9 +6,10 @@
 package gpu
 
 import (
-	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"math"
 	"testing"
+
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 
 	"github.com/doug/gophics/internal/gfx/gg/scene"
 )

@@ -1,7 +1,10 @@
 package widget
 
 import (
+	"slices"
+
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
@@ -22,7 +25,7 @@ import (
 
 // DragSession is the app-wide drag state. Install one with DragHost (the app
 // runner does this at the root, next to OverlayHost); widgets reach it with
-// widget.Of[*DragSession].
+// ctx.Of[*DragSession]().
 type DragSession struct {
 	// payload is the value being carried, nil when no drag is in flight.
 	payload any
@@ -131,10 +134,8 @@ func (s *DragSession) notify() {
 }
 
 func (s *DragSession) register(r *dropReg) {
-	for _, t := range s.targets {
-		if t == r {
-			return
-		}
+	if slices.Contains(s.targets, r) {
+		return
 	}
 	s.targets = append(s.targets, r)
 }
@@ -209,7 +210,7 @@ type draggableState struct {
 
 func (s *draggableState) Init(ctx Ctx) {
 	s.ctx = ctx
-	s.sess, _ = Of[*DragSession](ctx)
+	s.sess, _ = ctx.Of[*DragSession]()
 	s.armed = !s.W().LongPressToStart
 }
 
@@ -260,7 +261,7 @@ func (s *draggableState) previewWidget() Widget {
 // showPreview puts the carried widget in the overlay, positioned by padding
 // from the top-left — the same mechanism menus and tooltips use.
 func (s *draggableState) showPreview() {
-	ov, ok := Of[Overlay](s.ctx)
+	ov, ok := s.ctx.Of[Overlay]()
 	if !ok {
 		return
 	}
@@ -287,7 +288,7 @@ func (s *draggableState) finish(dropped bool) {
 func (s *draggableState) Build(ctx Ctx) Widget {
 	w := s.W()
 	return Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			DragAxis: DragAny,
 			// Until the long press arms it, this drag is not ours: stand down
 			// so the page can scroll under a finger that starts on a chip.
@@ -387,14 +388,14 @@ func (p dragPreview) Build(Ctx) Widget {
 // whatever point positioned it.
 type centered struct{ child Widget }
 
-func (c centered) createBox(Ctx) layout.Box { return &layout.Translated{} }
+func (c centered) createBox(Ctx) layout.Box { return &layoutbox.Translated{} }
 func (c centered) updateBox(_ Ctx, b layout.Box) {
-	t := b.(*layout.Translated)
+	t := b.(*layoutbox.Translated)
 	t.FracX, t.FracY = -0.5, -0.5
 }
 func (c centered) childWidgets() []Widget { return []Widget{c.child} }
 func (c centered) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Translated).Child = first(kids)
+	b.(*layoutbox.Translated).Child = first(kids)
 }
 
 func max0(v float32) float32 {
@@ -430,7 +431,7 @@ type dropTargetState struct {
 
 func (s *dropTargetState) Init(ctx Ctx) {
 	s.ctx = ctx
-	s.sess, _ = Of[*DragSession](ctx)
+	s.sess, _ = ctx.Of[*DragSession]()
 	s.reg.accept = func(p any) bool {
 		if p == nil {
 			return false

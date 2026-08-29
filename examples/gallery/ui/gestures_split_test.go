@@ -57,7 +57,7 @@ func TestSwipingARowRemovesThatRow(t *testing.T) {
 	// Swipe it well past the dismissal threshold.
 	y := (n.Rect.Min.Y + n.Rect.Max.Y) / 2
 	a.Drag(geom.Pt{X: n.Rect.Min.X + 20, Y: y}, geom.Pt{X: n.Rect.Min.X + 400, Y: y})
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		a.Step(1.0 / 60)
 	}
 
@@ -91,7 +91,7 @@ func TestPullToRefreshReplacesTheList(t *testing.T) {
 	a.Move(geom.Pt{X: 210, Y: 300})
 	a.DragTo(geom.Pt{X: 210, Y: 300}, geom.Pt{X: 210, Y: 600})
 	a.Release(geom.Pt{X: 210, Y: 600})
-	for i := 0; i < 90; i++ {
+	for range 90 {
 		a.Step(1.0 / 60)
 	}
 

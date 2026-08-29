@@ -64,7 +64,7 @@ func (s *sourcesState) refreshStatus(ctx widget.Ctx) {
 func (s *sourcesState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	lib := env(ctx).Lib
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	feeds := lib.Subs.All()
 	sort.SliceStable(feeds, func(i, j int) bool {
@@ -202,7 +202,7 @@ type browseState struct {
 func (s *browseState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	lib := env(ctx).Lib
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	cat, err := library.Suggestions()
 	if err != nil {

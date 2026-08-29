@@ -165,8 +165,8 @@ func compare(got, want *image.RGBA) result {
 	res.total = w * h
 	res.diff = image.NewRGBA(image.Rect(0, 0, w, h))
 
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			g := got.RGBAAt(x+gb.Min.X, y+gb.Min.Y)
 			v := want.RGBAAt(x+wb.Min.X, y+wb.Min.Y)
 

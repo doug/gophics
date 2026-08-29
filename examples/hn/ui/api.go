@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/doug/gophics/layout"
-	"github.com/doug/gophics/paint"
 	"html"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/paint"
 )
 
 // Item is a HackerNews item (story or comment) from the Firebase API.
@@ -155,8 +156,8 @@ func parseSpans(s string, style spanStyle) []layout.RichSpan {
 			flush()
 			if j := strings.Index(lower, `href="`); j >= 0 {
 				rest := tag[j+6:]
-				if k := strings.IndexByte(rest, '"'); k >= 0 {
-					href = html.UnescapeString(rest[:k])
+				if before, _, ok := strings.Cut(rest, "\""); ok {
+					href = html.UnescapeString(before)
 				}
 			}
 		case lower == "/a":

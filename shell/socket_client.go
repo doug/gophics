@@ -227,7 +227,7 @@ func (c *wsConn) writeFrame(opcode byte, payload []byte) error {
 		return nil
 	}
 	masked := make([]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		masked[i] = payload[i] ^ mask[i&3]
 	}
 	_, err := c.conn.Write(masked)

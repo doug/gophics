@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	srv := &ssh.Server{Addr: ":2222", Handler: handleSession}
+	srv := &ssh.Server{Addr: ":2222", Gestures: handleSession}
 	srv.AddHostKey(signer)
 	log.Println("gophics SSH demo on :2222 — connect with:  ssh -p 2222 localhost")
 	log.Fatal(srv.ListenAndServe())
@@ -153,7 +153,7 @@ var (
 func (s *demoState) Build(widget.Ctx) widget.Widget {
 	t, ptr, moved := s.t, s.ptr, s.moved
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress: func(p geom.Pt) { s.SetState(func() { s.ptr, s.moved = p, true }) },
 			OnDrag:  func(p, _ geom.Pt) { s.SetState(func() { s.ptr, s.moved = p, true }) },
 		},

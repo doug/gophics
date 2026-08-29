@@ -66,7 +66,7 @@ type safeAreaApplied struct{}
 
 func (s *safeAreaState) Build(ctx Ctx) Widget {
 	w := s.W()
-	if _, done := Of[safeAreaApplied](ctx); done {
+	if _, done := ctx.Of[safeAreaApplied](); done {
 		return w.Child
 	}
 	return Provide[safeAreaApplied]{Value: safeAreaApplied{}, Child: Padding{

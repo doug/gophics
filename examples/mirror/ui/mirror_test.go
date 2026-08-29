@@ -22,8 +22,8 @@ import (
 // a displacement can be read straight back out of the output.
 func gradient(w, h int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.SetRGBA(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: uint8((x + y) / 2), A: 255})
 		}
 	}
@@ -38,8 +38,8 @@ func TestWarpSilenceIsIdentity(t *testing.T) {
 	dst := image.NewRGBA(src.Bounds())
 	Warp(dst, src, Params{Amount: 1, T: 12.5, Bands: make([]float32, 16)})
 
-	for y := 0; y < 48; y++ {
-		for x := 0; x < 64; x++ {
+	for y := range 48 {
+		for x := range 64 {
 			if got, want := dst.RGBAAt(x, y), src.RGBAAt(x, y); got != want {
 				t.Fatalf("silence altered (%d,%d): %v, want %v", x, y, got, want)
 			}
@@ -53,7 +53,7 @@ func TestWarpMirrorFlips(t *testing.T) {
 	dst := image.NewRGBA(src.Bounds())
 	Warp(dst, src, Params{Amount: 1, Mirror: true, Bands: make([]float32, 8)})
 	for y := 0; y < 48; y += 7 {
-		for x := 0; x < 64; x++ {
+		for x := range 64 {
 			if got, want := dst.RGBAAt(x, y), src.RGBAAt(63-x, y); got != want {
 				t.Fatalf("mirror wrong at (%d,%d): %v, want %v", x, y, got, want)
 			}
@@ -86,7 +86,7 @@ func TestWarpRespondsToSound(t *testing.T) {
 	split := image.NewRGBA(src.Bounds())
 	Warp(split, src, Params{Amount: 1, Level: 1, Bands: make([]float32, 8)})
 	var moved int
-	for x := 0; x < 64; x++ {
+	for x := range 64 {
 		if split.RGBAAt(x, 24).R != quiet.RGBAAt(x, 24).R {
 			moved++
 		}
@@ -113,8 +113,8 @@ func TestWarpStaysInBounds(t *testing.T) {
 		{Amount: 1, Level: 1, Bands: []float32{}},
 	} {
 		Warp(dst, src, p) // must not panic
-		for y := 0; y < 30; y++ {
-			for x := 0; x < 40; x++ {
+		for y := range 30 {
+			for x := range 40 {
 				if a := dst.RGBAAt(x, y).A; a != 255 {
 					t.Fatalf("alpha %d at (%d,%d) for %+v", a, x, y, p)
 				}
@@ -211,7 +211,7 @@ func newApp(t *testing.T, src Source) (*app.Headless, *mirror) {
 func TestPipelineRuns(t *testing.T) {
 	src := &fakeSource{level: 0.8}
 	h, m := newApp(t, src)
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		h.Step(1.0 / 60)
 	}
 	if src.frames == 0 {
@@ -249,14 +249,14 @@ func TestOutputBuffersRotate(t *testing.T) {
 func TestSurvivesFramelessStart(t *testing.T) {
 	src := &fakeSource{level: 0.4, silent: true}
 	h, m := newApp(t, src)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		h.Step(1.0 / 60)
 	}
 	if m.show != nil {
 		t.Error("something was drawn before any frame arrived")
 	}
 	src.silent = false
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.Step(1.0 / 60)
 	}
 	if m.show == nil {
@@ -271,7 +271,7 @@ func TestLevelAttacksFastReleasesSlow(t *testing.T) {
 	h, m := newApp(t, src)
 
 	src.level = 1
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.Step(1.0 / 60)
 	}
 	rise := m.smooth
@@ -279,7 +279,7 @@ func TestLevelAttacksFastReleasesSlow(t *testing.T) {
 		t.Errorf("after 5 loud frames the envelope is only %.2f; the attack is too slow", rise)
 	}
 	src.level = 0
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.Step(1.0 / 60)
 	}
 	if m.smooth > rise*0.75 {

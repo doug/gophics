@@ -187,7 +187,7 @@ func (s *queueState) filterRow(ctx widget.Ctx, th theme.Theme, lib *library.Libr
 }
 
 func (s *queueState) list(ctx widget.Ctx, th theme.Theme, lib *library.Library) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return widget.LazyList{
 		Count:           len(s.items),
 		EstimatedExtent: 116,

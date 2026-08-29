@@ -49,7 +49,7 @@ func Warp(dst, src *image.RGBA, p Params) {
 	// behaves like a bar chart made of your own face.
 	colDY := make([]int, w)
 	lift := amt * float32(h) * 0.10
-	for x := 0; x < w; x++ {
+	for x := range w {
 		colDY[x] = int(bandAt(p.Bands, x, w) * lift)
 	}
 
@@ -57,7 +57,7 @@ func Warp(dst, src *image.RGBA, p Params) {
 	// a quiet room is still and a shout ripples.
 	rowDX := make([]int, h)
 	sway := amt * level * float32(w) * 0.035
-	for y := 0; y < h; y++ {
+	for y := range h {
 		rowDX[y] = int(sway * float32(math.Sin(float64(y)*0.055+float64(p.T)*3.2)))
 	}
 
@@ -67,10 +67,10 @@ func Warp(dst, src *image.RGBA, p Params) {
 
 	sp, dp := src.Pix, dst.Pix
 	ss, ds := src.Stride, dst.Stride
-	for y := 0; y < h; y++ {
+	for y := range h {
 		dx := rowDX[y]
 		row := y * ds
-		for x := 0; x < w; x++ {
+		for x := range w {
 			sx := x
 			if p.Mirror {
 				sx = w - 1 - x

@@ -31,8 +31,8 @@ func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Column(
 		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
 		widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.n++ }) }},
-			Child:   widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.36, 0.62, 0.98)},
+			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.n++ }) }},
+			Child:    widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.36, 0.62, 0.98)},
 		},
 	)
 }

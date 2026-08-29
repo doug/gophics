@@ -32,7 +32,7 @@ func TestFadedOpacityPanelStaysVisible(t *testing.T) {
 
 	// Drive the section into its faded state through its own control.
 	a.TapText("Grouped opacity")
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		a.Step(1.0 / 60)
 	}
 

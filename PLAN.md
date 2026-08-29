@@ -590,9 +590,9 @@ capability set.
 <!-- planfacts:widgets -->
 `Align`, `AspectRatio`, `Autocomplete`, `Canvas`, `Decorated`
 `Directionality`, `Dismissible`, `DragHost`, `Draggable`, `DropTarget`
-`EditAction`, `Fill`, `Flexible`, `Grid`, `Hero`, `Image`, `Interactive`
-`KeyboardAvoiding`, `LayoutBuilder`, `LazyList`, `Nav`, `Navigator`
-`NetworkImage`, `Opacity`, `Overlay`, `OverlayHost`, `Padding`
+`EditAction`, `Fill`, `Flexible`, `Gestures`, `Grid`, `Hero`, `Image`
+`Interactive`, `KeyboardAvoiding`, `LayoutBuilder`, `LazyList`, `Nav`
+`Navigator`, `NetworkImage`, `Opacity`, `Overlay`, `OverlayHost`, `Padding`
 `Reorderable`, `Rich`, `SafeArea`, `Scroll`, `ScrollController`
 `SelectableText`, `SelectionArea`, `Semantics`, `Sized`, `Stack`, `Text`
 `TextField`, `Transform`, `Tree`, `TreeNode`, `Wrap`
@@ -679,9 +679,8 @@ tree.
 | `input/` | Per-frame, poll-style input state for games: which keys are held right now |
 | `internal/` | Vendored GPU substrate (wgpu, naga, windowing) and internals |
 | `intl/` | Formats numbers, money and dates the way a reader's locale writes them |
-| `layout/` | Gophics's render layer: the box protocol and the core layout boxes |
+| `layout/` | Gophics's render-layer protocol: the Box interface |
 | `paint/` | Gophics's drawing layer |
-| `scene/` | Display lists: recorded paint commands that can be replayed onto any paint.Canvas |
 | `shell/` | Defines the platform interface gophics runs on |
 | `sound/` | A pure-Go DSP mixer for game and UI audio: PCM samples, oscillators, gain |
 | `text/` | Gophics's text stack: shaping, bidi, font fallback, and line breaking |

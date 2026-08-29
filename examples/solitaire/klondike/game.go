@@ -1,6 +1,9 @@
 package klondike
 
-import "math/rand"
+import (
+	"math/rand"
+	"slices"
+)
 
 // PileKind identifies a family of stacks in the Klondike layout.
 type PileKind uint8
@@ -51,7 +54,7 @@ func New(seed int64, drawN int) *Game {
 	})
 	g := &Game{drawN: drawN}
 	k := 0
-	for col := 0; col < 7; col++ {
+	for col := range 7 {
 		for row := 0; row <= col; row++ {
 			c := deck[k]
 			k++
@@ -105,10 +108,7 @@ func (g *Game) Draw() bool {
 		g.history = append(g.history, Move{Recycle: true, Count: n})
 		return true
 	}
-	n := g.drawN
-	if n > len(g.stock) {
-		n = len(g.stock)
-	}
+	n := min(g.drawN, len(g.stock))
 	for i := 0; i < n; i++ {
 		c := g.stock[len(g.stock)-1]
 		g.stock = g.stock[:len(g.stock)-1]
@@ -208,7 +208,7 @@ func (g *Game) AutoToFoundation(p Pile) bool {
 		return false
 	}
 	card := (*src)[idx]
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if g.canPlace([]Card{card}, Pile{Foundation, i}) {
 			return g.Move(p, idx, Pile{Foundation, i})
 		}
@@ -228,8 +228,8 @@ func (g *Game) Undo() bool {
 	switch {
 	case m.Recycle:
 		// The recycle emptied the waste into the stock; put it all back.
-		for i := len(g.stock) - 1; i >= 0; i-- {
-			c := g.stock[i]
+		for _, c := range slices.Backward(g.stock) {
+
 			c.Up = true
 			g.waste = append(g.waste, c)
 		}
@@ -259,7 +259,7 @@ func (g *Game) Undo() bool {
 // Won reports whether all 52 cards have reached the foundations.
 func (g *Game) Won() bool {
 	n := 0
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		n += len(g.found[i])
 	}
 	return n == 52
@@ -277,10 +277,10 @@ type Action struct {
 func (g *Game) LegalActions() []Action {
 	var out []Action
 	dests := make([]Pile, 0, 11)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		dests = append(dests, Pile{Foundation, i})
 	}
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		dests = append(dests, Pile{Tableau, i})
 	}
 	consider := func(from Pile, idx int) {
@@ -293,14 +293,14 @@ func (g *Game) LegalActions() []Action {
 	if len(g.waste) > 0 {
 		consider(Pile{Waste, 0}, len(g.waste)-1)
 	}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if len(g.found[i]) > 0 {
 			consider(Pile{Foundation, i}, len(g.found[i])-1)
 		}
 	}
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		t := g.tab[i]
-		for j := 0; j < len(t); j++ {
+		for j := range t {
 			if t[j].Up {
 				consider(Pile{Tableau, i}, j)
 			}

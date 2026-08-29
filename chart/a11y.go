@@ -51,7 +51,7 @@ func summarize(d []Datum) string {
 	if cats(d) != nil {
 		var b strings.Builder
 		n := min(len(d), 10)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if i > 0 {
 				b.WriteString(", ")
 			}

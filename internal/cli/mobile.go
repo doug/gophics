@@ -924,7 +924,7 @@ func developmentTeam() (string, error) {
 		return "", fmt.Errorf("security find-identity: %w", err)
 	}
 	var cn string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		a := strings.Index(line, `"`)
 		b := strings.LastIndex(line, `"`)
 		if a < 0 || b <= a {

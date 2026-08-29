@@ -167,8 +167,8 @@ func (t Table) headerCell(th Theme, c int) widget.Widget {
 		return content
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { t.requestSort(c) }},
-		Child:   content,
+		Gestures: widget.Gestures{OnTap: func() { t.requestSort(c) }},
+		Child:    content,
 	}
 }
 
@@ -234,7 +234,7 @@ func (s *tableRowState) Build(ctx widget.Ctx) widget.Widget {
 	}
 
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap:   r.onTap,
 			OnEnter: func() { s.SetState(func() { s.hover = true }) },
 			OnExit:  func() { s.SetState(func() { s.hover = false }) },

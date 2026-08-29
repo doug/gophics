@@ -6,10 +6,11 @@ package ggcanvas
 import (
 	"errors"
 	"fmt"
-	"github.com/doug/gophics/internal/gfx/gputypes"
 	"image"
 	"io"
 	"math"
+
+	"github.com/doug/gophics/internal/gfx/gputypes"
 
 	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/internal/gfx/gpucontext"

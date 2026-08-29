@@ -12,7 +12,7 @@ import (
 // dismiss func closes it programmatically. Requires an OverlayHost in scope
 // (app.NewCore installs one).
 func ShowDialog(ctx widget.Ctx, content widget.Widget) (dismiss func()) {
-	ov := widget.MustOf[widget.Overlay](ctx)
+	ov := ctx.MustOf[widget.Overlay]()
 	th := Of(ctx)
 	var tok widget.OverlayToken
 	closed := false
@@ -37,7 +37,7 @@ func ShowDialog(ctx widget.Ctx, content widget.Widget) (dismiss func()) {
 // ShowMenu presents items in a card anchored at topLeft (logical coords),
 // above the app. Selecting an item or tapping outside dismisses it.
 func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()) {
-	ov := widget.MustOf[widget.Overlay](ctx)
+	ov := ctx.MustOf[widget.Overlay]()
 	th := Of(ctx)
 	var tok widget.OverlayToken
 	closed := false
@@ -50,7 +50,7 @@ func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()
 	rows := make([]widget.Widget, len(items))
 	for i, it := range items {
 		rows[i] = widget.Interactive{
-			Handler: widget.Handler{OnTap: func() {
+			Gestures: widget.Gestures{OnTap: func() {
 				close()
 				if it.OnTap != nil {
 					it.OnTap()
@@ -102,7 +102,7 @@ type modalScrim struct {
 
 func (m modalScrim) Build(widget.Ctx) widget.Widget {
 	scrim := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap: m.OnDismiss,
 			OnKey: func(k shell.Key) {
 				if k.Kind == shell.KeyPress && k.Code == shell.KeyEscape {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -199,7 +200,7 @@ func (s *dismissState) release() {
 func (s *dismissState) Build(ctx Ctx) Widget {
 	w := s.W()
 	slide := slideBox{dx: s.dx, out: &s.width, child: Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			DragAxis: DragHorizontal, // let a vertical scroll claim vertical drags
 			OnPress: func(geom.Pt) {
 				s.anim.Jump(1) // grab interrupts any spring/dismiss
@@ -242,7 +243,7 @@ func (d dismissStack) attach(b layout.Box, kids []layout.Box) {
 }
 
 type dismissBox struct {
-	layout.Base
+	layoutbox.Base
 	bg, fg layout.Box
 	reveal bool
 	size   geom.Size
@@ -294,9 +295,9 @@ type slideBox struct {
 	child Widget
 }
 
-func (b slideBox) createBox(Ctx) layout.Box { return &layout.Translated{} }
+func (b slideBox) createBox(Ctx) layout.Box { return &layoutbox.Translated{} }
 func (b slideBox) updateBox(_ Ctx, box layout.Box) {
-	t := box.(*layout.Translated)
+	t := box.(*layoutbox.Translated)
 	t.Dx = b.dx
 	if b.out != nil {
 		*b.out = t.Size().W
@@ -305,5 +306,5 @@ func (b slideBox) updateBox(_ Ctx, box layout.Box) {
 func (b slideBox) childWidgets() []Widget { return []Widget{b.child} }
 func (b slideBox) soleChild() Widget      { return b.child }
 func (b slideBox) attach(box layout.Box, kids []layout.Box) {
-	box.(*layout.Translated).Child = first(kids)
+	box.(*layoutbox.Translated).Child = first(kids)
 }

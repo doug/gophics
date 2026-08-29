@@ -287,10 +287,7 @@ func (c *Client) doSleep(ctx context.Context, d time.Duration) error {
 // backoff returns an exponentially growing delay with jitter, so a batch of
 // feeds failing at once does not retry in lockstep.
 func backoff(attempt int) time.Duration {
-	base := time.Duration(1<<uint(attempt)) * time.Second
-	if base > 30*time.Second {
-		base = 30 * time.Second
-	}
+	base := min(time.Duration(1<<uint(attempt))*time.Second, 30*time.Second)
 	jitter := time.Duration(rand.Int63n(int64(base / 2)))
 	return base + jitter
 }

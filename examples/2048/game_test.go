@@ -21,8 +21,8 @@ func TestSlideMergeUp(t *testing.T) {
 	}
 	// only one tile remains.
 	n := 0
-	for r := 0; r < boardN; r++ {
-		for c := 0; c < boardN; c++ {
+	for r := range boardN {
+		for c := range boardN {
 			if out[r][c] != 0 {
 				n++
 			}

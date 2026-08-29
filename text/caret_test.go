@@ -69,7 +69,7 @@ func TestIndexAtInvertsCaretX(t *testing.T) {
 
 	// Round-tripping every caret position must be stable: the x for an index,
 	// nudged into that cluster, resolves back to the same index.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		x := l.CaretX(i) + 1 // just inside cluster i
 		if got := l.IndexAt(x); got != i {
 			t.Errorf("IndexAt(CaretX(%d)+1) = %d, want %d", i, got, i)

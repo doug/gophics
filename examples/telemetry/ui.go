@@ -256,7 +256,7 @@ func chartCard(th theme.Theme, title string, c widget.Widget) widget.Widget {
 func (s *dash) throughput(th theme.Theme) widget.Widget {
 	data := make([]chart.Datum, 0, ThroughputSecs)
 	// The newest second is still filling, so it always reads low; drop it.
-	for i := 0; i < ThroughputSecs-1; i++ {
+	for i := range ThroughputSecs - 1 {
 		data = append(data, chart.Datum{X: float64(i - (ThroughputSecs - 1)), Y: float64(s.res.PerSec[i])})
 	}
 	col := th.ChartAt(0)

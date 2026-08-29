@@ -158,12 +158,12 @@ func (s *rowState) Build(ctx widget.Ctx) widget.Widget {
 	var del widget.Widget = widget.Sized{W: 20, H: 20}
 	if s.hovered {
 		del = widget.Interactive{
-			Handler: widget.Handler{OnTap: r.OnDelete},
-			Child:   widget.Text{S: "×", Size: 16, Color: th.Danger},
+			Gestures: widget.Gestures{OnTap: r.OnDelete},
+			Child:    widget.Text{S: "×", Size: 16, Color: th.Danger},
 		}
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap: r.OnToggle,
 			OnEnter: func() {
 				r.OnHover()

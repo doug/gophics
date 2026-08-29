@@ -3,8 +3,9 @@
 package gpu
 
 import (
-	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"sort"
+
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 )
 
 // TileWidth is the width of a tile in pixels (matches TileSize).

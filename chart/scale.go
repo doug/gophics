@@ -107,10 +107,7 @@ func (s *Band) Invert(t float32) float64 {
 	if n == 0 {
 		return 0
 	}
-	i := int(float64(t) * float64(n))
-	if i < 0 {
-		i = 0
-	}
+	i := max(int(float64(t)*float64(n)), 0)
 	if i >= n {
 		i = n - 1
 	}

@@ -22,7 +22,7 @@ import (
 //	theme.ShowSnackbar(ctx, "Deleted", theme.WithAction("Undo", undo),
 //	    theme.WithDuration(6*time.Second))
 func ShowSnackbar(ctx widget.Ctx, message string, opts ...SnackOption) (dismiss func()) {
-	ov := widget.MustOf[widget.Overlay](ctx)
+	ov := ctx.MustOf[widget.Overlay]()
 	th := Of(ctx)
 	cfg := snackConfig{duration: 4 * time.Second}
 	for _, o := range opts {
@@ -161,7 +161,7 @@ func (s *snackbarState) Build(ctx widget.Ctx) widget.Widget {
 			widget.Sized{W: 16},
 			widget.Spacer(),
 			widget.Interactive{
-				Handler: widget.Handler{OnTap: func() {
+				Gestures: widget.Gestures{OnTap: func() {
 					if w.cfg.onAction != nil {
 						w.cfg.onAction()
 					}

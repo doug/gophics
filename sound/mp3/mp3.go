@@ -24,7 +24,7 @@ func Decode(r io.Reader) (*sound.Sample, error) {
 	// 16-bit LE, 2 channels → interleaved float32.
 	n := len(raw) / 2
 	data := make([]float32, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s := int16(raw[2*i]) | int16(raw[2*i+1])<<8
 		data[i] = float32(s) / 32768
 	}

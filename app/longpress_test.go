@@ -24,7 +24,7 @@ type lpState struct {
 func (s *lpState) Init(widget.Ctx) { s.hook(s) }
 func (s *lpState) Build(widget.Ctx) widget.Widget {
 	return widget.Center(widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap:       func() { s.taps++ },
 			OnLongPress: func() { s.longs++ },
 		},
@@ -73,7 +73,7 @@ func TestMoveCancelsLongPress(t *testing.T) {
 	h, st := lpHarness(t)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 100, Y: 100}})
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 130, Y: 100}}) // past slop
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		h.Step(0.02)
 	}
 	if st.longs != 0 {

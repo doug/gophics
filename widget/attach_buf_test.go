@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 )
 
@@ -36,7 +37,7 @@ func TestNoAttachRetainsItsBuffer(t *testing.T) {
 		}}}
 	}
 
-	layoutWith := func(scrub bool) []layout.InspectNode {
+	layoutWith := func(scrub bool) []layoutbox.InspectNode {
 		prev := scrubAttachBuf
 		scrubAttachBuf = scrub
 		defer func() { scrubAttachBuf = prev }()
@@ -46,7 +47,7 @@ func TestNoAttachRetainsItsBuffer(t *testing.T) {
 		o.FlushBuilds()
 		box := o.root.renderBox()
 		box.Layout(layout.Loose(geom.Size{W: 200, H: 200}))
-		return layout.Inspect(box)
+		return layoutbox.Inspect(box)
 	}
 
 	want := layoutWith(false)

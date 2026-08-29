@@ -394,7 +394,7 @@ func (m *Mixer) ReadFloat32s(buf []float32) (int, error) {
 		}
 		env0, env1 := env0, v.env
 
-		for i := 0; i < frames; i++ {
+		for i := range frames {
 			e := env0
 			if frames > 1 {
 				e = env0 + (env1-env0)*float32(i)/float32(frames)

@@ -197,7 +197,7 @@ func TestLongPressThenDragCarriesThePayload(t *testing.T) {
 	h, r := newDnDWith(t, true)
 
 	h.Press(geom.Pt{X: 100, Y: srcY})
-	for s := 0; s < 40; s++ { // past the half-second long-press threshold
+	for range 40 { // past the half-second long-press threshold
 		h.Step(1.0 / 60)
 	}
 	h.Move(geom.Pt{X: 100, Y: acceptY})
@@ -219,7 +219,7 @@ func TestLongPressDragBeatsTheScrollAroundIt(t *testing.T) {
 	h, r := newDnDIn(t, true, true)
 
 	h.Press(geom.Pt{X: 100, Y: scrollPadTop + srcY})
-	for s := 0; s < 40; s++ {
+	for range 40 {
 		h.Step(1.0 / 60)
 	}
 	h.Move(geom.Pt{X: 100, Y: scrollPadTop + acceptY})

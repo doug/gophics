@@ -137,12 +137,12 @@ func TestHasFindsItemAfterDateChange(t *testing.T) {
 func TestPerFeedLimitAndLimit(t *testing.T) {
 	s := mustOpen(t)
 	now := time.Now().UTC()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := s.Put(mkItem("noisy", string(rune('a'+i)), "N", now.Add(-time.Duration(i)*time.Minute), 100)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := s.Put(mkItem("quiet", string(rune('x'+i)), "Q", now.Add(-time.Duration(i)*time.Minute), 100)); err != nil {
 			t.Fatal(err)
 		}

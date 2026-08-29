@@ -58,7 +58,7 @@ func TestImgLoaderFetchConcurrencyBounded(t *testing.T) {
 	const n = 32
 	var wg sync.WaitGroup
 	results := make([]loadResult, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -102,7 +102,7 @@ func TestImgLoaderSingleFlight(t *testing.T) {
 	const n = 16
 	var wg sync.WaitGroup
 	results := make([]loadResult, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -133,7 +133,7 @@ func TestImgLoaderEvictsOldHalfKeepsHot(t *testing.T) {
 
 	l := newTestLoader()
 	// Fill the cache to its limit with entries of ascending age.
-	for i := 0; i < imgCacheLimit; i++ {
+	for i := range imgCacheLimit {
 		l.gen++
 		l.cache[fmt.Sprintf("u%d", i)] = &imgCacheEntry{gen: l.gen}
 	}

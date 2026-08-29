@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -152,11 +153,8 @@ func (c *Catalog) validate() error {
 		}
 		if f.Kind != "" {
 			var ok bool
-			for _, k := range KnownKinds() {
-				if f.Kind == k {
-					ok = true
-					break
-				}
+			if slices.Contains(KnownKinds(), f.Kind) {
+				ok = true
 			}
 			if !ok {
 				return fmt.Errorf("feed %q: unknown kind %q", f.ID, f.Kind)
@@ -208,11 +206,8 @@ func (c *Catalog) validate() error {
 		}
 		for _, k := range e.Kinds {
 			var ok bool
-			for _, known := range KnownKinds() {
-				if k == known {
-					ok = true
-					break
-				}
+			if slices.Contains(KnownKinds(), k) {
+				ok = true
 			}
 			if !ok {
 				return fmt.Errorf("edition %q references unknown kind %q", e.ID, k)

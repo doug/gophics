@@ -25,7 +25,7 @@ func TestTileSheet(t *testing.T) {
 	size := geom.Size{W: float32(int(tileCount))*(tile*scale+14) + 26, H: tile*scale + 40}
 	sheet := widget.Canvas{Draw: func(c paint.Canvas, _ geom.Size) {
 		c.Clear(paint.RGB(0.10, 0.10, 0.13))
-		for i := TileID(0); i < tileCount; i++ {
+		for i := range tileCount {
 			x := 13 + float32(int(i))*(tile*scale+14)
 			c.DrawSprite(atlas, paint.Sprite{
 				Src: src(i), Dst: geom.RectXYWH(x, 20, tile*scale, tile*scale), Nearest: true})

@@ -125,7 +125,7 @@ func TestBalance(t *testing.T) {
 	const runs = 200
 	var wins, deaths, stalls, totalTurns int
 	depths := map[int]int{}
-	for i := 0; i < runs; i++ {
+	for i := range runs {
 		d, won, dead, turns := bot(int64(i)+1, 4000)
 		depths[d]++
 		totalTurns += turns
@@ -160,7 +160,7 @@ func TestBalance(t *testing.T) {
 func bar(n, of int) string {
 	w := n * 40 / max(1, of)
 	s := ""
-	for i := 0; i < w; i++ {
+	for range w {
 		s += "█"
 	}
 	return s

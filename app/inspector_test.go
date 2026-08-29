@@ -9,7 +9,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/geom"
-	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/widget"
 )
 
@@ -39,7 +39,7 @@ func TestDeepestAtFindsLeaf(t *testing.T) {
 	root := h.core.Owner.RootBox()
 
 	// The 100×40 box is centered in 300×200: x∈[100,200], y∈[80,120].
-	_, rect, ok := layout.DeepestAt(root, geom.Pt{X: 150, Y: 100})
+	_, rect, ok := layoutbox.DeepestAt(root, geom.Pt{X: 150, Y: 100})
 	if !ok {
 		t.Fatal("no box found under the centered point")
 	}
@@ -48,7 +48,7 @@ func TestDeepestAtFindsLeaf(t *testing.T) {
 	}
 
 	// An empty corner still resolves to some ancestor filling that area.
-	_, corner, ok := layout.DeepestAt(root, geom.Pt{X: 5, Y: 5})
+	_, corner, ok := layoutbox.DeepestAt(root, geom.Pt{X: 5, Y: 5})
 	if !ok {
 		t.Fatal("no box found at the corner")
 	}

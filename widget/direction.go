@@ -43,6 +43,6 @@ func (d Directionality) Build(Ctx) Widget {
 // DirectionOf returns the reading direction in scope, defaulting to DirLTR
 // when no Directionality was installed.
 func DirectionOf(c Ctx) Direction {
-	d, _ := Of[Direction](c)
+	d, _ := c.Of[Direction]()
 	return d
 }

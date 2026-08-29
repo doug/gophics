@@ -15,8 +15,8 @@ import (
 // differ by 1, vertical by cols mod numTypes = 2).
 func TestMatches(t *testing.T) {
 	g := &game{}
-	for r := 0; r < rows; r++ {
-		for c := 0; c < cols; c++ {
+	for r := range rows {
+		for c := range cols {
 			g.grid[r][c] = int8((r*cols + c) % numTypes)
 		}
 	}
@@ -58,7 +58,7 @@ func TestPlay(t *testing.T) {
 	// (swap 140ms + clear 200 + fall 260 ≈ 40 frames), then confirm it renders.
 	for _, sw := range [][2]int{{4, 3}, {2, 1}, {5, 4}, {1, 2}} {
 		h.Drag(center(sw[0], sw[1]), center(sw[0], sw[1]+1))
-		for i := 0; i < 60; i++ {
+		for range 60 {
 			h.Step(0.016)
 		}
 	}

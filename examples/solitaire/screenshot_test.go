@@ -36,7 +36,7 @@ func TestScreenshot(t *testing.T) {
 		h.Step(0.05)
 		h.Render()
 	}
-	for round := 0; round < 60; round++ {
+	for round := range 60 {
 		if acts := st.g.LegalActions(); len(acts) > 0 {
 			a := acts[round%len(acts)]
 			st.g.Move(a.From, a.FromIdx, a.To)
@@ -73,7 +73,7 @@ func TestCascadeShot(t *testing.T) {
 	// Force a completed game: all four foundations full, A→K.
 	var snap klondike.Snapshot
 	snap.DrawN = 1
-	for suit := 0; suit < 4; suit++ {
+	for suit := range 4 {
 		for rank := 1; rank <= 13; rank++ {
 			snap.Foundations[suit] = append(snap.Foundations[suit],
 				klondike.Card{Suit: klondike.Suit(suit), Rank: uint8(rank), Up: true})

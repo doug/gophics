@@ -19,7 +19,7 @@ func dismissFixture(t *testing.T, w Dismissible) (*Owner, *dismissState) {
 // pumpDismiss runs frames until the spring/dismiss animation settles.
 func pumpDismiss(t *testing.T, o *Owner, s *dismissState) {
 	t.Helper()
-	for i := 0; i < 240; i++ {
+	for range 240 {
 		o.TickAll(0.016)
 		o.FlushBuilds()
 		if !s.anim.Running() {

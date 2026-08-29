@@ -78,7 +78,7 @@ func TestFilePrefsCorruptFile(t *testing.T) {
 func TestFilePrefsAtomicWrite(t *testing.T) {
 	dir := t.TempDir()
 	p := &Store{path: filepath.Join(dir, "preferences.json")}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if err := p.Set("k", "v"); err != nil {
 			t.Fatal(err)
 		}

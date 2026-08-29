@@ -54,8 +54,8 @@ func (ch Chip) Build(ctx widget.Ctx) widget.Widget {
 		Sem: &layout.SemInfo{
 			Role: layout.RoleCheckbox, Label: ch.Label, Checked: &selected,
 		},
-		Handler: widget.Handler{OnTap: ch.OnTap},
-		Child:   body,
+		Gestures: widget.Gestures{OnTap: ch.OnTap},
+		Child:    body,
 	}
 }
 

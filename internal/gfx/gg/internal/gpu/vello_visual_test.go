@@ -6,13 +6,14 @@
 package gpu
 
 import (
-	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 
 	"github.com/doug/gophics/internal/gfx/gg/scene"
 )

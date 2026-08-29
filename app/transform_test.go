@@ -25,8 +25,8 @@ func (s *scaleState) Build(widget.Ctx) widget.Widget {
 	// A 50×50 button at the top-left, scaled 2× about its origin: it visually
 	// covers [0,0]–[100,100] but its layout box is still 50×50.
 	btn := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.tapped = true }) }},
-		Child:   widget.Sized{W: 50, H: 50},
+		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.tapped = true }) }},
+		Child:    widget.Sized{W: 50, H: 50},
 	}
 	return widget.Align{X: 0, Y: 0, Child: widget.Scale(2, btn)}
 }

@@ -107,10 +107,7 @@ func (s *readerState) longEnough() bool {
 	if mins <= 0 {
 		return false
 	}
-	want := time.Duration(mins) * time.Minute / 2
-	if want > 4*time.Minute {
-		want = 4 * time.Minute
-	}
+	want := min(time.Duration(mins)*time.Minute/2, 4*time.Minute)
 	return time.Since(s.opened) >= want
 }
 
@@ -257,7 +254,7 @@ func summaryNotice(th theme.Theme, it *store.Item, size float32, openURL func(st
 // ranking model, and the link to the original.
 func (s *readerState) articleFoot(ctx widget.Ctx, th theme.Theme, it *store.Item) widget.Widget {
 	lib := env(ctx).Lib
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	vote := func(up bool) {
 		lib.Vote(it, up)

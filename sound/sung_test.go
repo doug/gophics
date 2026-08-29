@@ -127,7 +127,7 @@ func TestSungDoesNotClip(t *testing.T) {
 func TestSungEnds(t *testing.T) {
 	src := sound.Sung(440, 0.05, 0.5, sound.VoiceOptions{})
 	block := make([]float32, 512)
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if !src.Process(block) {
 			return
 		}

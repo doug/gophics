@@ -42,8 +42,8 @@ func (s *lum) drawField(c paint.Canvas, step float32) {
 		c.FillRect(geom.RectXYWH(s.area.Min.X, y-0.5, s.area.Dx(), 1), gridLine)
 	}
 	r := step * 0.055
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
+	for y := range rows {
+		for x := range cols {
 			if s.grid[y][x] != empty {
 				continue
 			}
@@ -74,8 +74,8 @@ func (s *lum) drawRipples(c paint.Canvas, step float32) {
 }
 
 func (s *lum) drawCells(c paint.Canvas, step float32) {
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
+	for y := range rows {
+		for x := range cols {
 			switch s.grid[y][x] {
 			case node:
 				s.drawNode(c, x, y, step)

@@ -143,8 +143,8 @@ func declaredCharset(raw []byte) string {
 		head = head[:4096]
 	}
 	lower := strings.ToLower(string(head))
-	if i := strings.Index(lower, "charset="); i >= 0 {
-		rest := lower[i+len("charset="):]
+	if _, after, ok := strings.Cut(lower, "charset="); ok {
+		rest := after
 		rest = strings.TrimLeft(rest, `"' `)
 		end := strings.IndexAny(rest, `"' ;/>`+"\r\n\t")
 		if end < 0 {

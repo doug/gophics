@@ -44,9 +44,9 @@ func TestScaffoldedIOSHostTypechecks(t *testing.T) {
 	if err := scaffoldMobile(dir, "com.example.probe", data, true, false); err != nil {
 		t.Fatal(err)
 	}
-	src, err := os.ReadFile(filepath.Join(dir, "ios", "App", "App.swift"))
-	if err != nil {
-		t.Fatal(err)
+	swifts, err := filepath.Glob(filepath.Join(dir, "ios", "App", "*.swift"))
+	if err != nil || len(swifts) == 0 {
+		t.Fatalf("no scaffolded Swift files: %v", err)
 	}
 
 	// The framework the host imports is the app's own bind package, which does
@@ -60,11 +60,22 @@ func TestScaffoldedIOSHostTypechecks(t *testing.T) {
 		t.Fatalf("gomobile bind: %v\n%s", err, out)
 	}
 
-	body := strings.ReplaceAll(string(src), "import Probemobile", "import Mobile")
-	body = strings.ReplaceAll(body, "@main\n", "")
-	body += "\nfunc ProbemobileStart(_ e: NSErrorPointer) -> MobileBridge? { nil }\n"
+	// All of them together, because they reference each other: App.swift
+	// constructs the GophicsPlatform that GophicsPlatform.swift defines.
+	var body strings.Builder
+	for _, f := range swifts {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		one := strings.ReplaceAll(string(src), "import Probemobile", "import Mobile")
+		one = strings.ReplaceAll(one, "@main\n", "")
+		body.WriteString(one)
+		body.WriteString("\n")
+	}
+	body.WriteString("\nfunc ProbemobileStart(_ e: NSErrorPointer) -> MobileBridge? { nil }\n")
 	swift := filepath.Join(dir, "App_typecheck.swift")
-	if err := os.WriteFile(swift, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(swift, []byte(body.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

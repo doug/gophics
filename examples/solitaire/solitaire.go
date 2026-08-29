@@ -149,13 +149,13 @@ func (s *gameState) startCascade() {
 	s.cascading = true
 	s.cascade, s.stamps, s.launch, s.launchT = nil, nil, nil, 0
 	maxLen := 0
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if l := len(s.g.Foundation(i)); l > maxLen {
 			maxLen = l
 		}
 	}
 	for row := 0; row < maxLen; row++ {
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			f := s.g.Foundation(i)
 			if idx := len(f) - 1 - row; idx >= 0 {
 				s.launch = append(s.launch, launchItem{f[idx], i})
@@ -264,7 +264,7 @@ func (s *gameState) persist() {
 
 func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 	board := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress: func(p geom.Pt) {
 				if s.dealing { // ignore board input while the deal animates in
 					s.pressOK = false
@@ -335,7 +335,7 @@ func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
 
 func chip(label string, onTap func()) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: onTap},
+		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Decorated{Color: colBack2, Radius: 8, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(14, 7),
 			Child:  widget.Text{S: label, Size: 14, Color: colFace},
@@ -477,7 +477,7 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 	} else {
 		drawEmpty(c, b.Waste)
 	}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		f := s.g.Foundation(i)
 		hiding := s.hidingRun() && s.dragPile.Kind == klondike.Foundation && s.dragPile.Index == i
 		if len(f) > 0 && !hiding {
@@ -487,11 +487,11 @@ func (s *gameState) draw(c paint.Canvas, size geom.Size) {
 		}
 	}
 	total := 0
-	for j := 0; j < 7; j++ {
+	for j := range 7 {
 		total += len(s.g.Tableau(j))
 	}
 	di := 0
-	for j := 0; j < 7; j++ {
+	for j := range 7 {
 		col := s.g.Tableau(j)
 		if len(col) == 0 {
 			drawEmpty(c, b.Slot[j])

@@ -136,7 +136,7 @@ func (s *Store) registerVocabulary(v *vocab) {
 		s.routeIDs = append(s.routeIDs, v.route.intern(n))
 	}
 	for _, r := range genRegions {
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			s.hostIDs = append(s.hostIDs, v.host.intern(r+"-"+string(rune('a'+i))+string(rune('0'+i%4))))
 		}
 	}
@@ -246,7 +246,7 @@ func (s *Store) Fill(n int, over time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	span := float64(over.Milliseconds())
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i%180 == 0 {
 			s.drift()
 		}
@@ -280,7 +280,7 @@ func (s *Store) Produce(stop <-chan struct{}) {
 			}
 			s.drift()
 			now := s.now()
-			for i := 0; i < batch; i++ {
+			for range batch {
 				s.write(s.gen(now))
 			}
 			s.mu.Unlock()

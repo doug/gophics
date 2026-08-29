@@ -2,6 +2,7 @@ package chart
 
 import (
 	"math"
+	"slices"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
@@ -80,8 +81,8 @@ func (a AreaMark) draw(p plot) {
 	for _, d := range a.Data {
 		poly.LineTo(geom.Pt{X: p.px(d.X), Y: topAt(d)})
 	}
-	for i := len(a.Data) - 1; i >= 0; i-- {
-		poly.LineTo(geom.Pt{X: p.px(a.Data[i].X), Y: botAt(a.Data[i])})
+	for _, v := range slices.Backward(a.Data) {
+		poly.LineTo(geom.Pt{X: p.px(v.X), Y: botAt(v)})
 	}
 	p.Canvas.FillPath(poly.Close(), fill)
 

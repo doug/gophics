@@ -13,9 +13,9 @@ import (
 func dft(x []complex128) []complex128 {
 	n := len(x)
 	out := make([]complex128, n)
-	for k := 0; k < n; k++ {
+	for k := range n {
 		var sum complex128
-		for t := 0; t < n; t++ {
+		for t := range n {
 			ang := -2 * math.Pi * float64(k) * float64(t) / float64(n)
 			sum += x[t] * cmplx.Exp(complex(0, ang))
 		}
@@ -104,10 +104,7 @@ func TestSamplesAreChronological(t *testing.T) {
 	}
 	// Feed in small blocks, as a real driver would.
 	for i := 0; i < total; i += 37 {
-		end := i + 37
-		if end > total {
-			end = total
-		}
+		end := min(i+37, total)
 		a.Write(in[i:end])
 	}
 
@@ -315,9 +312,7 @@ func TestConcurrentWriteAndRead(t *testing.T) {
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 
-	wg.Add(1)
-	go func() { // the capture thread
-		defer wg.Done()
+	wg.Go(func() { // the capture thread
 		block := make([]float32, 256)
 		for i := 0; ; i++ {
 			select {
@@ -330,11 +325,11 @@ func TestConcurrentWriteAndRead(t *testing.T) {
 			}
 			a.Write(block)
 		}
-	}()
+	})
 
 	out := make([]float32, 2048)
 	bands := make([]float32, 32)
-	for i := 0; i < 200; i++ { // the UI goroutine
+	for range 200 { // the UI goroutine
 		a.Samples(out)
 		a.Level()
 		a.Bands(bands)

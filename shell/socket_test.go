@@ -85,7 +85,7 @@ func recvMsg[T any](t *testing.T, ch <-chan T) T {
 	}
 }
 
-// wsEchoServer returns an http.Handler that completes the server side of the
+// wsEchoServer returns an http.Gestures that completes the server side of the
 // WebSocket opening handshake by hijacking the connection, then echoes every
 // data frame back and honors a close frame. It reuses the client's framing
 // helpers (wsConn.readFrame, acceptKey, the op* constants) since the test is in

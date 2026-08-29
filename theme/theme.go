@@ -220,7 +220,7 @@ func GlassDark() Theme {
 // Of returns the provided Theme, falling back to Auto when none is
 // provided — themed components work without any setup.
 func Of(ctx widget.Ctx) Theme {
-	if th, ok := widget.Of[Theme](ctx); ok {
+	if th, ok := ctx.Of[Theme](); ok {
 		return th
 	}
 	return Auto(ctx)
@@ -368,7 +368,7 @@ func (s *buttonState) Build(ctx widget.Ctx) widget.Widget {
 		bg = paint.Lerp(bg, th.Text, 0.16*p)
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap:      b.OnTap,
 			OnEnter:    func() { s.SetState(func() { s.hovered = true }) },
 			OnExit:     func() { s.SetState(func() { s.hovered = false }) },

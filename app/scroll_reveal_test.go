@@ -65,7 +65,7 @@ func TestCaretScrollsIntoViewWhileTyping(t *testing.T) {
 
 	// Add many lines, past the bottom of the viewport. Each Enter should keep
 	// the caret in view, so the offset grows.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		h.Key(shell.KeyEnter)
 		h.Type("line")
 		h.Render()
@@ -81,7 +81,7 @@ func TestCaretScrollsIntoViewWhileTyping(t *testing.T) {
 
 	// Now move the caret back to the top with Home-ish navigation (many Ups):
 	// the view should follow the caret back up.
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		h.Key(shell.KeyUp)
 		h.Render()
 	}
@@ -100,7 +100,7 @@ func TestCaretRevealTextGrew(t *testing.T) {
 	}
 	h.Render()
 	h.Tap(geom.Pt{X: 20, Y: 10})
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.Type("x")
 		h.Key(shell.KeyEnter)
 		h.Render()

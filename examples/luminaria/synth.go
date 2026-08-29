@@ -56,10 +56,7 @@ type pluck struct {
 }
 
 func newPluck(freq, sustain float64, seed int64) *pluck {
-	n := int(math.Round(sr / freq))
-	if n < 2 {
-		n = 2
-	}
+	n := max(int(math.Round(sr/freq)), 2)
 	rng := rand.New(rand.NewSource(seed))
 	buf := make([]float32, n)
 	for i := range buf {

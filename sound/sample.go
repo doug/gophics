@@ -34,7 +34,7 @@ func FromInterleaved(data []float32, srcRate, channels int) *Sample {
 	frames := len(data) / channels
 	mono := make([]float32, frames)
 	inv := 1 / float32(channels)
-	for i := 0; i < frames; i++ {
+	for i := range frames {
 		var s float32
 		for c := 0; c < channels; c++ {
 			s += data[i*channels+c]
@@ -47,7 +47,7 @@ func FromInterleaved(data []float32, srcRate, channels int) *Sample {
 	ratio := float64(SampleRate) / float64(srcRate)
 	outN := int(float64(frames) * ratio)
 	out := make([]float32, outN)
-	for i := 0; i < outN; i++ {
+	for i := range outN {
 		pos := float64(i) / ratio
 		idx := int(pos)
 		frac := float32(pos - float64(idx))

@@ -63,7 +63,7 @@ func sheetHarness(t *testing.T) (*apptest.App, *sheetState) {
 
 // settle advances a batch of frames so entrance/exit animations complete.
 func settle(h *apptest.App) {
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		h.Step(1.0 / 60)
 		h.Render()
 	}

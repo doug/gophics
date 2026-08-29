@@ -222,7 +222,7 @@ func TestLoadCommentsStopsWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	api := &countingAPI{fakeAPI: fakeAPI{stories: 20, commentsPer: 20}, cancel: cancel, after: 5}
+	api := &countingAPI{stories: 20, commentsPer: 20, cancel: cancel, after: 5}
 	story, err := api.Item(context.Background(), 1_000_000)
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestLoadCommentsStopsWhenCancelled(t *testing.T) {
 // The guard must not truncate an ordinary load: an uncancelled walk still
 // returns the comments it was asked for.
 func TestLoadCommentsCompletesWhenNotCancelled(t *testing.T) {
-	api := &countingAPI{fakeAPI: fakeAPI{stories: 20, commentsPer: 20}}
+	api := &countingAPI{stories: 20, commentsPer: 20}
 	story, err := api.Item(context.Background(), 1_000_000)
 	if err != nil {
 		t.Fatal(err)

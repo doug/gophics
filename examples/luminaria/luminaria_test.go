@@ -183,7 +183,7 @@ func TestTurnsCloseALoop(t *testing.T) {
 	s.crawlers = []crawler{{x: 2, y: 2, dir: 1}} // on a corner, heading east
 
 	seen := map[[2]int]bool{}
-	for i := 0; i < 16; i++ { // the loop is 16 cells around
+	for i := range 16 { // the loop is 16 cells around
 		s.advance()
 		c := s.crawlers[0]
 		if c.x < 2 || c.x > 6 || c.y < 2 || c.y > 6 {
@@ -260,13 +260,13 @@ func TestTickDrivesTheClock(t *testing.T) {
 	s.acc = 0
 
 	// Fed at a real frame rate: 14 frames is 0.233s, still short of the beat.
-	for i := 0; i < 14; i++ {
+	for range 14 {
 		s.Tick(1.0 / 60)
 	}
 	if s.crawlers[0].x != 0 {
 		t.Error("stepped before the beat was due")
 	}
-	for i := 0; i < 2; i++ { // 0.267s — over the line
+	for range 2 { // 0.267s — over the line
 		s.Tick(1.0 / 60)
 	}
 	if s.crawlers[0].x != 1 {
@@ -335,7 +335,7 @@ func TestKeyboardShortcuts(t *testing.T) {
 // palette that colours it.
 func TestCrawlerCapIsHonoured(t *testing.T) {
 	_, s := newApp(t)
-	for i := 0; i < maxCrawlers*3; i++ {
+	for range maxCrawlers * 3 {
 		s.addCrawler()
 	}
 	if len(s.crawlers) != maxCrawlers {
@@ -377,7 +377,7 @@ func TestLayoutFollowsTheWindow(t *testing.T) {
 func TestRendersWithoutPanic(t *testing.T) {
 	h, s := newApp(t)
 	s.playing = true
-	for i := 0; i < 120; i++ {
+	for range 120 {
 		h.Step(1.0 / 60)
 	}
 	img := h.Render()

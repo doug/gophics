@@ -1,6 +1,9 @@
 package main
 
-import "math/rand"
+import (
+	"math/rand"
+	"slices"
+)
 
 // Cell is a map tile's terrain.
 type Cell uint8
@@ -53,17 +56,11 @@ func (d *Dungeon) opaque(x, y int) bool { return d.at(x, y) == CellWall }
 // the previous with an L-shaped corridor. The last room gets the stairs down.
 func genDungeon(w, h, maxRooms int, rng *rand.Rand) *Dungeon {
 	d := &Dungeon{W: w, H: h, cells: make([]Cell, w*h)} // all walls
-	for i := 0; i < maxRooms; i++ {
+	for range maxRooms {
 		rw, rh := 4+rng.Intn(7), 3+rng.Intn(5)
 		rx, ry := 1+rng.Intn(w-rw-2), 1+rng.Intn(h-rh-2)
 		room := Room{rx, ry, rw, rh}
-		clash := false
-		for _, o := range d.rooms {
-			if room.overlaps(o) {
-				clash = true
-				break
-			}
-		}
+		clash := slices.ContainsFunc(d.rooms, room.overlaps)
 		if clash {
 			continue
 		}

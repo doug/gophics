@@ -14,7 +14,7 @@ func TestSynthProviderDeterministic(t *testing.T) {
 		t.Fatalf("synthProvider not deterministic: %v vs %v", got, want)
 	}
 	before := len(a.Series(HeartRate))
-	for i := 0; i < 300; i++ { // ~5s at 60fps
+	for range 300 { // ~5s at 60fps
 		a.Advance(1.0 / 60.0)
 	}
 	if lat, ok := a.Latest(HeartRate); !ok || lat.V < 30 || lat.V > 220 {
@@ -38,7 +38,7 @@ func TestDeviceProviderPush(t *testing.T) {
 		t.Fatal("SetAuthorized(true) did not stick")
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		d.Push(HeartRate, float64(i), 60+float64(i), 5) // cap 5
 	}
 	if got := len(d.Series(HeartRate)); got != 5 {
@@ -69,13 +69,13 @@ func TestDeviceProviderConcurrent(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			d.Push(HeartRate, float64(i), 70, 64)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_ = d.Series(HeartRate)
 			_, _ = d.Latest(HeartRate)
 		}

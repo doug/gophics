@@ -18,7 +18,7 @@ import (
 func TestOnPressEnd(t *testing.T) {
 	var press, end, tap int
 	root := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress:    func(geom.Pt) { press++ },
 			OnPressEnd: func() { end++ },
 			OnTap:      func() { tap++ },

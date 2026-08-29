@@ -115,7 +115,6 @@ func (s *dismissState) Build(ctx widget.Ctx) widget.Widget {
 
 	rows := make([]widget.Widget, 0, len(s.cards)+1)
 	for _, c := range s.cards {
-		c := c
 		// WithKey is what makes removal animate the right row: without a stable
 		// key the reconciler matches rows by position, so removing the middle
 		// one looks like the last one vanishing.

@@ -107,11 +107,11 @@ func (r *renderer) flush() {
 		return
 	}
 	// Collapse whitespace-only paragraphs, which markup is full of.
-	all := ""
+	var all strings.Builder
 	for _, s := range r.pending {
-		all += s.Text
+		all.WriteString(s.Text)
 	}
-	if strings.TrimSpace(all) == "" {
+	if strings.TrimSpace(all.String()) == "" {
 		r.reset()
 		return
 	}

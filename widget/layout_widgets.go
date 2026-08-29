@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -16,14 +17,14 @@ type Fill struct {
 	Child Widget
 }
 
-func (f Fill) createBox(Ctx) layout.Box { return &layout.Filled{} }
+func (f Fill) createBox(Ctx) layout.Box { return &layoutbox.Filled{} }
 func (f Fill) updateBox(_ Ctx, b layout.Box) {
-	b.(*layout.Filled).Color = f.Color
+	b.(*layoutbox.Filled).Color = f.Color
 }
 func (f Fill) childWidgets() []Widget { return []Widget{f.Child} }
 func (f Fill) soleChild() Widget      { return f.Child }
 func (f Fill) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Filled).Child = first(kids)
+	b.(*layoutbox.Filled).Child = first(kids)
 }
 
 // Opacity fades its child as a group at Alpha [0,1] (1 = opaque, 0 =
@@ -33,14 +34,14 @@ type Opacity struct {
 	Child Widget
 }
 
-func (o Opacity) createBox(Ctx) layout.Box { return &layout.Opacity{} }
+func (o Opacity) createBox(Ctx) layout.Box { return &layoutbox.Opacity{} }
 func (o Opacity) updateBox(_ Ctx, b layout.Box) {
-	b.(*layout.Opacity).Alpha = o.Alpha
+	b.(*layoutbox.Opacity).Alpha = o.Alpha
 }
 func (o Opacity) childWidgets() []Widget { return []Widget{o.Child} }
 func (o Opacity) soleChild() Widget      { return o.Child }
 func (o Opacity) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Opacity).Child = first(kids)
+	b.(*layoutbox.Opacity).Child = first(kids)
 }
 
 // Transform applies an affine transform to its child when painting (scale,
@@ -61,15 +62,15 @@ func Scale(factor float32, child Widget) Transform {
 	return Transform{T: paint.Transform{SX: factor, SY: factor}, Child: child}
 }
 
-func (t Transform) createBox(Ctx) layout.Box { return &layout.Transformed{} }
+func (t Transform) createBox(Ctx) layout.Box { return &layoutbox.Transformed{} }
 func (t Transform) updateBox(_ Ctx, b layout.Box) {
-	tb := b.(*layout.Transformed)
+	tb := b.(*layoutbox.Transformed)
 	tb.T, tb.Center = t.T, t.Center
 }
 func (t Transform) childWidgets() []Widget { return []Widget{t.Child} }
 func (t Transform) soleChild() Widget      { return t.Child }
 func (t Transform) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Transformed).Child = first(kids)
+	b.(*layoutbox.Transformed).Child = first(kids)
 }
 
 // AspectRatio sizes its child to Ratio (width/height), as large as fits.
@@ -78,14 +79,14 @@ type AspectRatio struct {
 	Child Widget
 }
 
-func (a AspectRatio) createBox(Ctx) layout.Box { return &layout.AspectRatio{} }
+func (a AspectRatio) createBox(Ctx) layout.Box { return &layoutbox.AspectRatio{} }
 func (a AspectRatio) updateBox(_ Ctx, b layout.Box) {
-	b.(*layout.AspectRatio).Ratio = a.Ratio
+	b.(*layoutbox.AspectRatio).Ratio = a.Ratio
 }
 func (a AspectRatio) childWidgets() []Widget { return []Widget{a.Child} }
 func (a AspectRatio) soleChild() Widget      { return a.Child }
 func (a AspectRatio) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.AspectRatio).Child = first(kids)
+	b.(*layoutbox.AspectRatio).Child = first(kids)
 }
 
 // Grid arranges children in Columns equal-width columns with Spacing.
@@ -96,14 +97,14 @@ type Grid struct {
 	Children []Widget
 }
 
-func (g Grid) createBox(Ctx) layout.Box { return &layout.Grid{} }
+func (g Grid) createBox(Ctx) layout.Box { return &layoutbox.Grid{} }
 func (g Grid) updateBox(_ Ctx, b layout.Box) {
-	gb := b.(*layout.Grid)
+	gb := b.(*layoutbox.Grid)
 	gb.Columns, gb.Spacing = g.Columns, g.Spacing
 }
 func (g Grid) childWidgets() []Widget { return g.Children }
 func (g Grid) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Grid).Children = append(b.(*layout.Grid).Children[:0], kids...)
+	b.(*layoutbox.Grid).Children = append(b.(*layoutbox.Grid).Children[:0], kids...)
 }
 
 // Wrap flows children left to right, wrapping to new runs; Spacing
@@ -114,14 +115,14 @@ type Wrap struct {
 	Children   []Widget
 }
 
-func (w Wrap) createBox(Ctx) layout.Box { return &layout.Wrap{} }
+func (w Wrap) createBox(Ctx) layout.Box { return &layoutbox.Wrap{} }
 func (w Wrap) updateBox(_ Ctx, b layout.Box) {
-	wb := b.(*layout.Wrap)
+	wb := b.(*layoutbox.Wrap)
 	wb.Spacing, wb.RunSpacing = w.Spacing, w.RunSpacing
 }
 func (w Wrap) childWidgets() []Widget { return w.Children }
 func (w Wrap) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Wrap).Children = append(b.(*layout.Wrap).Children[:0], kids...)
+	b.(*layoutbox.Wrap).Children = append(b.(*layoutbox.Wrap).Children[:0], kids...)
 }
 
 // Stack layers children (first at the bottom); each fills or centers within
@@ -131,9 +132,9 @@ type Stack struct {
 	Children []Widget
 }
 
-func (s Stack) createBox(Ctx) layout.Box  { return &layout.Stack{} }
+func (s Stack) createBox(Ctx) layout.Box  { return &layoutbox.Stack{} }
 func (s Stack) updateBox(Ctx, layout.Box) {}
 func (s Stack) childWidgets() []Widget    { return s.Children }
 func (s Stack) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Stack).Children = append(b.(*layout.Stack).Children[:0], kids...)
+	b.(*layoutbox.Stack).Children = append(b.(*layoutbox.Stack).Children[:0], kids...)
 }

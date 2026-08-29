@@ -56,7 +56,7 @@ func (s *feedState) Init(ctx widget.Ctx) {
 func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	lib := env(ctx).Lib
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	f, subscribed := lib.Subs.ByID(s.W().FeedID)
 	if !subscribed {
@@ -149,7 +149,7 @@ func enabledLabel(f catalog.Feed) string {
 func (s *feedState) settingsCard(ctx widget.Ctx, th theme.Theme, lib *library.Library,
 	f catalog.Feed) widget.Widget {
 
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	// Category
 	cats := lib.Subs.Categories()

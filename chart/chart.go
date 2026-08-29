@@ -203,7 +203,7 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	var root widget.Widget = canvas
 	if len(s.primary) > 0 {
 		root = widget.Interactive{
-			Handler: widget.Handler{
+			Gestures: widget.Gestures{
 				// Selection commits on tap rather than on press. A finger
 				// landing on a chart is usually the start of a scroll, and
 				// selecting on touch-down strands a tooltip and crosshair when

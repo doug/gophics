@@ -1,9 +1,11 @@
 package widget
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
@@ -51,7 +53,7 @@ func (s *selectableState) Build(ctx Ctx) Widget {
 	t := s.W()
 	lo, hi := s.sel()
 	return Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			OnPress: func(p geom.Pt) {
 				s.closeMenu()
 				s.pressGlobal = ctx.Input().Pointer()
@@ -180,7 +182,7 @@ func (w selText) attach(layout.Box, []layout.Box) {}
 // the runes in [lo, hi). Offsets are linear over the wrapped-line model: each
 // line contributes len(runes)+1 (a virtual newline between lines).
 type selectableBox struct {
-	layout.Base
+	layoutbox.Base
 	Painter  *paint.Painter
 	text     string
 	font     string
@@ -230,10 +232,7 @@ func (b *selectableBox) offsetAt(p geom.Pt) int {
 	if len(b.lines) == 0 {
 		return 0
 	}
-	li := int(p.Y / b.lineH)
-	if li < 0 {
-		li = 0
-	}
+	li := max(int(p.Y/b.lineH), 0)
 	if li >= len(b.lines) {
 		li = len(b.lines) - 1
 	}
@@ -254,16 +253,13 @@ func (b *selectableBox) offsetAt(p geom.Pt) int {
 // (or immediately before) the offset — for double-tap word selection. A tap
 // on whitespace returns an empty range.
 func (b *selectableBox) wordAt(off int) (int, int) {
-	for li := len(b.lines) - 1; li >= 0; li-- {
+	for li, v := range slices.Backward(b.lines) {
 		start := b.lineStart[li]
 		if off < start {
 			continue
 		}
-		runes := []rune(b.lines[li])
-		col := off - start
-		if col > len(runes) {
-			col = len(runes)
-		}
+		runes := []rune(v)
+		col := min(off-start, len(runes))
 		word := func(r rune) bool { return r != ' ' && r != '\t' }
 		lo, hi := col, col
 		for lo > 0 && word(runes[lo-1]) {

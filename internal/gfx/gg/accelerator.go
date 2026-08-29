@@ -2,11 +2,12 @@ package gg
 
 import (
 	"errors"
-	"github.com/doug/gophics/internal/gfx/gputypes"
 	"image"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/doug/gophics/internal/gfx/gputypes"
 
 	"github.com/doug/gophics/internal/gfx/gg/text"
 	"github.com/doug/gophics/internal/gfx/gpucontext"

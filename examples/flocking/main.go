@@ -70,7 +70,7 @@ func (s *flockState) Init(ctx widget.Ctx) { ctx.AddTicker(s) }
 func (s *flockState) seed(w, h float32) {
 	s.w, s.h = w, h
 	s.boids = s.boids[:0]
-	for i := 0; i < numBoids; i++ {
+	for range numBoids {
 		s.boids = append(s.boids, &boid{
 			pos: geom.Pt{X: rand.Float32() * w, Y: rand.Float32() * h},
 			vel: fromAngle(rand.Float64()*2*math.Pi, 1+rand.Float32()*(maxSpeed-1)),

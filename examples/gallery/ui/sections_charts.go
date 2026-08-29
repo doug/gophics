@@ -99,8 +99,8 @@ func chartCard(th theme.Theme, title, subtitle string, height float32, c chart.C
 // the heatmap — a plausible little contribution graph.
 func activityCells() []chart.Cell {
 	cells := make([]chart.Cell, 0, 50)
-	for x := 0; x < 10; x++ {
-		for y := 0; y < 5; y++ {
+	for x := range 10 {
+		for y := range 5 {
 			v := (x*7 + y*3) % 10 // deterministic spread across the ramp
 			cells = append(cells, chart.Cell{X: x, Y: y, V: float64(v)})
 		}

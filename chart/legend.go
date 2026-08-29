@@ -39,10 +39,7 @@ func legendRows(entries []legendEntry, p *paint.Painter) int {
 	for _, e := range entries {
 		total += legendItemWidth(e, sw, p) + legendItemGap
 	}
-	rows := int(total/300) + 1
-	if rows > 2 {
-		rows = 2
-	}
+	rows := min(int(total/300)+1, 2)
 	return rows
 }
 

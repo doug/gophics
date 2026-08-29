@@ -54,11 +54,11 @@ func TestAllVisibleAgesAdvanceTogether(t *testing.T) {
 	}
 
 	// Let the clock move. Nothing is hovered, clicked, or scrolled.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		a.Step(1.0 / 60)
 	}
 	time.Sleep(700 * time.Millisecond)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		a.Step(1.0 / 60)
 	}
 

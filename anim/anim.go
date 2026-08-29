@@ -153,9 +153,6 @@ func (c *Controller) Tick(dt float64) bool {
 	return c.dir != 0
 }
 
-// Lerp linearly interpolates between a and b.
-func Lerp(a, b, t float32) float32 { return a + (b-a)*t }
-
 func clamp01(v float32) float32 {
 	if v < 0 {
 		return 0

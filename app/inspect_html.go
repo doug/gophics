@@ -5,7 +5,7 @@ import (
 	"html"
 	"strings"
 
-	"github.com/doug/gophics/layout"
+	"github.com/doug/gophics/internal/layoutbox"
 )
 
 // InspectHTML renders the current render tree (see InspectTree) as a
@@ -58,7 +58,7 @@ func (c *core) InspectHTML() string {
 }
 
 // shortType strips the package qualifier from a box type name
-// ("*layout.Flex" → "Flex").
+// ("*layoutbox.Flex" → "Flex").
 func shortType(t string) string {
 	if i := strings.LastIndexByte(t, '.'); i >= 0 {
 		return t[i+1:]
@@ -66,7 +66,7 @@ func shortType(t string) string {
 	return strings.TrimPrefix(t, "*")
 }
 
-func rectStr(n layout.InspectNode) string {
+func rectStr(n layoutbox.InspectNode) string {
 	return fmt.Sprintf(`<span class="rect">%d,%d %d×%d</span>`,
 		int(n.Rect.Min.X), int(n.Rect.Min.Y), int(n.Rect.Dx()), int(n.Rect.Dy()))
 }

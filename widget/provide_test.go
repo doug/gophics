@@ -19,7 +19,7 @@ func TestProvideNearestWins(t *testing.T) {
 	var ok bool
 	o := newOwner()
 	o.SetRoot(Provide[int]{Value: 1, Child: Provide[int]{Value: 2, Child: ctxSpy{
-		OnBuild: func(ctx Ctx) { got, ok = Of[int](ctx) },
+		OnBuild: func(ctx Ctx) { got, ok = ctx.Of[int]() },
 	}}})
 	if !ok || got != 2 {
 		t.Fatalf("Of[int] = %d,%v — nearest Provide must shadow the outer one", got, ok)
@@ -32,8 +32,8 @@ func TestProvideDifferentTypesCoexist(t *testing.T) {
 	o := newOwner()
 	o.SetRoot(Provide[int]{Value: 7, Child: Provide[string]{Value: "s", Child: ctxSpy{
 		OnBuild: func(ctx Ctx) {
-			gotInt, _ = Of[int](ctx)
-			gotStr, _ = Of[string](ctx)
+			gotInt, _ = ctx.Of[int]()
+			gotStr, _ = ctx.Of[string]()
 		},
 	}}})
 	if gotInt != 7 || gotStr != "s" {
@@ -48,10 +48,10 @@ func TestProvideScopedToSubtree(t *testing.T) {
 	o := newOwner()
 	o.SetRoot(Row(
 		Provide[string]{Value: "scoped", Child: ctxSpy{
-			OnBuild: func(ctx Ctx) { inVal, inOK = Of[string](ctx) },
+			OnBuild: func(ctx Ctx) { inVal, inOK = ctx.Of[string]() },
 		}},
 		ctxSpy{
-			OnBuild: func(ctx Ctx) { _, outOK = Of[string](ctx) },
+			OnBuild: func(ctx Ctx) { _, outOK = ctx.Of[string]() },
 		},
 	))
 	if !inOK || inVal != "scoped" {
@@ -67,7 +67,7 @@ func TestProvideValueUpdateReachesDescendants(t *testing.T) {
 	var got int
 	tree := func(v int) Widget {
 		return Provide[int]{Value: v, Child: ctxSpy{
-			OnBuild: func(ctx Ctx) { got, _ = Of[int](ctx) },
+			OnBuild: func(ctx Ctx) { got, _ = ctx.Of[int]() },
 		}}
 	}
 	o := newOwner()
@@ -84,7 +84,7 @@ func TestProvideValueUpdateReachesDescendants(t *testing.T) {
 func TestOfAbsentReturnsFalse(t *testing.T) {
 	var ok bool
 	o := newOwner()
-	o.SetRoot(ctxSpy{OnBuild: func(ctx Ctx) { _, ok = Of[float64](ctx) }})
+	o.SetRoot(ctxSpy{OnBuild: func(ctx Ctx) { _, ok = ctx.Of[float64]() }})
 	if ok {
 		t.Fatal("Of reported a value with no Provide in scope")
 	}
@@ -95,7 +95,7 @@ func TestMustOfPanicsWhenAbsent(t *testing.T) {
 	o := newOwner()
 	o.SetRoot(ctxSpy{OnBuild: func(ctx Ctx) {
 		defer func() { recovered = recover() }()
-		MustOf[float64](ctx)
+		ctx.MustOf[float64]()
 	}})
 	if recovered == nil {
 		t.Fatal("MustOf did not panic with no Provide in scope")

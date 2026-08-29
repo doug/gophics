@@ -57,7 +57,7 @@ func ShowEditMenu(ctx Ctx, at geom.Pt, actions []EditAction) (dismiss func()) {
 	if len(actions) == 0 {
 		return func() {}
 	}
-	ov, ok := Of[Overlay](ctx)
+	ov, ok := ctx.Of[Overlay]()
 	if !ok {
 		return func() {} // no OverlayHost above us; nothing to show it in
 	}
@@ -87,7 +87,7 @@ func ShowEditMenu(ctx Ctx, at geom.Pt, actions []EditAction) (dismiss func()) {
 			kids = append(kids, Decorated{Color: sep, Child: Sized{W: 1, H: editMenuHeight - 16}})
 		}
 		kids = append(kids, Interactive{
-			Handler: Handler{OnTap: func() {
+			Gestures: Gestures{OnTap: func() {
 				closeFn()
 				if a.OnTap != nil {
 					a.OnTap()
@@ -144,7 +144,7 @@ type editMenuScrim struct {
 func (m editMenuScrim) Build(Ctx) Widget {
 	return Stack{Children: []Widget{
 		Interactive{
-			Handler: Handler{
+			Gestures: Gestures{
 				OnTap: m.OnDismiss,
 				OnKey: func(k shell.Key) {
 					if k.Kind == shell.KeyPress && k.Code == shell.KeyEscape {

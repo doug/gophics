@@ -10,8 +10,8 @@ import (
 
 func solid(w, h int, c color.RGBA) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.SetRGBA(x, y, c)
 		}
 	}

@@ -2,6 +2,7 @@ package widget
 
 import (
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 )
 
@@ -28,7 +29,7 @@ type richState struct {
 	lastPress geom.Pt
 }
 
-type richRef struct{ b *layout.RichBox }
+type richRef struct{ b *layoutbox.RichBox }
 
 func (s *richState) Init(Ctx) { s.box = &richRef{} }
 
@@ -38,7 +39,7 @@ func (s *richState) Build(Ctx) Widget {
 		return richView{state: s}
 	}
 	return Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			OnPress: func(p geom.Pt) { s.lastPress = p },
 			OnTap: func() {
 				if s.box.b == nil {
@@ -56,10 +57,10 @@ func (s *richState) Build(Ctx) Widget {
 type richView struct{ state *richState }
 
 func (v richView) createBox(ctx Ctx) layout.Box {
-	return &layout.RichBox{Painter: ctx.Painter()}
+	return &layoutbox.RichBox{Painter: ctx.Painter()}
 }
 func (v richView) updateBox(ctx Ctx, b layout.Box) {
-	rb := b.(*layout.RichBox)
+	rb := b.(*layoutbox.RichBox)
 	r := v.state.W()
 	rb.Painter, rb.Spans, rb.TextSize = ctx.Painter(), r.Spans, r.size()
 	v.state.box.b = rb

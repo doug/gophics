@@ -27,8 +27,8 @@ func TestClipBoundsRotatedDrawing(t *testing.T) {
 
 	img := p.Image()
 	outside := 0
-	for y := 0; y < H; y++ {
-		for x := 0; x < W; x++ {
+	for y := range H {
+		for x := range W {
 			r, _, _, _ := img.At(x, y).RGBA()
 			// generous margin for the rounded corners and antialiasing
 			inCard := x >= 48 && x < 152 && y >= 48 && y < 152

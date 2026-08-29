@@ -23,7 +23,7 @@ func TestGPUCheckRenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		h.Step(0.016)
 	}
 	if h.Render().Bounds().Empty() {

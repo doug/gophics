@@ -101,7 +101,7 @@ func TestRepeatedMountCyclesDoNotAccumulate(t *testing.T) {
 	o := newOwner()
 	base := o.TickerCount()
 
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		mount(o, tidyTicker{})
 		unmount(o)
 	}

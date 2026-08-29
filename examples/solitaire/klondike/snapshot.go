@@ -15,9 +15,9 @@ type Snapshot struct {
 // Save captures the current game as a Snapshot (deep-copied, so later play does
 // not mutate it).
 func (g *Game) Save() Snapshot {
-	s := Snapshot{DrawN: g.drawN}
-	s.Stock = append([]Card(nil), g.stock...)
-	s.Waste = append([]Card(nil), g.waste...)
+	s := Snapshot{DrawN: g.drawN,
+		Stock: append([]Card(nil), g.stock...),
+		Waste: append([]Card(nil), g.waste...)}
 	for i := range g.found {
 		s.Foundations[i] = append([]Card(nil), g.found[i]...)
 	}

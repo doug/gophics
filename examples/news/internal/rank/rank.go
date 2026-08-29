@@ -408,10 +408,7 @@ func (m *Model) lengthLLR(it *store.Item) (float64, string) {
 // is a day and a half, which is roughly how long a news item stays worth
 // reading; the floor stops an old essay from being buried by arithmetic.
 func recency(it *store.Item, now time.Time) (float64, string) {
-	age := now.Sub(it.Published)
-	if age < 0 {
-		age = 0
-	}
+	age := max(now.Sub(it.Published), 0)
 	hours := age.Hours()
 	v := 0.8*math.Exp(-hours/36) - 0.3
 	switch {
@@ -470,10 +467,7 @@ func minutes(it *store.Item) int {
 	if it.WordCount <= 0 {
 		return 0
 	}
-	m := (it.WordCount + 219) / 220
-	if m < 1 {
-		m = 1
-	}
+	m := max((it.WordCount+219)/220, 1)
 	return m
 }
 

@@ -138,7 +138,7 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 	// the state so the ctx-less Canvas draw closure can read chrome colors.
 	s.th = theme.Auto(ctx)
 	board := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress:   s.onPress,
 			OnDrag:    s.onDrag,
 			OnRelease: s.onRelease,
@@ -155,8 +155,8 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 
 // newBoard fills the grid with no pre-existing matches (a fair start).
 func (s *game) newBoard() {
-	for r := 0; r < rows; r++ {
-		for c := 0; c < cols; c++ {
+	for r := range rows {
+		for c := range cols {
 			for {
 				t := int8(s.rng.Intn(numTypes))
 				// Reject a type that would already make a run of three.
@@ -261,8 +261,8 @@ func (s *game) advance() {
 		s.phase = phaseIdle
 		s.ctx.Invalidate()
 	case phaseClear:
-		for r := 0; r < rows; r++ {
-			for c := 0; c < cols; c++ {
+		for r := range rows {
+			for c := range cols {
 				if s.clearing[r][c] {
 					s.grid[r][c] = -1
 				}
@@ -285,8 +285,8 @@ func (s *game) advance() {
 func (s *game) beginClear() {
 	s.clearing = s.matches()
 	n := 0
-	for r := 0; r < rows; r++ {
-		for c := 0; c < cols; c++ {
+	for r := range rows {
+		for c := range cols {
 			if s.clearing[r][c] {
 				n++
 			}
@@ -306,7 +306,7 @@ func (s *game) beginClear() {
 // every gem falls from so the animation can slide it into place.
 func (s *game) beginFall() {
 	var next [rows][cols]int8
-	for c := 0; c < cols; c++ {
+	for c := range cols {
 		w := rows - 1
 		for r := rows - 1; r >= 0; r-- {
 			if s.grid[r][c] != -1 {
@@ -339,8 +339,8 @@ func (s *game) start(phase int, d time.Duration) {
 
 func (s *game) hasMatch() bool {
 	m := s.matches()
-	for r := 0; r < rows; r++ {
-		for c := 0; c < cols; c++ {
+	for r := range rows {
+		for c := range cols {
 			if m[r][c] {
 				return true
 			}
@@ -352,7 +352,7 @@ func (s *game) hasMatch() bool {
 // matches returns the mask of gems that are part of a run of 3+ (rows or cols).
 func (s *game) matches() [rows][cols]bool {
 	var m [rows][cols]bool
-	for r := 0; r < rows; r++ {
+	for r := range rows {
 		run := 1
 		for c := 1; c <= cols; c++ {
 			if c < cols && s.grid[r][c] != -1 && s.grid[r][c] == s.grid[r][c-1] {
@@ -367,7 +367,7 @@ func (s *game) matches() [rows][cols]bool {
 			}
 		}
 	}
-	for c := 0; c < cols; c++ {
+	for c := range cols {
 		run := 1
 		for r := 1; r <= rows; r++ {
 			if r < rows && s.grid[r][c] != -1 && s.grid[r][c] == s.grid[r-1][c] {
@@ -466,8 +466,8 @@ func (s *game) draw(c paint.Canvas, size geom.Size) {
 	// they cross the top edge (otherwise they'd draw over the score panel).
 	c.PushClip(geom.RectXYWH(b.x, b.y, boardW, boardH))
 	p := s.ctrl.Value()
-	for r := 0; r < rows; r++ {
-		for cc := 0; cc < cols; cc++ {
+	for r := range rows {
+		for cc := range cols {
 			t := s.grid[r][cc]
 			if t < 0 {
 				continue
@@ -495,7 +495,7 @@ func (s *game) draw(c paint.Canvas, size geom.Size) {
 				}
 			case phaseFall:
 				from := float32(s.fallFrom[r][cc])
-				vr := anim.Lerp(from, float32(r), p)
+				vr := geom.LerpFloat(from, float32(r), p)
 				cy = b.y + vr*b.cell + b.cell/2
 			}
 			drawGem(c, cx, cy, b.cell*0.9*scale, gems[t])
@@ -520,7 +520,7 @@ func (s *game) lerpCenter(b box, from, to cell, p float32) (x, y float32) {
 	fy := b.y + float32(from.r)*b.cell + b.cell/2
 	tx := b.x + float32(to.c)*b.cell + b.cell/2
 	ty := b.y + float32(to.r)*b.cell + b.cell/2
-	return anim.Lerp(fx, tx, p), anim.Lerp(fy, ty, p)
+	return geom.LerpFloat(fx, tx, p), geom.LerpFloat(fy, ty, p)
 }
 
 // drawGem renders one gem centered at (cx,cy) with side sz: a rounded, top-lit

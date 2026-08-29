@@ -97,7 +97,7 @@ func (s *tappableState) Build(ctx widget.Ctx) widget.Widget {
 	if t.Pad != (geom.Insets{}) {
 		child = widget.Padding{Insets: t.Pad, Child: child}
 	}
-	h := widget.Handler{
+	h := widget.Gestures{
 		OnTap:      s.onTap,
 		OnEnter:    func() { s.SetState(func() { s.hovered = true }) },
 		OnExit:     func() { s.SetState(func() { s.hovered = false }) },
@@ -108,8 +108,8 @@ func (s *tappableState) Build(ctx widget.Ctx) widget.Widget {
 		h.OnLongPress = s.onLongPress
 	}
 	return widget.Interactive{
-		Handler: h,
-		Child:   widget.Decorated{Color: fill, Radius: t.Radius, Child: child},
+		Gestures: h,
+		Child:    widget.Decorated{Color: fill, Radius: t.Radius, Child: child},
 	}
 }
 

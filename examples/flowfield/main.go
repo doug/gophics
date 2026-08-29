@@ -43,7 +43,7 @@ func (s *flowState) Init(ctx widget.Ctx) { ctx.AddTicker(s) }
 func (s *flowState) seed(w, h float32) {
 	s.w, s.h = w, h
 	s.ps = s.ps[:0]
-	for i := 0; i < numParticles; i++ {
+	for range numParticles {
 		p := geom.Pt{X: rand.Float32() * w, Y: rand.Float32() * h}
 		s.ps = append(s.ps, &particle{trail: []geom.Pt{p}})
 	}

@@ -81,9 +81,9 @@ func header(th theme.Theme, title string, lead widget.Widget) widget.Widget {
 
 func backButton(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: nav.Pop},
+		Gestures: widget.Gestures{OnTap: nav.Pop},
 		Child: widget.Padding{Insets: geom.InsetsSymmetric(6, 4),
 			Child: widget.Text{S: "‹ Back", Size: th.Type.Body, Color: th.OnPrimary}},
 	}
@@ -171,7 +171,7 @@ func (s *feedState) Init(ctx widget.Ctx) {
 // that is closed a moment after opening keeps fetching every one of them.
 func (s *feedState) fetch(wctx widget.Ctx) {
 	ctx := wctx.Context()
-	api := widget.MustOf[API](wctx)
+	api := wctx.MustOf[API]()
 	n := s.W().N
 	go func() {
 		ids, err := api.TopStories(ctx)
@@ -204,7 +204,7 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	case f.err != nil:
 		body = widget.Center(widget.Text{S: f.err.Error(), Wrap: true, Size: th.Type.Body, Color: th.Muted})
 	default:
-		nav := widget.MustOf[widget.Nav](ctx)
+		nav := ctx.MustOf[widget.Nav]()
 		body = widget.LazyList{
 			Count:           len(s.feed.items),
 			EstimatedExtent: 66,
@@ -263,7 +263,7 @@ type threadState struct {
 func (s *threadState) Init(wctx widget.Ctx) {
 	s.loading = true
 	ctx := wctx.Context()
-	api := widget.MustOf[API](wctx)
+	api := wctx.MustOf[API]()
 	story := s.W().Story
 	go func() {
 		comments := loadComments(ctx, api, story, 80)

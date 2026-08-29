@@ -59,7 +59,7 @@ func dmHarness(t *testing.T) (*Headless, *dmState) {
 func swipe(h *Headless, y, dx float32) {
 	h.DragTo(geom.Pt{X: 40, Y: y}, geom.Pt{X: 40 + dx, Y: y})
 	h.Release(geom.Pt{X: 40 + dx, Y: y})
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		h.Step(0.016)
 		h.Render()
 	}

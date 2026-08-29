@@ -2,13 +2,14 @@ package gg
 
 import (
 	"fmt"
-	"github.com/doug/gophics/internal/gfx/gputypes"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
 	"io"
 	"math"
+
+	"github.com/doug/gophics/internal/gfx/gputypes"
 
 	"github.com/doug/gophics/internal/gfx/gg/internal/clip"
 	"github.com/doug/gophics/internal/gfx/gg/text"

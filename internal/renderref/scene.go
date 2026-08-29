@@ -89,8 +89,8 @@ func draw(c paint.Canvas, sz geom.Size) {
 	cols, rows := 5, 2
 	tw, th := float32(56), float32(52)
 	x0, y0 := float32(12), float32(340)
-	for r := 0; r < rows; r++ {
-		for col := 0; col < cols; col++ {
+	for r := range rows {
+		for col := range cols {
 			x := x0 + float32(col)*(tw+2)
 			y := y0 + float32(r)*(th+4)
 			base := paint.RGB(0.2+0.13*float32(col), 0.35+0.1*float32(r), 0.85-0.09*float32(col))
@@ -117,8 +117,8 @@ func buildAtlas() *image.RGBA {
 	quad := [4]color.RGBA{
 		{220, 70, 70, 255}, {70, 170, 220, 255}, {80, 200, 120, 255}, {230, 200, 80, 255},
 	}
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	for y := range 16 {
+		for x := range 16 {
 			a.SetRGBA(x, y, quad[(y/8)*2+(x/8)])
 		}
 	}

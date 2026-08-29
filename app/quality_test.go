@@ -27,7 +27,7 @@ func (s *focusState) Init(widget.Ctx) { focusToggle = s }
 
 func (s *focusState) Build(widget.Ctx) widget.Widget {
 	if s.show {
-		return widget.Interactive{Handler: widget.Handler{OnKey: func(shell.Key) {}}, Child: widget.Sized{W: 10, H: 10}}
+		return widget.Interactive{Gestures: widget.Gestures{OnKey: func(shell.Key) {}}, Child: widget.Sized{W: 10, H: 10}}
 	}
 	return widget.Sized{W: 10, H: 10}
 }
@@ -82,8 +82,8 @@ type twoTapApp struct{ a, b *tapCounts }
 func (t twoTapApp) Build(widget.Ctx) widget.Widget {
 	mk := func(c *tapCounts) widget.Widget {
 		return widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { c.tap++ }, OnDoubleTap: func() { c.dbl++ }},
-			Child:   widget.Sized{W: 40, H: 40},
+			Gestures: widget.Gestures{OnTap: func() { c.tap++ }, OnDoubleTap: func() { c.dbl++ }},
+			Child:    widget.Sized{W: 40, H: 40},
 		}
 	}
 	return widget.Column(mk(t.a), mk(t.b))

@@ -110,13 +110,10 @@ func FoldBands(bins []float32, dst []float32) int {
 	}
 	ratio := math.Log(float64(hi) / float64(lo))
 	edge := func(i int) int {
-		e := int(float64(lo) * math.Exp(ratio*float64(i)/float64(n)))
-		if e > hi {
-			e = hi
-		}
+		e := min(int(float64(lo)*math.Exp(ratio*float64(i)/float64(n))), hi)
 		return e
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a, b := edge(i), edge(i+1)
 		if b <= a {
 			b = a + 1 // the lowest bands are narrower than one bin

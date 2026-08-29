@@ -304,9 +304,9 @@ func serialize(sb *strings.Builder, n *node) {
 }
 
 func mapItem(n *node) Item {
-	it := Item{}
+	it := Item{
 
-	it.Title = cleanText(stripTagsIfMarkup(n.text("title")))
+		Title: cleanText(stripTagsIfMarkup(n.text("title")))}
 
 	// Identity. Atom uses <id>, RSS uses <guid>.
 	if g := n.child("guid"); g != nil {

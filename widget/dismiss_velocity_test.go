@@ -45,7 +45,7 @@ func dismissProbe(t *testing.T, steps int, dxPer float32) bool {
 		h.Render()
 	}
 	h.Release(geom.Pt{X: x, Y: 40})
-	for s := 0; s < 120; s++ {
+	for range 120 {
 		h.Step(1.0 / 60)
 		h.Render()
 	}

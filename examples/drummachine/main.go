@@ -173,8 +173,8 @@ func (s *drum) toggleCell(v, st int) {
 }
 
 func (s *drum) onPress(p geom.Pt) {
-	for v := 0; v < numVoices; v++ {
-		for st := 0; st < steps; st++ {
+	for v := range numVoices {
+		for st := range steps {
 			if s.cell[v][st].Contains(p) {
 				s.toggleCell(v, st)
 				return
@@ -195,7 +195,7 @@ func (s *drum) onPress(p geom.Pt) {
 
 func (s *drum) Build(_ widget.Ctx) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnKey: func(k shell.Key) {
 				if k.Kind != shell.KeyPress {
 					return
@@ -254,9 +254,9 @@ func (s *drum) draw(c paint.Canvas, sz geom.Size) {
 		c.FillRRect(geom.RectXYWH(x-2, gridTop-4, cellW+4, numVoices*rowH-2), 5, headCol)
 	}
 
-	for v := 0; v < numVoices; v++ {
+	for v := range numVoices {
 		c.TextIn("", s.voices[v].name, geom.Pt{X: pad, Y: yOf(v) + cellH*0.72}, 14, labelCol)
-		for st := 0; st < steps; st++ {
+		for st := range steps {
 			r := geom.RectXYWH(xOf(st), yOf(v), cellW, cellH)
 			s.cell[v][st] = r
 			switch {

@@ -164,7 +164,7 @@ func (s *gameState) attachSound() {
 
 func (s *gameState) Build(_ widget.Ctx) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnKey: func(k shell.Key) {
 				if k.Kind == shell.KeyPress {
 					s.key(k.Code)

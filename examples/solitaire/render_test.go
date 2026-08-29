@@ -83,7 +83,7 @@ func TestTapStockRecycles(t *testing.T) {
 	h, st := mount(t, 1)
 	b := Layout(testSize, st.g)
 	stock0 := len(st.g.Stock())
-	for i := 0; i < stock0; i++ {
+	for range stock0 {
 		h.Tap(center(b.Stock))
 	}
 	h.Render()
@@ -235,7 +235,7 @@ func TestWinCascade(t *testing.T) {
 	// Force a completed game: all four foundations full, A→K.
 	var snap klondike.Snapshot
 	snap.DrawN = 1
-	for suit := 0; suit < 4; suit++ {
+	for suit := range 4 {
 		for rank := 1; rank <= 13; rank++ {
 			snap.Foundations[suit] = append(snap.Foundations[suit],
 				klondike.Card{Suit: klondike.Suit(suit), Rank: uint8(rank), Up: true})

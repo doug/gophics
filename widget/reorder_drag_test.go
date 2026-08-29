@@ -61,7 +61,7 @@ func TestDraggingARowReordersIt(t *testing.T) {
 func TestADragWinnerIsStillToldItsPressEnded(t *testing.T) {
 	var pressed, ended int
 	root := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress:    func(geom.Pt) { pressed++ },
 			OnDrag:     func(geom.Pt, geom.Pt) {},
 			OnPressEnd: func() { ended++ },

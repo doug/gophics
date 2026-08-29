@@ -4,8 +4,9 @@ package gpu
 
 import (
 	"fmt"
-	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"testing"
+
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 
 	"github.com/doug/gophics/internal/gfx/gg/scene"
 )

@@ -38,7 +38,7 @@ func (s *whyState) Init(ctx widget.Ctx) {
 func (s *whyState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	lib := env(ctx).Lib
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	it, ok := s.item, s.found
 	if !ok {

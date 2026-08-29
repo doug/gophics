@@ -102,7 +102,7 @@ func (s *datePickerState) Build(ctx widget.Ctx) widget.Widget {
 	lead := int(firstWeekday(s.year, s.month))
 	n := daysInMonth(s.year, s.month)
 	dayCells := make([]widget.Widget, 0, lead+n)
-	for i := 0; i < lead; i++ {
+	for range lead {
 		dayCells = append(dayCells, widget.Sized{H: dpCellH})
 	}
 	for day := 1; day <= n; day++ {

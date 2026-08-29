@@ -60,7 +60,7 @@ func (s *tooltipState) show() {
 	}
 	s.shown = true
 	th := Of(s.ctx)
-	ov := widget.MustOf[widget.Overlay](s.ctx)
+	ov := s.ctx.MustOf[widget.Overlay]()
 
 	// The tip hangs below-right of the pointer, the position that keeps it
 	// clear of the cursor and of the control being described.
@@ -96,7 +96,7 @@ func (s *tooltipState) Build(ctx widget.Ctx) widget.Widget {
 		return w.Child
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnEnter: func() {
 				s.origin = ctx.Input().Pointer()
 				s.hover.start(s.delay())

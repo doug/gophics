@@ -1,9 +1,11 @@
 package widget
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
@@ -50,7 +52,7 @@ func (s *selectionAreaState) Build(ctx Ctx) Widget {
 	r := s.reg
 	r.selColor = col
 	return Provide[*selectionRegistry]{Value: r, Child: Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			// Modality-aware drag ownership (Flutter parity):
 			//   - mouse: a drag that begins on text selects (any direction),
 			//     beating a deeper scroll; a drag on empty space scrolls.
@@ -326,12 +328,12 @@ func (fr *selFrag) offsetAt(p geom.Pt) int {
 // wordAt returns the linear range of the whitespace-delimited word containing
 // the offset (for long-press word selection).
 func (fr *selFrag) wordAt(off int) (int, int) {
-	for li := len(fr.lines) - 1; li >= 0; li-- {
+	for li, v := range slices.Backward(fr.lines) {
 		start := fr.lineStart[li]
 		if off < start {
 			continue
 		}
-		runes := []rune(fr.lines[li])
+		runes := []rune(v)
 		col := min(off-start, len(runes))
 		word := func(r rune) bool { return r != ' ' && r != '\t' }
 		lo, hi := col, col
@@ -391,7 +393,7 @@ func (w selAnchor) soleChild() Widget                   { return w.child }
 func (w selAnchor) attach(b layout.Box, k []layout.Box) { b.(*selAnchorBox).child = first(k) }
 
 type selAnchorBox struct {
-	layout.Base
+	layoutbox.Base
 	reg   *selectionRegistry
 	child layout.Box
 }

@@ -21,7 +21,7 @@ func navFixture(t *testing.T) (*Owner, *navState) {
 // pumpNav runs frames until the navigator's transition settles.
 func pumpNav(t *testing.T, o *Owner, s *navState) {
 	t.Helper()
-	for i := 0; i < 240; i++ {
+	for range 240 {
 		o.TickAll(0.016)
 		o.FlushBuilds()
 		if s.trans == nil && !s.slide.Running() {
@@ -33,7 +33,7 @@ func pumpNav(t *testing.T, o *Owner, s *navState) {
 
 // tickNav advances n frames without requiring the transition to finish.
 func tickNav(o *Owner, n int) {
-	for i := 0; i < n; i++ {
+	for range n {
 		o.TickAll(0.016)
 		o.FlushBuilds()
 	}

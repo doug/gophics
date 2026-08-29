@@ -24,7 +24,7 @@ import (
 func tapProbe(t *testing.T, drift float32, touch bool, holdFrames int) (tapped, longPressed bool) {
 	t.Helper()
 	root := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap:       func() { tapped = true },
 			OnLongPress: func() { longPressed = true },
 		},

@@ -272,10 +272,7 @@ func (s *textFieldState) moveVertical(ctx Ctx, dir int, extend bool) {
 		return
 	}
 	target := lines[li]
-	idx := target.Start + target.IndexAt(x)
-	if idx > target.End {
-		idx = target.End
-	}
+	idx := min(target.Start+target.IndexAt(x), target.End)
 	s.ed.MoveTo(idx, extend)
 	s.SetState(nil)
 }
@@ -322,10 +319,7 @@ func (s *textFieldState) caretPt(pr *paint.Painter, idx int) geom.Pt {
 	li := lineOf(lines, idx)
 	l := lines[li]
 	m := pr.MetricsIn("", f.size())
-	rel := idx - l.Start
-	if rel < 0 {
-		rel = 0
-	}
+	rel := max(idx-l.Start, 0)
 	return geom.Pt{X: l.CaretX(rel), Y: float32(li) * m.LineHeight()}
 }
 
@@ -479,25 +473,19 @@ func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
 		return 0
 	}
 	m := ctx.Painter().MetricsIn("", f.size())
-	li := int(p.Y / m.LineHeight())
-	if li < 0 {
-		li = 0
-	}
+	li := max(int(p.Y/m.LineHeight()), 0)
 	if li >= len(lines) {
 		li = len(lines) - 1
 	}
 	l := lines[li]
-	idx := l.Start + l.IndexAt(p.X)
-	if idx > l.End {
-		idx = l.End
-	}
+	idx := min(l.Start+l.IndexAt(p.X), l.End)
 	return idx
 }
 
 func (s *textFieldState) Build(ctx Ctx) Widget {
 	f := s.W()
 	// The nearest enclosing Scroll's caret-into-view service, if any.
-	s.reveal, _ = Of[*scrollReveal](ctx)
+	s.reveal, _ = ctx.Of[*scrollReveal]()
 	if f.Value != s.ed.Text() {
 		s.ed.SetText(f.Value)
 		s.ed.End(false)
@@ -606,7 +594,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	}
 
 	view := Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			OnPress: func(p geom.Pt) {
 				s.activity()
 				s.closeMenu() // a new press replaces whatever the last one raised

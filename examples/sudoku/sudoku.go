@@ -10,14 +10,14 @@ func idx(r, c int) int { return r*9 + c }
 // canPlace reports whether v (1..9) can go at (r,c) without repeating in the
 // row, column, or 3x3 box.
 func canPlace(g *Grid, r, c, v int) bool {
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		if g[idx(r, i)] == v || g[idx(i, c)] == v {
 			return false
 		}
 	}
 	br, bc := r/3*3, c/3*3
-	for dr := 0; dr < 3; dr++ {
-		for dc := 0; dc < 3; dc++ {
+	for dr := range 3 {
+		for dc := range 3 {
 			if g[idx(br+dr, bc+dc)] == v {
 				return false
 			}
@@ -27,7 +27,7 @@ func canPlace(g *Grid, r, c, v int) bool {
 }
 
 func (g *Grid) firstEmpty() int {
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		if g[i] == 0 {
 			return i
 		}
@@ -118,13 +118,13 @@ func generate(rng *rand.Rand, targetClues int) (puzzle, solution Grid) {
 // column, or box.
 func (g *Grid) conflicts() [81]bool {
 	var bad [81]bool
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		v := g[i]
 		if v == 0 {
 			continue
 		}
 		r, c := i/9, i%9
-		for j := 0; j < 9; j++ {
+		for j := range 9 {
 			if k := idx(r, j); k != i && g[k] == v {
 				bad[i] = true
 			}
@@ -133,8 +133,8 @@ func (g *Grid) conflicts() [81]bool {
 			}
 		}
 		br, bc := r/3*3, c/3*3
-		for dr := 0; dr < 3; dr++ {
-			for dc := 0; dc < 3; dc++ {
+		for dr := range 3 {
+			for dc := range 3 {
 				if k := idx(br+dr, bc+dc); k != i && g[k] == v {
 					bad[i] = true
 				}
@@ -147,7 +147,7 @@ func (g *Grid) conflicts() [81]bool {
 // solved reports whether the grid is completely and validly filled.
 func (g *Grid) solved() bool {
 	bad := g.conflicts()
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		if g[i] == 0 || bad[i] {
 			return false
 		}

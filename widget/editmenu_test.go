@@ -1,6 +1,7 @@
 package widget_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -116,12 +117,7 @@ func labels(h *app.Headless) []string {
 func hasLabel(h *app.Headless, s string) bool { return contains(labels(h), s) }
 
 func contains(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, s)
 }
 
 func tapLabel(t *testing.T, h *app.Headless, label string) {

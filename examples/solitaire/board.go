@@ -1,6 +1,8 @@
 package main
 
 import (
+	"slices"
+
 	"github.com/doug/gophics/examples/solitaire/klondike"
 	"github.com/doug/gophics/geom"
 )
@@ -31,13 +33,13 @@ func Layout(size geom.Size, g *klondike.Game) Board {
 	topY := float32(margin)
 	b.Stock = rect(colX(0), topY)
 	b.Waste = rect(colX(1), topY)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		b.Foundations[i] = rect(colX(3+i), topY)
 	}
 
 	tableTop := topY + cardH + gap*1.4
 	fanUp, fanDown := cardH*fanUpFrac, cardH*fanDownFrac
-	for j := 0; j < 7; j++ {
+	for j := range 7 {
 		x := colX(j)
 		b.Slot[j] = rect(x, tableTop)
 		col := g.Tableau(j)
@@ -64,15 +66,15 @@ func (b Board) Hit(p geom.Pt) (pile klondike.Pile, idx int, ok bool) {
 	case b.Waste.Contains(p):
 		return klondike.Pile{Kind: klondike.Waste}, 0, true
 	}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if b.Foundations[i].Contains(p) {
 			return klondike.Pile{Kind: klondike.Foundation, Index: i}, 0, true
 		}
 	}
-	for j := 0; j < 7; j++ {
+	for j := range 7 {
 		rects := b.Tableaus[j]
-		for k := len(rects) - 1; k >= 0; k-- {
-			if rects[k].Contains(p) {
+		for k, rect := range slices.Backward(rects) {
+			if rect.Contains(p) {
 				return klondike.Pile{Kind: klondike.Tableau, Index: j}, k, true
 			}
 		}
@@ -93,10 +95,10 @@ type DropTarget struct {
 // column (its top card, or the empty slot), for overlap-based drop resolution.
 func (b Board) DropTargets(g *klondike.Game) []DropTarget {
 	out := make([]DropTarget, 0, 11)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		out = append(out, DropTarget{klondike.Pile{Kind: klondike.Foundation, Index: i}, b.Foundations[i]})
 	}
-	for j := 0; j < 7; j++ {
+	for j := range 7 {
 		r := b.Slot[j]
 		if n := len(b.Tableaus[j]); n > 0 {
 			r = b.Tableaus[j][n-1]

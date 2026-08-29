@@ -19,7 +19,7 @@ import (
 // exit animation before the overlay entry is removed. Requires an OverlayHost
 // in scope (app.NewCore installs one).
 func ShowBottomSheet(ctx widget.Ctx, content widget.Widget) (dismiss func()) {
-	ov := widget.MustOf[widget.Overlay](ctx)
+	ov := ctx.MustOf[widget.Overlay]()
 	th := Of(ctx)
 	var tok widget.OverlayToken
 	// The live sheet state animates entry/exit; the returned closer routes
@@ -122,7 +122,7 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 		ty := (1-v)*h + s.drag
 
 		scrim := widget.Interactive{
-			Handler: widget.Handler{
+			Gestures: widget.Gestures{
 				OnTap: s.close,
 				OnKey: func(k shell.Key) {
 					if k.Kind == shell.KeyPress && k.Code == shell.KeyEscape {
@@ -148,7 +148,7 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 		// Drag-to-dismiss: the sheet follows a downward drag; a release past the
 		// threshold closes, otherwise it springs back to rest.
 		draggable := widget.Interactive{
-			Handler: widget.Handler{
+			Gestures: widget.Gestures{
 				DragAxis: widget.DragVertical,
 				OnDrag: func(_, d geom.Pt) {
 					s.SetState(func() { s.drag = maxF(0, s.drag+d.Y) })

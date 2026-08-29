@@ -30,12 +30,12 @@ func TestReorderRowsCentreTheirContents(t *testing.T) {
 	a.Move(geom.Pt{X: 210, Y: 400})
 	for i := 0; i < 20 && a.NodeContaining(section).Rect.Min.Y > 640; i++ {
 		a.Scroll(geom.Pt{Y: -400})
-		for s := 0; s < 40; s++ {
+		for range 40 {
 			a.Step(1.0 / 60)
 		}
 	}
 	a.TapText(section)
-	for s := 0; s < 40; s++ {
+	for range 40 {
 		a.Step(1.0 / 60)
 	}
 

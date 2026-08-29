@@ -9,7 +9,7 @@ import (
 func TestSnapshotRoundTrip(t *testing.T) {
 	g := New(5, 3)
 	// Play a bit so the snapshot has non-trivial waste/foundation/history state.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		acts := g.LegalActions()
 		if len(acts) > 0 {
 			a := acts[0]

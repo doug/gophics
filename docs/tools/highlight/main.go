@@ -77,10 +77,7 @@ func main() {
 		if n == 0 {
 			n = len(t.tok.String())
 		}
-		end := t.off + n
-		if end > len(src) {
-			end = len(src)
-		}
+		end := min(t.off+n, len(src))
 		text := html.EscapeString(string(src[t.off:end]))
 		if cls := classOf(t, toks, i); cls != "" {
 			fmt.Fprintf(&b, `<span class="%s">%s</span>`, cls, text)

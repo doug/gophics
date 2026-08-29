@@ -1,4 +1,4 @@
-// Widget kinds, State plumbing, Ctx accessors, and the interaction Handler
+// Widget kinds, State plumbing, Ctx accessors, and the interaction Gestures
 // contract. Package documentation — including the reconciler-core vs
 // widget-catalog layering and the sealed extension policy — is in doc.go.
 
@@ -6,6 +6,7 @@ package widget
 
 import (
 	"context"
+
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/input"
 	"github.com/doug/gophics/paint"
@@ -220,10 +221,10 @@ func keyOf(w Widget) any {
 	return nil
 }
 
-// Handler bundles the interaction callbacks of Interactive widgets.
+// Gestures bundles the interaction callbacks of Interactive widgets.
 // All callbacks are optional. Positions are in the widget's local
 // coordinates.
-type Handler struct {
+type Gestures struct {
 	OnTap   func()
 	OnEnter func()
 	OnExit  func()
@@ -295,7 +296,7 @@ type Handler struct {
 	OnFocus       func(focused bool)
 }
 
-func (h *Handler) focusable() bool { return h.OnText != nil || h.OnKey != nil }
+func (h *Gestures) focusable() bool { return h.OnText != nil || h.OnKey != nil }
 
 // GestureTarget is the handle through which the app runner dispatches pointer
 // gestures (tap, press, drag, hover, scroll, focus). It is sealed: the
@@ -308,15 +309,15 @@ func (h *Handler) focusable() bool { return h.OnText != nil || h.OnKey != nil }
 // compare equal exactly when they wrap the same box, so the runner may use ==
 // and slice membership to track a gesture across events.
 type GestureTarget interface {
-	// GestureHandler returns the target's Handler. The returned pointer is
+	// GestureHandler returns the target's Gestures. The returned pointer is
 	// stable for the life of the render object (keyboard focus retains it),
 	// and reflects the most recent reconciliation.
-	GestureHandler() *Handler
+	GestureHandler() *Gestures
 	// sealedGestureTarget restricts implementations to this package.
 	sealedGestureTarget()
 }
 
-// DragAxis constrains the direction a drag handler claims (see Handler.DragAxis).
+// DragAxis constrains the direction a drag handler claims (see Gestures.DragAxis).
 type DragAxis uint8
 
 const (

@@ -3,6 +3,7 @@ package extract
 import (
 	"bytes"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -157,7 +158,7 @@ func fixImages(root *html.Node, opts Options) {
 // largestFromSrcset picks the highest-width entry from a srcset attribute.
 func largestFromSrcset(v string) string {
 	best, bestW := "", -1
-	for _, part := range strings.Split(v, ",") {
+	for part := range strings.SplitSeq(v, ",") {
 		fields := strings.Fields(strings.TrimSpace(part))
 		if len(fields) == 0 {
 			continue
@@ -235,8 +236,8 @@ func normalizeTags(root *html.Node) {
 		return true
 	})
 	// Unwrap deepest-last so parents are still attached when children move.
-	for i := len(toUnwrap) - 1; i >= 0; i-- {
-		unwrap(toUnwrap[i])
+	for _, t := range slices.Backward(toUnwrap) {
+		unwrap(t)
 	}
 }
 
@@ -265,7 +266,7 @@ func stripAttrs(root *html.Node) {
 // dropEmpty removes elements left with neither text nor meaningful children.
 func dropEmpty(root *html.Node) {
 	// Repeat until stable: emptying a child can empty its parent.
-	for pass := 0; pass < 4; pass++ {
+	for range 4 {
 		var doomed []*html.Node
 		walk(root, func(n *html.Node) bool {
 			name := tag(n)
@@ -330,8 +331,8 @@ func collapseWrappers(root *html.Node) {
 		}
 		return true
 	})
-	for i := len(toUnwrap) - 1; i >= 0; i-- {
-		unwrap(toUnwrap[i])
+	for _, t := range slices.Backward(toUnwrap) {
+		unwrap(t)
 	}
 }
 

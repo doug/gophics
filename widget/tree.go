@@ -178,7 +178,7 @@ func (s *treeState) disclosureFor(id string, expandable, open bool) Widget {
 	// screen reader would read a triangle aloud and then say nothing about
 	// whether the row is open.
 	return Sized{W: affordance, Child: Interactive{
-		Handler: Handler{OnTap: func() { s.toggle(id) }},
+		Gestures: Gestures{OnTap: func() { s.toggle(id) }},
 		Child: Semantics{Hidden: true, Child: Canvas{
 			W: affordance, H: affordance,
 			Draw: func(c paint.Canvas, size geom.Size) {

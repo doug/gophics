@@ -25,8 +25,8 @@ func (s *ascaleState) Init(widget.Ctx) { s.hook(s); s.scale = 1 }
 
 func (s *ascaleState) Build(widget.Ctx) widget.Widget {
 	btn := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.tapped = true }) }},
-		Child:   widget.Sized{W: 40, H: 40},
+		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.tapped = true }) }},
+		Child:    widget.Sized{W: 40, H: 40},
 	}
 	// A 40×40 button centered in 200×200, scaled about its center.
 	return widget.Center(widget.AnimatedScale(s.scale, 80*time.Millisecond, btn))

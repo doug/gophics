@@ -79,7 +79,7 @@ func TestScrollControllerJumpAndAnimate(t *testing.T) {
 	// Animate back to top.
 	st.ctrl.AnimateTo(0, 100*time.Millisecond)
 	settled := false
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		h.Step(0.016)
 		h.Render()
 		if st.ctrl.Offset() < 1 {

@@ -26,13 +26,13 @@ func clueCount(g Grid) int {
 // the puzzle has exactly one solution.
 func TestGeneratedPuzzleIsValidAndUnique(t *testing.T) {
 	rng := rand.New(rand.NewSource(7))
-	for trial := 0; trial < 5; trial++ {
+	for trial := range 5 {
 		puzzle, solution := generate(rng, clueTarget)
 
 		if !solution.solved() {
 			t.Fatalf("trial %d: generated solution is not a valid complete grid", trial)
 		}
-		for i := 0; i < 81; i++ {
+		for i := range 81 {
 			if puzzle[i] != 0 && puzzle[i] != solution[i] {
 				t.Fatalf("trial %d: clue at %d (%d) disagrees with solution (%d)", trial, i, puzzle[i], solution[i])
 			}
@@ -103,7 +103,7 @@ func TestInputWiring(t *testing.T) {
 
 	// Find an empty cell and a clue cell.
 	empty, clue := -1, -1
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		if g.given[i] {
 			if clue < 0 {
 				clue = i
@@ -178,7 +178,7 @@ func TestEraseClearsSelection(t *testing.T) {
 	h.Render()
 
 	empty := -1
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		if !g.given[i] {
 			empty = i
 			break

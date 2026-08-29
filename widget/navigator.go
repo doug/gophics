@@ -5,6 +5,7 @@ import (
 
 	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -12,7 +13,7 @@ import (
 // Navigator manages a page stack with slide transitions. Pages reach it
 // through the provided Nav handle:
 //
-//	nav := widget.MustOf[widget.Nav](ctx)
+//	nav := ctx.MustOf[widget.Nav]()
 //	nav.Push(DetailPage{...})
 //	nav.Pop()
 //
@@ -230,7 +231,7 @@ func (s *navState) Build(Ctx) Widget {
 	// through. Only present when there's something to pop.
 	if len(s.stack) > 0 && s.trans == nil {
 		children = append(children, Interactive{
-			Handler: Handler{
+			Gestures: Gestures{
 				DragAxis: DragHorizontal,
 				OnPress:  func(geom.Pt) { s.edgeDx = 0 },
 				OnDrag:   func(_, d geom.Pt) { s.edgeDx += d.X },
@@ -318,11 +319,11 @@ func (s *navState) buildFlights(width float32) []Widget {
 // stackW and translatedW are internal render widgets over the layout boxes.
 type stackW struct{ Children []Widget }
 
-func (w stackW) createBox(Ctx) layout.Box      { return &layout.Stack{} }
+func (w stackW) createBox(Ctx) layout.Box      { return &layoutbox.Stack{} }
 func (w stackW) updateBox(_ Ctx, b layout.Box) {}
 func (w stackW) childWidgets() []Widget        { return w.Children }
 func (w stackW) attach(b layout.Box, kids []layout.Box) {
-	st := b.(*layout.Stack)
+	st := b.(*layoutbox.Stack)
 	st.Children = append(st.Children[:0], kids...)
 }
 
@@ -350,7 +351,7 @@ func (w pageW) attach(b layout.Box, kids []layout.Box) {
 }
 
 type pageBox struct {
-	layout.Base
+	layoutbox.Base
 	offstage bool
 	fracX    float32
 	reg      *heroRegistry
@@ -409,12 +410,12 @@ type translatedW struct {
 	Child Widget
 }
 
-func (w translatedW) createBox(Ctx) layout.Box { return &layout.Translated{} }
+func (w translatedW) createBox(Ctx) layout.Box { return &layoutbox.Translated{} }
 func (w translatedW) updateBox(_ Ctx, b layout.Box) {
-	b.(*layout.Translated).FracX = w.FracX
+	b.(*layoutbox.Translated).FracX = w.FracX
 }
 func (w translatedW) childWidgets() []Widget { return []Widget{w.Child} }
 func (w translatedW) soleChild() Widget      { return w.Child }
 func (w translatedW) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Translated).Child = first(kids)
+	b.(*layoutbox.Translated).Child = first(kids)
 }

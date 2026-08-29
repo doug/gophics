@@ -224,7 +224,7 @@ func (s *animationsState) Build(ctx widget.Ctx) widget.Widget {
 	spin := widget.AnimatedRotation(s.angle, 300*time.Millisecond, animTile(th, th.ChartAt(5), "Rotation"))
 
 	tap := func(child widget.Widget, onTap func()) widget.Widget {
-		return widget.Interactive{Handler: widget.Handler{OnTap: onTap}, Child: child}
+		return widget.Interactive{Gestures: widget.Gestures{OnTap: onTap}, Child: child}
 	}
 
 	return sectionColumn(

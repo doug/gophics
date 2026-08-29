@@ -76,9 +76,9 @@ func coarse(img *image.RGBA, cw, ch int) []float64 {
 	W, H := b.Dx(), b.Dy()
 	out := make([]float64, cw*ch*3)
 	cnt := make([]int, cw*ch)
-	for y := 0; y < H; y++ {
+	for y := range H {
 		cy := y * ch / H
-		for x := 0; x < W; x++ {
+		for x := range W {
 			cx := x * cw / W
 			o := img.PixOffset(b.Min.X+x, b.Min.Y+y)
 			ci := (cy*cw + cx) * 3
@@ -100,7 +100,7 @@ func coarse(img *image.RGBA, cw, ch int) []float64 {
 
 func maxChan(a, b []float64) int {
 	m := 0.0
-	for k := 0; k < 3; k++ {
+	for k := range 3 {
 		d := a[k] - b[k]
 		if d < 0 {
 			d = -d

@@ -192,7 +192,7 @@ func (s *lum) seed() {
 	for _, p := range [][2]int{{3, 3}, {12, 3}, {12, 12}, {3, 12}} {
 		s.grid[p[1]][p[0]] = turnCW
 	}
-	for i := 0; i < 22; i++ {
+	for range 22 {
 		x, y := s.rng.Intn(cols), s.rng.Intn(rows)
 		if s.grid[y][x] == empty {
 			s.grid[y][x] = node
@@ -453,7 +453,7 @@ func (s *lum) stacked(ctx widget.Ctx, th theme.Theme) widget.Widget {
 
 func (s *lum) matrix() widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnKey:      s.onKey,
 			OnPress:    s.onPress,
 			OnDrag:     s.onDrag,

@@ -2,6 +2,7 @@ package widget
 
 import (
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -23,7 +24,7 @@ func (h Hero) createBox(Ctx) layout.Box { return &heroBox{} }
 func (h Hero) updateBox(ctx Ctx, b layout.Box) {
 	hb := b.(*heroBox)
 	hb.tag, hb.child = h.Tag, h.Child
-	hb.reg, _ = Of[*heroRegistry](ctx) // nil outside a transition
+	hb.reg, _ = ctx.Of[*heroRegistry]() // nil outside a transition
 }
 func (h Hero) childWidgets() []Widget { return []Widget{h.Child} }
 func (h Hero) soleChild() Widget      { return h.Child }
@@ -62,7 +63,7 @@ func restRect(rc geom.Rect, frac, width float32) geom.Rect {
 }
 
 type heroBox struct {
-	layout.Base
+	layoutbox.Base
 	tag      string
 	reg      *heroRegistry
 	child    Widget

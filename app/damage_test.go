@@ -32,7 +32,7 @@ func (s *rowsState) Build(widget.Ctx) widget.Widget {
 			col = paint.RGB(0.5, 0.5, 0.6)
 		}
 		rows[i] = widget.Interactive{
-			Handler: widget.Handler{
+			Gestures: widget.Gestures{
 				OnEnter: func() { s.SetState(func() { s.hover = i }) },
 				OnExit:  func() { s.SetState(func() { s.hover = -1 }) },
 			},

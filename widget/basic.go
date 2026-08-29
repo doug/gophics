@@ -7,6 +7,7 @@ import (
 
 	"github.com/doug/gophics/anim"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -34,14 +35,14 @@ func (t Text) size() float32 {
 	return t.Size
 }
 
-func (t Text) createBox(ctx Ctx) layout.Box { return &layout.TextBox{Painter: ctx.Painter()} }
+func (t Text) createBox(ctx Ctx) layout.Box { return &layoutbox.TextBox{Painter: ctx.Painter()} }
 func (t Text) updateBox(ctx Ctx, b layout.Box) {
-	tb := b.(*layout.TextBox)
+	tb := b.(*layoutbox.TextBox)
 	tb.Text, tb.Font, tb.TextSize, tb.Color = t.S, t.Font, t.size(), t.Color
 	tb.Wrap, tb.Strike, tb.Underline = t.Wrap, t.Strike, t.Underline
 	tb.MaxLines, tb.Ellipsis = t.MaxLines, t.Ellipsis
 	// Inside a SelectionArea, register as a selectable fragment.
-	if reg, ok := Of[*selectionRegistry](ctx); ok {
+	if reg, ok := ctx.Of[*selectionRegistry](); ok {
 		tb.Selection = reg
 	} else {
 		tb.Selection = nil
@@ -81,14 +82,14 @@ func (p Padding) insets(dir Direction) geom.Insets {
 	return in
 }
 
-func (p Padding) createBox(Ctx) layout.Box { return &layout.Padded{} }
+func (p Padding) createBox(Ctx) layout.Box { return &layoutbox.Padded{} }
 func (p Padding) updateBox(ctx Ctx, b layout.Box) {
-	b.(*layout.Padded).Insets = p.insets(DirectionOf(ctx))
+	b.(*layoutbox.Padded).Insets = p.insets(DirectionOf(ctx))
 }
 func (p Padding) childWidgets() []Widget { return []Widget{p.Child} }
 func (p Padding) soleChild() Widget      { return p.Child }
 func (p Padding) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Padded).Child = first(kids)
+	b.(*layoutbox.Padded).Child = first(kids)
 }
 
 // Sized forces dimensions (zero = unspecified). With no child it is a spacer.
@@ -97,15 +98,15 @@ type Sized struct {
 	Child Widget
 }
 
-func (s Sized) createBox(Ctx) layout.Box { return &layout.Sized{} }
+func (s Sized) createBox(Ctx) layout.Box { return &layoutbox.Sized{} }
 func (s Sized) updateBox(_ Ctx, b layout.Box) {
-	sb := b.(*layout.Sized)
+	sb := b.(*layoutbox.Sized)
 	sb.W, sb.H = s.W, s.H
 }
 func (s Sized) childWidgets() []Widget { return []Widget{s.Child} }
 func (s Sized) soleChild() Widget      { return s.Child }
 func (s Sized) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Sized).Child = first(kids)
+	b.(*layoutbox.Sized).Child = first(kids)
 }
 
 // Decorated paints a rounded-rect background and/or border behind its child.
@@ -120,9 +121,9 @@ type Decorated struct {
 	Child Widget
 }
 
-func (d Decorated) createBox(Ctx) layout.Box { return &layout.Decorated{} }
+func (d Decorated) createBox(Ctx) layout.Box { return &layoutbox.Decorated{} }
 func (d Decorated) updateBox(_ Ctx, b layout.Box) {
-	db := b.(*layout.Decorated)
+	db := b.(*layoutbox.Decorated)
 	db.Color, db.Radius = d.Color, d.Radius
 	db.BorderColor, db.BorderWidth = d.BorderColor, d.BorderWidth
 	db.Blur = d.Blur
@@ -130,7 +131,7 @@ func (d Decorated) updateBox(_ Ctx, b layout.Box) {
 func (d Decorated) childWidgets() []Widget { return []Widget{d.Child} }
 func (d Decorated) soleChild() Widget      { return d.Child }
 func (d Decorated) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Decorated).Child = first(kids)
+	b.(*layoutbox.Decorated).Child = first(kids)
 }
 
 // Align positions its child; X/Y in [0,1] (0 start, 0.5 center, 1 end).
@@ -146,9 +147,9 @@ type Align struct {
 // Center centers its child.
 func Center(child Widget) Align { return Align{X: 0.5, Y: 0.5, Child: child} }
 
-func (a Align) createBox(Ctx) layout.Box { return &layout.Aligned{} }
+func (a Align) createBox(Ctx) layout.Box { return &layoutbox.Aligned{} }
 func (a Align) updateBox(ctx Ctx, b layout.Box) {
-	ab := b.(*layout.Aligned)
+	ab := b.(*layoutbox.Aligned)
 	x := a.X
 	if a.Directional && DirectionOf(ctx).RTL() {
 		x = 1 - x
@@ -158,7 +159,7 @@ func (a Align) updateBox(ctx Ctx, b layout.Box) {
 func (a Align) childWidgets() []Widget { return []Widget{a.Child} }
 func (a Align) soleChild() Widget      { return a.Child }
 func (a Align) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Aligned).Child = first(kids)
+	b.(*layoutbox.Aligned).Child = first(kids)
 }
 
 // Flexible gives a Flex child a share of the remaining main-axis space.
@@ -196,9 +197,9 @@ func Column(children ...Widget) Flex {
 	return Flex{Axis: layout.Vertical, CrossAlign: layout.CrossCenter, Children: children}
 }
 
-func (f Flex) createBox(Ctx) layout.Box { return &layout.Flex{} }
+func (f Flex) createBox(Ctx) layout.Box { return &layoutbox.Flex{} }
 func (f Flex) updateBox(ctx Ctx, b layout.Box) {
-	fb := b.(*layout.Flex)
+	fb := b.(*layoutbox.Flex)
 	fb.Axis, fb.MainAlign, fb.CrossAlign = f.Axis, f.MainAlign, f.CrossAlign
 	// Only a horizontal run mirrors: a column reads top-to-bottom in every
 	// script gophics supports.
@@ -231,7 +232,7 @@ func (f Flex) childWidgets() []Widget {
 }
 
 func (f Flex) attach(b layout.Box, kids []layout.Box) {
-	fb := b.(*layout.Flex)
+	fb := b.(*layoutbox.Flex)
 	fb.Children = fb.Children[:0]
 	ki := 0
 	for _, c := range f.Children {
@@ -242,7 +243,7 @@ func (f Flex) attach(b layout.Box, kids []layout.Box) {
 		if c == nil {
 			continue // childWidgets yielded nil → the reconciler made no box
 		}
-		fb.Children = append(fb.Children, layout.FlexChild{Box: kids[ki], Flex: flex})
+		fb.Children = append(fb.Children, layoutbox.FlexChild{Box: kids[ki], Flex: flex})
 		ki++
 	}
 }
@@ -420,7 +421,7 @@ func (r *scrollReveal) reveal(lo, hi float32) {
 	}
 }
 
-type viewportRef struct{ box *layout.Viewport }
+type viewportRef struct{ box *layoutbox.Viewport }
 
 func (s *scrollState) Init(ctx Ctx) {
 	s.ctx = ctx
@@ -868,7 +869,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 		dragAxis = DragHorizontal
 	}
 	inner := Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			DragAxis: dragAxis, // so a cross-axis swipe (Dismissible) can nest
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
@@ -948,7 +949,7 @@ func (w revealAnchor) soleChild() Widget                   { return w.child }
 func (w revealAnchor) attach(b layout.Box, k []layout.Box) { b.(*revealAnchorBox).child = first(k) }
 
 type revealAnchorBox struct {
-	layout.Base
+	layoutbox.Base
 	reveal *scrollReveal
 	child  layout.Box
 }
@@ -1029,7 +1030,7 @@ func scrollbarThumb(s *scrollState) Widget {
 	}
 
 	size.Child = Interactive{
-		Handler: Handler{
+		Gestures: Gestures{
 			DragAxis: axis,
 			OnPress:  func(geom.Pt) { s.barDragging, s.barDragStart = true, s.offset },
 			OnDrag: func(_, d geom.Pt) {
@@ -1055,7 +1056,7 @@ func (b scrollbar) childWidgets() []Widget          { return nil }
 func (b scrollbar) attach(layout.Box, []layout.Box) {}
 
 type scrollbarBox struct {
-	layout.Base
+	layoutbox.Base
 	s    *scrollState
 	size geom.Size
 }
@@ -1122,7 +1123,7 @@ func (r refreshIndicator) childWidgets() []Widget          { return nil }
 func (r refreshIndicator) attach(layout.Box, []layout.Box) {}
 
 type refreshBox struct {
-	layout.Base
+	layoutbox.Base
 	extent   float32
 	progress float32
 	spinning bool
@@ -1162,7 +1163,7 @@ func (b *refreshBox) Paint(c paint.Canvas, at geom.Pt) {
 	if fadeIn > 1 || b.spinning {
 		fadeIn = 1
 	}
-	for i := 0; i < refreshSpokes; i++ {
+	for i := range refreshSpokes {
 		ang := float64(i)/refreshSpokes*2*math.Pi - math.Pi/2
 		cos, sin := float32(math.Cos(ang)), float32(math.Sin(ang))
 		var alpha float32
@@ -1198,9 +1199,9 @@ type viewport struct {
 	Child   Widget
 }
 
-func (v viewport) createBox(Ctx) layout.Box { return &layout.Viewport{} }
+func (v viewport) createBox(Ctx) layout.Box { return &layoutbox.Viewport{} }
 func (v viewport) updateBox(_ Ctx, b layout.Box) {
-	vb := b.(*layout.Viewport)
+	vb := b.(*layoutbox.Viewport)
 	vb.Axis, vb.Offset, vb.Lead, vb.Reverse = v.Axis, v.Offset, v.Lead, v.Reverse
 	if v.Ref != nil {
 		v.Ref.box = vb
@@ -1209,7 +1210,7 @@ func (v viewport) updateBox(_ Ctx, b layout.Box) {
 func (v viewport) childWidgets() []Widget { return []Widget{v.Child} }
 func (v viewport) soleChild() Widget      { return v.Child }
 func (v viewport) attach(b layout.Box, kids []layout.Box) {
-	b.(*layout.Viewport).Child = first(kids)
+	b.(*layoutbox.Viewport).Child = first(kids)
 }
 
 // Image draws an image.Image scaled into its box. W/H set the logical
@@ -1229,7 +1230,7 @@ func (iw Image) childWidgets() []Widget          { return nil }
 func (iw Image) attach(layout.Box, []layout.Box) {}
 
 type imageBox struct {
-	layout.Base
+	layoutbox.Base
 	src  image.Image
 	w, h float32
 }
@@ -1435,18 +1436,18 @@ func (b *canvasBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	}
 }
 
-// Interactive makes its child respond to input via Handler callbacks.
+// Interactive makes its child respond to input via Gestures callbacks.
 // It adds no visuals and takes its child's size.
 type Interactive struct {
-	Handler Handler
+	Gestures Gestures
 	// Sem overrides the semantics Interactive would otherwise infer from
-	// Handler. Set it whenever the control is not the plain button its
+	// Gestures. Set it whenever the control is not the plain button its
 	// handlers imply — a checkbox, a switch, a slider, a tab. Declaring it
 	// here rather than wrapping the control in Semantics keeps it as one
 	// node: a checkbox nested inside a button is worse for a screen-reader
 	// user than either alone, because it has to be stepped through twice.
 	//
-	// OnActivate defaults to Handler.OnTap when left nil.
+	// OnActivate defaults to Gestures.OnTap when left nil.
 	Sem   *layout.SemInfo
 	Child Widget
 }
@@ -1454,13 +1455,13 @@ type Interactive struct {
 func (iw Interactive) createBox(ctx Ctx) layout.Box { return &InteractiveBox{} }
 func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 	ib := b.(*InteractiveBox)
-	ib.Handler = iw.Handler
+	ib.Gestures = iw.Gestures
 	ib.sem = iw.Sem
 	// Autofocus: a focusable widget mounted while nothing has focus takes it.
-	if ib.Handler.focusable() && ctx.el.owner.KeyboardTarget == nil {
-		ctx.el.owner.KeyboardTarget = &ib.Handler
-		if ib.Handler.OnFocus != nil {
-			ib.Handler.OnFocus(true)
+	if ib.Gestures.focusable() && ctx.el.owner.KeyboardTarget == nil {
+		ctx.el.owner.KeyboardTarget = &ib.Gestures
+		if ib.Gestures.OnFocus != nil {
+			ib.Gestures.OnFocus(true)
 		}
 	}
 }
@@ -1473,15 +1474,15 @@ func (iw Interactive) attach(b layout.Box, kids []layout.Box) {
 // InteractiveBox is the render object behind Interactive. The app runner
 // dispatches pointer events to it through the sealed GestureTarget interface.
 type InteractiveBox struct {
-	Handler Handler
-	Child   layout.Box
-	sem     *layout.SemInfo
-	size    geom.Size
+	Gestures Gestures
+	Child    layout.Box
+	sem      *layout.SemInfo
+	size     geom.Size
 }
 
 // GestureHandler implements GestureTarget: the app runner reaches this box's
 // interaction callbacks through it.
-func (b *InteractiveBox) GestureHandler() *Handler { return &b.Handler }
+func (b *InteractiveBox) GestureHandler() *Gestures { return &b.Gestures }
 
 func (b *InteractiveBox) sealedGestureTarget() {}
 
@@ -1509,20 +1510,20 @@ func (b *InteractiveBox) Semantics() layout.SemInfo {
 	if b.sem != nil {
 		info := *b.sem
 		if info.OnActivate == nil {
-			info.OnActivate = b.Handler.OnTap
+			info.OnActivate = b.Gestures.OnTap
 		}
 		return info
 	}
 	switch {
-	case b.Handler.OnText != nil:
+	case b.Gestures.OnText != nil:
 		// Only text *entry* makes a text field. Taking key events does not:
 		// scrollers, list navigation and game surfaces all consume keys, and
 		// treating them as inputs put a full-screen "textfield" over the HN
 		// feed on Android whose label was every headline concatenated — one
 		// stop that reads the entire list and no way past it.
 		return layout.SemInfo{Role: layout.RoleTextField}
-	case b.Handler.OnTap != nil:
-		return layout.SemInfo{Role: layout.RoleButton, OnActivate: b.Handler.OnTap}
+	case b.Gestures.OnTap != nil:
+		return layout.SemInfo{Role: layout.RoleButton, OnActivate: b.Gestures.OnTap}
 	}
 	return layout.SemInfo{}
 }

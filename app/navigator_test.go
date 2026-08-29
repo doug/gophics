@@ -20,23 +20,23 @@ type navHomeState struct {
 }
 
 func (s *navHomeState) Build(ctx widget.Ctx) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	s.counter++
 	*s.log = append(*s.log, "home-build")
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Push(detail{log: s.log}) }},
-		Child:   widget.Sized{W: 200, H: 200},
+		Gestures: widget.Gestures{OnTap: func() { nav.Push(detail{log: s.log}) }},
+		Child:    widget.Sized{W: 200, H: 200},
 	}
 }
 
 type detail struct{ log *[]string }
 
 func (d detail) Build(ctx widget.Ctx) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	*d.log = append(*d.log, "detail-build")
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Pop() }},
-		Child:   widget.Decorated{Color: pRGB(0.9, 0.2, 0.2), Child: widget.Sized{W: 200, H: 200}},
+		Gestures: widget.Gestures{OnTap: func() { nav.Pop() }},
+		Child:    widget.Decorated{Color: pRGB(0.9, 0.2, 0.2), Child: widget.Sized{W: 200, H: 200}},
 	}
 }
 

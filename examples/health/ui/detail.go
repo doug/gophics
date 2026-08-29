@@ -50,7 +50,7 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	sp := specFor(m)
 	th := theme.Of(ctx)
 	accent := th.ChartAt(sp.accentIdx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 
 	ranges := rangesFor(m)
 	series := p.Series(m)
@@ -64,8 +64,8 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	lo, avg, hi := stats(series)
 
 	back := widget.Interactive{
-		Handler: widget.Handler{OnTap: nav.Pop},
-		Child:   widget.Text{S: "‹  Back", Size: 15, Color: accent},
+		Gestures: widget.Gestures{OnTap: nav.Pop},
+		Child:    widget.Text{S: "‹  Back", Size: 15, Color: accent},
 	}
 	head := widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Bottom: 16}, Child: back},
@@ -118,7 +118,7 @@ func chip(th theme.Theme, label string, selected bool, accent paint.Color, onTap
 		fg, bgc = th.OnPrimary, accent
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: onTap},
+		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Padding{Insets: geom.Insets{Right: 8}, Child: widget.Decorated{
 			Color: bgc, Radius: 10,
 			Child: widget.Padding{Insets: geom.InsetsSymmetric(14, 7), Child: widget.Text{S: label, Size: 13, Color: fg}},

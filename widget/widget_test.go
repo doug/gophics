@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 )
 
@@ -134,7 +135,7 @@ func TestFlexAttachEnforcesFactors(t *testing.T) {
 		Sized{W: 30, H: 10},
 		Expand(Sized{H: 10}),
 	))
-	box := o.RootBox().(*layout.Flex)
+	box := o.RootBox().(*layoutbox.Flex)
 	box.Layout(layout.Tight(geom.Size{W: 100, H: 10}))
 	if got := box.Children[1].Box.Size().W; got != 70 {
 		t.Fatalf("expanded child W = %v, want 70", got)
@@ -153,7 +154,7 @@ func TestBuildDirtyPropagation(t *testing.T) {
 	}
 	o.FlushBuilds()
 	// Only "a" rebuilt; "b" untouched. a's box width reflects local=3.
-	fx := o.RootBox().(*layout.Flex)
+	fx := o.RootBox().(*layoutbox.Flex)
 	fx.Layout(layout.Unbounded())
 	if got := fx.Children[0].Box.Size().W; got != 13 {
 		t.Fatalf("dirty rebuild W = %v, want 13", got)

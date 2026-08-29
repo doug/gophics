@@ -89,7 +89,7 @@ func TestPullToRefreshRetractsAndRearms(t *testing.T) {
 	// App finishes work: clear busy. The indicator retracts over a few frames
 	// (must not panic), and the machine re-arms.
 	st.SetState(func() { st.busy = false })
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		h.Step(0.016)
 		h.Render()
 	}

@@ -68,7 +68,7 @@ func TestAHeroLandsUnderAHeader(t *testing.T) {
 	}
 
 	h.Tap(geom.Pt{X: 150, Y: navMidY})
-	for i := 0; i < 5; i++ { // into the flight; rects lag a frame
+	for range 5 { // into the flight; rects lag a frame
 		h.Step(0.016)
 		h.Render()
 	}

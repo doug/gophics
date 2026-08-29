@@ -71,7 +71,7 @@ func (t tick) Tick(dt float64) bool {
 
 func (s *checkState) Build(_ widget.Ctx) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{OnPress: func(p geom.Pt) {
+		Gestures: widget.Gestures{OnPress: func(p geom.Pt) {
 			s.taps++
 			s.lastTap = p
 			s.ctx.Invalidate()
@@ -187,8 +187,8 @@ func (s *checkState) draw(c paint.Canvas, size geom.Size) {
 func buildAtlas() *image.RGBA {
 	a := image.NewRGBA(image.Rect(0, 0, 16, 16))
 	quad := [4]color.RGBA{{220, 70, 70, 255}, {70, 170, 220, 255}, {80, 200, 120, 255}, {230, 200, 80, 255}}
-	for yy := 0; yy < 16; yy++ {
-		for xx := 0; xx < 16; xx++ {
+	for yy := range 16 {
+		for xx := range 16 {
 			a.SetRGBA(xx, yy, quad[(yy/8)*2+(xx/8)])
 		}
 	}

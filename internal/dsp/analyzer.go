@@ -140,10 +140,7 @@ func (a *Analyzer) read(dst []float32) int {
 		copy(dst, a.ring[:got])
 		return got
 	}
-	want := len(dst)
-	if want > n {
-		want = n
-	}
+	want := min(len(dst), n)
 	// The newest `want` samples end just before a.w, wrapping backwards.
 	start := (a.w - want + n) % n
 	if start+want <= n {
@@ -205,7 +202,7 @@ func (a *Analyzer) Bands(dst []float32) int {
 		return len(dst)
 	}
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var v float64
 		if i < got {
 			v = float64(scratch[i])

@@ -157,8 +157,8 @@ func drawCardBackNoFrame(c paint.Canvas, r geom.Rect, rad float32) {
 	n := int(reach/cell) + 2
 	x0 := cx - float32(n)*cell/2
 	y0 := cy - float32(n)*cell/2
-	for iy := 0; iy < n; iy++ {
-		for ix := 0; ix < n; ix++ {
+	for iy := range n {
+		for ix := range n {
 			col := colBack3
 			if (ix+iy)%2 == 1 {
 				col = colBack4

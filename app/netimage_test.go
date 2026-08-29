@@ -21,8 +21,8 @@ import (
 func pngServer(t *testing.T, hits *int32) *httptest.Server {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	for y := range 16 {
+		for x := range 16 {
 			img.Set(x, y, color.RGBA{200, 200, 200, 255})
 		}
 	}

@@ -25,6 +25,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"slices"
 
 	"golang.org/x/image/font/gofont/goregular"
 
@@ -270,8 +271,8 @@ func (s *board) commit() {
 // eraseAt removes the topmost element under p; the first removal of a gesture
 // pushes one undo snapshot so the whole gesture reverts as a unit.
 func (s *board) eraseAt(p geom.Pt) {
-	for i := len(s.elements) - 1; i >= 0; i-- {
-		if s.elements[i].hit(p) {
+	for i, v := range slices.Backward(s.elements) {
+		if v.hit(p) {
 			if !s.erased {
 				s.pushUndo()
 				s.erased = true
@@ -301,7 +302,7 @@ func (s *board) onPress(p geom.Pt) {
 			return
 		}
 	}
-	for i := tool(0); i < numTools; i++ {
+	for i := range numTools {
 		if s.toolBtn[i].Contains(p) {
 			s.tool = i
 			s.ctx.Invalidate()
@@ -329,7 +330,7 @@ func (s *board) onPress(p geom.Pt) {
 
 func (s *board) Build(_ widget.Ctx) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress:   func(p geom.Pt) { s.onPress(p) },
 			OnDrag:    func(pos, _ geom.Pt) { s.drag(pos) },
 			OnRelease: func() { s.commit() }, // fires after a drag
@@ -378,7 +379,7 @@ func (s *board) drawToolbar(c paint.Canvas, sz geom.Size) {
 
 	// Tool selector: a rounded square per tool with a small vector icon.
 	const tb = 30
-	for i := tool(0); i < numTools; i++ {
+	for i := range numTools {
 		rect := geom.RectXYWH(x, cy-tb/2, tb, tb)
 		s.toolBtn[i] = rect
 		fg := btnFg
@@ -500,12 +501,9 @@ func roughLineInto(p *paint.Path, a, b geom.Pt, rng *rand.Rand) {
 		return
 	}
 	nrm := perp(d.Mul(1 / length))
-	n := int(length / 40)
-	if n < 2 {
-		n = 2
-	}
+	n := max(int(length/40), 2)
 	amp := clampf(length*0.02, 0.5, 2)
-	for pass := 0; pass < 2; pass++ {
+	for range 2 {
 		pts := make([]geom.Pt, n+1)
 		for i := 0; i <= n; i++ {
 			a2 := amp
@@ -556,7 +554,7 @@ func roughEllipseInto(p *paint.Path, r geom.Rect, rng *rand.Rand) {
 		return
 	}
 	const n = 22
-	for pass := 0; pass < 2; pass++ {
+	for range 2 {
 		pts := make([]geom.Pt, 0, n+3)
 		for i := 0; i <= n+2; i++ { // +2 samples overlap the start
 			a := 2 * math.Pi * float64(i) / float64(n)
@@ -710,7 +708,7 @@ func closedSmooth(p *paint.Path, pts []geom.Pt) {
 		return
 	}
 	p.MoveTo(pts[n-1].Lerp(pts[0], 0.5))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		p.QuadTo(pts[i], pts[i].Lerp(pts[(i+1)%n], 0.5))
 	}
 	p.Close()
@@ -719,7 +717,7 @@ func closedSmooth(p *paint.Path, pts []geom.Pt) {
 // circleInto writes a smooth closed ellipse of radii rx, ry into p.
 func circleInto(p *paint.Path, center geom.Pt, rx, ry float32, n int) {
 	pts := make([]geom.Pt, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a := 2 * math.Pi * float64(i) / float64(n)
 		pts[i] = geom.Pt{X: center.X + rx*float32(math.Cos(a)), Y: center.Y + ry*float32(math.Sin(a))}
 	}
@@ -756,7 +754,7 @@ func ellipsePts(r geom.Rect, n int) []geom.Pt {
 	c := center(r)
 	rx, ry := r.Dx()/2, r.Dy()/2
 	pts := make([]geom.Pt, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a := 2 * math.Pi * float64(i) / float64(n)
 		pts[i] = geom.Pt{X: c.X + rx*float32(math.Cos(a)), Y: c.Y + ry*float32(math.Sin(a))}
 	}

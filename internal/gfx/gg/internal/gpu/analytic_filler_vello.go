@@ -6,8 +6,9 @@
 package gpu
 
 import (
-	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 	"math"
+
+	"github.com/doug/gophics/internal/gfx/gg/internal/raster"
 )
 
 // AnalyticFillerVello implements the Vello CPU fine rasterizer algorithm.

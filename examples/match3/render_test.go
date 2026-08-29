@@ -22,7 +22,7 @@ func TestRenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		h.Step(0.016)
 	}
 	if h.Render().Bounds().Empty() {

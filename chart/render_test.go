@@ -23,7 +23,7 @@ func renderChart(t *testing.T, root widget.Widget) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		h.Step(0.05)
 	}
 	if h.Render().Bounds().Empty() {
@@ -65,8 +65,8 @@ func TestRangeAndCandle(t *testing.T) {
 // TestHeatmapRenders draws a small RectMark grid.
 func TestHeatmapRenders(t *testing.T) {
 	var cells []Cell
-	for x := 0; x < 8; x++ {
-		for y := 0; y < 5; y++ {
+	for x := range 8 {
+		for y := range 5 {
 			cells = append(cells, Cell{X: x, Y: y, V: float64((x + y) % 4)})
 		}
 	}

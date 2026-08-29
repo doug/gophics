@@ -10,6 +10,7 @@ import (
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/input"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -40,9 +41,9 @@ type Owner struct {
 	Painter *paint.Painter
 	// RequestFrame is called when state changes require a new frame.
 	RequestFrame func()
-	// KeyboardTarget is the current Handler receiving OnText/OnKey
-	// (pre-M4 focus model; see Handler).
-	KeyboardTarget *Handler
+	// KeyboardTarget is the current Gestures receiving OnText/OnKey
+	// (pre-M4 focus model; see Gestures).
+	KeyboardTarget *Gestures
 	// Clipboard is the platform clipboard, set by the app runner.
 	Clipboard Clipboard
 	// Post schedules fn onto the UI goroutine (set by the app runner).
@@ -462,7 +463,7 @@ func (el *element) update(w Widget) {
 func (el *element) markBoxChainDirty() {
 	for e := el; e != nil; e = e.parent {
 		if e.box != nil {
-			layout.MarkDirty(e.box)
+			layoutbox.MarkDirty(e.box)
 		}
 	}
 }
@@ -720,10 +721,10 @@ func (el *element) unmount() {
 	// focus (autofocus only fires when KeyboardTarget is nil, and text-capturing
 	// would otherwise stay stuck on).
 	if el.owner != nil && el.owner.KeyboardTarget != nil {
-		if ib, ok := el.box.(*InteractiveBox); ok && el.owner.KeyboardTarget == &ib.Handler {
+		if ib, ok := el.box.(*InteractiveBox); ok && el.owner.KeyboardTarget == &ib.Gestures {
 			el.owner.KeyboardTarget = nil
-			if ib.Handler.OnFocus != nil {
-				ib.Handler.OnFocus(false)
+			if ib.Gestures.OnFocus != nil {
+				ib.Gestures.OnFocus(false)
 			}
 		}
 	}

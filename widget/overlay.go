@@ -5,7 +5,7 @@ package widget
 // the app root (app.NewCore wraps the tree in one), so any widget can reach
 // the handle:
 //
-//	ov := widget.MustOf[widget.Overlay](ctx)
+//	ov := ctx.MustOf[widget.Overlay]()
 //	tok := ov.Show(myDialog)
 //	...
 //	tok.Dismiss()

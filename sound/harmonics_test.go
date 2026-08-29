@@ -125,7 +125,7 @@ func TestHarmonicsDegradesToTone(t *testing.T) {
 func TestHarmonicsEnds(t *testing.T) {
 	src := sound.Harmonics(440, 0.05, 0.5, vowel)
 	block := make([]float32, 512)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if !src.Process(block) {
 			return
 		}

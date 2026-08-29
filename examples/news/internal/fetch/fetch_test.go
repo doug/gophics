@@ -72,9 +72,9 @@ func TestConditionalGet(t *testing.T) {
 }
 
 func TestRetryOn503ThenSucceed(t *testing.T) {
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&hits, 1) == 1 {
+		if hits.Add(1) == 1 {
 			w.Header().Set("Retry-After", "7")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
@@ -213,7 +213,7 @@ func TestContextCancellation(t *testing.T) {
 func TestBodySizeCap(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		buf := make([]byte, 1<<16)
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			w.Write(buf)
 		}
 	}))

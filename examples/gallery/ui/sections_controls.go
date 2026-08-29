@@ -123,7 +123,6 @@ func (s *formState) Build(ctx widget.Ctx) widget.Widget {
 	// Checkboxes: three bound toppings, echoed in a summary line.
 	checks := make([]widget.Widget, 0, 5)
 	for i, name := range toppingNames {
-		i := i
 		if i > 0 {
 			checks = append(checks, widget.Sized{H: 8})
 		}
@@ -137,7 +136,6 @@ func (s *formState) Build(ctx widget.Ctx) widget.Widget {
 	// Radio group: single-select plan.
 	radios := make([]widget.Widget, 0, 5)
 	for i, name := range planNames {
-		i := i
 		if i > 0 {
 			radios = append(radios, widget.Sized{H: 8})
 		}
@@ -332,8 +330,8 @@ func (s *cardsState) Build(ctx widget.Ctx) widget.Widget {
 
 		groupLabel("Opacity"),
 		widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.faded = !s.faded }) }},
-			Child:   fadeTarget,
+			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.faded = !s.faded }) }},
+			Child:    fadeTarget,
 		},
 		widget.Sized{H: 8},
 		theme.Label("Tap the card to fade it"),

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
@@ -21,7 +22,7 @@ func (f field) Build(widget.Ctx) widget.Widget {
 	name := f.Name
 	log := f.Log
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnText:  func(s string) { *log = append(*log, name+":text:"+s) },
 			OnFocus: func(v bool) { *log = append(*log, name+":focus:"+b2s(v)) },
 		},
@@ -75,7 +76,7 @@ func TestTapToFocus(t *testing.T) {
 func TestDragCancelsTapAndDelivers(t *testing.T) {
 	taps, drag := 0, geom.Pt{}
 	root := widget.Center(widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap:  func() { taps++ },
 			OnDrag: func(_, d geom.Pt) { drag = drag.Add(d) },
 		},
@@ -157,9 +158,9 @@ func TestScrollWidget(t *testing.T) {
 	}
 }
 
-func findViewport(b layout.Box) *layout.Viewport {
+func findViewport(b layout.Box) *layoutbox.Viewport {
 	for _, hit := range layout.HitTest(b, geom.Pt{X: 1, Y: 1}) {
-		if vp, ok := hit.Box.(*layout.Viewport); ok {
+		if vp, ok := hit.Box.(*layoutbox.Viewport); ok {
 			return vp
 		}
 	}
@@ -205,7 +206,7 @@ func TestFlingDeceleration(t *testing.T) {
 	// Drag upward with real timing so velocity tracking sees speed.
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 50, Y: 90}})
 	y := float32(90)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		time.Sleep(8 * time.Millisecond)
 		y -= 12
 		h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 50, Y: y}})

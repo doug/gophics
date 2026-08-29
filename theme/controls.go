@@ -62,7 +62,7 @@ func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 	checked := on
 	return widget.Interactive{
 		Sem: &layout.SemInfo{Role: layout.RoleSwitch, Label: s.W().Label, Checked: &checked},
-		Handler: widget.Handler{OnTap: func() {
+		Gestures: widget.Gestures{OnTap: func() {
 			if f := s.W().OnChange; f != nil {
 				haptic(ctx, shell.HapticSelection) // a light tick as the value flips
 				f(!on)
@@ -135,7 +135,7 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 	checked := cb.Checked
 	return widget.Interactive{
 		Sem: &layout.SemInfo{Role: layout.RoleCheckbox, Label: cb.Label, Checked: &checked},
-		Handler: widget.Handler{OnTap: func() {
+		Gestures: widget.Gestures{OnTap: func() {
 			if cb.OnChange != nil {
 				haptic(ctx, shell.HapticSelection)
 				cb.OnChange(!cb.Checked)
@@ -182,7 +182,7 @@ func (s *sliderState) Build(ctx widget.Ctx) widget.Widget {
 		Sem: &layout.SemInfo{
 			Role: layout.RoleSlider, Label: s.W().Label, Value: formatPercent(val),
 		},
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress: func(p geom.Pt) { s.set(p.X) },
 			OnDrag:  func(p, _ geom.Pt) { s.set(p.X) },
 		},
@@ -233,7 +233,7 @@ func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 		Sem: &layout.SemInfo{
 			Role: layout.RoleRadio, Label: rd.Label, Selected: rd.Selected,
 		},
-		Handler: widget.Handler{OnTap: func() {
+		Gestures: widget.Gestures{OnTap: func() {
 			if rd.OnSelect != nil {
 				haptic(ctx, shell.HapticSelection)
 				rd.OnSelect()

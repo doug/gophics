@@ -59,7 +59,7 @@ func TestControlsDoNotAccumulateTickers(t *testing.T) {
 	o := &widget.Owner{}
 	base := o.TickerCount()
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		o.SetRoot(Button{Label: "ok", OnTap: func() {}})
 		o.FlushBuilds()
 		o.SetRoot(widget.Sized{W: 1, H: 1})

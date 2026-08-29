@@ -62,7 +62,7 @@ func (s *autocompleteState) Build(ctx Ctx) Widget {
 		OnSubmit: func(v string) { s.commit(v) },
 	}
 
-	rows := []Widget{Interactive{Handler: Handler{OnKey: s.onKey}, Child: field}}
+	rows := []Widget{Interactive{Gestures: Gestures{OnKey: s.onKey}, Child: field}}
 	if s.open && len(list) > 0 {
 		for i, sug := range list {
 			rows = append(rows, s.row(i, sug))
@@ -93,8 +93,8 @@ func (s *autocompleteState) row(i int, sug string) Widget {
 		content = f(sug, i == s.highlight)
 	}
 	return Interactive{
-		Handler: Handler{OnTap: func() { s.commit(sug) }},
-		Child:   content,
+		Gestures: Gestures{OnTap: func() { s.commit(sug) }},
+		Child:    content,
 	}
 }
 

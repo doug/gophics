@@ -150,14 +150,14 @@ func (q QuadBez) End() Point {
 func (q QuadBez) Subdivide() (QuadBez, QuadBez) {
 	mid := q.Eval(0.5)
 	return QuadBez{
-			P0: q.P0,
-			P1: q.P0.Lerp(q.P1, 0.5),
-			P2: mid,
-		}, QuadBez{
-			P0: mid,
-			P1: q.P1.Lerp(q.P2, 0.5),
-			P2: q.P2,
-		}
+		P0: q.P0,
+		P1: q.P0.Lerp(q.P1, 0.5),
+		P2: mid,
+	}, QuadBez{
+		P0: mid,
+		P1: q.P1.Lerp(q.P2, 0.5),
+		P2: q.P2,
+	}
 }
 
 // Subsegment returns the portion of the curve from t0 to t1.

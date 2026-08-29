@@ -26,7 +26,7 @@ func TestPushMovesTheOutgoingPageToo(t *testing.T) {
 
 	// Push the detail page and stop part-way into the slide.
 	h.Tap(geom.Pt{X: 210, Y: 220})
-	for i := 0; i < 6; i++ { // ~100ms of 220ms
+	for range 6 { // ~100ms of 220ms
 		h.Step(1.0 / 60)
 	}
 

@@ -128,10 +128,7 @@ func Select(items []*store.Item, priority PriorityFunc, p Params) Result {
 		catBudget = 0
 	)
 	if p.Minutes > 0 && p.MaxCategoryShare > 0 {
-		catBudget = int(float64(p.Minutes) * p.MaxCategoryShare)
-		if catBudget < 1 {
-			catBudget = 1
-		}
+		catBudget = max(int(float64(p.Minutes)*p.MaxCategoryShare), 1)
 	}
 
 	for _, e := range eligible {

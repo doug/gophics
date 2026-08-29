@@ -3,7 +3,7 @@ package ui_test
 import (
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -31,7 +31,7 @@ func gallerySection(t *testing.T, theme, section string) *apptest.App {
 		Size: geom.Size{W: 420, H: 760}, Font: goregular.TTF,
 	}))
 	settle := func() {
-		for s := 0; s < 40; s++ {
+		for range 40 {
 			a.Step(1.0 / 60)
 		}
 	}
@@ -52,7 +52,7 @@ func gallerySection(t *testing.T, theme, section string) *apptest.App {
 }
 
 func percentiles(d []time.Duration) (p50, p95, p99, max time.Duration) {
-	sort.Slice(d, func(i, j int) bool { return d[i] < d[j] })
+	slices.Sort(d)
 	at := func(f float64) time.Duration {
 		i := int(f * float64(len(d)-1))
 		return d[i]
@@ -79,7 +79,7 @@ func TestFrameCostByThemeAndSection(t *testing.T) {
 		a := gallerySection(t, c.theme, c.section)
 		const frames = 200
 		d := make([]time.Duration, 0, frames)
-		for i := 0; i < frames; i++ {
+		for range frames {
 			t0 := time.Now()
 			a.Render()
 			d = append(d, time.Since(t0))
@@ -105,7 +105,7 @@ func TestProfileGlassCharts(t *testing.T) {
 	}
 	t.Setenv("GOPHICS_NO_DAMAGE", "1")
 	a := gallerySection(t, "Glass", "Charts")
-	for i := 0; i < 120; i++ {
+	for range 120 {
 		a.Render()
 	}
 }

@@ -141,8 +141,8 @@ func TestInputWiring(t *testing.T) {
 
 	// Clear empties every step.
 	h.Tap(center(g.clrBtn))
-	for v := 0; v < numVoices; v++ {
-		for st := 0; st < steps; st++ {
+	for v := range numVoices {
+		for st := range steps {
 			if g.grid[v][st] {
 				t.Fatalf("Clear left step (%d,%d) on", v, st)
 			}

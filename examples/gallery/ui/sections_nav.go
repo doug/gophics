@@ -73,9 +73,9 @@ func genImage(seed int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, n, n))
 	a, b := swatchHues(seed)
 	fs := float64(seed)
-	for y := 0; y < n; y++ {
+	for y := range n {
 		fy := float64(y) / n
-		for x := 0; x < n; x++ {
+		for x := range n {
 			fx := float64(x) / n
 			v := 0.5 + 0.25*math.Sin((fx*3.7+fs)*math.Pi) +
 				0.22*math.Cos((fy*2.9-fs*0.7)*math.Pi) +
@@ -196,15 +196,15 @@ func (s *feedState) remove(id int) {
 
 func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	list := widget.LazyList{
 		Count:           len(s.cards),
 		EstimatedExtent: 96,
 		Build: func(i int) widget.Widget {
 			c := s.cards[i]
 			return widget.Interactive{
-				Handler: widget.Handler{OnTap: func() { nav.Push(detailPage{card: c}) }},
-				Child:   cardTile(th, c),
+				Gestures: widget.Gestures{OnTap: func() { nav.Push(detailPage{card: c}) }},
+				Child:    cardTile(th, c),
 			}
 		},
 	}
@@ -247,13 +247,13 @@ type detailState struct {
 
 func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	c := s.card
 
 	// Full-bleed hero header — tapping it (or the back chip) pops.
 	header := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Pop() }},
-		Child:   widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 0, 200, 0)},
+		Gestures: widget.Gestures{OnTap: func() { nav.Pop() }},
+		Child:    widget.Hero{Tag: heroTag(c.id), Child: swatch(c.img, 0, 200, 0)},
 	}
 
 	heartSize := float32(22)
@@ -268,7 +268,7 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 	// Animate the glyph's font size (re-rasterized each frame, so it stays crisp)
 	// rather than scaling a cached glyph bitmap, which would soften it.
 	like := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.liked = !s.liked }) }},
+		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.liked = !s.liked }) }},
 		Child: widget.Row(
 			widget.Sized{W: 30, Child: widget.Center(
 				widget.AnimateFloat(heartSize, 140*time.Millisecond, func(sz float32) widget.Widget {

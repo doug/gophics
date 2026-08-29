@@ -55,10 +55,7 @@ func (b BarMark) draw(p plot) {
 		frac = 0.7
 	}
 	slot := slotWidth(b.Data, p)
-	groups := p.groups
-	if groups < 1 {
-		groups = 1
-	}
+	groups := max(p.groups, 1)
 	sub := slot / float32(groups)                         // one series' share of the slot
 	off := (float32(p.group) - float32(groups-1)/2) * sub // this series' offset within the band
 	bw := sub * frac

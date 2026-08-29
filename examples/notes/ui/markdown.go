@@ -98,7 +98,7 @@ type headingItem struct {
 func extractHeadings(src string) []headingItem {
 	var out []headingItem
 	inFence := false
-	for _, line := range strings.Split(src, "\n") {
+	for line := range strings.SplitSeq(src, "\n") {
 		t := strings.TrimSpace(line)
 		if strings.HasPrefix(t, "```") {
 			inFence = !inFence

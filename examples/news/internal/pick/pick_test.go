@@ -156,7 +156,7 @@ func TestStaleMustReadLosesToFresh(t *testing.T) {
 
 func TestPerFeedCap(t *testing.T) {
 	var items []*store.Item
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		items = append(items, item("noisy", "news", string(rune('a'+i)), 200, float64(i)))
 	}
 	items = append(items, item("quiet", "science", "quiet piece", 200, 9))
@@ -180,10 +180,10 @@ func TestPerFeedCap(t *testing.T) {
 // issue because its articles happen to be the longest.
 func TestCategoryShareCap(t *testing.T) {
 	var items []*store.Item
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		items = append(items, item("sci", "science", "long science "+string(rune('a'+i)), 2300, float64(i)))
 	}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		items = append(items, item("ne", "newengland", "local "+string(rune('a'+i)), 700, float64(i)))
 	}
 
@@ -275,7 +275,7 @@ func TestEmptyInput(t *testing.T) {
 // explicitly excluded.
 func TestEveryItemIsAccountedFor(t *testing.T) {
 	var items []*store.Item
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		items = append(items, item("a", "news", string(rune('a'+i)), 1000+i*900, float64(i)))
 	}
 	teaser := item("b", "tech", "teaser", 20, 1)

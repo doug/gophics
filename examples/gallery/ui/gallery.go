@@ -266,14 +266,13 @@ var homeHook func(widget.Nav)
 
 func (homePage) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	if homeHook != nil {
 		homeHook(nav)
 	}
 
 	rows := make([]widget.Widget, 0, len(sections())*2)
 	for _, sec := range sections() {
-		sec := sec
 		if len(rows) > 0 {
 			rows = append(rows, widget.Sized{H: 10})
 		}
@@ -304,10 +303,9 @@ func (homePage) Build(ctx widget.Ctx) widget.Widget {
 // themeSwitcher is a row of buttons cycling the four built-in themes; the active
 // one shows the filled Primary style.
 func themeSwitcher(ctx widget.Ctx) widget.Widget {
-	ctl := widget.MustOf[themeControl](ctx)
+	ctl := ctx.MustOf[themeControl]()
 	btns := make([]widget.Widget, len(allModes))
 	for i, m := range allModes {
-		m := m
 		btns[i] = theme.Button{
 			Label:   m.label(),
 			Primary: m == ctl.mode,
@@ -368,7 +366,7 @@ func scaffold(ctx widget.Ctx, title, subtitle string, body widget.Widget) widget
 	titleCol.CrossAlign = layout.CrossStart
 
 	var head widget.Widget = titleCol
-	if nav, ok := widget.Of[widget.Nav](ctx); ok && nav.Depth() > 1 {
+	if nav, ok := ctx.Of[widget.Nav](); ok && nav.Depth() > 1 {
 		back := theme.Button{Label: "← Back", OnTap: func() { nav.Pop() }}
 		row := widget.Row(back, widget.Sized{W: 12}, widget.Expand(titleCol))
 		head = row

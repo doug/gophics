@@ -123,7 +123,7 @@ func TestFromHTMLTooShort(t *testing.T) {
 func TestFromHTMLFallbackToParagraphs(t *testing.T) {
 	var sb strings.Builder
 	sb.WriteString("<html><body>")
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		sb.WriteString("<p>A paragraph of prose that is long enough to count, with commas, clauses, and a reasonable amount of substance to it.</p>")
 	}
 	sb.WriteString("</body></html>")

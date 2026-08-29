@@ -2,6 +2,7 @@ package klondike
 
 import (
 	"math/rand"
+	"slices"
 	"testing"
 )
 
@@ -15,10 +16,10 @@ func census(g *Game) map[[2]int]int {
 	}
 	add(g.Stock())
 	add(g.Waste())
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		add(g.Foundation(i))
 	}
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		add(g.Tableau(i))
 	}
 	return m
@@ -42,7 +43,7 @@ func assertFullDeck(t *testing.T, g *Game) {
 func TestDealLayout(t *testing.T) {
 	g := New(42, 1)
 	assertFullDeck(t, g)
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		col := g.Tableau(i)
 		if len(col) != i+1 {
 			t.Fatalf("tableau %d has %d cards, want %d", i, len(col), i+1)
@@ -194,7 +195,7 @@ func TestAutoToFoundation(t *testing.T) {
 func TestNoCardLostOrDuplicated(t *testing.T) {
 	g := New(99, 3)
 	r := rand.New(rand.NewSource(2024))
-	for step := 0; step < 10000; step++ {
+	for range 10000 {
 		switch {
 		case r.Intn(6) == 0:
 			g.Undo()
@@ -218,21 +219,15 @@ func TestNoCardLostOrDuplicated(t *testing.T) {
 func TestGreedyPlayTerminates(t *testing.T) {
 	g := New(7, 1)
 	sources := []Pile{{Waste, 0}}
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		sources = append(sources, Pile{Tableau, i})
 	}
 	sinceProgress := 0
-	for steps := 0; steps < 200000; steps++ {
+	for range 200000 {
 		if g.Won() {
 			break
 		}
-		moved := false
-		for _, p := range sources {
-			if g.AutoToFoundation(p) {
-				moved = true
-				break
-			}
-		}
+		moved := slices.ContainsFunc(sources, g.AutoToFoundation)
 		if moved {
 			sinceProgress = 0
 			continue

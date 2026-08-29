@@ -488,7 +488,7 @@ func TestFilteringIsFastEnough(t *testing.T) {
 	rows, now := fixture(t)
 	start := time.Now()
 	const runs = 5
-	for i := 0; i < runs; i++ {
+	for range runs {
 		Run(rows, now, Query{Svc: -1, Text: "payments", SortCol: colTime, Desc: true})
 	}
 	if per := time.Since(start) / runs; per > 25*time.Millisecond {
@@ -513,7 +513,7 @@ func TestLayoutFollowsTheWindow(t *testing.T) {
 // TestRunsWithoutPanic steps the real app — clock, rebuilds, charts, table.
 func TestRunsWithoutPanic(t *testing.T) {
 	h, s, _ := newApp(t, 1360, 860)
-	for i := 0; i < 90; i++ {
+	for range 90 {
 		h.Step(1.0 / 60)
 	}
 	if s.res.Elapsed <= 0 {

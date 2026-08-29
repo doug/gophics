@@ -201,7 +201,7 @@ func TestPaintPanicDropsFrameKeepsAppAlive(t *testing.T) {
 	}
 
 	panicNow = true
-	for i := 0; i < 3; i++ { // a panicking frame must not crash the loop …
+	for range 3 { // a panicking frame must not crash the loop …
 		sh.Frame(w, f, 1.0/60)
 	}
 	if sh.core.framePanics != 3 {

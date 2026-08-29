@@ -16,9 +16,9 @@ import (
 type hHome struct{}
 
 func (hHome) Build(ctx widget.Ctx) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Push(hDetail{}) }},
+		Gestures: widget.Gestures{OnTap: func() { nav.Push(hDetail{}) }},
 		Child: widget.Center(widget.Hero{Tag: "h",
 			Child: widget.Decorated{Color: paint.RGB(0.3, 0.85, 0.4), Child: widget.Sized{W: 60, H: 60}}}),
 	}
@@ -27,9 +27,9 @@ func (hHome) Build(ctx widget.Ctx) widget.Widget {
 type hDetail struct{}
 
 func (hDetail) Build(ctx widget.Ctx) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { nav.Pop() }},
+		Gestures: widget.Gestures{OnTap: func() { nav.Pop() }},
 		Child: widget.Stack{Children: []widget.Widget{
 			widget.Fill{Color: paint.RGB(0.85, 0.2, 0.2)},
 			widget.Align{X: 0, Y: 0, Child: widget.Hero{Tag: "h",
@@ -69,7 +69,7 @@ func TestHeroFliesBetweenRoutes(t *testing.T) {
 
 	h.Tap(geom.Pt{X: 150, Y: 150}) // push detail
 	// Advance into the flight (rects lag one frame, so step a few).
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.Step(0.016)
 		h.Render()
 	}

@@ -16,7 +16,7 @@ type semApp struct{}
 func (semApp) Build(widget.Ctx) widget.Widget {
 	button := func(label string) widget.Widget {
 		return widget.Interactive{
-			Handler: widget.Handler{OnTap: func() {}},
+			Gestures: widget.Gestures{OnTap: func() {}},
 			Child: widget.Decorated{Color: paint.RGB(0.2, 0.2, 0.2), Radius: 4,
 				Child: widget.Padding{All: 6, Child: widget.Text{S: label}}},
 		}

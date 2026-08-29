@@ -27,7 +27,7 @@ func TestTheChartsPageRecordsNoBackdropBlur(t *testing.T) {
 			Size: geom.Size{W: 420, H: 760}, Font: goregular.TTF,
 		}))
 		settle := func() {
-			for s := 0; s < 40; s++ {
+			for range 40 {
 				a.Step(1.0 / 60)
 			}
 		}

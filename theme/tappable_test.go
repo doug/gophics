@@ -39,7 +39,7 @@ func TestTappablePressHighlight(t *testing.T) {
 	h.Press(geom.Pt{X: 60, Y: 30})
 	held := red()
 	h.Release(geom.Pt{X: 60, Y: 30})
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		h.Step(1.0 / 60)
 	}
 	after := red()

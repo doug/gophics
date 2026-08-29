@@ -23,7 +23,7 @@ type dtState struct {
 func (s *dtState) Init(widget.Ctx) { s.hook(s) }
 func (s *dtState) Build(widget.Ctx) widget.Widget {
 	return widget.Center(widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnTap:       func() { s.taps++ },
 			OnDoubleTap: func() { s.doubles++ },
 		},

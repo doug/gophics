@@ -79,7 +79,7 @@ func init() {
 }
 
 // env pulls the shared state out of context.
-func env(ctx widget.Ctx) *Env { return widget.MustOf[*Env](ctx) }
+func env(ctx widget.Ctx) *Env { return ctx.MustOf[*Env]() }
 
 // page is the standard screen scaffold: a colored header that extends behind
 // the status bar, and a body inset by the safe areas. On a wide window it
@@ -152,7 +152,7 @@ func header(th theme.Theme, title, subtitle string, lead widget.Widget, actions 
 // backButton returns to the previous screen.
 func backButton(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return theme.Tappable{
 		OnTap:  nav.Pop,
 		Radius: th.Radius,

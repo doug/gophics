@@ -187,7 +187,7 @@ func (d *Detector) difference(x []float32, tauMax int) {
 	d.diff[0] = 0
 	for tau := 1; tau <= tauMax; tau++ {
 		var sum float64
-		for j := 0; j < n; j++ {
+		for j := range n {
 			delta := float64(x[j]) - float64(x[j+tau])
 			sum += delta * delta
 		}

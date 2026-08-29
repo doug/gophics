@@ -27,8 +27,8 @@ func (s *chatState) Build(widget.Ctx) widget.Widget {
 	rows := make([]widget.Widget, 0, s.n)
 	for i := 0; i < s.n; i++ {
 		rows = append(rows, widget.WithKey{Key: i, Child: widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.tapped = i }) }},
-			Child:   widget.Sized{W: 200, H: 40},
+			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.tapped = i }) }},
+			Child:    widget.Sized{W: 200, H: 40},
 		}})
 	}
 	col := widget.Column(rows...)
@@ -104,8 +104,8 @@ func (s *lazyChatState) Build(widget.Ctx) widget.Widget {
 		Reverse:         true,
 		Build: func(i int) widget.Widget {
 			return widget.Interactive{
-				Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.tapped = i }) }},
-				Child:   widget.Sized{W: 200, H: 40},
+				Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.tapped = i }) }},
+				Child:    widget.Sized{W: 200, H: 40},
 			}
 		},
 	}

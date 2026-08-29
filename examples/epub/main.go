@@ -112,7 +112,7 @@ func (s *libraryState) open(fp shell.FilePicker) {
 
 func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	kids := []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{S: book.Title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text, Wrap: true}},
 		widget.Padding{Insets: geom.Insets{Bottom: 20}, Child: widget.Text{S: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
@@ -139,7 +139,7 @@ func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 }
 
 func tocRow(th theme.Theme, n int, title string, onTap func()) widget.Widget {
-	return widget.Interactive{Handler: widget.Handler{OnTap: onTap}, Child: widget.Padding{
+	return widget.Interactive{Gestures: widget.Gestures{OnTap: onTap}, Child: widget.Padding{
 		Insets: geom.InsetsSymmetric(2, 15),
 		Child: widget.Row(
 			widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d", n), Size: th.Type.Body, Color: th.Primary}},
@@ -170,11 +170,11 @@ func (s *readerState) go2(delta int) {
 
 func (s *readerState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	ch := book.Chapters[s.idx]
 
 	top := widget.Padding{Insets: geom.InsetsSymmetric(20, 14), Child: widget.Row(
-		widget.Interactive{Handler: widget.Handler{OnTap: nav.Pop}, Child: widget.Text{S: "‹  Contents", Size: th.Type.Body, Color: th.Primary}},
+		widget.Interactive{Gestures: widget.Gestures{OnTap: nav.Pop}, Child: widget.Text{S: "‹  Contents", Size: th.Type.Body, Color: th.Primary}},
 		widget.Spacer(),
 		widget.Text{S: fmt.Sprintf("%d / %d", s.idx+1, len(book.Chapters)), Size: th.Type.Label, Color: th.Muted},
 	)}
@@ -213,7 +213,7 @@ func navBtn(th theme.Theme, label string, enabled bool, onTap func()) widget.Wid
 	if !enabled {
 		return t
 	}
-	return widget.Interactive{Handler: widget.Handler{OnTap: onTap}, Child: t}
+	return widget.Interactive{Gestures: widget.Gestures{OnTap: onTap}, Child: t}
 }
 
 func divider(th theme.Theme) widget.Widget {

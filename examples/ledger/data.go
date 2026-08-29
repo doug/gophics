@@ -41,7 +41,7 @@ func sampleData() dataset {
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	bal := 4200.0
 	var balance []chart.Datum
-	for d := 0; d < 30; d++ {
+	for d := range 30 {
 		day := base.AddDate(0, 0, d)
 		balance = append(balance, chart.Datum{X: chart.Seconds(day), Y: bal, Label: day.Format("Jan 2")})
 		bal += r.Float64()*300 - 130 // gentle drift with a downward bias

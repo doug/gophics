@@ -48,7 +48,7 @@ func BenchmarkRasterRectsOnly(b *testing.B) {
 		c := p.BeginOffscreen(geom.Size{W: 480, H: 900}, 2)
 		c.Clear(RGB(0.1, 0.1, 0.1))
 		y := float32(20)
-		for j := 0; j < 40; j++ {
+		for range 40 {
 			c.FillRRect(geom.RectXYWH(20, y, 440, 32), 6, RGB(0.15, 0.15, 0.18))
 			y += 40
 		}

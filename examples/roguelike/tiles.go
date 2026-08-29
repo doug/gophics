@@ -74,14 +74,14 @@ func buildAtlas() *image.RGBA {
 	// Wall face: brick with mortar lines, and a lighter top course so the
 	// upper edge catches the light like a real ledge.
 	fill(a, TWall, cWall)
-	for y := 0; y < tile; y++ {
-		for x := 0; x < tile; x++ {
+	for y := range tile {
+		for x := range tile {
 			if y%5 == 4 || (x+((y/5)%2)*4)%8 == 7 {
 				px(a, TWall, x, y, cWall2)
 			}
 		}
 	}
-	for x := 0; x < tile; x++ {
+	for x := range tile {
 		px(a, TWall, x, 0, shade(cWall, 1.22))
 		px(a, TWall, x, 1, shade(cWall, 1.10))
 	}
@@ -89,8 +89,8 @@ func buildAtlas() *image.RGBA {
 	// Wall top: cold, coarse stone with no mortar — read as unlit rock above
 	// the room rather than another lit face.
 	fill(a, TWallTop, cWallTop)
-	for y := 0; y < tile; y++ {
-		for x := 0; x < tile; x++ {
+	for y := range tile {
+		for x := range tile {
 			if (x*7+y*13)%11 == 0 {
 				px(a, TWallTop, x, y, cWallTop2)
 			}
@@ -124,7 +124,7 @@ func buildAtlas() *image.RGBA {
 	}
 
 	// Stairs down: nested steps.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		rect(a, TStairs, 3+i, 3+i*3, 12, 5+i*3, shade(cFloor2, 1-float64(i)*0.18))
 	}
 
@@ -158,8 +158,8 @@ func floorTile(a *image.RGBA, id TileID, specks [][2]int) {
 // lower half of the tile where a standing figure's feet are.
 func shadowTile(a *image.RGBA) {
 	const cx, cy = 7.5, 11.0
-	for y := 0; y < tile; y++ {
-		for x := 0; x < tile; x++ {
+	for y := range tile {
+		for x := range tile {
 			dx := (float64(x) - cx) / 5.5
 			dy := (float64(y) - cy) / 2.6
 			f := 1 - math.Sqrt(dx*dx+dy*dy)
@@ -175,8 +175,8 @@ func shadowTile(a *image.RGBA) {
 
 func glowTile(a *image.RGBA) {
 	const cx, cy = 7.5, 7.5
-	for y := 0; y < tile; y++ {
-		for x := 0; x < tile; x++ {
+	for y := range tile {
+		for x := range tile {
 			f := 1 - math.Hypot(float64(x)-cx, float64(y)-cy)/8
 			if f < 0 {
 				f = 0
@@ -212,8 +212,8 @@ func px(a *image.RGBA, id TileID, x, y int, c color.RGBA) {
 }
 
 func fill(a *image.RGBA, id TileID, c color.RGBA) {
-	for y := 0; y < tile; y++ {
-		for x := 0; x < tile; x++ {
+	for y := range tile {
+		for x := range tile {
 			px(a, id, x, y, c)
 		}
 	}
@@ -247,8 +247,8 @@ func outline(a *image.RGBA, id TileID, out color.RGBA) {
 	// creature and item used to sit on an opaque black square, unable to
 	// stand on the lit floor beneath it.
 	var edge [][2]int
-	for y := 0; y < tile; y++ {
-		for x := 0; x < tile; x++ {
+	for y := range tile {
+		for x := range tile {
 			ax, ay := at(id, x, y)
 			if a.RGBAAt(ax, ay).A == 0 {
 				continue

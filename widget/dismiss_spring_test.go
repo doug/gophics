@@ -62,7 +62,7 @@ func TestAShortSwipeSpringsBackPastItsPlace(t *testing.T) {
 
 	// Follow the spring home and watch for it crossing to the other side.
 	crossed := false
-	for i := 0; i < 120; i++ {
+	for range 120 {
 		h.Step(1.0 / 60)
 		h.Render()
 		if left() < rest-0.5 {
@@ -123,7 +123,7 @@ func TestADismissedCardNeverComesBack(t *testing.T) {
 	if !ok {
 		t.Fatal("the card vanished before it was released")
 	}
-	for i := 0; i < 120; i++ {
+	for range 120 {
 		h.Step(1.0 / 60)
 		h.Render()
 		cur, ok := left()

@@ -62,7 +62,7 @@ func snackHarness(t *testing.T, open func(s *snackState, ctx widget.Ctx)) (*appt
 // stepFor advances roughly d worth of frames (plus a margin) at 60fps.
 func stepFor(h *apptest.App, d time.Duration) {
 	n := int(d.Seconds()*60) + 30
-	for i := 0; i < n; i++ {
+	for range n {
 		h.Step(1.0 / 60)
 		h.Render()
 	}
@@ -74,7 +74,7 @@ func TestSnackbarShowsAndAutoDismisses(t *testing.T) {
 	})
 	h.Tap(geom.Pt{X: 200, Y: 300})
 	// Let it enter and hold, but not yet time out.
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		h.Step(1.0 / 60)
 		h.Render()
 	}

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
@@ -159,7 +160,7 @@ func phoneFrame(child widget.Widget) widget.Widget {
 
 func (s *healthState) onboarding(th theme.Theme) widget.Widget {
 	connect := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.connected = true }) }},
+		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.connected = true }) }},
 		Child: widget.Decorated{Color: th.Primary, Radius: 14, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(28, 14),
 			Child:  widget.Text{S: "Connect " + s.p.Name(), Size: 16, Color: th.OnPrimary},
@@ -183,7 +184,7 @@ type dashboard struct{ p Provider }
 
 func (d dashboard) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	children := []widget.Widget{header(th, d.p)}
 	for _, sp := range specs {
 		m := sp.m
@@ -233,8 +234,8 @@ func card(th theme.Theme, p Provider, sp spec, onTap func()) widget.Widget {
 	return widget.Padding{
 		Insets: geom.Insets{Bottom: 14},
 		Child: widget.Sized{H: 170, Child: widget.Interactive{
-			Handler: widget.Handler{OnTap: onTap},
-			Child:   body,
+			Gestures: widget.Gestures{OnTap: onTap},
+			Child:    body,
 		}},
 	}
 }
@@ -313,15 +314,15 @@ func fmtInt(v float64) string {
 		n = -n
 	}
 	s := strconv.Itoa(n)
-	out := ""
+	var out strings.Builder
 	for i := range s {
 		if i > 0 && (len(s)-i)%3 == 0 {
-			out += ","
+			out.WriteString(",")
 		}
-		out += string(s[i])
+		out.WriteString(string(s[i]))
 	}
 	if neg {
-		return "-" + out
+		return "-" + out.String()
 	}
-	return out
+	return out.String()
 }

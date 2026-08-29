@@ -37,10 +37,7 @@ func (s *segmentedState) indexAt(x float32) int {
 	if n == 0 || s.width <= 0 {
 		return -1
 	}
-	i := int(x / (s.width / float32(n)))
-	if i < 0 {
-		i = 0
-	}
+	i := max(int(x/(s.width/float32(n))), 0)
 	if i >= n {
 		i = n - 1
 	}
@@ -54,10 +51,7 @@ func (s *segmentedState) Build(ctx widget.Ctx) widget.Widget {
 	if n == 0 {
 		return widget.Sized{}
 	}
-	sel := sg.Selected
-	if sel < 0 {
-		sel = 0
-	}
+	sel := max(sg.Selected, 0)
 	if sel >= n {
 		sel = n - 1
 	}
@@ -77,7 +71,7 @@ func (s *segmentedState) Build(ctx widget.Ctx) widget.Widget {
 	labels := widget.Row(cells...)
 
 	return widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnPress: func(p geom.Pt) { s.pressed = s.indexAt(p.X) },
 			OnTap: func() {
 				if f := sg.OnChange; f != nil && s.pressed >= 0 && s.pressed != sg.Selected {

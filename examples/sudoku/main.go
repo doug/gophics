@@ -121,7 +121,7 @@ func (s *game) Init(ctx widget.Ctx) {
 func (s *game) reset() {
 	s.puzzle, s.solution = generate(s.rng, clueTarget)
 	s.board = s.puzzle
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		s.given[i] = s.puzzle[i] != 0
 		s.notes[i] = 0
 	}
@@ -158,13 +158,13 @@ func (s *game) input(v int) {
 func (s *game) clearPeerNotes(i, v int) {
 	r, c := i/9, i%9
 	mask := ^(uint16(1) << uint(v))
-	for j := 0; j < 9; j++ {
+	for j := range 9 {
 		s.notes[idx(r, j)] &= mask
 		s.notes[idx(j, c)] &= mask
 	}
 	br, bc := r/3*3, c/3*3
-	for dr := 0; dr < 3; dr++ {
-		for dc := 0; dc < 3; dc++ {
+	for dr := range 3 {
+		for dc := range 3 {
 			s.notes[idx(br+dr, bc+dc)] &= mask
 		}
 	}
@@ -206,7 +206,7 @@ func (s *game) onPress(p geom.Pt) {
 		}
 		return
 	}
-	for v := 0; v < 9; v++ {
+	for v := range 9 {
 		if s.numBtn[v].Contains(p) {
 			s.input(v + 1)
 			return
@@ -230,7 +230,7 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Auto(ctx)
 	s.pal = paletteFrom(th)
 	board := widget.Interactive{
-		Handler: widget.Handler{
+		Gestures: widget.Gestures{
 			OnKey: func(k shell.Key) {
 				if k.Kind != shell.KeyPress {
 					return
@@ -295,7 +295,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	}
 
 	// Cell backgrounds: selection, conflicts, peers, matching value.
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		r, cc := i/9, i%9
 		var col paint.Color
 		switch {
@@ -325,7 +325,7 @@ func (s *game) draw(c paint.Canvas, sz geom.Size) {
 	}
 
 	// Digits and pencil marks.
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		r, cc := i/9, i%9
 		x, y := bx+float32(cc)*cell, by+float32(r)*cell
 		if v := s.board[i]; v != 0 {
@@ -402,7 +402,7 @@ func (s *game) button(c paint.Canvas, rect geom.Rect, label string, active bool)
 
 func (s *game) digitCounts() [10]int {
 	var n [10]int
-	for i := 0; i < 81; i++ {
+	for i := range 81 {
 		n[s.board[i]]++
 	}
 	return n

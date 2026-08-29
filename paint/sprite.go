@@ -63,8 +63,8 @@ func (p *Painter) tinted(atlas image.Image, src image.Rectangle, tint Color) *gg
 	}
 	w, h := src.Dx(), src.Dy()
 	out := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			r, g, b, a := atlas.At(src.Min.X+x, src.Min.Y+y).RGBA() // 16-bit, straight
 			out.SetRGBA(x, y, color.RGBA{
 				R: mul8(uint8(r>>8), tint.R),

@@ -304,7 +304,7 @@ type counterState struct {
 }
 
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return screen("{{.Name}}", widget.Column(
 		widget.Text{S: fmt.Sprintf("Count: %d", s.Count), Size: 28, Color: colText},
 		widget.Sized{H: 16},
@@ -320,7 +320,7 @@ func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 type detailPage struct{ Count int }
 
 func (p detailPage) Build(ctx widget.Ctx) widget.Widget {
-	nav := widget.MustOf[widget.Nav](ctx)
+	nav := ctx.MustOf[widget.Nav]()
 	return screen("Detail", widget.Column(
 		widget.Text{S: fmt.Sprintf("Opened at count %d", p.Count), Size: 22, Color: colText},
 		widget.Sized{H: 16},
@@ -330,7 +330,7 @@ func (p detailPage) Build(ctx widget.Ctx) widget.Widget {
 
 func button(label string, onTap func()) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: onTap},
+		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Decorated{Color: colAccent, Radius: 8,
 			Child: widget.Padding{Insets: geom.InsetsSymmetric(16, 10),
 				Child: widget.Text{S: label, Size: 15, Color: colOnAcc}}},

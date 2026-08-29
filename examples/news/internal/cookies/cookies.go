@@ -114,7 +114,7 @@ func parseNetscape(body string) []*http.Cookie {
 func parseHeader(body string) []*http.Cookie {
 	// Ignore comment lines so a file may explain where it came from.
 	var kept []string
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if t := strings.TrimSpace(line); t != "" && !strings.HasPrefix(t, "#") {
 			kept = append(kept, t)
 		}
@@ -128,7 +128,7 @@ func parseHeader(body string) []*http.Cookie {
 	}
 
 	var out []*http.Cookie
-	for _, pair := range strings.Split(joined, ";") {
+	for pair := range strings.SplitSeq(joined, ";") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue

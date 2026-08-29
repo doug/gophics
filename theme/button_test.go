@@ -39,7 +39,7 @@ func TestButtonPressHighlight(t *testing.T) {
 	h.Press(geom.Pt{X: 60, Y: 40})
 	held := red()
 	h.Release(geom.Pt{X: 60, Y: 40})
-	for i := 0; i < 40; i++ { // let the release fade settle
+	for range 40 { // let the release fade settle
 		h.Step(1.0 / 60)
 	}
 	after := red()

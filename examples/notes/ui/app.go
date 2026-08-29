@@ -113,8 +113,8 @@ func (s *workspaceState) sidebar(th theme.Theme, v *Vault) widget.Widget {
 	head := widget.Row(
 		widget.Expand(widget.Text{S: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
 		widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.creating = true; s.newName = "" }) }},
-			Child:   widget.Text{S: "+ New", Size: th.Type.Label, Color: th.Primary},
+			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.creating = true; s.newName = "" }) }},
+			Child:    widget.Text{S: "+ New", Size: th.Type.Label, Color: th.Primary},
 		},
 	)
 	head.CrossAlign = layout.CrossCenter
@@ -267,8 +267,8 @@ func (s *workspaceState) backlinks(th theme.Theme, v *Vault, note Note) []widget
 	}
 	for _, n := range refs {
 		out = append(out, block(widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.open(n.Path) }},
-			Child:   widget.Text{S: "← " + n.Name, Size: th.Type.Body, Color: th.Primary},
+			Gestures: widget.Gestures{OnTap: func() { s.open(n.Path) }},
+			Child:    widget.Text{S: "← " + n.Name, Size: th.Type.Body, Color: th.Primary},
 		}))
 	}
 	return out
@@ -350,7 +350,7 @@ func (s *workspaceState) deleteNote(v *Vault) {
 
 func (s *workspaceState) button(th theme.Theme, label string, onTap func()) widget.Widget {
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: onTap},
+		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Decorated{Color: th.Primary, Radius: 7, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(16, 8),
 			Child:  widget.Text{S: label, Size: th.Type.Label, Color: th.OnPrimary},
@@ -363,16 +363,16 @@ func (s *workspaceState) button(th theme.Theme, label string, onTap func()) widg
 func (s *workspaceState) deleteControl(th theme.Theme, v *Vault) widget.Widget {
 	if !s.confirmDelete {
 		return widget.Interactive{
-			Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.confirmDelete = true }) }},
-			Child:   widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Delete", Size: th.Type.Label, Color: th.Muted}},
+			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.confirmDelete = true }) }},
+			Child:    widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Delete", Size: th.Type.Label, Color: th.Muted}},
 		}
 	}
 	cancel := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.confirmDelete = false }) }},
-		Child:   widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Cancel", Size: th.Type.Label, Color: th.Muted}},
+		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.confirmDelete = false }) }},
+		Child:    widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Cancel", Size: th.Type.Label, Color: th.Muted}},
 	}
 	confirm := widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.deleteNote(v) }},
+		Gestures: widget.Gestures{OnTap: func() { s.deleteNote(v) }},
 		Child: widget.Decorated{Color: th.Danger, Radius: 7, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(14, 8),
 			Child:  widget.Text{S: "Delete?", Size: th.Type.Label, Color: th.OnPrimary},

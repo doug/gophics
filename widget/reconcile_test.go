@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 )
 
@@ -80,7 +81,7 @@ func TestDuplicateKeyMountsFreshAndWarns(t *testing.T) {
 
 	// The tree stays usable: layout must not panic and both children must
 	// occupy distinct slots.
-	fx := o.RootBox().(*layout.Flex)
+	fx := o.RootBox().(*layoutbox.Flex)
 	fx.Layout(layout.Unbounded())
 	if len(fx.Children) != 2 {
 		t.Fatalf("flex has %d children after duplicate-key reconcile, want 2", len(fx.Children))
