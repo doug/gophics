@@ -187,7 +187,7 @@ func TestExampleHostsMatchTheReference(t *testing.T) {
 // whatever the app called its framework.
 func normalize(src string) string {
 	var out []string
-	for _, l := range strings.Split(src, "\n") {
+	for l := range strings.SplitSeq(src, "\n") {
 		if strings.HasPrefix(l, "package ") {
 			continue
 		}

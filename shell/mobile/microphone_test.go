@@ -188,7 +188,7 @@ func TestFloatDeliveryPath(t *testing.T) {
 	b.DeliverMonitorReady(h.lastStarted(), 44100)
 
 	block := make([]byte, 1024*4)
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		binary.LittleEndian.PutUint32(block[i*4:], math.Float32bits(0.5))
 	}
 	b.DeliverMonitorFloat32(h.lastStarted(), block)
@@ -270,9 +270,7 @@ func TestConcurrentPCMAndPolling(t *testing.T) {
 
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
-	wg.Add(1)
-	go func() { // the audio thread
-		defer wg.Done()
+	wg.Go(func() { // the audio thread
 		block := make([]float32, 256)
 		for {
 			select {
@@ -282,11 +280,11 @@ func TestConcurrentPCMAndPolling(t *testing.T) {
 			}
 			b.DeliverMonitorPCM(id, pcm16(block))
 		}
-	}()
+	})
 
 	out := make([]float32, mon.WindowSize())
 	bands := make([]float32, 24)
-	for i := 0; i < 300; i++ { // the UI goroutine
+	for range 300 { // the UI goroutine
 		mon.Samples(out)
 		mon.Level()
 		mon.Bands(bands)

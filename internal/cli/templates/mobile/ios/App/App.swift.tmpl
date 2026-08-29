@@ -17,6 +17,9 @@ private var bridge: MobileBridge!
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
+    /// Retained for the lifetime of the app: the bridge holds its host
+    /// interfaces weakly across the bind boundary.
+    private var platform: GophicsPlatform?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -30,9 +33,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         bridge = b
 
         let w = UIWindow(frame: UIScreen.main.bounds)
-        w.rootViewController = GophicsViewController()
+        let vc = GophicsViewController()
+        w.rootViewController = vc
         w.makeKeyAndVisible()
         window = w
+
+        // The platform capabilities: share sheet, notifications, keychain, file
+        // picker and location. Registered together because an app that wants
+        // any of them usually wants several, and they share a presenting view
+        // controller. A capability whose host is not registered reads as nil in
+        // Go, which is how a widget knows to hide its affordance.
+        let p = GophicsPlatform(bridge: b, present: vc)
+        platform = p
+        b.setShareHost(p)
+        b.setNotifyHost(p)
+        b.setSecureHost(p)
+        b.setFileHost(p)
+        b.setLocationHost(p)
+        b.setDeviceHost(p)
+        p.observe() // reachability + battery, pushed as they change
+        // Preferences needs somewhere to write, and Go cannot ask for it.
+        b.setFilesDir(NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? "")
         return true
     }
 

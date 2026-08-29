@@ -36,6 +36,11 @@ func (b *Bridge) SetOnline(online bool) {
 	if !first && b.online == online {
 		return
 	}
+	if first {
+		// The capability did not exist a moment ago; the runtime has to re-read
+		// what this Bridge offers or it stays nil for the life of the window.
+		b.capabilitiesChanged()
+	}
 	b.online = online
 	for _, fn := range b.netSubs {
 		fn(online)
@@ -73,6 +78,9 @@ func (b *Bridge) SetBattery(level float32, charging bool) {
 	b.batKnown = true
 	if !first && b.batLevel == level && b.batCharging == charging {
 		return
+	}
+	if first {
+		b.capabilitiesChanged()
 	}
 	b.batLevel, b.batCharging = level, charging
 	for _, fn := range b.batSubs {

@@ -20,6 +20,25 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<!-- Usage strings for the capabilities the bundled GophicsPlatform host can
+	     serve. iOS terminates an app that reaches one of these without a string,
+	     and `gophics build` refuses earlier than that.
+
+	     These are placeholders on purpose. The text is shown in the permission
+	     prompt and read at App Review, so it has to say why *this* app needs the
+	     thing — which no generator can know. Edit the ones you use and delete
+	     the ones you do not: a prompt is more likely to be granted when it
+	     explains itself, and an unused key invites a reviewer's question. -->
+	<key>NSCameraUsageDescription</key>
+	<string>TODO: say why {{.Name}} needs the camera.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TODO: say why {{.Name}} needs the microphone.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TODO: say why {{.Name}} needs your location.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>TODO: say why {{.Name}} saves pictures to your library.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>TODO: say why {{.Name}} uses Face ID.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

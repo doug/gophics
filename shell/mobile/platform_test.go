@@ -8,6 +8,7 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/shell/mobile"
+	"github.com/doug/gophics/widget"
 )
 
 // Each capability is nil until a host wires it, and that is the contract an app
@@ -231,3 +232,49 @@ func TestInitialLinkOnlyBeforeTheFirstFrame(t *testing.T) {
 		t.Errorf("OnLink saw %v", live)
 	}
 }
+
+// A capability that arrives after the first frame has to become reachable.
+//
+// Capabilities are wired once, when the shell hands over a Window. A mobile
+// host registers its backends after Start, and connectivity and battery are
+// only answerable once the platform has reported them — so without an
+// announcement the capability is read as nil on the first frame and stays nil
+// for the life of the window, however available it later becomes. The inspector
+// showed exactly that: Wake lock and Photo library greyed out on a device whose
+// host had registered for both.
+func TestLateCapabilitiesReachTheTree(t *testing.T) {
+	h, err := app.NewHandler(capProbe{}, app.Config{Font: goregular.TTF})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := mobile.NewBridge(h)
+	b.Resize(300, 300, 1)
+	b.Snapshot(0.016) // attaches the window and wires what exists now: nothing
+
+	if seenShare {
+		t.Fatal("Share was reachable before a host registered")
+	}
+
+	// The host registers, as a real one does after Start.
+	b.SetShareHost(nopShare{})
+	b.Snapshot(0.016)
+
+	if !seenShare {
+		t.Error("Share is still nil a frame after its host registered — the tree " +
+			"never re-read the capability set")
+	}
+}
+
+// seenShare records what the tree could reach on its last build.
+var seenShare bool
+
+type capProbe struct{}
+
+func (capProbe) Build(ctx widget.Ctx) widget.Widget {
+	seenShare = ctx.Share() != nil
+	return widget.Sized{W: 10, H: 10}
+}
+
+type nopShare struct{}
+
+func (nopShare) Share(reqID int, title, text, url, fileName string, data []byte) {}

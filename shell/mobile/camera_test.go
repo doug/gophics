@@ -121,7 +121,7 @@ func TestPreviewFramesRotate(t *testing.T) {
 
 	px := make([]byte, 4*4*4)
 	seen := map[any]bool{}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		px[0] = byte(i + 1)
 		b.DeliverPreviewFrame(id, px, 4, 4)
 		seen[any(frames.Frame())] = true
@@ -257,13 +257,13 @@ func TestPreviewFrameDeliveryIsConcurrencySafe(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		px := make([]byte, 8*8*4)
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			b.DeliverPreviewFrame(id, px, 8, 8)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			_ = frames.Frame()
 		}
 	}()

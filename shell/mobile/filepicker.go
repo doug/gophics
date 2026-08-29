@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/doug/gophics/shell"
 )
@@ -32,7 +33,7 @@ type FileHost interface {
 }
 
 // SetFileHost registers the file chooser, enabling ctx.FilePicker().
-func (b *Bridge) SetFileHost(h FileHost) { b.fileHost = h }
+func (b *Bridge) SetFileHost(h FileHost) { b.fileHost = h; b.capabilitiesChanged() }
 
 // FilePicker makes the Bridge a shell.FilePickerWindow.
 func (b *Bridge) FilePicker() shell.FilePicker {
@@ -128,12 +129,12 @@ func (b *Bridge) DeliverSaveDone(reqID int, errMsg string) {
 
 // joinAccept flattens the Accept filter for the bind boundary.
 func joinAccept(accept []string) string {
-	out := ""
+	var out strings.Builder
 	for i, a := range accept {
 		if i > 0 {
-			out += ","
+			out.WriteString(",")
 		}
-		out += a
+		out.WriteString(a)
 	}
-	return out
+	return out.String()
 }

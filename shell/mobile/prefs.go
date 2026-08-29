@@ -41,7 +41,9 @@ func (b *Bridge) Preferences() shell.Preferences {
 func (b *Bridge) SetFilesDir(dir string) {
 	if dir == "" {
 		b.prefs = nil
+		b.capabilitiesChanged()
 		return
 	}
 	b.prefs = prefs.New(filepath.Join(dir, "preferences.json"))
+	b.capabilitiesChanged()
 }

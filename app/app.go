@@ -21,9 +21,10 @@ import (
 	"github.com/doug/gophics/input"
 	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/internal/gfx/wgpu"
+	"github.com/doug/gophics/internal/layoutbox"
+	"github.com/doug/gophics/internal/scene"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/scene"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
@@ -73,7 +74,8 @@ type Config struct {
 	// selectable per text run via widget.Text.Font / layout.RichSpan.Font.
 	FontFamilies map[string][]byte
 	// Debug draws box-bounds outlines over the app (Flutter's
-	// debugPaintSize). Toggle at runtime via core.SetDebugPaint.
+	// debugPaintSize). Toggle at runtime via Headless.SetDebugPaint, or on a
+	// live app through the handler returned by NewHandler.
 	Debug bool
 	// Renderer selects the rasterization backend: Auto (default) prefers the
 	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
@@ -449,12 +451,12 @@ func (c *core) SetInspect(on bool) {
 // InspectTree returns the current render tree as a flat, depth-ordered dump
 // (types, rects, semantics) — the data behind a widget inspector. Call
 // after a frame. Runs headless.
-func (c *core) InspectTree() []layout.InspectNode {
+func (c *core) InspectTree() []layoutbox.InspectNode {
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
 	}
-	return layout.Inspect(box)
+	return layoutbox.Inspect(box)
 }
 
 // FrameStats summarises recent frame times (ms) as percentiles.
@@ -577,10 +579,10 @@ func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed boo
 	if box := c.Owner.RootBox(); box != nil {
 		box.Paint(rec, geom.Pt{})
 		if c.debugPaint {
-			layout.DebugPaint(box, rec)
+			layoutbox.DebugPaint(box, rec)
 		}
 		if c.inspect {
-			layout.InspectOverlay(box, c.lastPos, rec, c.Painter)
+			layoutbox.InspectOverlay(box, c.lastPos, rec, c.Painter)
 		}
 	}
 
@@ -1150,6 +1152,13 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		h.core.Keyboard(e)
 	case shell.Insets:
 		h.core.Owner.SafeInsets = e.Insets
+		h.core.Owner.RebuildAll()
+		w.Invalidate()
+	case shell.CapabilitiesChanged:
+		// The set is not fixed at startup: a mobile host registers its backends
+		// after Start, and connectivity and battery are only answerable once the
+		// platform has reported them once.
+		h.wireMedia(w)
 		h.core.Owner.RebuildAll()
 		w.Invalidate()
 	case shell.KeyboardInset:

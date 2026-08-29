@@ -26,11 +26,11 @@ func (s *tapState) Build(ctx widget.Ctx) widget.Widget {
 		col = paint.RGB(0.9, 0.1, 0.1)
 	}
 	return widget.Interactive{
-		Handler: widget.Handler{OnTap: func() { s.SetState(func() { s.on = !s.on }) }},
+		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.on = !s.on }) }},
 		Child: widget.Decorated{Color: col, Child: widget.Center(
 			widget.Interactive{
-				Handler: widget.Handler{OnTap: func() { _ = ctx.OpenURL("https://example.com") }},
-				Child:   widget.Sized{W: 40, H: 40},
+				Gestures: widget.Gestures{OnTap: func() { _ = ctx.OpenURL("https://example.com") }},
+				Child:    widget.Sized{W: 40, H: 40},
 			},
 		)},
 	}

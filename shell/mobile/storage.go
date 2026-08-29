@@ -38,7 +38,7 @@ type SecureHost interface {
 }
 
 // SetSecureHost registers the keychain backend, enabling ctx.SecureStorage().
-func (b *Bridge) SetSecureHost(h SecureHost) { b.secureHost = h }
+func (b *Bridge) SetSecureHost(h SecureHost) { b.secureHost = h; b.capabilitiesChanged() }
 
 // SecureStorage makes the Bridge a shell.StorageWindow.
 func (b *Bridge) SecureStorage() shell.SecureStorage {

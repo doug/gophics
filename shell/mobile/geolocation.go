@@ -25,7 +25,7 @@ type LocationHost interface {
 }
 
 // SetLocationHost registers the location backend, enabling ctx.Geolocation().
-func (b *Bridge) SetLocationHost(h LocationHost) { b.locHost = h }
+func (b *Bridge) SetLocationHost(h LocationHost) { b.locHost = h; b.capabilitiesChanged() }
 
 // Geolocation makes the Bridge a shell.GeolocationWindow.
 func (b *Bridge) Geolocation() shell.Geolocation {

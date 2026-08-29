@@ -137,8 +137,8 @@ func (g *mobileGPU) renderOffscreen() (*image.RGBA, error) {
 	bgra := g.format == gputypes.TextureFormatBGRA8Unorm ||
 		g.format == gputypes.TextureFormatBGRA8UnormSrgb
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			s := y*int(rowBytes) + x*4
 			d := img.PixOffset(x, y)
 			if bgra {

@@ -456,6 +456,18 @@ func (b *Bridge) TakeOpenedURL() string {
 // simply do not reach other apps — which is what shipped before this comment
 // existed, undocumented.
 
+// capabilitiesChanged tells the runtime to re-read what this Bridge offers.
+//
+// Capabilities are wired once when the shell hands over a Window, and a mobile
+// host registers its backends after Start — so without this, everything the
+// host adds is read as nil on the first frame and stays nil.
+func (b *Bridge) capabilitiesChanged() {
+	if b.handler == nil {
+		return
+	}
+	b.handler.Event(b, shell.CapabilitiesChanged{})
+}
+
 // SetClipboardText delivers the system pasteboard's contents. Hosts call it
 // when the app comes to the foreground and whenever the pasteboard changes
 // (iOS UIPasteboard.changedNotification, Android OnPrimaryClipChangedListener).

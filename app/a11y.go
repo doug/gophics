@@ -78,7 +78,7 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 // cache (and, on web, the DOM) for animations that change no semantics at all,
 // so the flattened tree is diffed and only a real change is published.
 func (h *shellHandler) publishA11y() {
-	a := h.core.Owner.Accessibility
+	a := h.core.Owner.Accessibility()
 	if a == nil {
 		return
 	}

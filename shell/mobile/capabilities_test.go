@@ -10,6 +10,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/shell/mobile"
 )
@@ -104,7 +105,7 @@ func TestBridgeMediaCapabilities(t *testing.T) {
 		t.Fatal("clip has no waveform envelope")
 	}
 	// The WAV round-trips back to the delivered PCM.
-	got, gotRate, err := shell.DecodeWAV(clip.Data)
+	got, gotRate, err := wav.Decode(clip.Data)
 	if err != nil {
 		t.Fatal(err)
 	}

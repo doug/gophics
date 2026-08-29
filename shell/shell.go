@@ -29,8 +29,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/doug/gophics/internal/gfx/gpucontext"
-
 	"github.com/doug/gophics/geom"
 )
 
@@ -127,17 +125,18 @@ type Frame interface {
 
 // Target is a frame's presentation target — deliberately an open type, not a
 // sealed union: the present path (app.present) type-switches on it, so besides
-// the two portable kinds here (GPUTarget, PixelTarget) a backend may return its
-// own private target type that the present path recognizes by interface (e.g. a
-// GPU-canvas target exposing RenderGPU). Consumers must handle an unknown target
+// the portable PixelTarget a backend may return its own private target type
+// that the present path recognizes by interface (a GPU-canvas target exposing
+// RenderGPU, as shell/mobile does). Consumers must handle an unknown target
 // gracefully rather than assume the set is closed.
+//
+// GPU presentation is in-module only. There was a portable GPUTarget carrying a
+// WebGPU texture view, and nothing ever constructed one: every GPU backend
+// returns its own type satisfying the RenderGPU interface instead, so the
+// branch was unreachable. It is not re-addable as a seam either — two Go WebGPU
+// bindings cannot exchange a Device through Go types, so a foreign device
+// cannot be handed in. An embedding host presents through PixelTarget.
 type Target any
-
-// GPUTarget presents by compositing onto a WebGPU texture view.
-type GPUTarget struct {
-	View gpucontext.TextureView
-	W, H int // physical pixels
-}
 
 // PixelTarget presents by handing finished physical-pixel frames to Put
 // (e.g. a browser canvas or a test sink).
@@ -302,6 +301,20 @@ type Insets struct{ Insets geom.Insets }
 // because some other screen raised one — conflating them makes both wrong.
 type KeyboardInset struct{ Height float32 }
 
+// CapabilitiesChanged tells the runtime to re-read the window's capabilities.
+//
+// They are wired once when the shell hands over a Window, which is right for a
+// set fixed at startup and wrong for one that is not: a mobile host registers
+// its platform backends after Start, and connectivity and battery only become
+// answerable once the platform has reported them once. Without this the
+// capability is read as nil on the first frame and stays nil for the life of
+// the window, however available it later becomes.
+//
+// A shell sends it when a capability appears or disappears. Re-wiring is cheap
+// and idempotent, but it is not free — it rebuilds the Posted adapters — so it
+// is an event rather than a per-frame check.
+type CapabilitiesChanged struct{}
+
 // CompositionKind discriminates Composition events.
 type CompositionKind uint8
 
@@ -323,12 +336,13 @@ type Composition struct {
 	Committed string
 }
 
-func (Insets) isEvent()        {}
-func (KeyboardInset) isEvent() {}
-func (Resize) isEvent()        {}
-func (Closed) isEvent()        {}
-func (Focus) isEvent()         {}
-func (Pointer) isEvent()       {}
-func (Key) isEvent()           {}
-func (Text) isEvent()          {}
-func (Composition) isEvent()   {}
+func (Insets) isEvent()              {}
+func (KeyboardInset) isEvent()       {}
+func (CapabilitiesChanged) isEvent() {}
+func (Resize) isEvent()              {}
+func (Closed) isEvent()              {}
+func (Focus) isEvent()               {}
+func (Pointer) isEvent()             {}
+func (Key) isEvent()                 {}
+func (Text) isEvent()                {}
+func (Composition) isEvent()         {}

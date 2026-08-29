@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/doug/gophics/internal/dsp"
+	"github.com/doug/gophics/internal/wav"
 	"github.com/doug/gophics/shell"
 )
 
@@ -68,7 +69,7 @@ func (b *Bridge) Microphone() shell.Microphone {
 	if mon == nil && b.media.host == nil {
 		return nil
 	}
-	return &mobileMicrophone{b: b, mobileRecording: mobileRecording{m: b.media}}
+	return &mobileMicrophone{b: b, m: b.media}
 }
 
 type mobileMicrophone struct {
@@ -238,7 +239,7 @@ func (b *Bridge) DeliverMonitorFloat32(reqID int, data []byte) {
 		return
 	}
 	out := make([]float32, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		bits := binary.LittleEndian.Uint32(data[i*4:])
 		out[i] = math.Float32frombits(bits)
 	}
@@ -333,10 +334,10 @@ func (b *Bridge) DeliverPCM(reqID int, pcm []byte, sampleRate int, durationMs in
 	}
 	if r.stopCb != nil {
 		r.stopCb(shell.Clip{
-			Data:     shell.EncodeWAV(samples, sampleRate),
+			Data:     wav.Encode(samples, sampleRate),
 			Mime:     "audio/wav",
 			Duration: dur,
-			Envelope: shell.Envelope(samples, 120),
+			Envelope: wav.Envelope(samples, 120),
 		}, nil)
 	}
 }
@@ -344,7 +345,7 @@ func (b *Bridge) DeliverPCM(reqID int, pcm []byte, sampleRate int, durationMs in
 func pcmToInt16(b []byte) []int16 {
 	n := len(b) / 2
 	out := make([]int16, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] = int16(binary.LittleEndian.Uint16(b[i*2:]))
 	}
 	return out

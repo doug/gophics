@@ -19,7 +19,7 @@ import (
 // thread must be marshaled to the UI thread first.
 //
 // Recording delivers raw PCM (16-bit little-endian mono) plus its sample rate;
-// Go encodes the portable WAV Clip with shell.EncodeWAV, so the format matches
+// Go encodes the portable WAV Clip with wav.Encode, so the format matches
 // the web shell exactly. Playback is given that WAV via PlayClip.
 type MediaHost interface {
 	AuthorizeCamera(reqID int)          // → DeliverPermission(reqID, granted)

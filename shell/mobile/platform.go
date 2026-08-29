@@ -26,7 +26,7 @@ type ShareHost interface {
 }
 
 // SetShareHost registers the share backend, enabling ctx.Share().
-func (b *Bridge) SetShareHost(h ShareHost) { b.shareHost = h }
+func (b *Bridge) SetShareHost(h ShareHost) { b.shareHost = h; b.capabilitiesChanged() }
 
 // Share makes the Bridge a shell.ShareWindow.
 func (b *Bridge) Share() shell.Share {
@@ -81,7 +81,7 @@ type NotifyHost interface {
 }
 
 // SetNotifyHost registers the notification backend, enabling ctx.Notifier().
-func (b *Bridge) SetNotifyHost(h NotifyHost) { b.notifyHost = h }
+func (b *Bridge) SetNotifyHost(h NotifyHost) { b.notifyHost = h; b.capabilitiesChanged() }
 
 // Notifier makes the Bridge a shell.NotifyWindow.
 func (b *Bridge) Notifier() shell.Notifier {

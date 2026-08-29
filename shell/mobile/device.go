@@ -39,7 +39,7 @@ type DeviceHost interface {
 }
 
 // SetDeviceHost registers the backend for WakeLock, Photos and Biometric.
-func (b *Bridge) SetDeviceHost(h DeviceHost) { b.deviceHost = h }
+func (b *Bridge) SetDeviceHost(h DeviceHost) { b.deviceHost = h; b.capabilitiesChanged() }
 
 // ---- Wake lock ----
 
