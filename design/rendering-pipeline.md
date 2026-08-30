@@ -13,6 +13,7 @@
 > | glyph bind-group reuse (unplanned) | **done** | 38→0 bind groups/frame; no time change | Metal, M-series |
 > | C2 strokes → tier 2a | **reverted** | 2b 75%→15%, but parity 0.48%→10.27% | Metal, M-series |
 > | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal + **Vulkan/Mali** |
+> | opacity single-draw fold | **done** | 21→1 passes; Mali 53.7→11.6 ms (4.4×) | Metal + **Vulkan/Mali** |
 > | Vulkan verification | **done** | MSAA = 2× on multi-pass; C1/F7 hold | **Mali-G615, Galaxy Tab A9+** |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
@@ -103,9 +104,37 @@
 > by itself. `ui-screen` has no opacity groups and runs 1 pass, which is why it
 > was never slow.
 >
-> So the pass-count work is specifically **opacity-layer batching** — the
-> subject of `design/gpu-opacity-layers.md`, with `offscreenPool` already in
-> place — and not a general pass audit. Not started.
+> **Fixed by folding single-draw groups.** A group holding exactly one draw does
+> not need an offscreen at all: source-over of one primitive is associative in
+> alpha, so drawing it into a transparent layer and compositing at group alpha g
+> equals drawing it at colour-alpha × g. `GPURenderContext.PopLayer` now
+> collapses push/draw/pop into the draw, guarded on all three conditions that
+> make the identity hold — exactly one draw (two would double-blend where they
+> overlap), Normal blend (any other is defined against a backdrop, and a layer's
+> is transparent), and a solid colour (a gradient's alpha is per-stop).
+>
+> The reference scene's 20 groups are all single-draw, so:
+>
+> | | before | after |
+> | --- | --- | --- |
+> | passes | 21 | **1** |
+> | draws | 58 | 38 |
+> | Mali frame, mean of 3 | 53.7 / 54.3 / 55.8 ms | **11.6 / 12.8 / 12.2 ms** |
+> | Mali frame, best | 42.3 ms | **4.0 ms** |
+>
+> **4.4× on the tiler**, and pixel-identical: GPU/CPU parity on `mixed` is
+> 1.178% before and after. That is the right check rather than a weak one — the
+> CPU path does not fold, so the GPU agreeing with it exactly as much as it did
+> before is evidence the fold changed nothing visible.
+>
+> `TestWhatCostsARenderPass` gates both directions: a single-draw group must
+> cost 1 pass, a two-draw group must cost 2. The second matters as much as the
+> first, because folding it would be silently wrong rather than slow.
+>
+> This did not need the offscreen batching `design/gpu-opacity-layers.md`
+> scopes. Groups with several draws still take a pass each, and batching
+> non-overlapping ones remains available if a real UI is ever found that needs
+> it — but the common shape, a fade over one thing, now costs nothing.
 >
 > **That reframes Phase D.** The cost is `passes × MSAA-per-pass`, so there are
 > two factors to attack and the plan only considered one. Removing MSAA is the

@@ -62,6 +62,23 @@ func TestWhatCostsARenderPass(t *testing.T) {
 		{"+ sprite", base(func(c paint.Canvas) {
 			c.Image(testAtlas(), geom.RectXYWH(20, 20, 32, 32))
 		})},
+		// One draw inside the group: folded into that draw, so no pass. This is
+		// the shape most opacity in a UI has — a fade over a single thing.
+		{"+ 1-draw opacity (folded)", widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+			c.Clear(paint.RGB(1, 1, 1))
+			c.PushOpacity(0.5)
+			c.FillRRect(r, 8, paint.RGB(0.2, 0.5, 0.9))
+			c.PopOpacity()
+		}}},
+		// Two draws: the group alpha applies to their composite, so folding it
+		// per-draw would double-blend the overlap. Keeps its pass.
+		{"+ 2-draw opacity (kept)", widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
+			c.Clear(paint.RGB(1, 1, 1))
+			c.PushOpacity(0.5)
+			c.FillRRect(r, 8, paint.RGB(0.2, 0.5, 0.9))
+			c.FillRRect(geom.RectXYWH(60, 40, 90, 70), 8, paint.RGB(0.9, 0.4, 0.2))
+			c.PopOpacity()
+		}}},
 		{"+ opacity group", widget.Opacity{Alpha: 0.5, Child: base(nil)}},
 		{"+ 2 opacity groups", widget.Opacity{Alpha: 0.5,
 			Child: widget.Opacity{Alpha: 0.5, Child: base(nil)}}},
@@ -79,6 +96,21 @@ func TestWhatCostsARenderPass(t *testing.T) {
 		skipWithoutHardwareGPU(t)
 		h.RenderGPU() // warm frame; counters describe the last frame
 		e := wgpu.EncoderStats()
-		t.Logf("%-22s passes=%2d draws=%3d switches=%3d", c.name, e.RenderPasses, e.DrawCalls, e.PipelineSwitches)
+		t.Logf("%-26s passes=%2d draws=%3d switches=%3d", c.name, e.RenderPasses, e.DrawCalls, e.PipelineSwitches)
+		// The two opacity cases are gated, because the fold is the whole reason
+		// the reference scene went from 21 passes to 1 and 53ms to 12ms on a
+		// Mali tiler. Losing it silently would put both back.
+		switch c.name {
+		case "+ 1-draw opacity (folded)":
+			if e.RenderPasses != 1 {
+				t.Errorf("a single-draw opacity group cost %d passes, want 1: the fold "+
+					"in GPURenderContext.PopLayer is not firing", e.RenderPasses)
+			}
+		case "+ 2-draw opacity (kept)":
+			if e.RenderPasses != 2 {
+				t.Errorf("a two-draw opacity group cost %d passes, want 2: folding it "+
+					"would double-blend where the two draws overlap", e.RenderPasses)
+			}
+		}
 	}
 }

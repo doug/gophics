@@ -674,8 +674,63 @@ func (rc *GPURenderContext) PushLayer(opacity float64, blend gg.BlendMode) {
 
 // PopLayer records the end of the opacity/blend group opened by the most recent
 // unmatched PushLayer. See PushLayer.
+//
+// A group holding exactly one draw is folded into that draw instead, which is
+// what makes opacity affordable. Every group otherwise costs a full render pass
+// — measured at one pass per group, and ~1.3 ms per pass on a Mali tiler, so
+// the ten-tile reference scene spent 20 of its 21 passes and 53 ms of its frame
+// on layers (design/rendering-pipeline.md). Most opacity in a real UI is a fade
+// over a single thing, and a single thing does not need an offscreen.
 func (rc *GPURenderContext) PopLayer() {
+	if rc.foldSingleDrawLayer() {
+		return
+	}
 	rc.pendingDraws = append(rc.pendingDraws, drawCommand{kind: drawCmdPopLayer})
+}
+
+// foldSingleDrawLayer collapses "push, one draw, pop" into that draw with the
+// group alpha multiplied into its color, and reports whether it did.
+//
+// Sound because source-over compositing of a single primitive is associative in
+// alpha: drawing one shape into a transparent offscreen and compositing that at
+// alpha g is the same as drawing it at color-alpha × g. That equivalence needs
+// all three conditions below, and each is a way it stops being true:
+//
+//   - Exactly one draw. With two, the group alpha applies to their *composite*;
+//     folding it per-draw double-blends wherever they overlap, so a translucent
+//     pair would show its seam.
+//   - Normal blend. Any separable blend mode is defined against the backdrop,
+//     and a layer's backdrop is transparent while the canvas's is not.
+//   - A solid color. A gradient or pattern carries alpha per-stop, and scaling
+//     "the" alpha of a brush is not defined here.
+//
+// Nested groups are excluded by construction: an inner group leaves its own
+// markers between the two, so the span is not a single draw.
+func (rc *GPURenderContext) foldSingleDrawLayer() bool {
+	n := len(rc.pendingDraws)
+	if n < 2 {
+		return false
+	}
+	push := &rc.pendingDraws[n-2]
+	draw := &rc.pendingDraws[n-1]
+	if push.kind != drawCmdPushLayer || push.layerBlend != gg.BlendNormal {
+		return false
+	}
+	switch draw.kind {
+	case drawCmdFillShape, drawCmdStrokeShape, drawCmdFillPath, drawCmdStrokePath:
+	default:
+		return false // text, images and textures carry alpha elsewhere
+	}
+	col, ok := draw.paint.SolidColor()
+	if !ok {
+		return false
+	}
+	col.A *= float64(push.layerOpacity)
+	draw.paint.SetBrush(gg.SolidBrush{Color: col})
+	// Drop the marker, keep the draw.
+	rc.pendingDraws[n-2] = *draw
+	rc.pendingDraws = rc.pendingDraws[:n-1]
+	return true
 }
 
 // QueueGPUTextureDraw queues a GPU-to-GPU texture compositing command via
