@@ -5,11 +5,16 @@ went to the background, and doing work while it is there. The first is small and
 already designed. The second is the subject of most of this document, and the
 design below is deliberately *not* a wrapper around the platform schedulers.
 
-Status today: `ctx.Lifecycle()` is nil on Android and iOS
-(`shell/mobile/lifecycle.go` returns nil), and nothing in the tree touches
-WorkManager, JobScheduler, BGTaskScheduler or `beginBackgroundTask`. A gophics
-goroutine runs exactly as long as the OS lets the process run, which after
-backgrounding is seconds.
+Status 2026-08-30: the *first* capability now exists —
+`shell/mobile/lifecycle.go` makes the Bridge a `shell.LifecycleWindow`, so
+`ctx.Lifecycle()` is non-nil on Android and iOS and an app can know it went to
+the background. The line above used to say it was nil; that has been true for a
+while and the document did not say so.
+
+The second capability is untouched and is what the rest of this document is
+about: nothing in the tree reaches WorkManager, JobScheduler, BGTaskScheduler or
+`beginBackgroundTask`, so a gophics goroutine still runs exactly as long as the
+OS lets the process run — after backgrounding, seconds.
 
 ---
 

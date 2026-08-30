@@ -190,8 +190,8 @@ func shortPath(p string) string {
 
 // Consumers reports which of the module's own packages are imported from dirs.
 //
-// This exists because of a specific mistake. The audit that produced
-// design/api-surface-reduction.md concluded "nothing imports intl" and was
+// This exists because of a specific mistake. The 2026-08 API-surface audit
+// concluded "nothing imports intl" and was
 // wrong: examples/tally does, and calls intl.Auto() — on Android and iOS, where
 // the environment variables it reads do not exist. It was missed because tally
 // is a *separate module*, invisible to `go list ./...` from the root, which is

@@ -24,7 +24,9 @@ import (
 // takes a still and streams a preview, a microphone records a clip and streams
 // a monitor. So it is a pair of methods, not a pair of interfaces.
 //
-// See design/spec-media-journal.md for the still/clip half.
+// The still/clip split below is what the media spec settled on; the Journal app
+// it was written against has been removed, but these interfaces shipped from it
+// unchanged.
 
 // CameraWindow is implemented by a Window that can take a still photo.
 type CameraWindow interface {

@@ -1,7 +1,7 @@
 # GPU opacity-layer compositing — design & plan
 
-> **STATUS 2026-08-04 — IMPLEMENTED & VERIFIED headless + on-device (uncommitted
-> WIP in `internal/gfx/gg`).** On-device: an opacity region added to
+> **STATUS 2026-08-04 — IMPLEMENTED & VERIFIED headless + on-device; the work
+> described as uncommitted WIP below is committed and has been since.** On-device: an opacity region added to
 > `examples/gpucheck` renders correctly on a real Pixel (PowerVR D-Series Vulkan,
 > `RGBA8Unorm`, GPU present) — base survives, overlay 50%, nested 25%, matching
 > the desktop reference. Deploy: `gophics run -p android -tags gophics_verify
