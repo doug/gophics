@@ -11,6 +11,7 @@
 > | A4 MSAA ablation hook | **done** | MSAA priced: free on Metal | Metal, M-series |
 > | C1 hoist tier 2b allocations | **done** | 121→1 obj/frame; -45% frame time | Metal, M-series |
 > | glyph bind-group reuse (unplanned) | **done** | 38→0 bind groups/frame; no time change | Metal, M-series |
+> | C2 strokes → tier 2a | **reverted** | 2b 75%→15%, but parity 0.48%→10.27% | Metal, M-series |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
 >
@@ -103,6 +104,41 @@
 >
 > What is left, and is a third subsystem again: mixed still makes 26 bind groups
 > and 17 textures a frame, from the image/sprite and offscreen-layer paths.
+>
+> **C2 was implemented, measured, and reverted.** Removing the EvenOdd gate does
+> what §6 C2 predicts — 24 of stroke-heavy's 30 stencil paths move to the convex
+> tier, dropping 2b from 75% to 15% of items — and the fill-rule argument holds:
+> on a verified convex simple polygon EvenOdd and NonZero classify every point
+> identically, so the routing is not incorrect.
+>
+> But it renders worse. GPU/CPU agreement on stroke-heavy goes from **0.48% of
+> pixels differing to 10.27%**, a 21× regression, while every other scene is
+> untouched. The unstated assumption in C2 was that the two tiers render
+> equally; they do not. Tier 2a's per-vertex coverage ramp is a cruder
+> approximation for a thin stroke outline than 4× MSAA'd stencil, which is the
+> same asymmetry §1.1 records in the "Own AA?" column read the other way round:
+> 2b has no AA of its own *and gets the good one from MSAA*.
+>
+> So C2 is blocked on tier 2a's AA quality, not on its routing. It becomes
+> available if Phase D gives 2b coverage-based AA and drops MSAA — at which
+> point 2a and 2b would be compared on equal terms, and this measurement should
+> be redone rather than assumed.
+>
+> **The corpus was not under any correctness test until this was written**, which
+> is how C2 nearly landed. `TestGPUMatchesCPU` renders its own `equivScene` and
+> `TestRenderScaleConsistency` renders `renderref.Scene`; neither ever saw
+> StrokeHeavy or the others, so the parity number was identical before and after
+> a change that moved 24 paths to a different rasterizer. A5's claim that
+> putting the scenes in renderref would let the harnesses pick them up for free
+> was wrong. `TestGPUMatchesCPUOnCorpus` closes it, with per-scene budgets.
+>
+> **An unexplained finding it surfaced:** text-heavy has 11.0% of pixels
+> differing between CPU and GPU, by up to 218/255, on a scene that is nothing
+> but text — where every other scene agrees to within 1.5%. It is pre-existing
+> and unrelated to any change in this phase. Text is rasterized by different
+> machinery on each backend so some divergence is expected; an order of
+> magnitude more than everything else is not obviously that. Budgeted where it
+> stands so it cannot grow, and not diagnosed.
 > A grounded pass over the whole pipeline, generalizing
 > `design/strip-rendering.md`.
 >
