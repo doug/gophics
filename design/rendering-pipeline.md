@@ -78,6 +78,35 @@
 > pass"; the measurement says the per-pass resolve is the whole term, at roughly
 > 1.3 ms per pass on this device.
 >
+> **What spends the passes: opacity groups, one pass each.** Measured by adding
+> one construct at a time to a fixed baseline (`TestWhatCostsARenderPass`):
+>
+> | Scene | passes |
+> | --- | ---: |
+> | baseline, one fill | 1 |
+> | + rect clip | 1 |
+> | + rrect clip | 1 |
+> | + nested clips | 1 |
+> | + gradient | 1 |
+> | + sprite | 1 |
+> | **+ opacity group** | **2** |
+> | **+ two opacity groups** | **3** |
+>
+> Clips, gradients and sprites are free; every opacity group costs a pass. That
+> accounts for the reference scene exactly: its tile loop is 2 rows × 5 columns
+> with two PushOpacity calls per tile — 20 groups, plus the base pass, is the 21
+> observed. At ~1.3 ms per pass on the Mali, `1 + 20 × 1.3` is the 53 ms frame.
+>
+> The scene's own comment says those tiles carry two layer pushes "like real
+> UIs", and that is the part which generalizes: a UI fading ten elements pays
+> ~13 ms/frame on this class of device for the layers alone, which drops a frame
+> by itself. `ui-screen` has no opacity groups and runs 1 pass, which is why it
+> was never slow.
+>
+> So the pass-count work is specifically **opacity-layer batching** — the
+> subject of `design/gpu-opacity-layers.md`, with `offscreenPool` already in
+> place — and not a general pass audit. Not started.
+>
 > **That reframes Phase D.** The cost is `passes × MSAA-per-pass`, so there are
 > two factors to attack and the plan only considered one. Removing MSAA is the
 > larger, riskier change and costs edge quality; reducing the pass count helps
