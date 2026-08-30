@@ -10,3 +10,9 @@ func (w *window) runOnMain(fn func()) {
 		fn()
 	}
 }
+
+// setSizeOnMain resizes inline, so the platform's own answer survives — X11
+// accepts, Wayland refuses because the compositor owns geometry.
+func (w *window) setSizeOnMain(width, height int) bool {
+	return w.app.SetSize(width, height)
+}
