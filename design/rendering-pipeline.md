@@ -132,13 +132,47 @@
 > putting the scenes in renderref would let the harnesses pick them up for free
 > was wrong. `TestGPUMatchesCPUOnCorpus` closes it, with per-scene budgets.
 >
-> **An unexplained finding it surfaced:** text-heavy has 11.0% of pixels
-> differing between CPU and GPU, by up to 218/255, on a scene that is nothing
-> but text — where every other scene agrees to within 1.5%. It is pre-existing
-> and unrelated to any change in this phase. Text is rasterized by different
-> machinery on each backend so some divergence is expected; an order of
-> magnitude more than everything else is not obviously that. Budgeted where it
-> stands so it cannot grow, and not diagnosed.
+> **The finding it surfaced, now diagnosed — F7, and it is a correctness bug
+> rather than a performance one.**
+>
+> text-heavy's 11.0% is not anti-aliasing noise. The backends lay the same
+> string out differently: every line *starts* on the same pixel and *ends* on a
+> different one, drifting up to **9 pixels across 43 characters at 9px**, with
+> total ink within 0.2% and no global shift that improves agreement. That is
+> accumulation, not offset.
+>
+> `glyph_mask_engine.snapXGrid` (`:262`) gives each GPU glyph a position
+> accumulated from **rounded** advances — a deliberate hinted-text technique,
+> documented there, that keeps vertical stems on pixel boundaries and is the
+> right call for crispness taken on its own. `text/glyph_renderer.go:251` places
+> CPU glyphs at the shaper's exact `glyph.X`. `text/layout.go:495`
+> (`MeasureWidthIn`) also sums unrounded advances.
+>
+> So **measurement and the CPU agree; the GPU disagrees with both** — and the
+> GPU is the default renderer. Measured against MeasureWidthIn on a 43-character
+> string:
+>
+> | size | measured | CPU ink Δ | GPU ink Δ | GPU − CPU |
+> | --- | --- | --- | --- | --- |
+> | 9 | 178.95 | −2.0 | **+7.0** | **+9.0** |
+> | 11 | 218.98 | −3.0 | +0.0 | +3.0 |
+> | 15 | 298.47 | −2.5 | **−5.5** | −3.0 |
+>
+> The CPU's constant −1.7 to −3.0 is side bearings — ink is narrower than
+> advance width, as it should be. The GPU's swing from +7 to −5.5, changing sign
+> with size, is the accumulated rounding.
+>
+> What that costs, since layout is computed from the measured width: centred
+> text is off-centre, text sized to its measured box can overflow it, and a
+> caret positioned from shaper metrics does not sit where the glyph was drawn —
+> all on the GPU backend only, and worst at the small sizes UIs use most.
+>
+> Fixing it is a design decision, not a patch, because all three answers change
+> text appearance framework-wide: snap on the CPU too (consistent and crisp,
+> still disagrees with measurement), stop snapping on the GPU (agrees with
+> measurement, loses the stem alignment the comment defends), or snap in the
+> shaper so measurement and both backends share one answer (correct, largest
+> blast radius). Not scheduled here.
 > A grounded pass over the whole pipeline, generalizing
 > `design/strip-rendering.md`.
 >

@@ -43,15 +43,17 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 		{"curve-heavy", renderref.CurveHeavy(), 0.02},   // measured 0.36%
 		{"ui-screen", renderref.UIScreen(), 0.02},       // measured 0.62%
 		{"mixed", renderref.Scene(), 0.03},              // measured 1.52%
-		// text-heavy is the outlier and is not understood: 11.0% of pixels
-		// differ by up to 218/255, on a scene that is nothing but text. Every
-		// other scene agrees to within 1.5%. It is pre-existing — it measures
-		// the same with and without the tier changes in this phase — so it is
-		// recorded here rather than fixed here, with a budget that holds it
-		// where it is instead of letting it grow. Text is drawn by different
-		// machinery on each backend (CPU analytic coverage vs the GPU glyph
-		// atlas), so some divergence is expected; an order of magnitude more
-		// than every other scene is not obviously it.
+		// text-heavy's 11.0% is diagnosed, and it is not anti-aliasing noise:
+		// the two backends lay the same string out differently.
+		// glyph_mask_engine.snapXGrid gives GPU glyphs positions accumulated
+		// from *rounded* advances, while the CPU rasterizer and MeasureWidthIn
+		// both use the shaper's unrounded ones. The error accumulates instead
+		// of cancelling, so a 43-character line at 9px ends 9 pixels wider on
+		// the GPU than on the CPU while starting on the same pixel.
+		//
+		// See TestGPUTextWidthVersusMeasuredWidth for the per-size numbers and
+		// design/rendering-pipeline.md for why fixing it is a design decision
+		// rather than a patch. Budgeted where it stands so it cannot grow.
 		{"text-heavy", renderref.TextHeavy(), 0.12}, // measured 11.01%
 	}
 	for _, sc := range scenes {
