@@ -186,42 +186,44 @@ func NewWindow(config WindowConfig) (*Window, error) {
 // Show makes the window visible and brings it to front.
 func (w *Window) Show() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	ns := w.nsWindow
+	w.visible = true
+	w.mu.Unlock()
 
-	if w.nsWindow.IsNil() {
+	if ns.IsNil() {
 		return
 	}
-
-	// Make key and order front (nil sender)
-	w.nsWindow.SendPtr(selectors.makeKeyAndOrderFront, 0)
-	w.visible = true
+	// Make key and order front (nil sender). Sent unlocked: see nsWin.
+	ns.SendPtr(selectors.makeKeyAndOrderFront, 0)
 }
 
 // Hide hides the window.
 func (w *Window) Hide() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	ns := w.nsWindow
+	w.visible = false
+	w.mu.Unlock()
 
-	if w.nsWindow.IsNil() {
+	if ns.IsNil() {
 		return
 	}
-
-	// Order out (nil sender)
-	w.nsWindow.SendPtr(selectors.orderOut, 0)
-	w.visible = false
+	// Order out (nil sender). Sent unlocked: see nsWin.
+	ns.SendPtr(selectors.orderOut, 0)
 }
 
 // Close closes the window.
 func (w *Window) Close() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	ns := w.nsWindow
+	w.shouldClose = true
+	w.mu.Unlock()
 
-	if w.nsWindow.IsNil() {
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.Send(selectors.close)
-	w.shouldClose = true
+	// close fires windowShouldClose:/windowWillClose: synchronously, and those
+	// handlers re-enter this type. Sent unlocked: see nsWin.
+	ns.Send(selectors.close)
 }
 
 // SetTitle sets the window title.
@@ -480,50 +482,46 @@ func (w *Window) ContentRect() NSRect {
 
 // Center centers the window on the screen.
 func (w *Window) Center() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.Send(selectors.center)
+	// Moves or resizes the window, which AppKit reports through delegate
+	// callbacks that re-enter this type. Sent unlocked: see nsWin.
+	ns.Send(selectors.center)
 }
 
 // Miniaturize minimizes the window.
 func (w *Window) Miniaturize() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendPtr(selectors.miniaturize, 0)
+	// Moves or resizes the window, which AppKit reports through delegate
+	// callbacks that re-enter this type. Sent unlocked: see nsWin.
+	ns.SendPtr(selectors.miniaturize, 0)
 }
 
 // Deminiaturize restores a minimized window.
 func (w *Window) Deminiaturize() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendPtr(selectors.deminiaturize, 0)
+	// Moves or resizes the window, which AppKit reports through delegate
+	// callbacks that re-enter this type. Sent unlocked: see nsWin.
+	ns.SendPtr(selectors.deminiaturize, 0)
 }
 
 // Zoom toggles the window zoom state.
 func (w *Window) Zoom() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendPtr(selectors.zoom, 0)
+	// Moves or resizes the window, which AppKit reports through delegate
+	// callbacks that re-enter this type. Sent unlocked: see nsWin.
+	ns.SendPtr(selectors.zoom, 0)
 }
 
 // InLiveResize returns true while the user is dragging a resize handle.
@@ -757,14 +755,13 @@ func (w *Window) injectTitleTextField(textAlignment uint64) {
 
 // SetStyleMask sets the window's style mask.
 func (w *Window) SetStyleMask(mask NSWindowStyleMask) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendUint(selectors.setStyleMask, uint64(mask))
+	// A style change resizes the frame, which AppKit reports through delegate
+	// callbacks that re-enter this type. Sent unlocked: see nsWin.
+	ns.SendUint(selectors.setStyleMask, uint64(mask))
 }
 
 // IsMiniaturized returns true if the window is minimized.
@@ -809,14 +806,13 @@ func (w *Window) IsKeyWindow() bool {
 // SetCollectionBehavior sets the window's collection behavior flags.
 // Used to enable fullscreen support via NSWindowCollectionBehaviorFullScreenPrimary.
 func (w *Window) SetCollectionBehavior(behavior NSWindowCollectionBehavior) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendUint(selectors.setCollectionBehavior, uint64(behavior))
+	// Collection behavior carries the fullscreen-participation flags, so it is
+	// adjacent to the transition that deadlocked. Sent unlocked: see nsWin.
+	ns.SendUint(selectors.setCollectionBehavior, uint64(behavior))
 }
 
 // sendUnlocked is how a window method reaches AppKit without holding w.mu.
@@ -834,6 +830,34 @@ func (w *Window) SetCollectionBehavior(behavior NSWindowCollectionBehavior) {
 // rule, so holding it across a send buys no safety and costs re-entrancy.
 //
 // Read what is needed under the lock, then send outside it.
+//
+// Audited 2026-08-30. Converted: ToggleFullScreen, SetTitle, SetSize, Show,
+// Hide, Close, Center, Miniaturize, Deminiaturize, Zoom, SetStyleMask,
+// SetMinSize, SetMaxSize, SetCollectionBehavior — every method whose selector
+// can make AppKit fire windowDidResize:, windowWillStartLiveResize:,
+// windowDidEndLiveResize:, windowDidChangeScreen: or windowShouldClose:, which
+// are the five callbacks registered on the delegate. Of the handlers those
+// reach, StartLiveResize, EndLiveResize and liveResizeHookValue lock w.mu, and
+// that is the whole hazard surface.
+//
+// Deliberately still holding the lock across a send, each for a reason:
+//
+//   - Frame, ContentRect, UpdateSize, FramebufferSize, IsMiniaturized,
+//     IsZoomed, IsKeyWindow, IsFullScreen — property reads. A getter cannot
+//     provoke a delegate callback, and they must answer while holding the
+//     fields they report on.
+//   - Destroy — safe by construction rather than by luck: it sends
+//     setDelegate:nil before close:, so by the time anything could call back
+//     there is no delegate to call.
+//   - SetMetalLayer — sends to the content view, not the window; the five
+//     callbacks above are NSWindowDelegate methods and a view layer change does
+//     not raise them.
+//   - SetHeaderAlignment — a genuine remaining hazard: it sends setStyleMask:
+//     under the lock, and its own comment notes that provokes a title
+//     re-layout. Not converted because it performs view surgery through
+//     injectTitleTextField, which assumes the caller already holds the lock, so
+//     the fix is a restructure rather than a hoist — and header alignment
+//     cannot be exercised from here to confirm the restructure is right.
 func (w *Window) nsWin() ID {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -869,23 +893,19 @@ func (w *Window) IsFullScreen() bool {
 // SetMinSize sets the minimum window frame size in logical points.
 // Use 0 for both to remove the minimum constraint (system default).
 func (w *Window) SetMinSize(width, height float64) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendSize(selectors.setMinSize, MakeSize(CGFloat(width), CGFloat(height)))
+	// May clamp the current frame, which reports a resize. Sent unlocked.
+	ns.SendSize(selectors.setMinSize, MakeSize(CGFloat(width), CGFloat(height)))
 }
 
 // SetMaxSize sets the maximum window frame size in logical points.
 // Use 0 for both to remove the maximum constraint (use a very large value).
 func (w *Window) SetMaxSize(width, height float64) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
 
@@ -897,7 +917,8 @@ func (w *Window) SetMaxSize(width, height float64) {
 	} else {
 		size = MakeSize(CGFloat(width), CGFloat(height))
 	}
-	w.nsWindow.SendSize(selectors.setMaxSize, size)
+	// May clamp the current frame, which reports a resize. Sent unlocked.
+	ns.SendSize(selectors.setMaxSize, size)
 }
 
 func (w *Window) SetOnClose(fn func() bool) {
