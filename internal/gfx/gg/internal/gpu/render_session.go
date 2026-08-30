@@ -205,6 +205,10 @@ type GPURenderSession struct {
 	glyphMaskUniformBufs  []*wgpu.Buffer
 	glyphMaskBindGroups   []*wgpu.BindGroup
 	glyphMaskPendingViews []glyphMaskPendingView // deferred bind group creation (BUG-GPU-001)
+	// glyphMaskBindKeys records what each glyph bind group was built against,
+	// so an unchanged batch reuses it instead of rebuilding. See
+	// materializeGlyphMaskBindGroups.
+	glyphMaskBindKeys []glyphMaskBindKey
 
 	// Tier 3b: GPU texture compositing persistent buffers.
 	// Overlay and base layer use SEPARATE vertex buffers to prevent
@@ -1201,6 +1205,7 @@ func (s *GPURenderSession) destroyPersistentBuffers() { //nolint:gocyclo,cyclop,
 		}
 	}
 	s.glyphMaskBindGroups = nil
+	s.glyphMaskBindKeys = nil // the groups they described are gone
 	for _, buf := range s.glyphMaskUniformBufs {
 		if buf != nil {
 			buf.Release()
@@ -2426,6 +2431,17 @@ func (s *GPURenderSession) SetGlyphMaskAtlasView(batchIndex int, atlasView *wgpu
 	})
 }
 
+// glyphMaskBindKey is everything a glyph bind group references. Equal keys mean
+// the existing bind group is still correct, which is the whole test for reuse:
+// a bind group is a binding of exactly these, and nothing else about a frame
+// can invalidate it.
+type glyphMaskBindKey struct {
+	view    *wgpu.TextureView
+	layout  *wgpu.BindGroupLayout
+	uniform *wgpu.Buffer
+	sampler *wgpu.Sampler
+}
+
 // materializeGlyphMaskBindGroups creates bind groups from pending atlas views.
 // Must be called AFTER pipeline stabilization (ensureGlyphMaskPipeline with
 // final clip layout). This is the fix for BUG-GPU-001: on the first frame,
@@ -2441,16 +2457,40 @@ func (s *GPURenderSession) materializeGlyphMaskBindGroups() {
 		if pv.batchIndex >= len(s.glyphMaskBindGroups) {
 			continue
 		}
-		if s.glyphMaskBindGroups[pv.batchIndex] != nil {
-			s.glyphMaskBindGroups[pv.batchIndex].Release()
-			s.glyphMaskBindGroups[pv.batchIndex] = nil
-		}
 
 		layout := s.glyphMaskPipeline.uniformLayout
 		uniformSize := uint64(glyphMaskUniformSize)
 		if pv.isLCD && s.glyphMaskPipeline.lcdUniformLayout != nil {
 			layout = s.glyphMaskPipeline.lcdUniformLayout
 			uniformSize = glyphMaskLCDUniformSize
+		}
+
+		// Reuse when nothing this bind group references has changed. It used to
+		// release and recreate unconditionally, every frame, for every glyph
+		// batch — 38 bind groups a frame on a themed screen with 19 batches,
+		// which after tier 2b was fixed (C1) was the largest per-frame
+		// allocator left. Text does not usually change between frames; the
+		// atlas view does, and only when the atlas is repacked.
+		//
+		// The layout is part of the key on purpose: BUG-GPU-001 was bind groups
+		// outliving the layout they were built against, when pipeline
+		// stabilization destroyed uniformLayout on the first frame. Keying on it
+		// makes that case a rebuild rather than a stale binding.
+		for len(s.glyphMaskBindKeys) < len(s.glyphMaskBindGroups) {
+			s.glyphMaskBindKeys = append(s.glyphMaskBindKeys, glyphMaskBindKey{})
+		}
+		key := glyphMaskBindKey{
+			view: pv.atlasView, layout: layout,
+			uniform: s.glyphMaskUniformBufs[pv.batchIndex],
+			sampler: s.glyphMaskPipeline.sampler,
+		}
+		if s.glyphMaskBindGroups[pv.batchIndex] != nil &&
+			s.glyphMaskBindKeys[pv.batchIndex] == key {
+			continue
+		}
+		if s.glyphMaskBindGroups[pv.batchIndex] != nil {
+			s.glyphMaskBindGroups[pv.batchIndex].Release()
+			s.glyphMaskBindGroups[pv.batchIndex] = nil
 		}
 
 		bg, err := s.device.CreateBindGroup(&wgpu.BindGroupDescriptor{
@@ -2467,6 +2507,7 @@ func (s *GPURenderSession) materializeGlyphMaskBindGroups() {
 			continue
 		}
 		s.glyphMaskBindGroups[pv.batchIndex] = bg
+		s.glyphMaskBindKeys[pv.batchIndex] = key
 	}
 	s.glyphMaskPendingViews = nil
 }

@@ -10,6 +10,7 @@
 > | A3 passes / draws / switches | **done** | F2 confirmed | Metal |
 > | A4 MSAA ablation hook | **done** | MSAA priced: free on Metal | Metal, M-series |
 > | C1 hoist tier 2b allocations | **done** | 121→1 obj/frame; -45% frame time | Metal, M-series |
+> | glyph bind-group reuse (unplanned) | **done** | 38→0 bind groups/frame; no time change | Metal, M-series |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
 >
@@ -84,11 +85,24 @@
 > pixel before and after — 1845/132000 differing, worst diff 161 at the same
 > cell — so this is a pure allocation change.
 >
-> **It also exposed the next one.** ui-screen still makes 38 bind groups a frame
-> and mixed 28, and neither is tier 2b: buildTextResources gives every text and
-> glyph batch its own uniform buffer and bind group, and ui-screen has 19 glyph
-> batches — 19 × 2 = 38. Same defect, different tier, and now the largest
-> remaining per-frame allocator. It is not in §6; it should be.
+> **It also exposed the next one, which is now fixed.** ui-screen was still
+> making 38 bind groups a frame and none were tier 2b. Not buildTextResources,
+> which is already well-behaved — the glyph-mask tier:
+> `materializeGlyphMaskBindGroups` released and recreated every batch's bind
+> group unconditionally, every frame. Keying each bind group on what it actually
+> references — atlas view, layout, uniform buffer, sampler — makes an unchanged
+> batch reuse it. The layout is in the key deliberately: BUG-GPU-001 was a bind
+> group outliving the layout it was built against, and keying on it turns that
+> into a rebuild instead of a stale binding.
+>
+> ui-screen and text-heavy now allocate **nothing** per frame: 1 buffer, 0 bind
+> groups. **But it bought no time on Metal** — 1.83 → 1.85 ms, inside the noise.
+> Bind-group creation is cheap there. §2.1 predicts it is not on Vulkan, where
+> every set goes through descriptorAllocator.Allocate/Free per path per frame,
+> and that is unmeasured. Recorded as churn removed, not as a speedup.
+>
+> What is left, and is a third subsystem again: mixed still makes 26 bind groups
+> and 17 textures a frame, from the image/sprite and offscreen-layer paths.
 > A grounded pass over the whole pipeline, generalizing
 > `design/strip-rendering.md`.
 >
