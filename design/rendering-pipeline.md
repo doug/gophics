@@ -12,6 +12,7 @@
 > | C1 hoist tier 2b allocations | **done** | 121→1 obj/frame; -45% frame time | Metal, M-series |
 > | glyph bind-group reuse (unplanned) | **done** | 38→0 bind groups/frame; no time change | Metal, M-series |
 > | C2 strokes → tier 2a | **reverted** | 2b 75%→15%, but parity 0.48%→10.27% | Metal, M-series |
+> | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal, M-series |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
 >
@@ -167,12 +168,31 @@
 > caret positioned from shaper metrics does not sit where the glyph was drawn —
 > all on the GPU backend only, and worst at the small sizes UIs use most.
 >
-> Fixing it is a design decision, not a patch, because all three answers change
-> text appearance framework-wide: snap on the CPU too (consistent and crisp,
-> still disagrees with measurement), stop snapping on the GPU (agrees with
-> measurement, loses the stem alignment the comment defends), or snap in the
-> shaper so measurement and both backends share one answer (correct, largest
-> blast radius). Not scheduled here.
+> **Fixed by removing snapXGrid.** The shaper looked like the right home for a
+> single shared answer, but snapping is not a property of the text: it is a
+> function of device scale, hinting mode, LCD mode and the transform, none of
+> which the shaper knows and all of which belong to the target. LCD deliberately
+> keeps fractional X because the fraction selects the R/G/B phase, so a shaper
+> that snapped unconditionally would break subpixel rendering outright.
+>
+> What made the choice clear is that snapXGrid was the only snapping in the
+> codebase that *accumulated*. The autohinter rounds each advance in f26dot6 and
+> applyGridFit snaps outline coordinates inside a glyph; both are bounded per
+> glyph. Only the pen-position grid compounded, which is why the error grew with
+> string length instead of staying within half a pixel.
+>
+> Removing it makes GPU ink match CPU ink exactly at four of five sizes and to
+> within 1px at the fifth, and text-heavy parity falls from 11.0% to 4.98% —
+> what remains is genuine rasterizer difference, which does not accumulate.
+>
+> The cost is real and was measured rather than argued. Solid ink drops from
+> 33.9% of ink pixels to 28.6%, midtones rise 46.0% to 56.7%: text is softer,
+> landing between the old GPU output and the CPU's 22.7%/58.4%. Reviewed by eye
+> at 9px and 15px as well as by number; at 15px the three are hard to tell
+> apart, and at 9px the old output is visibly *wider* rather than visibly
+> crisper. This is also what browsers, CoreText and Skia all do, and what gophics
+> already did whenever LCD was active — so it is not a new class of appearance,
+> just a wider application of one that already shipped.
 > A grounded pass over the whole pipeline, generalizing
 > `design/strip-rendering.md`.
 >

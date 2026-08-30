@@ -252,33 +252,23 @@ func (e *GlyphMaskEngine) LayoutShapedGlyphs(
 	return e.layoutGlyphs(glyphs, x, y, fontSize, fontID, parsed, hinting, useLCD, e.lcdLayout, face.Variations(), &lcdFilter, batchColor, matrix, deviceScale, isCJK, false), nil
 }
 
-// snapXGrid precomputes the integer device-space X position for each glyph by
-// accumulating ROUNDED advances. Rounding each glyph's absolute position
-// independently would make adjacent advances jitter by ±1px and open visible
-// gaps inside words ("anyway" -> "an yway"); rounding the advance makes every
-// like-advance the same integer, so spacing is uniform while stems stay
-// pixel-aligned and crisp. This is the standard hinted-text layout
-// (FreeType/GDI integer advances).
-func snapXGrid(glyphs []text.ShapedGlyph, x, deviceScale float64) []float64 {
-	out := make([]float64, len(glyphs))
-	pen := math.Round((x + glyphs[0].X) * deviceScale)
-	for i := range glyphs {
-		out[i] = pen
-		if i+1 < len(glyphs) {
-			pen += math.Round((glyphs[i+1].X - glyphs[i].X) * deviceScale)
-		}
-	}
-	return out
-}
-
 // glyphPlacement computes the device-space position (returned in user space as
 // absX/absY) and sub-pixel fraction for one glyph, applying hinting
-// pixel-snapping. Y is snapped for any hinting (baseline / horizontal stems
-// grid-fit to the pixel grid). X is snapped to the precomputed rounded-advance
-// grid (snappedDevX) when snapX is set, so vertical stems stay crisp while
-// spacing remains even. The fraction MUST be measured in device space: the mask
-// is rasterized at device size and the quad is scaled by deviceScale at flush.
-func glyphPlacement(absX, absY, deviceScale float64, hinting text.Hinting, snappedDevX float64, snapX bool) (px, py, fracX, fracY float64) {
+// pixel-snapping. Y is snapped for any hinting: the baseline and horizontal
+// stems grid-fit to the pixel grid, and a run shares one baseline, so snapping
+// it cannot accumulate.
+//
+// X is deliberately NOT snapped. It used to be, to a grid of accumulated
+// rounded advances, which kept vertical stems on pixel boundaries at the cost
+// of the run drifting from its own measured width — up to 9px across 43
+// characters at 9px, because the rounding compounded instead of cancelling.
+// MeasureWidthIn and the CPU rasterizer both use the shaper's exact positions,
+// so the GPU was the only component that disagreed, and layout is computed from
+// the measurement. See design/rendering-pipeline.md F7.
+//
+// The fraction MUST be measured in device space: the mask is rasterized at
+// device size and the quad is scaled by deviceScale at flush.
+func glyphPlacement(absX, absY, deviceScale float64, hinting text.Hinting) (px, py, fracX, fracY float64) {
 	devX := absX * deviceScale
 	devY := absY * deviceScale
 	fracX = devX - math.Floor(devX)
@@ -286,10 +276,6 @@ func glyphPlacement(absX, absY, deviceScale float64, hinting text.Hinting, snapp
 	if hinting != text.HintingNone {
 		fracY = 0
 		absY = math.Round(devY) / deviceScale
-	}
-	if snapX {
-		fracX = 0
-		absX = snappedDevX / deviceScale
 	}
 	return absX, absY, fracX, fracY
 }
@@ -324,25 +310,10 @@ func (e *GlyphMaskEngine) layoutGlyphs(
 	// ADR-054: compute variation hash for cache key differentiation.
 	varHash := text.VariationHash(variations)
 
-	// Full hinting grid-fits stems to the integer pixel grid, so fully hinted
-	// glyphs must be placed at integer device pixels (snapXGrid). LCD keeps
-	// sub-pixel X (it selects the R/G/B phase), so it is excluded.
-	snapX := hinting == text.HintingFull && !useLCD
-	var snappedDevX []float64
-	if snapX && len(glyphs) > 0 {
-		snappedDevX = snapXGrid(glyphs, x, deviceScale)
-	}
-
 	for i := range glyphs {
 		glyph := glyphs[i]
-		// Compute the device-space placement and sub-pixel fraction for this
-		// glyph, applying hinting pixel-snapping (see glyphPlacement). snapped
-		// is only consulted when snapX is set.
-		var snapped float64
-		if snapX {
-			snapped = snappedDevX[i]
-		}
-		absX, absY, fracX, fracY := glyphPlacement(x+glyph.X, y+glyph.Y, deviceScale, hinting, snapped, snapX)
+		// Device-space placement and sub-pixel fraction for this glyph.
+		absX, absY, fracX, fracY := glyphPlacement(x+glyph.X, y+glyph.Y, deviceScale, hinting)
 
 		// Size bucket quantization (Skia pattern): under atlas pressure,
 		// rasterize at a coarse bucket size and scale quads to actual size.

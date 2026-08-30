@@ -43,18 +43,14 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 		{"curve-heavy", renderref.CurveHeavy(), 0.02},   // measured 0.36%
 		{"ui-screen", renderref.UIScreen(), 0.02},       // measured 0.62%
 		{"mixed", renderref.Scene(), 0.03},              // measured 1.52%
-		// text-heavy's 11.0% is diagnosed, and it is not anti-aliasing noise:
-		// the two backends lay the same string out differently.
-		// glyph_mask_engine.snapXGrid gives GPU glyphs positions accumulated
-		// from *rounded* advances, while the CPU rasterizer and MeasureWidthIn
-		// both use the shaper's unrounded ones. The error accumulates instead
-		// of cancelling, so a 43-character line at 9px ends 9 pixels wider on
-		// the GPU than on the CPU while starting on the same pixel.
-		//
-		// See TestGPUTextWidthVersusMeasuredWidth for the per-size numbers and
-		// design/rendering-pipeline.md for why fixing it is a design decision
-		// rather than a patch. Budgeted where it stands so it cannot grow.
-		{"text-heavy", renderref.TextHeavy(), 0.12}, // measured 11.01%
+		// text-heavy was 11.0% until snapXGrid was removed: the GPU used to
+		// place glyphs on a grid of accumulated rounded advances while the CPU
+		// and MeasureWidthIn used the shaper's exact positions, so a line
+		// drifted up to 9px across 43 characters. What is left is genuine
+		// rasterizer difference — CPU analytic coverage against the GPU glyph
+		// atlas — which is the expected kind and does not accumulate. It stays
+		// the highest of the five because this scene is nothing but text.
+		{"text-heavy", renderref.TextHeavy(), 0.07}, // measured 4.98%
 	}
 	for _, sc := range scenes {
 		t.Run(sc.name, func(t *testing.T) {
