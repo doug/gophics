@@ -8,9 +8,9 @@
 > | A1 buffer/bind-group counters | **done** | F1 made observable | Metal, M-series |
 > | A2 tier populations | **done** | §1.2 corrected — see below | Metal |
 > | A3 passes / draws / switches | **done** | F2 confirmed | Metal |
-> | A4 MSAA ablation hook | not started | — | — |
+> | A4 MSAA ablation hook | **done** | MSAA priced: free on Metal | Metal, M-series |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
-> | A6 Metal timestamp honesty | not started | — | — |
+> | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
 >
 > **F1 is real, and the ratio is exact.** Steady state, after warm-up, zero
 > pipelines created — so this is per-frame churn, not first-use cost. Measured
@@ -37,6 +37,32 @@
 >
 > One detail worth chasing: on ui-screen, pipeline switches (62) *exceed* draws
 > (43), which the stencil alternation alone does not explain.
+>
+> **The MSAA ablation says Phase D is not justified — on Metal.** `GOGPU_NO_MSAA=1`
+> against the default, mean of 40 frames after warm-up, repeated three times
+> because the first run's ui-screen figure was a cold-machine outlier that
+> flattered the ablation by 42%:
+>
+> | Scene | 4× MSAA | 1× ablated |
+> | --- | --- | --- |
+> | mixed | 4.94 / 4.92 ms | 4.91 / 5.03 ms |
+> | ui-screen | 2.29 / 2.36 ms | 2.33 / 2.32 ms |
+> | stroke-heavy | 3.09 ms | 3.14 ms |
+> | curve-heavy | 2.38 ms | 2.41 ms |
+>
+> No difference on any scene. §3's bandwidth argument does not hold on an
+> M-series, which has bandwidth to spare — and §6 Phase D is explicitly gated on
+> this: "if 4× MSAA is cheap on both backends this phase is not worth its risk."
+>
+> **Half that gate is still open, and it is the half the argument was about.**
+> §1.4 and §3 predict the cost on a *tiler*, where the 4× attachment is the
+> dominant term; the Pixel/Vulkan run has not been done. Until it is, Phase D
+> stands neither justified nor refuted — but the Metal half points away from it,
+> and F3a's confirmed corruption still wants the
+> `design/gpu-single-pass-surface.md` fallback regardless of how the tiler
+> measures.
+>
+> Phase C is unaffected: it is justified by object churn, not by MSAA.
 > A grounded pass over the whole pipeline, generalizing
 > `design/strip-rendering.md`.
 >

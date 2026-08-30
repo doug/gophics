@@ -1031,12 +1031,13 @@ func (d *Device) DestroyComputePipeline(pipeline hal.ComputePipeline) {
 	mtlPipeline.device = nil
 }
 
-// CreateCommandEncoder creates a command encoder.
-//
-// The Metal command buffer is NOT created here — it is deferred to BeginEncoding.
-// This matches the two-step pattern used by Vulkan (allocate → vkBeginCommandBuffer)
 // CreateQuerySet creates a query set.
-// TODO: implement using Metal counter sample buffers for timestamp support.
+//
+// Not implemented. The adapter does not advertise FeatureTimestampQuery, so a
+// caller reaches this only by ignoring the feature set; returning the error is
+// the honest answer. Implementing it means Metal counter sample buffers
+// (MTLCounterSampleBuffer) here, plus QuerySet API through wgpu and core, which
+// have none — see design/rendering-pipeline.md §2.5.
 func (d *Device) CreateQuerySet(_ *hal.QuerySetDescriptor) (hal.QuerySet, error) {
 	return nil, hal.ErrTimestampsNotSupported
 }

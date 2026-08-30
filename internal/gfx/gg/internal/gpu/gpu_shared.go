@@ -5,6 +5,7 @@ package gpu
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/doug/gophics/internal/gfx/gg"
@@ -413,7 +414,24 @@ func (s *GPUShared) detectStrategy() gpuRenderStrategy {
 //
 // The WebGPU spec guarantees sampleCount=4 for standard formats on compliant
 // implementations, but software backends may not be fully compliant.
+//
+// GOGPU_NO_MSAA=1 forces 1x on hardware that supports 4x. This is the MSAA
+// ablation from design/rendering-pipeline.md §4.5(3): 4x MSAA exists to
+// anti-alias tier 2b, the one tier with no coverage of its own, and every other
+// tier pays for it in attachment bandwidth and a resolve per pass. On a tiler
+// that is the dominant term, and it is also why LoadOpLoad is illegal, which is
+// why multi-pass frames corrupt and why damage-rect scissoring is refused on
+// vector frames. Pricing that tax decides whether Phase D is worth its risk,
+// and strategyNoMSAA already existed with no way to reach it — detectStrategy
+// derives from this probe, so a device that supports MSAA could never be
+// measured without it. Same shape as GOGPU_TEXT_NO_LCD in this package.
+//
+// Edges are worse with it set. It is a measurement switch, not a quality knob.
 func resolveSampleCount(device *wgpu.Device) uint32 {
+	if os.Getenv("GOGPU_NO_MSAA") != "" {
+		slogger().Info("GOGPU_NO_MSAA set: forcing sampleCount=1 (MSAA ablation)")
+		return 1
+	}
 	tex, err := device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         "msaa_probe",
 		Size:          wgpu.Extent3D{Width: 4, Height: 4, DepthOrArrayLayers: 1},

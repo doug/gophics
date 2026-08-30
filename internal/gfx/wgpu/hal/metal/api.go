@@ -71,9 +71,20 @@ func (i *Instance) EnumerateAdapters(surfaceHint hal.Surface) []hal.ExposedAdapt
 
 		// Build features
 		var features gputypes.Features
-		if DeviceSupportsFamily(device, MTLGPUFamilyMetal3) {
-			features.Insert(gputypes.FeatureTimestampQuery)
-		}
+		// FeatureTimestampQuery is deliberately NOT inserted, though every
+		// Metal3 device could support it.
+		//
+		// It used to be, and it was a lie: CreateQuerySet returns
+		// ErrTimestampsNotSupported and ResolveQuerySet is an empty stub, so a
+		// caller that believed the feature bit got an error at the point of use
+		// — on the primary desktop target. That is the same class of defect as
+		// a capability that answers without meaning anything, and it is worse
+		// than the absence, because a caller can detect an absence and cannot
+		// detect a lie.
+		//
+		// Restore this line together with an implementation over Metal counter
+		// sample buffers (MTLCounterSampleBuffer), not before.
+		// See design/rendering-pipeline.md A6.
 		features.Insert(gputypes.FeatureDepthClipControl)
 		features.Insert(gputypes.FeatureTextureCompressionBC)
 
