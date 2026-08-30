@@ -30,6 +30,7 @@ func TestGPUOpacityGroupMatchesCPU(t *testing.T) {
 		if gpuImg == nil {
 			t.Skip("no headless GPU adapter")
 		}
+		skipWithoutHardwareGPU(t)
 		gpu := toRGBA(gpuImg)
 
 		cx, cy := cpu.Bounds().Dx()/2, cpu.Bounds().Dy()/2

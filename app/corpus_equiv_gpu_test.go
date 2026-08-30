@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/internal/renderref"
 	"github.com/doug/gophics/widget"
 )
@@ -73,6 +74,8 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 
 			const chanTol = 32
 			var diffPixels, total, maxDiff int
+			dx0, dy0 := 1<<30, 1<<30
+			dx1, dy1 := -1, -1
 			b := cpu.Bounds()
 			for y := b.Min.Y; y < b.Max.Y; y++ {
 				for x := b.Min.X; x < b.Max.X; x++ {
@@ -88,6 +91,8 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 					maxDiff = max(maxDiff, d)
 					if d > chanTol {
 						diffPixels++
+						dx0, dy0 = min(dx0, x), min(dy0, y)
+						dx1, dy1 = max(dx1, x), max(dy1, y)
 					}
 					total++
 				}
@@ -95,10 +100,60 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 			frac := float64(diffPixels) / float64(total)
 			t.Logf("%-13s differing pixels (>%d/chan): %d/%d = %.3f%%; max channel diff %d",
 				sc.name, chanTol, diffPixels, total, frac*100, maxDiff)
+			// Where the disagreement lives, not just how much. A backend that
+			// gets one region wrong and a backend that is uniformly noisy
+			// produce the same percentage and want different investigations.
+			if diffPixels > 0 {
+				t.Logf("%-13s disagreement bounds: x %d..%d  y %d..%d",
+					sc.name, dx0, dx1, dy0, dy1)
+			}
+			// Budgets gate a real GPU only. A software adapter takes
+			// strategyRasterAtlas — shapes route to the CPU rasterizer and the
+			// "GPU" composites — which is a different pipeline answering a
+			// different question, so its numbers are reported and not gated.
+			//
+			// They are worth reading. On the UTM software renderer, three
+			// scenes beat every real GPU (curve-heavy is pixel-exact) and
+			// `mixed` disagrees on 18.8%, scene-wide rather than in one region.
+			// That is an open finding, recorded in design/rendering-pipeline.md
+			// and not diagnosed: a machine with no working GPU driver renders
+			// complex scenes visibly differently.
+			if softwareAdapter() {
+				t.Logf("%-13s (software adapter: reported, not gated)", sc.name)
+				return
+			}
 			if frac > sc.maxFrac {
 				t.Errorf("%s: GPU and CPU disagree on %.2f%% of pixels (budget %.2f%%)",
 					sc.name, frac*100, sc.maxFrac*100)
 			}
 		})
+	}
+}
+
+// softwareAdapter reports whether the accelerator is a CPU adapter.
+func softwareAdapter() bool {
+	a, ok := gg.Accelerator().(gg.AdapterAware)
+	return ok && a.IsSoftwareAdapter()
+}
+
+// skipWithoutHardwareGPU skips a test that asserts a GPU *feature* works.
+//
+// The usual guard is a nil check on RenderGPU, which catches "no adapter" and
+// lets a software adapter through — and a software adapter is not a small,
+// slow GPU, it is a reduced feature set. Measured on the UTM Windows VM, whose
+// "Software Renderer" backend renders shapes and text well (curve-heavy is
+// pixel-exact against the CPU, better than either real GPU) while implementing
+// neither backdrop blur nor opacity groups and routing nothing to the stencil
+// tier.
+//
+// So these tests were failing on every machine without a GPU driver, which is a
+// broken gate rather than a caught defect: they assert blur works, not that
+// every adapter has blur. Parity tests do not use this — they report on a
+// software adapter instead, because their numbers stay meaningful.
+func skipWithoutHardwareGPU(t *testing.T) {
+	t.Helper()
+	if softwareAdapter() {
+		t.Skip("software adapter: this GPU feature is not implemented there; " +
+			"see design/rendering-pipeline.md")
 	}
 }

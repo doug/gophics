@@ -39,6 +39,7 @@ func TestBackdropBlurGPUConfinedToRegion(t *testing.T) {
 	if img == nil {
 		t.Skip("no headless GPU adapter")
 	}
+	skipWithoutHardwareGPU(t)
 	red := func(x, y int) uint8 { r, _, _, _ := img.At(x, y).RGBA(); return uint8(r >> 8) }
 
 	// Inside the blur, at the seam: a blend (mid-gray), not pure black or white.

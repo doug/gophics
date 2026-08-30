@@ -47,6 +47,7 @@ func TestTierPopulationsAndEncoderWork(t *testing.T) {
 		if h.RenderGPU() == nil {
 			t.Skip("no GPU adapter available")
 		}
+		skipWithoutHardwareGPU(t)
 		h.RenderGPU() // a warm frame: the counters describe the last frame only
 
 		tiers := gg.ReadFrameCounters()

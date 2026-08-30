@@ -49,6 +49,17 @@ func blurSeam(t *testing.T, gpu bool) []int {
 		if img = hl.RenderGPU(); img == nil {
 			t.Skip("no GPU adapter available")
 		}
+		// A software adapter is an adapter, so the nil check above lets it
+		// through — and it does not blur. Measured on the UTM Windows VM, whose
+		// "Software Renderer" backend produces a hard step across the seam
+		// (89..89, 245, 255..255) where a blur produces a ramp. That made the
+		// whole app suite red on any machine without a GPU driver, which is a
+		// broken gate rather than a caught defect: blur is a GPU feature and
+		// this test asserts it works, not that every adapter has it.
+		if softwareAdapter() {
+			t.Skip("software adapter does not implement backdrop blur; see " +
+				"design/rendering-pipeline.md")
+		}
 	} else {
 		img = hl.Render()
 	}

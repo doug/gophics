@@ -175,6 +175,7 @@ func TestGPUGradientInterpolates(t *testing.T) {
 // group must composite at ~50%. Checked both against the (correct) CPU path and
 // via direct pixel assertions.
 func TestGPUOpacityGroup(t *testing.T) {
+	skipWithoutHardwareGPU(t)
 	red := paint.RGB(1, 0, 0)
 	blue := paint.RGB(0, 0, 1)
 	// The overlay extends to the bottom-right corner (200,200): if a layer
@@ -257,6 +258,7 @@ func TestGPUOpacityGroup(t *testing.T) {
 // and an inner 0.5 group, so the inner content lands at 0.25 effective opacity.
 // The correct CPU path is the reference.
 func TestGPUOpacityNested(t *testing.T) {
+	skipWithoutHardwareGPU(t)
 	scene := widget.Canvas{Draw: func(c paint.Canvas, sz geom.Size) {
 		c.Clear(paint.RGB(1, 1, 1))
 		c.FillRect(geom.RectXYWH(0, 0, 100, 100), paint.RGB(1, 0, 0))

@@ -3,7 +3,6 @@
 package gpu
 
 import (
-	"math"
 	"testing"
 
 	"github.com/doug/gophics/internal/gfx/gg"
@@ -24,62 +23,17 @@ func TestGlyphMaskFullHintingForLatin(t *testing.T) {
 	}
 }
 
-// TestGlyphMaskEvenSpacing guards against the two failure modes seen while
-// fixing the faded glyph-mask text:
+// Letter-spacing evenness — that a word's internal advances do not depend on
+// the sub-pixel position it starts at — used to be tested here by comparing
+// GlyphMaskQuad.X0 values. That proxy stopped being valid when snapXGrid was
+// removed (design/rendering-pipeline.md F7): a quad's X0 is now an integer
+// bucket and the rest of the position lives in which sub-pixel mask variant is
+// drawn, so differences between X0 values read as ±1px jitter while nothing
+// visible moves.
 //
-//  1. Fully-hinted glyphs must land on integer device pixels (else the grid-fit
-//     stems are displaced and render faded). So every quad's left edge is an
-//     integer.
-//  2. Spacing must stay even: rounding each glyph's ABSOLUTE position
-//     independently makes adjacent advances jitter by ±1px and opens visible
-//     gaps inside words ("anyway" -> "an yway"). Using rounded ADVANCES instead
-//     makes every like-advance identical. The test lays out a word and asserts
-//     each glyph-to-glyph advance equals the rounded shaped advance (no jitter).
-func TestGlyphMaskEvenSpacing(t *testing.T) {
-	face := reproFont(t)
-	var glyphs []text.ShapedGlyph
-	for g := range face.Glyphs("anyway") {
-		glyphs = append(glyphs, text.ShapedGlyph{GID: g.GID, X: g.X, Y: g.Y})
-	}
-	if len(glyphs) < 3 {
-		t.Skip("font produced too few glyphs")
-	}
-
-	eng := NewGlyphMaskEngine()
-	advances := func(baseX float64) []float64 {
-		b, err := eng.LayoutShapedGlyphs(face, glyphs, baseX, 20, gg.RGBA{A: 1}, gg.Identity(), 1.0, false)
-		if err != nil {
-			t.Fatalf("LayoutShapedGlyphs: %v", err)
-		}
-		if len(b.Quads) != len(glyphs) {
-			t.Skipf("got %d quads for %d glyphs (some empty)", len(b.Quads), len(glyphs))
-		}
-		out := make([]float64, 0, len(b.Quads))
-		for i := range b.Quads {
-			// Fully hinted glyphs must land on integer device pixels, or the
-			// grid-fit stems are displaced and render faded.
-			if d := b.Quads[i].X0 - float32(math.Round(float64(b.Quads[i].X0))); math.Abs(float64(d)) > 0.01 {
-				t.Errorf("quad[%d].X0 = %.3f not integer-aligned", i, b.Quads[i].X0)
-			}
-			if i+1 < len(b.Quads) {
-				out = append(out, float64(b.Quads[i+1].X0-b.Quads[i].X0))
-			}
-		}
-		return out
-	}
-
-	// Even spacing means the internal advances depend only on the glyphs, not
-	// on the word's sub-pixel start position. Rounding absolute positions (the
-	// bug) makes them jitter with the base fraction and opens gaps in words;
-	// rounding advances makes them identical regardless of base.
-	a := advances(100.0)
-	for _, base := range []float64{100.25, 100.5, 100.75} {
-		b := advances(base)
-		for i := range a {
-			if math.Abs(a[i]-b[i]) > 0.01 {
-				t.Fatalf("advance[%d] changed with sub-pixel base: %.2f at x=100.00 vs %.2f at x=%.2f — spacing jitters with position (opens gaps in words)",
-					i, a[i], b[i], base)
-			}
-		}
-	}
-}
+// The property is about what is drawn, so it is now asserted on what is drawn,
+// in app.TestGPUTextSpacingIsIndependentOfSubpixelStart: the CPU rasterizer
+// places glyphs at exact shaper positions, so GPU/CPU agreement across
+// sub-pixel start offsets is the real test. Measured 1.0-1.9% at every offset
+// with no outlier; a backend opening a gap would spike at the offsets where its
+// rounding crossed a pixel boundary.
