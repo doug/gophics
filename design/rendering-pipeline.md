@@ -12,7 +12,8 @@
 > | C1 hoist tier 2b allocations | **done** | 121→1 obj/frame; -45% frame time | Metal, M-series |
 > | glyph bind-group reuse (unplanned) | **done** | 38→0 bind groups/frame; no time change | Metal, M-series |
 > | C2 strokes → tier 2a | **reverted** | 2b 75%→15%, but parity 0.48%→10.27% | Metal, M-series |
-> | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal, M-series |
+> | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal + **Vulkan/Mali** |
+> | Vulkan verification | **done** | MSAA = 2× on multi-pass; C1/F7 hold | **Mali-G615, Galaxy Tab A9+** |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
 >
@@ -58,13 +59,48 @@
 > M-series, which has bandwidth to spare — and §6 Phase D is explicitly gated on
 > this: "if 4× MSAA is cheap on both backends this phase is not worth its risk."
 >
-> **Half that gate is still open, and it is the half the argument was about.**
-> §1.4 and §3 predict the cost on a *tiler*, where the 4× attachment is the
-> dominant term; the Pixel/Vulkan run has not been done. Until it is, Phase D
-> stands neither justified nor refuted — but the Metal half points away from it,
-> and F3a's confirmed corruption still wants the
-> `design/gpu-single-pass-surface.md` fallback regardless of how the tiler
-> measures.
+> **The tiler half is now measured, and it justifies Phase D — with a sharper
+> mechanism than §3 proposed.** Mali-G615 MC2, Vulkan, Galaxy Tab A9+, three
+> repeats each:
+>
+> | Scene | passes | 4× MSAA | 1× ablated |
+> | --- | ---: | --- | --- |
+> | mixed | **21** | 53.7 / 54.3 / 55.8 ms | **27.1 / 27.7 / 27.7 ms** |
+> | ui-screen | 1 | 10.2 / 11.6 / 12.5 ms | 12.7 / 10.6 / 12.1 ms |
+> | stroke-heavy | 1 | 9.6 ms | 9.3 ms |
+> | curve-heavy | 1 | 8.8 ms | 7.8 ms |
+> | text-heavy | 1 | 9.3 ms | 10.1 ms |
+>
+> MSAA costs **2× on the multi-pass scene and nothing measurable on any
+> single-pass scene**. The distinguishing variable is not content — stroke-heavy
+> and curve-heavy are the tier-2b-dominated scenes and they do not move — it is
+> the render pass count. §3 predicted "4× the attachment and a resolve every
+> pass"; the measurement says the per-pass resolve is the whole term, at roughly
+> 1.3 ms per pass on this device.
+>
+> **That reframes Phase D.** The cost is `passes × MSAA-per-pass`, so there are
+> two factors to attack and the plan only considered one. Removing MSAA is the
+> larger, riskier change and costs edge quality; reducing the pass count helps
+> the same frames by the same mechanism, costs no quality, and is what
+> `design/gpu-single-pass-surface.md` already scopes for F3a's corruption. A
+> scene needing 21 passes is itself the anomaly — and 53 ms/frame on a mid-range
+> tablet is a real problem whichever factor is attacked.
+>
+> Everything else was backend-independent: tier populations, encoder counts,
+> post-C1 churn (0 bind groups), corpus parity within 1–3 px of Metal, and the
+> F7 text metrics identical to the digit.
+>
+> **How this was measured**, because it is cheaper than it looks and nothing
+> recorded it:
+>
+>     CGO_ENABLED=0 GOOS=android GOARCH=arm64 go test -c -tags gophics_gpu -o app.test.android ./app
+>     adb push app.test.android /data/local/tmp/ && adb shell chmod +x /data/local/tmp/app.test.android
+>     adb shell "cd /data/local/tmp && ./app.test.android -test.run TestMSAAAblation -test.v"
+>
+> The zero-CGo build means the GPU test binary cross-compiles and runs under
+> `adb shell` with no app, no JNI and no gomobile — headless Vulkan comes up
+> against `/vendor/lib64/hw/vulkan.mali.so` directly. Prefix `GOGPU_NO_MSAA=1`
+> for the ablation.
 >
 > Phase C is unaffected: it is justified by object churn, not by MSAA.
 >
