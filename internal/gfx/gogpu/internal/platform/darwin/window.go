@@ -227,22 +227,26 @@ func (w *Window) Close() {
 // SetTitle sets the window title.
 func (w *Window) SetTitle(title string) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.cachedTitle = title
+	ns, field := w.nsWindow, w.titleTextField
+	w.mu.Unlock()
 
-	if w.nsWindow.IsNil() {
+	if ns.IsNil() {
 		return
 	}
-
-	w.cachedTitle = title
+	// setTitle: retitles the theme frame, which AppKit does through delegate
+	// and layout callbacks that re-enter this type. Sent unlocked for the same
+	// reason as ToggleFullScreen.
 	nsTitle := NewNSString(title)
-	if nsTitle != nil {
-		w.nsWindow.SendPtr(selectors.setTitle, nsTitle.ID().Ptr())
-		// Keep the injected text field in sync when right-alignment is active.
-		if !w.titleTextField.IsNil() {
-			w.titleTextField.SendPtr(selectors.setStringValue, nsTitle.ID().Ptr())
-		}
-		nsTitle.Release()
+	if nsTitle == nil {
+		return
 	}
+	ns.SendPtr(selectors.setTitle, nsTitle.ID().Ptr())
+	// Keep the injected text field in sync when right-alignment is active.
+	if !field.IsNil() {
+		field.SendPtr(selectors.setStringValue, nsTitle.ID().Ptr())
+	}
+	nsTitle.Release()
 }
 
 // Size returns the current content size of the window.
@@ -256,17 +260,18 @@ func (w *Window) Size() (width, height int) {
 // SetSize sets the window content size.
 func (w *Window) SetSize(width, height int) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.width = width
+	w.height = height
+	ns := w.nsWindow
+	w.mu.Unlock()
 
-	if w.nsWindow.IsNil() {
+	if ns.IsNil() {
 		return
 	}
 
-	w.width = width
-	w.height = height
-
-	// Get current frame
-	frame := w.nsWindow.GetRect(selectors.frame)
+	// setFrame: resizes, and AppKit reports a resize through delegate callbacks
+	// that re-enter this type. Sent unlocked, as above.
+	frame := ns.GetRect(selectors.frame)
 
 	// Create new frame with updated size
 	newFrame := MakeRect(
@@ -277,7 +282,7 @@ func (w *Window) SetSize(width, height int) {
 	)
 
 	// Set frame with display
-	w.nsWindow.SendRect(selectors.setFrame, newFrame)
+	ns.SendRect(selectors.setFrame, newFrame)
 }
 
 // ShouldClose returns true if the window should close.
@@ -814,17 +819,37 @@ func (w *Window) SetCollectionBehavior(behavior NSWindowCollectionBehavior) {
 	w.nsWindow.SendUint(selectors.setCollectionBehavior, uint64(behavior))
 }
 
+// sendUnlocked is how a window method reaches AppKit without holding w.mu.
+//
+// AppKit invokes NSWindowDelegate callbacks *synchronously* during a selector
+// send, and those callbacks re-enter this type — windowWillStartLiveResize:
+// calls StartLiveResize, which locks w.mu. A method that sends while holding
+// the lock therefore deadlocks against itself on the same thread, because
+// sync.Mutex is not reentrant.
+//
+// That is not hypothetical: toggleFullScreen: hit exactly this path and froze
+// the app on the first fullscreen toggle, with the main thread parked in
+// StartLiveResize under ToggleFullScreen. The lock protects this struct's Go
+// fields; it protects nothing inside AppKit, which has its own main-thread
+// rule, so holding it across a send buys no safety and costs re-entrancy.
+//
+// Read what is needed under the lock, then send outside it.
+func (w *Window) nsWin() ID {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.nsWindow
+}
+
 // ToggleFullScreen toggles native macOS fullscreen mode.
 // Sends the toggleFullScreen: selector to the NSWindow.
 func (w *Window) ToggleFullScreen() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.nsWindow.IsNil() {
+	ns := w.nsWin()
+	if ns.IsNil() {
 		return
 	}
-
-	w.nsWindow.SendPtr(selectors.toggleFullScreen, 0)
+	// Sent unlocked: AppKit runs windowWillStartLiveResize: synchronously during
+	// this send, and that handler locks w.mu. See sendUnlocked's comment.
+	ns.SendPtr(selectors.toggleFullScreen, 0)
 }
 
 // IsFullScreen returns true if the window is in native macOS fullscreen mode.

@@ -22,13 +22,11 @@
 // the behaviour was "not runtime-confirmed". It was not runtime-confirmed
 // because it did not work.
 //
-// KNOWN ISSUE, separate from the crash and not fixed here: entering fullscreen
-// stops the UI loop. After SetFullscreen(true) no further frames are produced,
-// so the app freezes on screen and cannot be taken back out programmatically —
-// a posted callback that would call SetFullscreen(false) never runs. Verified
-// against a control that posts on the same schedule without touching the
-// window, which runs to completion. The defect is in the gogpu render loop
-// rather than in this binding.
+// Entering fullscreen also used to freeze the app, which turned out to be a
+// second and unrelated defect: darwin.Window held its own mutex across the
+// toggleFullScreen: send, AppKit ran windowWillStartLiveResize: synchronously
+// inside that send, and the handler locked the same non-reentrant mutex. Fixed
+// in darwin/window.go — see sendUnlocked there.
 
 package desktop
 
