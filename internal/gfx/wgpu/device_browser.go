@@ -56,6 +56,7 @@ func (d *Device) CreateBuffer(desc *BufferDescriptor) (*Buffer, error) {
 		state = MapStateMapped
 	}
 
+	buffersCreated.Add(1)
 	return &Buffer{
 		browser:  bb,
 		size:     desc.Size,
@@ -191,6 +192,7 @@ func (d *Device) CreateBindGroup(desc *BindGroupDescriptor) (*BindGroup, error) 
 	entries := convertBindGroupEntries(desc.Entries)
 	jsDesc := browser.BuildBindGroupDescriptor(desc.Label, layoutRef, entries)
 	bg := d.browser.CreateBindGroupFromDesc(jsDesc)
+	bindGroupsCreated.Add(1)
 	return &BindGroup{
 		browser:  bg,
 		released: false,

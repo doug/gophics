@@ -54,23 +54,35 @@ func TestFrameStatsOnAnEmptyRing(t *testing.T) {
 // allocated the first time something is needed costs a frame and appears in no
 // measure of what was drawn.
 //
-// The counters sit on Device.CreateTexture and Device.CreateRenderPipeline,
-// which every such allocation passes through, so unlike a counter on one code
-// path this cannot quietly measure nothing — which is exactly how the previous
-// attempt at this failed, having instrumented a text mode nothing here runs.
+// The counters sit on Device.CreateTexture, CreateRenderPipeline, CreateBuffer
+// and CreateBindGroup, which every such allocation passes through, so unlike a
+// counter on one code path this cannot quietly measure nothing — which is
+// exactly how the previous attempt at this failed, having instrumented a text
+// mode nothing here runs.
 func TestFrameStatsReportsWhatTheWorstFrameCreated(t *testing.T) {
 	c := &core{}
 	for range 59 {
-		c.recordFrameMade(5, 100, 0, 0) // steady frames make nothing
+		c.recordFrameMade(5, 100, 0, MadeCounts{}) // steady frames make nothing
 	}
-	c.recordFrameMade(48, 99, 0, 7) // the spike, on a smaller scene, making 7
+	// The spike, on a *smaller* scene: one pipeline compiled, six buffers and
+	// bind groups churned — the tier-2b shape from design/rendering-pipeline.md.
+	c.recordFrameMade(48, 99, 0, MadeCounts{Pipelines: 1, Buffers: 4, BindGroups: 2})
 
 	f := c.FrameStats()
 	if f.Worst != 48 {
 		t.Errorf("worst is %v, want the 48ms spike", f.Worst)
 	}
-	if f.WorstMade != 7 {
-		t.Errorf("worst frame made %d gpu objects, want 7", f.WorstMade)
+	if f.WorstMade.Total() != 7 {
+		t.Errorf("worst frame made %d gpu objects, want 7", f.WorstMade.Total())
+	}
+	// The breakdown is the point: a total of 7 cannot distinguish one pipeline
+	// compiled once from six buffers churned every frame, and only the second
+	// is a bug.
+	if f.WorstMade.Buffers != 4 || f.WorstMade.BindGroups != 2 {
+		t.Errorf("worst frame breakdown = %+v, want 4 buffers and 2 bind groups", f.WorstMade)
+	}
+	if got := f.WorstMade.String(); got != "4 buffers + 2 bind groups + 1 pipeline" {
+		t.Errorf("WorstMade.String() = %q", got)
 	}
 	if f.WorstOps > f.MedianOps {
 		t.Errorf("this fixture models a spike on a *smaller* scene; got worst %d vs median %d",

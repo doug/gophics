@@ -124,3 +124,101 @@ func buildAtlas() *image.RGBA {
 	}
 	return a
 }
+
+// The performance corpus (design/rendering-pipeline.md §4.3).
+//
+// Three scenes beside Scene(), chosen because the tier table in that plan's
+// §1.1 predicts they diverge: strokes and curved fills are claimed to land in
+// the stencil tier, text in the glyph tiers. If they do not diverge, the tier
+// model is wrong, and that is the most useful thing the corpus could report.
+//
+// They live here rather than in a benchmark package so that correctness and
+// performance are measured on the same content: TestGPUMatchesCPU and
+// TestRenderScaleConsistency pick these up for free, which means a scene
+// written to be fast cannot quietly stop being correct.
+//
+// All three are authored to SceneSize and are deterministic.
+
+// StrokeHeavy is dividers, borders, focus rings and chart lines — the shapes
+// §1.2 claims reach tier 2b unconditionally, because preTessellateStroke sets
+// EvenOdd and preTessellateFill skips the convex test for EvenOdd.
+func StrokeHeavy() widget.Widget { return widget.Canvas{Draw: drawStrokeHeavy} }
+
+func drawStrokeHeavy(c paint.Canvas, sz geom.Size) {
+	c.Clear(Background())
+	ink := paint.RGB(0.35, 0.38, 0.45)
+
+	// Dividers: the single commonest stroke in a real UI.
+	for i := range 24 {
+		y := float32(14 + i*8)
+		c.Line(geom.Pt{X: 10, Y: y}, geom.Pt{X: 310, Y: y}, 1, ink)
+	}
+	// Borders and focus rings.
+	for i := range 8 {
+		f := float32(i)
+		c.StrokeRRect(geom.RectXYWH(12+f*4, 214+f*4, 180-f*8, 90-f*8), 8, 2,
+			paint.RGB(0.20+f*0.08, 0.45, 0.85-f*0.06))
+	}
+	// Chart lines: open polylines, which is the case Phase C2 argues can reach
+	// tier 2a once the EvenOdd gate stops rejecting it untested.
+	for s := range 6 {
+		p := paint.NewPath()
+		base := float32(320 + s*20)
+		p.MoveTo(geom.Pt{X: 14, Y: base})
+		for i := 1; i < 20; i++ {
+			x := 14 + float32(i)*15
+			y := base - float32((i*7+s*11)%18)
+			p.LineTo(geom.Pt{X: x, Y: y})
+		}
+		c.StrokePath(p, 2, paint.RGB(0.85-float32(s)*0.1, 0.30, 0.35+float32(s)*0.09))
+	}
+}
+
+// CurveHeavy is filled curved paths — the other half of what §1.2 says reaches
+// tier 2b, being neither SDF-detectable shapes nor curve-free convex polygons.
+func CurveHeavy() widget.Widget { return widget.Canvas{Draw: drawCurveHeavy} }
+
+func drawCurveHeavy(c paint.Canvas, sz geom.Size) {
+	c.Clear(Background())
+	for row := range 6 {
+		for col := range 4 {
+			x := float32(14 + col*76)
+			y := float32(14 + row*74)
+			p := paint.NewPath()
+			// A closed blob: four quadratic arcs, so it is curved, closed and
+			// single-contour — SDF shape detection cannot claim it and the
+			// convex extractor rejects it on hasCurves.
+			p.MoveTo(geom.Pt{X: x, Y: y + 30})
+			p.QuadTo(geom.Pt{X: x, Y: y}, geom.Pt{X: x + 30, Y: y})
+			p.QuadTo(geom.Pt{X: x + 62, Y: y}, geom.Pt{X: x + 62, Y: y + 30})
+			p.QuadTo(geom.Pt{X: x + 62, Y: y + 60}, geom.Pt{X: x + 30, Y: y + 60})
+			p.QuadTo(geom.Pt{X: x, Y: y + 60}, geom.Pt{X: x, Y: y + 30})
+			p.Close()
+			f := float32(row*4+col) / 24
+			c.FillPath(p, paint.RGB(0.25+f*0.6, 0.45, 0.85-f*0.5))
+		}
+	}
+}
+
+// TextHeavy is long runs at mixed sizes, cold and warm in the glyph atlas —
+// the tier-6 case, and the one where the first frame differs most from the
+// rest because every glyph is rasterized once.
+func TextHeavy() widget.Widget { return widget.Canvas{Draw: drawTextHeavy} }
+
+func drawTextHeavy(c paint.Canvas, sz geom.Size) {
+	c.Clear(Background())
+	ink := paint.RGB(0.12, 0.13, 0.16)
+	lines := []string{
+		"The quick brown fox jumps over the lazy dog",
+		"Sphinx of black quartz, judge my vow",
+		"Pack my box with five dozen liquor jugs",
+		"How vexingly quick daft zebras jump",
+	}
+	y := float32(20)
+	for size := 9; size <= 15; size += 2 {
+		for _, s := range lines {
+			c.TextIn("", s, geom.Pt{X: 10, Y: y}, float32(size), ink)
+			y += float32(size) + 4
+		}
+	}
+}

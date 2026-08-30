@@ -75,6 +75,13 @@ app.Headless.TouchMove method
 app.Headless.TouchPress method
 app.Headless.TouchRelease method
 app.Headless.Type method
+app.MadeCounts type
+app.MadeCounts.BindGroups field
+app.MadeCounts.Buffers field
+app.MadeCounts.Pipelines field
+app.MadeCounts.String method
+app.MadeCounts.Textures field
+app.MadeCounts.Total method
 app.MemClipboard type
 app.MemClipboard.ClipboardRead method
 app.MemClipboard.ClipboardWrite method

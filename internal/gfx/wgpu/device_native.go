@@ -101,6 +101,7 @@ func (d *Device) CreateBuffer(desc *BufferDescriptor) (*Buffer, error) {
 	// explicit lifecycle management (BUG-WGPU-RESOURCE-LIFECYCLE-001).
 	buf.cleanup = registerBufferCleanup(buf, d, coreBuffer, desc.Label)
 
+	buffersCreated.Add(1)
 	return buf, nil
 }
 
@@ -465,6 +466,7 @@ func (d *Device) CreateBindGroup(desc *BindGroupDescriptor) (*BindGroup, error) 
 	// schedule deferred destruction via DestroyQueue (BUG-WGPU-RESOURCE-LIFECYCLE-001).
 	bg.cleanup = registerBindGroupCleanup(bg, d, desc.Label)
 
+	bindGroupsCreated.Add(1)
 	return bg, nil
 }
 

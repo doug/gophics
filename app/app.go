@@ -7,6 +7,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -150,10 +151,17 @@ type core struct {
 	// layer resolve or an atlas growth.
 	frameOps   [60]int32
 	frameBlurs [60]int32
-	// frameMade records GPU resources — textures, pipelines — created during
-	// each frame. A spike on a median-sized scene is work that happens once,
-	// the first time something is needed, and this is what makes it visible.
-	frameMade [60]int32
+	// frameMade records GPU resources created during each frame, by kind. A
+	// spike on a median-sized scene is work that happens once, the first time
+	// something is needed, and this is what makes it visible.
+	//
+	// By kind rather than as a total, because the two kinds mean opposite
+	// things. Textures and pipelines are first-use costs that amortize away;
+	// buffers and bind groups are recreated every frame by the stencil tier,
+	// six per path, and never amortize (design/rendering-pipeline.md F1).
+	// "Made 312 objects" and "made 312 buffers and bind groups" are different
+	// diagnoses, and the total could not tell them apart.
+	frameMade [60]MadeCounts
 	frameHead int
 
 	cur, prev     *scene.List
@@ -502,7 +510,7 @@ func (c *core) FrameStats() (s FrameSummary) {
 	// The worst frame's own scene, not the window's: the question a spike
 	// raises is what *that* frame was drawing.
 	s.WorstOps, s.WorstBlurs = int(c.frameOps[worstAt]), int(c.frameBlurs[worstAt])
-	s.WorstMade = int(c.frameMade[worstAt])
+	s.WorstMade = c.frameMade[worstAt]
 	// The median scene size, to compare the worst frame against.
 	var ops [len(c.frameOps)]int32
 	m := 0
@@ -528,19 +536,56 @@ type FrameSummary struct {
 	P50, P95, P99, Worst float32
 	WorstOps, WorstBlurs int
 	MedianOps            int
-	// WorstMade is how many GPU resources the worst frame had to create.
-	WorstMade int
+	// WorstMade is what GPU resources the worst frame had to create, by kind.
+	WorstMade MadeCounts
+}
+
+// MadeCounts is the GPU resources one frame created, by kind.
+type MadeCounts struct {
+	Textures   int
+	Pipelines  int
+	Buffers    int
+	BindGroups int
+}
+
+// Total is every kind together.
+func (m MadeCounts) Total() int { return m.Textures + m.Pipelines + m.Buffers + m.BindGroups }
+
+// String renders the breakdown for a log line, naming only the kinds that are
+// non-zero — a frame that made nothing but buffers should say so in as many
+// words, not bury it in three zeroes.
+func (m MadeCounts) String() string {
+	if m.Total() == 0 {
+		return "0 gpu objects"
+	}
+	parts := make([]string, 0, 4)
+	for _, k := range []struct {
+		n         int
+		one, many string
+	}{
+		{m.Buffers, "buffer", "buffers"}, {m.BindGroups, "bind group", "bind groups"},
+		{m.Textures, "texture", "textures"}, {m.Pipelines, "pipeline", "pipelines"},
+	} {
+		if k.n == 1 {
+			parts = append(parts, "1 "+k.one)
+		} else if k.n > 1 {
+			parts = append(parts, fmt.Sprintf("%d %s", k.n, k.many))
+		}
+	}
+	return strings.Join(parts, " + ")
 }
 
 func (c *core) recordFrameTime(ms float32) { c.recordFrame(ms, 0, 0) }
 
-func (c *core) recordFrame(ms float32, ops, blurs int) { c.recordFrameMade(ms, ops, blurs, 0) }
+func (c *core) recordFrame(ms float32, ops, blurs int) {
+	c.recordFrameMade(ms, ops, blurs, MadeCounts{})
+}
 
-func (c *core) recordFrameMade(ms float32, ops, blurs, made int) {
+func (c *core) recordFrameMade(ms float32, ops, blurs int, made MadeCounts) {
 	c.frameTimes[c.frameHead] = ms
 	c.frameOps[c.frameHead] = int32(ops)     //nolint:gosec // scene sizes are small
 	c.frameBlurs[c.frameHead] = int32(blurs) //nolint:gosec
-	c.frameMade[c.frameHead] = int32(made)   //nolint:gosec
+	c.frameMade[c.frameHead] = made
 	c.frameHead = (c.frameHead + 1) % len(c.frameTimes)
 }
 
@@ -1081,7 +1126,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		w.Invalidate() // animations or a held long-press: keep frames coming
 	}
 	t0 := time.Now()
-	tex0, pipe0 := wgpu.DeviceStats()
+	devices0 := wgpu.DeviceStats()
 	// Resolve the presentation target up front: a GPU target replays the whole
 	// scene, so the damage rect (and its per-text-op measurement) is never
 	// computed for it — see RecordSceneGPU.
@@ -1118,16 +1163,20 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	}
 	if changed {
 		// Full frame cost: layout + record + raster + upload + present.
-		tex1, pipe1 := wgpu.DeviceStats()
+		made := wgpu.DeviceStats().Sub(devices0)
 		h.core.recordFrameMade(float32(time.Since(t0).Seconds()*1000),
 			h.core.prev.Len(), h.core.prev.BackdropBlurs(),
-			int(tex1-tex0)+int(pipe1-pipe0)) //nolint:gosec // counts are small
+			//nolint:gosec // per-frame counts are small
+			MadeCounts{
+				Textures: int(made.Textures), Pipelines: int(made.Pipelines),
+				Buffers: int(made.Buffers), BindGroups: int(made.BindGroups),
+			})
 		// GOPHICS_PACING logs a rolling frame-time summary each time the
 		// 60-frame ring wraps — the on-device pacing readout (PLAN §6.4).
 		if h.core.frameHead == 0 && os.Getenv("GOPHICS_PACING") != "" {
 			f := h.core.FrameStats()
 			log.Printf("gophics pacing: p50 %.2f  p95 %.2f  p99 %.2f  worst %.2f ms "+
-				"(60 frames; worst drew %d ops / %d blurs, made %d gpu objects, median %d ops)",
+				"(60 frames; worst drew %d ops / %d blurs, made %s, median %d ops)",
 				f.P50, f.P95, f.P99, f.Worst, f.WorstOps, f.WorstBlurs, f.WorstMade, f.MedianOps)
 		}
 	}

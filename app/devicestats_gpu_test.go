@@ -31,14 +31,28 @@ func TestDeviceStatsCountARealFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, beforePipes := wgpu.DeviceStats()
+	before := wgpu.DeviceStats()
 	if h.RenderGPU() == nil {
 		t.Skip("no GPU adapter available")
 	}
-	after, afterPipes := wgpu.DeviceStats()
+	made := wgpu.DeviceStats().Sub(before)
 
-	if after == before && afterPipes == beforePipes {
+	if made.Textures == 0 && made.Pipelines == 0 {
 		t.Error("a GPU frame created neither a texture nor a pipeline: the counters " +
 			"are not on the path this renderer takes, and would report zero forever")
 	}
+	// The same proof for the two counters added for F1. These are the ones the
+	// plan rests on — tier 2b is claimed to create six GPU objects per path per
+	// frame — so a counter that sits off the renderer's path would make that
+	// finding unfalsifiable while looking like evidence.
+	if made.Buffers == 0 {
+		t.Error("a GPU frame created no buffer: CreateBuffer is not the choke point " +
+			"it is documented to be, and the F1 measurement would read zero forever")
+	}
+	if made.BindGroups == 0 {
+		t.Error("a GPU frame created no bind group: CreateBindGroup is not on the " +
+			"renderer's path, and the F1 measurement would read zero forever")
+	}
+	t.Logf("one GPU frame made %d buffers, %d bind groups, %d textures, %d pipelines",
+		made.Buffers, made.BindGroups, made.Textures, made.Pipelines)
 }
