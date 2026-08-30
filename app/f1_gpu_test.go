@@ -34,6 +34,7 @@ func TestF1SteadyStateObjectChurn(t *testing.T) {
 		root widget.Widget
 	}{
 		{"mixed", renderref.Scene()},
+		{"ui-screen", renderref.UIScreen()},
 		{"stroke-heavy", renderref.StrokeHeavy()},
 		{"curve-heavy", renderref.CurveHeavy()},
 		{"text-heavy", renderref.TextHeavy()},

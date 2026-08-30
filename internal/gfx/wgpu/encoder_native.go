@@ -107,6 +107,7 @@ func (e *CommandEncoder) trackBindGroup(bg *BindGroup) {
 // The returned RenderPassEncoder records draw commands.
 // Call RenderPassEncoder.End() when done.
 func (e *CommandEncoder) BeginRenderPass(desc *RenderPassDescriptor) (*RenderPassEncoder, error) {
+	renderPasses.Add(1)
 	if e.released {
 		return nil, ErrReleased
 	}

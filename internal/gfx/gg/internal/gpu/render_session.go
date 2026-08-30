@@ -359,6 +359,12 @@ func (s *GPURenderSession) SetSurfaceTarget(view *wgpu.TextureView, width, heigh
 // For offscreen mode this is a no-op — offscreen readback composites via
 // Porter-Duff "over", so LoadOpClear is always safe there.
 func (s *GPURenderSession) BeginFrame() {
+	// The measurement frame boundary too: tier populations and encoder activity
+	// describe one frame, so they are zeroed where the frame starts rather than
+	// at a boundary invented for them (design/rendering-pipeline.md A2/A3).
+	gg.ResetFrameCounters()
+	wgpu.ResetEncoderStats()
+
 	// Free all command buffers from the previous frame. By now, VSync (or
 	// the equivalent present barrier) guarantees the GPU is done with them.
 	// This MUST happen at frame boundaries — not mid-frame — because
@@ -699,11 +705,19 @@ func (s *GPURenderSession) RenderFrameGrouped(target gg.GPURenderTarget, groups 
 		return nil
 	}
 
-	// Check if all groups are empty.
+	// Check if all groups are empty — and record the breakdown while it is in
+	// hand. This loop already had every tier population and reduced them to a
+	// sum, so the claim that tier 2b catches most of a UI
+	// (design/rendering-pipeline.md §1.2) was one addition away from being
+	// measurable and was never measured.
 	totalItems := 0
 	for i := range groups {
-		totalItems += len(groups[i].SDFShapes) + len(groups[i].ConvexCommands) + len(groups[i].StencilPaths) +
-			len(groups[i].ImageCommands) + len(groups[i].GPUTextureCommands) + len(groups[i].TextBatches) + len(groups[i].GlyphMaskBatches)
+		g := &groups[i]
+		gg.CountTiers(len(g.SDFShapes), len(g.ConvexCommands), len(g.StencilPaths),
+			len(g.ImageCommands), len(g.GPUTextureCommands), len(g.TextBatches),
+			len(g.GlyphMaskBatches))
+		totalItems += len(g.SDFShapes) + len(g.ConvexCommands) + len(g.StencilPaths) +
+			len(g.ImageCommands) + len(g.GPUTextureCommands) + len(g.TextBatches) + len(g.GlyphMaskBatches)
 	}
 	if totalItems == 0 && baseLayer == nil {
 		return nil
@@ -963,6 +977,7 @@ func (s *GPURenderSession) RenderFrameGrouped(target gg.GPURenderTarget, groups 
 	// No enterprise framework (Chrome, Flutter, Skia) uses LoadOpLoad on MSAA.
 	// Warn if caller passed damageRect but MSAA path will be used.
 	if !blitOnly && len(target.DamageRects) > 0 {
+		gg.CountDamageRefused()
 		slogger().Warn("damageRects ignored: MSAA render path requires full LoadOpClear; use blit-only compositor for damage-aware rendering (ADR-021)")
 	}
 

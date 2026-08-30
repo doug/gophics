@@ -17,6 +17,7 @@ type CommandEncoder struct {
 
 // BeginRenderPass begins a render pass.
 func (e *CommandEncoder) BeginRenderPass(desc *RenderPassDescriptor) (*RenderPassEncoder, error) {
+	renderPasses.Add(1)
 	if e.released {
 		return nil, ErrReleased
 	}

@@ -65,6 +65,7 @@ func (p *RenderPassEncoder) trackRef(ref *core.ResourceRef) {
 
 // SetPipeline sets the active render pipeline.
 func (p *RenderPassEncoder) SetPipeline(pipeline *RenderPipeline) {
+	pipelineSwitches.Add(1)
 	if pipeline == nil {
 		p.encoder.setError(fmt.Errorf("wgpu: RenderPass.SetPipeline: pipeline is nil"))
 		return
@@ -217,6 +218,7 @@ func (p *RenderPassEncoder) validateDrawState(method string) bool {
 
 // Draw draws primitives.
 func (p *RenderPassEncoder) Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) {
+	drawCalls.Add(1)
 	if !p.validateDrawState("Draw") {
 		return
 	}

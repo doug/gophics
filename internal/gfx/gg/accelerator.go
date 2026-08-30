@@ -419,8 +419,16 @@ func renderMode() renderModeType {
 // when using direct surface rendering (RenderDirect).
 //
 // If no accelerator is registered or it doesn't implement FrameAware,
-// this is a no-op.
+// this is a no-op — except for the measurement counters, which are reset
+// unconditionally because this is the one point every rendering path passes
+// through at the start of a frame. GPURenderSession.BeginFrame looks like the
+// frame boundary and is not: Canvas.Draw reaches here, and the offscreen path
+// never calls that one at all, so counters reset there accumulated across
+// frames and reported a scene drawing shapes it does not contain.
 func BeginAcceleratorFrame() {
+	ResetFrameCounters()
+	resetEncoderStats()
+
 	a := Accelerator()
 	if a == nil {
 		return

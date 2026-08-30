@@ -16,6 +16,7 @@ type RenderPassEncoder struct {
 
 // SetPipeline sets the active render pipeline.
 func (p *RenderPassEncoder) SetPipeline(pipeline *RenderPipeline) {
+	pipelineSwitches.Add(1)
 	if pipeline == nil || pipeline.browser == nil {
 		return
 	}
@@ -77,6 +78,7 @@ func (p *RenderPassEncoder) SetStencilReference(reference uint32) {
 
 // Draw draws primitives.
 func (p *RenderPassEncoder) Draw(vertexCount, instanceCount, firstVertex, firstInstance uint32) {
+	drawCalls.Add(1)
 	p.browser.Draw(vertexCount, instanceCount, firstVertex, firstInstance)
 }
 

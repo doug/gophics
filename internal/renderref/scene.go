@@ -19,6 +19,7 @@ import (
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
 
@@ -221,4 +222,48 @@ func drawTextHeavy(c paint.Canvas, sz geom.Size) {
 			y += float32(size) + 4
 		}
 	}
+}
+
+// UIScreen is a realistic application screen built from the theme's own
+// widgets, as opposed to the primitive-coverage scene above.
+//
+// It exists because the corpus needed a case that is neither a stress test nor
+// a coverage fixture. Scene() reaches every paint primitive by construction,
+// which makes it excellent for correctness and misleading for tier populations:
+// it is dense in the rounded rectangles the SDF tier claims and thin in the
+// strokes and curves the stencil tier claims. A plan that reasons about "most
+// of a UI" needs a UI.
+func UIScreen() widget.Widget { return uiScreen{} }
+
+type uiScreen struct{}
+
+func (uiScreen) Build(ctx widget.Ctx) widget.Widget {
+	rows := make([]widget.Widget, 0, 24)
+	rows = append(rows,
+		widget.Text{S: "Settings", Font: "bold", Size: 22},
+		widget.Sized{H: 12},
+	)
+	for i := range 6 {
+		rows = append(rows,
+			theme.Card{Child: widget.Column(
+				widget.Text{S: []string{
+					"Appearance", "Notifications", "Privacy",
+					"Storage", "Accounts", "About",
+				}[i], Font: "bold", Size: 15},
+				widget.Sized{H: 4},
+				widget.Text{S: "Configure how this section behaves.", Size: 12},
+				widget.Sized{H: 8},
+				theme.Divider{},
+				widget.Sized{H: 8},
+				widget.Row(
+					theme.Button{Label: "Edit"},
+					widget.Sized{W: 8},
+					theme.Button{Label: "Reset", Primary: true},
+				),
+			)},
+			widget.Sized{H: 10},
+		)
+	}
+	return widget.Decorated{Color: Background(),
+		Child: widget.Padding{Insets: geom.InsetsAll(12), Child: widget.Column(rows...)}}
 }
