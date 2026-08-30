@@ -9,6 +9,7 @@
 > | A2 tier populations | **done** | §1.2 corrected — see below | Metal |
 > | A3 passes / draws / switches | **done** | F2 confirmed | Metal |
 > | A4 MSAA ablation hook | **done** | MSAA priced: free on Metal | Metal, M-series |
+> | C1 hoist tier 2b allocations | **done** | 121→1 obj/frame; -45% frame time | Metal, M-series |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
 >
@@ -63,6 +64,31 @@
 > measures.
 >
 > Phase C is unaffected: it is justified by object churn, not by MSAA.
+>
+> **C1 landed and hit its target.** Tier 2b now creates nothing per frame in
+> steady state. Five of the six objects turned out to need no capacity tracking
+> at all — the cover quad and both uniforms are fixed-size, and the bind groups
+> only reference those uniform buffers — so only the fan vertices needed the
+> grow-only treatment buildConvexResources already used one function away.
+>
+> | Scene | objects/frame before | after | frame time before → after |
+> | --- | --- | --- | --- |
+> | stroke-heavy | 121 buf / 60 bg | **1 / 0** | 3.09 → 1.71 ms (**-45%**) |
+> | curve-heavy | 97 / 48 | **1 / 0** | 2.38 → 1.55 ms (**-35%**) |
+> | ui-screen | 49 / 62 | **1 / 38** | 2.33 → 1.83 ms (**-21%**) |
+> | mixed | 13 / 34 | **1 / 28** | 4.93 → 4.82 ms (-2%) |
+> | text-heavy | 1 / 2 | 1 / 2 | 1.34 → 1.31 ms (unchanged) |
+>
+> Three repeats each; text-heavy not moving is the control, since it had no
+> churn to remove. GPU/CPU parity and scale consistency are identical to the
+> pixel before and after — 1845/132000 differing, worst diff 161 at the same
+> cell — so this is a pure allocation change.
+>
+> **It also exposed the next one.** ui-screen still makes 38 bind groups a frame
+> and mixed 28, and neither is tier 2b: buildTextResources gives every text and
+> glyph batch its own uniform buffer and bind group, and ui-screen has 19 glyph
+> batches — 19 × 2 = 38. Same defect, different tier, and now the largest
+> remaining per-frame allocator. It is not in §6; it should be.
 > A grounded pass over the whole pipeline, generalizing
 > `design/strip-rendering.md`.
 >

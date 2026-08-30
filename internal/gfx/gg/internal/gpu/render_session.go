@@ -1668,14 +1668,13 @@ func (s *GPURenderSession) buildStencilResourcesBatch(paths []StencilPathCommand
 			A: float64(cmd.Color[3]),
 		}
 
-		// Destroy old pooled entry and create fresh buffers.
-		// Stencil paths vary wildly per frame (different vertex counts, colors),
-		// so recreating is simpler than capacity tracking for 6 sub-buffers.
-		if s.stencilBufPool[i] != nil {
-			s.stencilBufPool[i].destroy()
-			s.stencilBufPool[i] = nil
-		}
-		bufs, err := s.stencilRenderer.createRenderBuffers(w, h, cmd.Vertices, cmd.CoverQuad, color)
+		// Reuse the pooled entry rather than destroying it. Five of its six GPU
+		// objects are fixed-size and can be rewritten in place; only the fan
+		// vertices grow. See ensureRenderBuffers for why the bind groups
+		// survive, and design/rendering-pipeline.md F1 for what the old
+		// destroy-and-recreate cost per frame.
+		bufs, err := s.stencilRenderer.ensureRenderBuffers(
+			s.stencilBufPool[i], w, h, cmd.Vertices, cmd.CoverQuad, color)
 		if err != nil {
 			// Clean up buffers created in this batch.
 			for j := 0; j < i; j++ {

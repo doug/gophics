@@ -186,6 +186,9 @@ type stencilCoverBuffers struct {
 	stencilBindGroup *wgpu.BindGroup
 	coverBindGroup   *wgpu.BindGroup
 	fanVertexCount   uint32
+	// fanVertCap is the fan buffer's allocated size, so a later frame whose
+	// path has no more vertices can rewrite it instead of reallocating.
+	fanVertCap uint64
 }
 
 // destroy releases all GPU resources.
@@ -268,6 +271,72 @@ func (sr *StencilRenderer) ensureReady(w, h uint32) error {
 	return nil
 }
 
+// ensureRenderBuffers updates b in place for a new path, creating only what it
+// cannot reuse, and returns a fresh set when b is nil.
+//
+// This is F1's fix (design/rendering-pipeline.md C1). The batch builder used to
+// destroy the pooled entry and call createRenderBuffers for every path on every
+// changed frame — six GPU objects per path, measured at 111 per frame on a plain
+// themed screen and 181 on stroke-heavy content, with no pipeline creation
+// beside them, so none of it amortized. The comment there was honest about why:
+// capacity tracking for six sub-buffers was more work than recreating.
+//
+// It turns out five of the six need no capacity tracking at all. The cover quad
+// is always 12 floats and both uniforms are fixed-size, so those three buffers
+// are rewritable in place; the two bind groups only ever reference those
+// uniform buffers, so they stay valid as long as the buffers do. Only the fan
+// vertices vary, and they get the grow-only treatment with 2x headroom that
+// buildConvexResources already uses one function away.
+//
+// Reuse is across frames within a pool slot, never across paths within a frame:
+// slot i belongs to path i, so each path still has its own uniforms and the
+// per-path color and vertex data cannot bleed between them.
+func (sr *StencilRenderer) ensureRenderBuffers(
+	b *stencilCoverBuffers, w, h uint32, fanVerts []float32, coverQuad [12]float32, color gg.RGBA,
+) (*stencilCoverBuffers, error) {
+	if b == nil {
+		return sr.createRenderBuffers(w, h, fanVerts, coverQuad, color)
+	}
+
+	b.fanVertexCount = uint32(len(fanVerts) / 2) //nolint:gosec // len/2 fits uint32
+	fanBytes := float32SliceToBytes(fanVerts)
+
+	// The one buffer whose size moves.
+	if b.fanVertBuf == nil || b.fanVertCap < uint64(len(fanBytes)) {
+		if b.fanVertBuf != nil {
+			b.fanVertBuf.Release()
+			b.fanVertBuf = nil
+		}
+		allocSize := uint64(len(fanBytes)) * 2 // headroom, as convex does
+		buf, err := sr.device.CreateBuffer(&wgpu.BufferDescriptor{
+			Label: "stencil_fan_verts", Size: allocSize,
+			Usage: gputypes.BufferUsageVertex | gputypes.BufferUsageCopyDst,
+		})
+		if err != nil {
+			b.fanVertCap = 0
+			return nil, fmt.Errorf("grow stencil fan buffer: %w", err)
+		}
+		b.fanVertBuf, b.fanVertCap = buf, allocSize
+	}
+	if err := sr.queue.WriteBuffer(b.fanVertBuf, 0, fanBytes); err != nil {
+		return nil, fmt.Errorf("write stencil fan buffer: %w", err)
+	}
+
+	// Fixed-size from here down: rewrite, never reallocate. A bind group
+	// referencing one of these uniform buffers stays valid because the buffer
+	// itself is the same object.
+	if err := sr.queue.WriteBuffer(b.coverVertBuf, 0, float32SliceToBytes(coverQuad[:])); err != nil {
+		return nil, fmt.Errorf("write cover vertex buffer: %w", err)
+	}
+	if err := sr.queue.WriteBuffer(b.stencilUniBuf, 0, makeStencilFillUniform(w, h)); err != nil {
+		return nil, fmt.Errorf("write stencil uniform: %w", err)
+	}
+	if err := sr.queue.WriteBuffer(b.coverUniBuf, 0, makeCoverUniform(w, h, color)); err != nil {
+		return nil, fmt.Errorf("write cover uniform: %w", err)
+	}
+	return b, nil
+}
+
 // createRenderBuffers creates vertex buffers, uniform buffers, and bind groups
 // for a stencil-then-cover render pass.
 func (sr *StencilRenderer) createRenderBuffers(
@@ -280,11 +349,13 @@ func (sr *StencilRenderer) createRenderBuffers(
 	var err error
 
 	// Vertex buffers.
-	b.fanVertBuf, err = sr.createAndUploadVertexBuffer("stencil_fan_verts", float32SliceToBytes(fanVerts))
+	fanBytes := float32SliceToBytes(fanVerts)
+	b.fanVertBuf, err = sr.createAndUploadVertexBuffer("stencil_fan_verts", fanBytes)
 	if err != nil {
 		b.destroy()
 		return nil, err
 	}
+	b.fanVertCap = uint64(len(fanBytes))
 	b.coverVertBuf, err = sr.createAndUploadVertexBuffer("stencil_cover_verts", float32SliceToBytes(coverQuad[:]))
 	if err != nil {
 		b.destroy()
