@@ -57,6 +57,14 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		h.Event(w, shell.Focus{Focused: focused})
 	})
 	app.OnClose(func() {
+		// The retained CPU present texture outlives any single frame by design,
+		// so it is this path that has to release it. Destroyed directly rather
+		// than deferred: the deferred queue runs at the next frame's
+		// BeginFrame, and after close there is no next frame.
+		if w.cpuTex != nil {
+			w.cpuTex.Destroy()
+			w.cpuTex = nil
+		}
 		h.Event(w, shell.Closed{})
 	})
 
@@ -220,6 +228,12 @@ type window struct {
 	ggc       any                // *ggcanvas.Canvas when the GPU path is active; nil otherwise
 	gpuT      *gpuTarget         // identity-stable GPU target, rebound per frame (present.go)
 	lc        *desktopLifecycle  // run-state capability, fed by app.OnFocus (lifecycle.go)
+	// cpuTex is the retained upload texture for the CPU present path, kept
+	// across frames so a damaged region can be updated instead of the whole
+	// surface re-uploaded. See present.go.
+	cpuTex  *gogpu.Texture
+	cpuTexW int
+	cpuTexH int
 }
 
 func (w *window) Invalidate()           { w.app.RequestRedraw() }

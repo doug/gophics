@@ -15,6 +15,7 @@
 > | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal + **Vulkan/Mali** |
 > | opacity single-draw fold | **done** | 21→1 passes; Mali 53.7→11.6 ms (4.4×) | Metal + **Vulkan/Mali** |
 > | D coverage-AA instead of MSAA | **closed, not justified** | MSAA now free on both backends | Metal + **Vulkan/Mali** |
+> | E damage-rect present | **done** | CPU present 8,480→230 KB/frame (37×) | Metal, M-series |
 > | Vulkan verification | **done** | MSAA = 2× on multi-pass; C1/F7 hold | **Mali-G615, Galaxy Tab A9+** |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
@@ -989,7 +990,39 @@ bandwidth nor damage on vector frames.
 > readback harness is the wrong proxy and would report success or failure at
 > random — which is exactly the trap §7.1 says the instrument exists to avoid.
 >
-> **So the next step is a present-path byte counter, not the swapchain work.**
+> **DONE 2026-08-31, and smaller than the plan thought.** Most of Phase E as
+> written no longer describes the code: `paint.PresentGPU` does not exist (the
+> paint package no longer imports shell), the two-frame damage union the plan
+> called "the trap" already exists and is live in
+> `ggcanvas.forwardDamageRects`, and the web CPU present already honoured
+> damage. What was actually left was one path —
+> `shell/desktop/present.go`, which created a whole new texture per frame and
+> discarded the rect it was handed.
+>
+> Retaining the texture and uploading only the damaged rows:
+>
+> | | per frame |
+> | --- | --- |
+> | before | 8,480 KB |
+> | after | **230 KB** |
+>
+> **37× less uploaded**, on a 640×640 window at 2× with one label changing.
+>
+> **A HiDPI bug found on the way, and it was mine.** `PixelTarget.Put` receives
+> the *physical* surface, and the damage rect was being passed in *logical*
+> coordinates — so at 2× it named the top-left quadrant's rows. The web
+> presenter shipped with this in Phase 4a: it uploaded half the height and left
+> the rest holding the previous frame. `app.present` now scales the rect where
+> the coordinate space changes, and the first "48% saving" this work appeared to
+> show was entirely that bug uploading half a surface.
+>
+> **A second finding, still open:** a text op whose font has no metrics produces
+> a zero-height damage rect, and `recordScene`'s "degenerate bounds → repaint
+> everything" fallback then silently forces a full-surface upload. It cost a
+> real measurement here — an app with no Font configured pays full damage on
+> every frame that touches text and nothing says so.
+>
+> **The rest of the original note, kept because the reasoning still applies.**
 > Building Phase E first would mean changing buffer-age and two-frame-union
 > semantics with no way to show it helped, which is how a risky change gets
 > merged on faith.

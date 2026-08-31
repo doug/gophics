@@ -63,27 +63,63 @@ func (f *frame) Target() shell.Target {
 		}
 		// GPU canvas not ready yet; fall through to the CPU blit for now.
 	}
-	// The damage rect is ignored here: this path uploads a whole new texture
-	// per frame (NewTextureFromImage), so there is no retained destination to
-	// update a sub-rect of. Honouring it would mean keeping a persistent
-	// texture across frames and updating a region of it — worth doing, and a
-	// change to the desktop present path rather than to this signature.
-	return shell.PixelTarget{Put: func(img *image.RGBA, _ geom.Rect) {
-		r := f.dc.Renderer()
-		tex, err := r.NewTextureFromImage(img)
-		if err != nil {
-			log.Printf("gophics/desktop: upload frame: %v", err)
-			return
+	return shell.PixelTarget{Put: f.w.putCPU(f.dc)}
+}
+
+// putCPU uploads the painter's surface and presents it, sending only the
+// damaged rows when it can.
+//
+// The texture is retained across frames rather than created per frame. It used
+// to be a fresh NewTextureFromImage every frame with the old one deferred for
+// destruction, which had no destination to update a sub-rect of, so the damage
+// rect this signature receives was discarded — and this path is every frame
+// under the CPU renderer, not an edge case.
+//
+// The damage rect arrives in the surface's physical pixels — app.present
+// scales it, because that is where logical coordinates end.
+//
+// Rows, not a sub-rect. The surface is row-major, so a row range is one
+// contiguous span and one upload; a sub-rect's columns would be a WriteTexture
+// per row, which costs more calls than it saves bytes. shell/web's putCPU made
+// the same call for the same reason.
+//
+// A retained texture is also the reason the deferred destroy can go: the GPU
+// may still be sampling the texture when this returns, and previously that
+// meant the *fresh* texture had to outlive the frame. Now the same texture is
+// reused, so there is nothing to free — and the region written next frame is
+// written before that frame's draw samples it.
+func (w *window) putCPU(dc *gogpu.Context) func(*image.RGBA, geom.Rect) {
+	return func(img *image.RGBA, damage geom.Rect) {
+		r := dc.Renderer()
+		pw, ph := img.Rect.Dx(), img.Rect.Dy()
+
+		fresh := w.cpuTex == nil || w.cpuTexW != pw || w.cpuTexH != ph
+		if fresh {
+			if w.cpuTex != nil {
+				r.EnqueueDeferredDestroy(w.cpuTex.Destroy)
+			}
+			tex, err := r.NewTextureFromImage(img)
+			if err != nil {
+				log.Printf("gophics/desktop: upload frame: %v", err)
+				return
+			}
+			w.cpuTex, w.cpuTexW, w.cpuTexH = tex, pw, ph
+		} else {
+			y0, y1 := damageRows(damage, ph)
+			if y1 > y0 {
+				lo := y0 * img.Stride
+				hi := y1 * img.Stride
+				if err := w.cpuTex.UpdateRegion(0, y0, pw, y1-y0, img.Pix[lo:hi]); err != nil {
+					log.Printf("gophics/desktop: update frame region: %v", err)
+					return
+				}
+			}
 		}
-		// PresentTexture submits an async GPU draw that samples tex; the GPU
-		// may still be reading it after this returns. Defer destruction to the
-		// next frame's BeginFrame (after the GPU consumed it) — destroying it
-		// now freed it mid-flight, causing trailing streaks under slow motion.
-		if err := f.dc.PresentTexture(tex); err != nil {
+
+		if err := dc.PresentTexture(w.cpuTex); err != nil {
 			log.Printf("gophics/desktop: present: %v", err)
 		}
-		r.EnqueueDeferredDestroy(tex.Destroy)
-	}}
+	}
 }
 
 // gpuTarget carries the GPU canvas and this frame's swapchain context; the app
@@ -110,3 +146,16 @@ func (t *gpuTarget) RenderGPU(replay func(*gg.Context)) {
 // present; without this marker it would treat the workless frame as a failed
 // begin and schedule a recovery redraw, spinning the app at vsync while idle.
 func (t *gpuTarget) SkipRenderGPU() { t.dc.SkipFrame() }
+
+// damageRows converts a physical-pixel damage rect to the row range to upload,
+// clamped to the surface. An empty range means nothing needs uploading: the
+// retained texture still holds the previous frame, so it is presented again.
+func damageRows(damage geom.Rect, height int) (lo, hi int) {
+	lo, hi = int(damage.Min.Y), int(damage.Max.Y)
+	lo = max(lo, 0)
+	hi = min(hi, height)
+	if hi <= lo {
+		return 0, 0
+	}
+	return lo, hi
+}

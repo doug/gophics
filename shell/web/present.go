@@ -254,6 +254,11 @@ func (p *presenter) putCPU(img *image.RGBA, damage geom.Rect) {
 
 	// Clamp to the surface, and treat an empty rect as "nothing changed" —
 	// except on a fresh buffer, which holds no previous frame to keep.
+	//
+	// The rect is in physical pixels, matching img: app.present scales it from
+	// the logical space Diff works in. It used to arrive logical and be used
+	// against this physical buffer, which at 2x uploaded the top half of the
+	// height and left the rest showing the previous frame.
 	y0, y1 := int(damage.Min.Y), int(damage.Max.Y)
 	if fresh || y1 <= y0 {
 		if !fresh {

@@ -109,14 +109,34 @@ func (h *shellHandler) present(f shell.Frame, tgt shell.Target, changed bool, da
 	}
 	// Present even when skipped: the painter's surface is retained, and the
 	// swapchain still needs this frame's image.
-	if err := presentSurface(h.core.Painter, tgt, damage); err != nil {
+	//
+	// Damage is scaled to physical pixels here because that is where the
+	// coordinate space changes: everything above works in logical units — Diff
+	// produces a logical rect, and ReplayDamaged clips a canvas that carries
+	// the device-scale transform — while the surface handed over below is the
+	// physical pixmap. Passing the logical rect against a physical image is a
+	// silent HiDPI bug: at 2x it names the top-left quadrant's rows, so a
+	// presenter that honours it uploads half the height and leaves the rest
+	// holding the previous frame.
+	if err := presentSurface(h.core.Painter, tgt, scaleRect(damage, f.Scale())); err != nil {
 		log.Printf("gophics: present: %v", err)
 	}
 }
 
+// scaleRect converts a logical rect to physical pixels. An empty rect stays
+// empty: it means "nothing changed", and scaling that would invent a region.
+func scaleRect(r geom.Rect, scale float32) geom.Rect {
+	if r.IsEmpty() || scale == 1 {
+		return r
+	}
+	return geom.Rect{
+		Min: geom.Pt{X: r.Min.X * scale, Y: r.Min.Y * scale},
+		Max: geom.Pt{X: r.Max.X * scale, Y: r.Max.Y * scale},
+	}
+}
+
 // presentSurface hands the painter's finished CPU surface to the shell's
-// target. The target type-switch lives here — in the app runtime — so the
-// paint package stays platform-agnostic (it no longer imports shell).
+// target, with damage already in the surface's physical pixels.
 func presentSurface(p *paint.Painter, tgt shell.Target, damage geom.Rect) error {
 	switch t := tgt.(type) {
 	case shell.PixelTarget:
