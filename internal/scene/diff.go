@@ -167,6 +167,12 @@ func opEqual(a, b *op) bool {
 		return a.imgKey == b.imgKey && a.r == b.r
 	case opSprite:
 		return a.imgKey == b.imgKey && a.sprite == b.sprite
+	case opMarks:
+		// By identity, like a path: a batch is thousands of coordinates, and
+		// re-scanning them every frame to prove nothing moved would cost more
+		// than redrawing. The bounds go in too, so a batch mutated in place
+		// still repaints when its extent changes.
+		return a.marks == b.marks && a.r == b.r
 	case opPushClip:
 		return a.r == b.r
 	case opPushClipRRect:
@@ -198,6 +204,8 @@ func opBounds(o *op, m Measurer) geom.Rect {
 		return inflate(r, o.f1)
 	case opSprite:
 		return o.sprite.Dst
+	case opMarks:
+		return inflate(o.r, 1) // recorded bounds; +1px for edge AA
 	case opFillPath:
 		return inflate(o.r, 1) // record-time bounds; +1px for fill AA
 	case opStrokePath:

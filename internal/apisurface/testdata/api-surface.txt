@@ -569,6 +569,7 @@ paint.Canvas type
 paint.Canvas.BackdropBlur method
 paint.Canvas.Clear method
 paint.Canvas.ClipBounds method
+paint.Canvas.DrawMarks method
 paint.Canvas.DrawSprite method
 paint.Canvas.FillPath method
 paint.Canvas.FillRRect method
@@ -597,6 +598,19 @@ paint.GPUAvailable func
 paint.HSV func
 paint.Lerp func
 paint.MapRect func
+paint.MarkCircle const
+paint.MarkKind type
+paint.MarkSquare const
+paint.Marks type
+paint.Marks.Bounds method
+paint.Marks.Color field
+paint.Marks.ColorAt method
+paint.Marks.Kind field
+paint.Marks.Len method
+paint.Marks.Size field
+paint.Marks.SizeAt method
+paint.Marks.X field
+paint.Marks.Y field
 paint.NewPainter func
 paint.NewPath func
 paint.Painter type

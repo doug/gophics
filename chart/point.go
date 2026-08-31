@@ -40,9 +40,23 @@ func (m PointMark) draw(p plot) {
 		d = 7
 	}
 	d *= 0.4 + 0.6*p.T // subtle grow-in
-	for _, pt := range m.Data {
-		dot(p.Canvas, p.px(pt.X), p.py(pt.Y), d, colorOr(pt.Color, col))
+	// One batch rather than a fill per point. A scatter is the case where that
+	// distinction stops being an optimisation and becomes whether the chart is
+	// interactive at all: as separate fills, 10,000 points cost ~65ms a frame,
+	// nearly all of it in the rasterizer deciding the same circle over and
+	// over.
+	batch := &paint.Marks{
+		Kind:  paint.MarkCircle,
+		X:     make([]float32, len(m.Data)),
+		Y:     make([]float32, len(m.Data)),
+		Size:  []float32{d},
+		Color: make([]paint.Color, len(m.Data)),
 	}
+	for i, pt := range m.Data {
+		batch.X[i], batch.Y[i] = p.px(pt.X), p.py(pt.Y)
+		batch.Color[i] = colorOr(pt.Color, col)
+	}
+	p.Canvas.DrawMarks(batch)
 }
 
 func (m PointMark) seriesData() []Datum    { return m.Data }

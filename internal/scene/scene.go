@@ -103,6 +103,7 @@ const (
 	opPushTransform
 	opPopTransform
 	opBackdropBlur
+	opMarks
 )
 
 // op is one recorded paint command as a tagged value (kind + union fields),
@@ -126,6 +127,10 @@ const (
 //	sprite sprite blit parameters (opSprite)
 //	xform  affine transform (opPushTransform)
 //	horiz  gradient axis (opFillRRectGradient)
+//	marks  mark batch (opMarks), retained by pointer like path and img — the
+//	       batch is variable-length, and diffing compares it by identity for
+//	       the same reason paths are: re-scanning thousands of coordinates
+//	       every frame to prove nothing moved would cost more than the draw
 type op struct {
 	kind       opKind
 	horiz      bool
@@ -139,6 +144,7 @@ type op struct {
 	imgKey     uintptr
 	sprite     paint.Sprite
 	xform      paint.Transform
+	marks      *paint.Marks
 }
 
 func (o *op) replay(c paint.Canvas) {
@@ -165,6 +171,8 @@ func (o *op) replay(c paint.Canvas) {
 		c.Image(o.img, o.r)
 	case opSprite:
 		c.DrawSprite(o.img, o.sprite)
+	case opMarks:
+		c.DrawMarks(o.marks)
 	case opPushClip:
 		c.PushClip(o.r)
 	case opPushClipRRect:
@@ -219,6 +227,16 @@ func (r recorder) FillRect(rect geom.Rect, col paint.Color) {
 
 func (r recorder) FillRRect(rect geom.Rect, radius float32, col paint.Color) {
 	r.l.ops = append(r.l.ops, op{kind: opFillRRect, r: rect, f1: radius, col: col})
+}
+
+// DrawMarks records a mark batch. The batch is kept by pointer: a caller that
+// reuses the same *Marks across frames gets an identity comparison and no
+// repaint, which is the same contract FillPath and Image carry.
+func (r recorder) DrawMarks(m *paint.Marks) {
+	if m == nil || m.Len() == 0 {
+		return
+	}
+	r.l.ops = append(r.l.ops, op{kind: opMarks, marks: m, r: m.Bounds()})
 }
 
 func (r recorder) FillRRectGradient(rect geom.Rect, radius float32, from, to paint.Color, horizontal bool) {

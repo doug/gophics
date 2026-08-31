@@ -138,6 +138,12 @@ type Canvas interface {
 	// same atlas value across calls to share one cached texture; scene diffing
 	// uses the same identity semantics as Image.
 	DrawSprite(atlas image.Image, s Sprite)
+	// DrawMarks draws a batch of identically-shaped marks in one call — the
+	// primitive behind scatter plots and any other "many small identical
+	// shapes" drawing. See Marks for why it is not just a loop of FillRRect.
+	// Scene diffing compares batches by identity, like Image and FillPath, so
+	// pass the same *Marks across frames when the data has not changed.
+	DrawMarks(m *Marks)
 	// PushClip clips subsequent drawing to r; balance with PopClip.
 	// Nested clips intersect.
 	PushClip(r geom.Rect)
@@ -650,6 +656,9 @@ func (c *ggCanvas) FillRect(r geom.Rect, col Color) {
 	c.dc.DrawRectangle(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()))
 	c.dc.Fill()
 }
+
+// DrawMarks implements Canvas.
+func (c *ggCanvas) DrawMarks(m *Marks) { drawMarks(c, m) }
 
 func (c *ggCanvas) FillRRect(r geom.Rect, radius float32, col Color) {
 	c.dc.SetColor(col.nrgba())
