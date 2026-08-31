@@ -407,12 +407,18 @@ const contentMaxW = 760
 // It centers with symmetric padding (rather than a MainCenter flex) so it works
 // under the loose constraints the Stack hands it — the pad fills the surplus and
 // the child gets exactly contentMaxW.
+//
+// The Padding is always emitted, with zero insets when there is no surplus,
+// because the shape of this subtree must not depend on the window width.
+// Returning a bare child below the threshold and a wrapped one above it changed
+// the tree's shape as the window crossed contentMaxW, and reconciliation
+// matches by position: child got a new element, and the Navigator underneath it
+// remounted and dropped its page stack. Resizing across 760px threw the reader
+// back to the section list. Same reason appSurface keeps a constant shape
+// across themes, one caller up.
 func capWidth(child widget.Widget) widget.Widget {
 	return widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
-		pad := (cs.Max.W - contentMaxW) / 2
-		if pad <= 0 {
-			return child
-		}
+		pad := max((cs.Max.W-contentMaxW)/2, 0)
 		return widget.Padding{Insets: geom.Insets{Left: pad, Right: pad}, Child: child}
 	}}
 }
