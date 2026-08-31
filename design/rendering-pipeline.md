@@ -969,6 +969,32 @@ bandwidth nor damage on vector frames.
 
 ### Phase E — Damage-rect present
 
+> **STATUS 2026-08-30 — blocked on an instrument, not on the work.** Sizing it
+> was attempted and could not be done with what exists.
+>
+> | | Metal (M1 Ultra) | Vulkan (Mali-G615) |
+> | --- | --- | --- |
+> | full scene | 1.09 ms | 7.40 ms |
+> | full scene, one element changing | 1.08 ms | 9.73 ms |
+> | same scene clipped to 48×48 | 1.05 ms | **8.60 ms** |
+>
+> Clipping to 1% of the area is *slower* than not clipping on the tiler. That is
+> not a result about scissoring: the headless harness renders through
+> RenderToImage, which reads the whole surface back every frame, and that
+> readback is proportional to the surface, cannot be removed by damage, and
+> swamps what damage would save.
+>
+> The phase's own "done when" asks for **uploaded bytes** to drop to the damage
+> rect's area, and nothing counts uploaded bytes. Frame time measured through a
+> readback harness is the wrong proxy and would report success or failure at
+> random — which is exactly the trap §7.1 says the instrument exists to avoid.
+>
+> **So the next step is a present-path byte counter, not the swapchain work.**
+> Building Phase E first would mean changing buffer-age and two-frame-union
+> semantics with no way to show it helped, which is how a risky change gets
+> merged on faith.
+
+
 `paint.PresentGPU` (`paint/paint.go:597`) passes an empty `image.Rectangle{}`,
 dropping damage the app already computed (`app.go:633`). `context.go:1459`
 quantifies the miss: a 48×48 spinner should update 9 KB, not 8 MB at 1080p.
