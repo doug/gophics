@@ -73,7 +73,7 @@ type Owner struct {
 	// window implements via wireCapabilities. Fields are promoted, so Ctx.<Cap>()
 	// reads owner.<Cap>. This struct and the accessors are GENERATED from the
 	// shell.<X>Window interfaces — see capabilities_gen.go, gen.go, and
-	// docs/design-capabilities.md. Do not add capability fields here by hand.
+	// internal/capgen/README.md. Do not add capability fields here by hand.
 	Capabilities
 	// Input is per-frame poll-style input state for games (held keys, pointer),
 	// fed by the app runner and read via Ctx.Input().

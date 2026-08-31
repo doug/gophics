@@ -16,7 +16,7 @@ import "github.com/doug/gophics/geom"
 //
 // STATUS: the web implementation (a positioned <iframe> overlay) is complete.
 // The native implementations are the WebView-per-OS piece; see
-// docs/design-capabilities.md.
+// internal/capgen/README.md.
 
 // WebViewWindow is implemented by a Window that can host an embedded web view.
 type WebViewWindow interface {

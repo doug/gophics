@@ -20,7 +20,7 @@ build cannot see controllers", and it will show a pairing prompt forever. If
 you cannot implement it, leave it nil. `shell/coverage_test.go` will make you
 record the reason.
 
-**Public API is frozen-ish and measured.** `internal/apisurface` generates
+**The public API is measured.** `internal/apisurface` generates
 `internal/apisurface/testdata/api-surface.txt` and fails when the tree drifts
 from it. Adding a name is fine; regenerate with
 `GOPHICS_UPDATE_API=1 go test ./internal/apisurface` and let the diff be
@@ -80,8 +80,11 @@ backend's opinion, and it has repeatedly disagreed with the Mac's.
 - **`git add -A` sweeps build outputs.** Stage named paths. Compiled examples
   and measurement harnesses land in the repo root and have reached commits at
   19–27MB more than once; the size gate catches them, but only after the fact.
-- **Do not hand-edit generated files.** `docs/design-capabilities.md` comes from
-  `scripts/tools/planfacts.py`; the API manifest from `internal/apisurface`.
+- **Do not hand-edit generated blocks.** The capability matrix inside
+  `internal/capgen/README.md` sits between `<!-- planfacts -->` markers and is
+  rewritten by `scripts/tools/planfacts.py`; the prose around it is yours. The
+  API manifest comes from `internal/apisurface`. `gates.sh` fails when either
+  drifts.
 - **`internal/gfx/` is vendored** from the MIT-licensed gogpu lineage. Its
   comments cite `ADR-NNN` documents that live upstream and are not readable
   here. Leave them: rewriting diverges the forks.

@@ -163,7 +163,7 @@ func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
 
 // The platform capability accessors — Ctx.Camera(), Ctx.Haptic(),
 // Ctx.FilePicker(), etc. — are generated from the shell.<X>Window interfaces
-// into capabilities_gen.go. See gen.go / docs/design-capabilities.md.
+// into capabilities_gen.go. See gen.go / internal/capgen/README.md.
 
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }

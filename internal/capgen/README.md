@@ -1,4 +1,4 @@
-# Platform capabilities: clean Go interfaces, generated wiring, zero-CGo native code
+# Capabilities: one interface, generated wiring, no CGo
 
 gophics is a pure-Go, zero-CGo framework, but real apps need per-platform native
 integration — file dialogs, share sheets, notifications, keychains, and so on.

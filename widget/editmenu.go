@@ -24,7 +24,7 @@ import (
 //
 // What that costs is the system's extra items: Look Up, Translate, Share, and
 // the text classification that turns a phone number into "Call". Those arrive
-// only with the native conformance; see docs/design-capabilities.md.
+// only with the native conformance; see internal/capgen/README.md.
 
 // EditAction is one entry in the edit menu.
 type EditAction struct {

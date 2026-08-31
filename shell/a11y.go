@@ -20,7 +20,7 @@ package shell
 //     tell the difference.
 //
 // Every bridge consumes the same A11yNode slice; see
-// docs/design-capabilities.md.
+// internal/capgen/README.md.
 
 // AccessibilityWindow is implemented by a Window that can talk to the platform
 // assistive technologies.

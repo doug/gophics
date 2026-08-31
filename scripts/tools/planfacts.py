@@ -41,7 +41,7 @@ os.chdir(ROOT)
 #
 # The capability matrix is different: it is public documentation, always
 # generated, and its absence is an error rather than a skip.
-CAPDOC = "docs/design-capabilities.md"
+CAPDOC = "internal/capgen/README.md"
 
 
 def plan_path():
@@ -384,7 +384,7 @@ BLOCKS = {
 
 # Which generated spans each file is expected to carry.
 #
-# design-capabilities.md keeps its own prose notes per capability — why the web
+# internal/capgen/README.md keeps its own prose notes per capability — why the web
 # implementation folds mic bands, why files cross as bytes — and only borrows
 # the status matrix. That table had drifted from the code in both directions:
 # it called seven mobile capabilities "stub" when the Bridge had no method at

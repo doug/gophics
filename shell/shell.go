@@ -17,7 +17,7 @@
 //
 // Beyond the core window/frame/event contract, optional platform integration
 // (file pickers, share sheets, haptics, notifications, storage, ...) follows
-// the capability pattern (see docs/design-capabilities.md): each capability is
+// the capability pattern (see internal/capgen/README.md): each capability is
 // a small interface in this package plus a <X>Window opt-in interface a
 // platform Window implements when it can provide it; callers reach
 // capabilities through the widget layer, which returns nil where the running
