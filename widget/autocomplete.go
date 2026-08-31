@@ -51,18 +51,27 @@ func (s *autocompleteState) Build(ctx Ctx) Widget {
 		Value:       w.Value,
 		Placeholder: w.Placeholder,
 		OnChange: func(v string) {
-			// Typing reopens the list and drops the highlight: the previous
-			// choice almost certainly does not match the new input, and
-			// carrying it over means Enter picks something unrelated.
-			s.SetState(func() { s.open, s.highlight = true, -1 })
+			// Typing reopens the list on the best match. The previous choice
+			// is dropped — it almost certainly does not match the new input —
+			// but the highlight lands on the new first suggestion rather than
+			// on nothing, because a list with no selection gives the user
+			// nothing to Tab into and no indication that Enter will do
+			// anything. Escape is how you get back to "just my text".
+			s.SetState(func() { s.open, s.highlight = true, 0 })
 			if f := w.OnChange; f != nil {
 				f(v)
 			}
 		},
 		OnSubmit: func(v string) { s.commit(v) },
+		// The list is driven from here rather than from a wrapper around the
+		// field. Keyboard events reach exactly one widget — the focused one,
+		// with no bubbling — and once the user clicks into the field, that is
+		// the field. A wrapper's OnKey never fires while anyone is typing,
+		// which is why Up, Down, Tab and Escape did nothing.
+		OnKeyPreview: s.onKey,
 	}
 
-	rows := []Widget{Interactive{Gestures: Gestures{OnKey: s.onKey}, Child: field}}
+	rows := []Widget{field}
 	if s.open && len(list) > 0 {
 		for i, sug := range list {
 			rows = append(rows, s.row(i, sug))
@@ -112,27 +121,52 @@ func (s *autocompleteState) commit(v string) {
 
 // onKey drives the list from the keyboard.
 //
-// Enter with something highlighted picks it; Enter with nothing highlighted is
-// left to the field's OnSubmit, so a user who ignored the list still submits
-// what they typed rather than having their text replaced by a guess.
-func (s *autocompleteState) onKey(k shell.Key) {
+// Enter and Tab both take the highlighted suggestion; Up and Down move it;
+// Escape closes the list. Once the list is closed, Enter falls through to the
+// field's OnSubmit, so a user who does not want any of the suggestions can
+// dismiss them and submit exactly what they typed. That escape route is what
+// makes it safe for the highlight to default to the first match instead of to
+// nothing.
+func (s *autocompleteState) onKey(k shell.Key) bool {
 	// Releases would double every step: a held Down would move twice per press.
+	// They are reported as unhandled so the field still sees them.
 	if k.Kind != shell.KeyPress {
-		return
+		return false
 	}
 	list := s.visible()
+	armed := s.open && s.highlight >= 0 && s.highlight < len(list)
 	switch k.Code {
 	case shell.KeyDown:
-		s.move(1, len(list))
-	case shell.KeyUp:
-		s.move(-1, len(list))
-	case shell.KeyEscape:
-		s.SetState(func() { s.open, s.highlight = false, -1 })
-	case shell.KeyEnter:
-		if s.open && s.highlight >= 0 && s.highlight < len(list) {
-			s.commit(list[s.highlight])
+		if len(list) == 0 {
+			return false
 		}
+		s.move(1, len(list))
+		return true
+	case shell.KeyUp:
+		if len(list) == 0 {
+			return false
+		}
+		s.move(-1, len(list))
+		return true
+	case shell.KeyEscape:
+		// Only consumed while the list is showing; otherwise Escape belongs to
+		// the field, which uses it to collapse a selection.
+		if !s.open {
+			return false
+		}
+		s.SetState(func() { s.open, s.highlight = false, -1 })
+		return true
+	case shell.KeyEnter, shell.KeyTab:
+		// Both accept the highlighted suggestion. Neither is consumed when
+		// there is nothing to accept: Enter then submits what was typed, and
+		// Tab stays the focus key rather than trapping the user in the field.
+		if !armed {
+			return false
+		}
+		s.commit(list[s.highlight])
+		return true
 	}
+	return false
 }
 
 // move steps the highlight, opening the list if it was closed.

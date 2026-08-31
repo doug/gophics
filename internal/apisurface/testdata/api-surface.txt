@@ -1926,6 +1926,7 @@ widget.TextField.CreateState method
 widget.TextField.Multiline field
 widget.TextField.OnChange field
 widget.TextField.OnFocus field
+widget.TextField.OnKeyPreview field
 widget.TextField.OnSubmit field
 widget.TextField.Placeholder field
 widget.TextField.PlaceholderColor field

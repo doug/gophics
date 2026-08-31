@@ -40,6 +40,13 @@ type TextField struct {
 	// widget holds it — for a field that appears in response to an action,
 	// such as edit-in-place. See Interactive.Autofocus.
 	Autofocus bool
+	// OnKeyPreview sees each key before the field acts on it and returns true
+	// to consume it. It exists because keyboard events reach exactly one
+	// widget — the focused one, with no bubbling — so a control built *around*
+	// a field cannot otherwise see the keys typed into it. Autocomplete uses
+	// it to take Up, Down, Tab and Escape for its suggestion list while the
+	// caret stays in the field.
+	OnKeyPreview func(shell.Key) bool
 
 	TextColor        paint.Color
 	PlaceholderColor paint.Color
@@ -496,6 +503,11 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	}
 
 	onKey := func(k shell.Key) {
+		// The preview runs before the Kind filter: a consumer that tracks key
+		// releases must see them, and one that does not can filter its own.
+		if f.OnKeyPreview != nil && f.OnKeyPreview(k) {
+			return
+		}
 		if k.Kind != shell.KeyPress {
 			return
 		}
