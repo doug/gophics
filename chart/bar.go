@@ -77,20 +77,41 @@ func (b BarMark) draw(p plot) {
 			corner = r.Dy() / 2
 		}
 		fill := colorOr(d.Color, col)
+		// Which end sits on the baseline. A bar for a negative value grows
+		// upward from it, so this is not always the bottom.
+		baseAtBottom := y0 >= yTop
 		if p.base != nil {
-			// Stacked: square, so adjacent segments meet without a seam. The
-			// top of the stack keeps its radius — drawn as a rounded rect with
-			// its lower corners squared off again, since the fill rounds all
-			// four and the bottom pair would show background through.
-			if p.stackTop && r.Dy() > corner {
-				p.Canvas.FillRRect(r, corner, fill)
-				p.Canvas.FillRect(geom.RectXYWH(r.Min.X, r.Max.Y-corner, r.Dx(), corner), fill)
+			// Stacked: square, so adjacent segments meet without a seam. Only
+			// the far end of the top segment keeps its radius.
+			if p.stackTop {
+				fillBarEnd(p.Canvas, r, corner, baseAtBottom, fill)
 			} else {
 				p.Canvas.FillRect(r, fill)
 			}
 			continue
 		}
-		p.Canvas.FillRRect(r, corner, fill)
+		fillBarEnd(p.Canvas, r, corner, baseAtBottom, fill)
+	}
+}
+
+// fillBarEnd fills a bar with only the end away from the baseline rounded.
+//
+// FillRRect rounds all four corners, which lifts the foot of the bar off the
+// axis and shows a sliver of background under it — the bar reads as floating
+// rather than as measured from the axis. Rounding is a shape given to the
+// value end; the baseline end is a join with the axis and belongs square. So
+// the rounded rect is drawn and then the baseline end is squared back off,
+// which is what the stacked path already did for the same reason.
+func fillBarEnd(c paint.Canvas, r geom.Rect, corner float32, baseAtBottom bool, col paint.Color) {
+	if corner <= 0 || r.Dy() <= corner {
+		c.FillRect(r, col)
+		return
+	}
+	c.FillRRect(r, corner, col)
+	if baseAtBottom {
+		c.FillRect(geom.RectXYWH(r.Min.X, r.Max.Y-corner, r.Dx(), corner), col)
+	} else {
+		c.FillRect(geom.RectXYWH(r.Min.X, r.Min.Y, r.Dx(), corner), col)
 	}
 }
 

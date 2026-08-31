@@ -447,8 +447,11 @@ func (s *transformDemo) Build(ctx widget.Ctx) widget.Widget {
 				s.SetState(func() { s.scale = clampF(s.scale+0.15, 0.5, 1.8) })
 			}},
 			widget.Sized{W: 8},
+			// Reset returns the demo to how it was found, tap count included:
+			// leaving "Tapped 7×" under a reset transform reads as the button
+			// having missed the reset rather than as a deliberate exclusion.
 			theme.Button{Label: "Reset", OnTap: func() {
-				s.SetState(func() { s.angle, s.scale = 0, 1 })
+				s.SetState(func() { s.angle, s.scale, s.taps = 0, 1, 0 })
 			}},
 		),
 		widget.Sized{H: 8},
