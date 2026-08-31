@@ -619,74 +619,94 @@ func init() {
 // Center: standard opaque title bar; native title hidden; a centered NSTextField
 // is injected to guarantee true horizontal centering on all macOS versions.
 func (w *Window) SetHeaderAlignment(alignment int) {
+	// Snapshot what the sends need, then send unlocked. setStyleMask: resizes
+	// the frame — its own comment below notes it triggers a title re-layout —
+	// and AppKit reports that through delegate callbacks that lock w.mu, so
+	// holding the lock across these sends is the deadlock shape nsWin
+	// describes. This was the last method in this file still doing it.
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	ns, oldField, title := w.nsWindow, w.titleTextField, w.cachedTitle
+	w.titleTextField = 0
+	w.alignment = alignment
+	w.mu.Unlock()
 
-	if w.nsWindow.IsNil() {
+	if ns.IsNil() {
 		return
 	}
 
 	// Remove any previously injected custom title text field.
-	if !w.titleTextField.IsNil() {
-		w.titleTextField.Send(selectors.removeFromSuperview)
-		w.titleTextField.Send(selectors.release)
-		w.titleTextField = 0
+	if !oldField.IsNil() {
+		oldField.Send(selectors.removeFromSuperview)
+		oldField.Send(selectors.release)
 	}
 
-	current := NSWindowStyleMask(w.nsWindow.GetUint64(selectors.styleMask))
+	current := NSWindowStyleMask(ns.GetUint64(selectors.styleMask))
 	hasFullSize := current&NSWindowStyleMaskFullSizeContentView != 0
+	var field ID
 	switch alignment {
 	case 1: // HeaderAlignLeft
 		if !hasFullSize {
-			w.nsWindow.SendUint(selectors.setStyleMask, uint64(current|NSWindowStyleMaskFullSizeContentView))
+			ns.SendUint(selectors.setStyleMask, uint64(current|NSWindowStyleMaskFullSizeContentView))
 		}
-		w.nsWindow.SendBool(selectors.setTitlebarAppearsTransparent, true)
-		w.nsWindow.SendUint(selectors.setTitleVisibility, uint64(NSWindowTitleVisible))
+		ns.SendBool(selectors.setTitlebarAppearsTransparent, true)
+		ns.SendUint(selectors.setTitleVisibility, uint64(NSWindowTitleVisible))
 	case 2: // HeaderAlignRight
 		if !hasFullSize {
-			w.nsWindow.SendUint(selectors.setStyleMask, uint64(current|NSWindowStyleMaskFullSizeContentView))
+			ns.SendUint(selectors.setStyleMask, uint64(current|NSWindowStyleMaskFullSizeContentView))
 		}
-		w.nsWindow.SendBool(selectors.setTitlebarAppearsTransparent, true)
-		w.nsWindow.SendUint(selectors.setTitleVisibility, uint64(NSWindowTitleHidden))
-		w.injectTitleTextField(nsTextAlignmentRight)
+		ns.SendBool(selectors.setTitlebarAppearsTransparent, true)
+		ns.SendUint(selectors.setTitleVisibility, uint64(NSWindowTitleHidden))
+		field = buildTitleTextField(ns, title, nsTextAlignmentRight)
 	default: // HeaderAlignCenter (0)
 		// Only touch the style mask when FullSizeContentView is actually present;
 		// calling setStyleMask: with an unchanged value triggers a title re-layout
 		// that macOS renders left-aligned instead of centered.
 		if hasFullSize {
-			w.nsWindow.SendUint(selectors.setStyleMask, uint64(current&^NSWindowStyleMaskFullSizeContentView))
+			ns.SendUint(selectors.setStyleMask, uint64(current&^NSWindowStyleMaskFullSizeContentView))
 		}
 		// Inject a centered NSTextField rather than relying on macOS default title
 		// positioning, which varies across OS versions and window configurations.
-		w.nsWindow.SendBool(selectors.setTitlebarAppearsTransparent, false)
-		w.nsWindow.SendUint(selectors.setTitleVisibility, uint64(NSWindowTitleHidden))
-		w.injectTitleTextField(nsTextAlignmentCenter)
+		ns.SendBool(selectors.setTitlebarAppearsTransparent, false)
+		ns.SendUint(selectors.setTitleVisibility, uint64(NSWindowTitleHidden))
+		field = buildTitleTextField(ns, title, nsTextAlignmentCenter)
 	}
-	w.alignment = alignment
+
+	w.mu.Lock()
+	w.titleTextField = field
+	w.mu.Unlock()
 }
 
 // injectTitleTextField adds an NSTextField to the title bar's button container
 // (the view that holds the traffic-light buttons) with the given NSTextAlignment.
 // textAlignment: 0 = left, 1 = center, 2 = right. Called with w.mu held.
-func (w *Window) injectTitleTextField(textAlignment uint64) {
+// buildTitleTextField creates the custom title label and returns it; the caller
+// owns storing it.
+//
+// A free function rather than a method, deliberately: it does nothing but send
+// to AppKit, so it must not run while w.mu is held, and taking no receiver
+// makes that impossible to get wrong rather than merely documented. It used to
+// be a method that read w.nsWindow and w.cachedTitle and wrote w.titleTextField
+// with the caller holding the lock, which is what kept SetHeaderAlignment
+// sending under it.
+func buildTitleTextField(ns ID, title string, textAlignment uint64) ID {
 	// Navigate to the view that owns the traffic-light buttons: get the close
 	// button (NSWindowCloseButton = 0) then its superview. This view has a
 	// transparent background so adding our label behind the buttons (with
 	// NSWindowBelow+nil) keeps text visible while clicks reach the buttons.
-	closeBtn := w.nsWindow.SendUint(selectors.standardWindowButton, 0)
+	closeBtn := ns.SendUint(selectors.standardWindowButton, 0)
 	if closeBtn.IsNil() {
-		return
+		return 0
 	}
 	tbView := closeBtn.Send(selectors.superview)
 	if tbView.IsNil() {
-		return
+		return 0
 	}
 
 	// Compute inset past the traffic-light buttons. NSWindowZoomButton (2) is
 	// the rightmost button; its right edge + a gap gives the safe left margin.
 	tbBounds := tbView.GetRect(selectors.bounds)
 	leftInset := CGFloat(0)
-	zoomBtn := w.nsWindow.SendUint(selectors.standardWindowButton, 2)
+	zoomBtn := ns.SendUint(selectors.standardWindowButton, 2)
 	if !zoomBtn.IsNil() {
 		zf := zoomBtn.GetRect(selectors.frame)
 		leftInset = zf.Origin.X + zf.Size.Width + 8
@@ -713,7 +733,7 @@ func (w *Window) injectTitleTextField(textAlignment uint64) {
 	tf := classes.NSTextField.Send(selectors.alloc)
 	tf = tf.SendRect(selectors.initWithFrame, frame)
 	if tf.IsNil() {
-		return
+		return 0
 	}
 
 	// Configure as a non-editable, transparent label.
@@ -735,8 +755,8 @@ func (w *Window) injectTitleTextField(textAlignment uint64) {
 	}
 
 	// Set the current title.
-	if w.cachedTitle != "" {
-		nsTitle := NewNSString(w.cachedTitle)
+	if title != "" {
+		nsTitle := NewNSString(title)
 		if nsTitle != nil {
 			tf.SendPtr(selectors.setStringValue, nsTitle.ID().Ptr())
 			nsTitle.Release()
@@ -750,7 +770,7 @@ func (w *Window) injectTitleTextField(textAlignment uint64) {
 	// reach the buttons. The button container has a transparent background, so the
 	// label remains visible. NSWindowBelow = -1 as uintptr = ^uintptr(0).
 	tbView.Send5Ptr(selectors.addSubviewPositionedRelativeTo, tf.Ptr(), ^uintptr(0), 0)
-	w.titleTextField = tf
+	return tf
 }
 
 // SetStyleMask sets the window's style mask.

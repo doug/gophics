@@ -112,11 +112,16 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 			// "GPU" composites — which is a different pipeline answering a
 			// different question, so its numbers are reported and not gated.
 			//
-			// They are worth reading. On the UTM software renderer, three
-			// scenes beat every real GPU (curve-heavy is pixel-exact) and
-			// `mixed` disagrees on 18.8%, scene-wide rather than in one region.
-			// That is an open finding and not diagnosed: a machine with no
-			// working GPU driver renders complex scenes visibly differently.
+			// They are worth reading. On the UTM software renderer three
+			// scenes beat every real GPU — curve-heavy is pixel-exact.
+			//
+			// `mixed` used to disagree on 18.8%, scene-wide, and is now 0.85%.
+			// The cause is settled rather than guessed: across the two runs the
+			// other four scenes are byte-identical, and mixed is the only corpus
+			// scene containing opacity groups. Folding single-draw groups
+			// removed all twenty of them — the software adapter had been
+			// compositing those offscreen layers differently, and there are no
+			// layers left to composite.
 			if softwareAdapter() {
 				t.Logf("%-13s (software adapter: reported, not gated)", sc.name)
 				return

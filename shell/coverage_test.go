@@ -24,12 +24,17 @@ import (
 // A capability reaching a platform is a decision either way. Implemented, or
 // listed below with the reason. What is not allowed is neither.
 //
-// "Implemented" here means the accessor exists, which is weaker than working:
-// Gamepads publishes a Poll that safely returns nothing because there is no
-// hardware to develop against. The generated capability matrix calls that
-// "hollow" and is the place to look for it; this gate is only about whether the
-// platform was considered at all.
+// "Implemented" here means the accessor exists, which is weaker than working —
+// the generated capability matrix marks a capability whose implementation does
+// nothing as "hollow", and that is the place to look for it. This gate is only
+// about whether the platform was considered at all.
 var mobileExempt = map[string]string{
+	"Gamepads": "both platforms support controllers (iOS GameController, Android " +
+		"InputDevice) and gophics does not bridge either yet. The Bridge used to " +
+		"publish a Poll that always returned nothing, which is worse than absence: " +
+		"a game could not tell 'no controller is connected' from 'this build " +
+		"cannot see controllers', so it would show a pairing prompt forever. nil " +
+		"is the detectable answer until the host side exists",
 	"Menus": "a desktop menu bar; mobile apps draw their own menus in the widget tree",
 	"Tray":  "a desktop system tray / menu bar extra; no mobile equivalent exists",
 	"WindowControl": "title, fullscreen and resize belong to a windowing system; " +
