@@ -237,6 +237,7 @@ architecture; see the script's header for what that misses.
 
 ## Learn more
 
+- **[AGENTS.md](AGENTS.md)** — for coding agents (and people) changing this repo: invariants, build tags, and the traps that have actually bitten.
 - **[docs/](docs/)** — the docs site (live demos + guides), deployed to GitHub Pages.
 - **[docs/api-tiers.md](docs/api-tiers.md)** — what each package promises after 1.0, and why the guarantee differs by tier.
 - **[docs/design-capabilities.md](docs/design-capabilities.md)** — the platform capability matrix, generated from the tree.
