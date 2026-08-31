@@ -37,7 +37,6 @@ type Col struct {
 //
 // Fixed (Width) and flexible (Flex) columns resolve identically for the header
 // and every body row, so columns line up without a shared measurement pass.
-//
 type Table struct {
 	Columns []Col
 	Count   int
