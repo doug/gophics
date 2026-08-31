@@ -75,9 +75,16 @@ docs/source/
 # versions before being purged from history; package/ios.sh regenerates them.
 examples/*/ios/*.xcframework/
 
-# Untracked debug dumps from TestVelloComputeGolden (regenerated each run).
-# Other files under internal/gfx/gg/tmp/ are tracked golden references.
-internal/gfx/gg/tmp/compute_*.png
+# Debug image dumps, written by the gg tests "for visual inspection" and read by
+# nothing. 41 of them were tracked, so every `go test ./...` left 41 modified
+# files in the working tree — a first contribution starts with a dirty diff, and
+# a real change to a golden becomes invisible in the noise.
+#
+# The comment here used to say the tracked ones were golden references. They
+# were not: the suite passes with the whole directory deleted and recreates all
+# 62 files. The actual goldens are in internal/gfx/gg/testdata/golden/, loaded
+# by loadGoldenPNG — read rather than written, which is the difference.
+internal/gfx/gg/tmp/
 
 # Ad-hoc measurement harnesses built into the repo root. These are named after
 # whatever they were probing, so the per-example list below cannot anticipate
