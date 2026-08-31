@@ -220,6 +220,21 @@ go test -tags gophics_gpu ./app/ ./paint/    # GPU-vs-CPU equivalence, blur, rea
 
 They self-skip when no headless adapter is available. CI runs them on macOS.
 
+CI itself is reproducible locally, which is worth doing before a push that
+touches build tags or platform code:
+
+```sh
+./scripts/ci-local.sh          # every job this machine can run
+./scripts/ci-local.sh -l       # list the jobs and where each one runs
+```
+
+Linux jobs run in podman, macOS jobs natively, and the commands are read out of
+the workflow file rather than restated — so the runner cannot drift from CI. It
+catches configuration failures that `go test ./...` cannot see: a test file
+missing a build tag, a step whose env only CI sets. It does not catch
+architecture-specific differences, because the container is the host's
+architecture; see the script's header for what that misses.
+
 ## Learn more
 
 - **[docs/](docs/)** — the docs site (live demos + guides), deployed to GitHub Pages.
