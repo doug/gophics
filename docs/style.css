@@ -130,6 +130,14 @@ pre.code, .code { background: #100d08; border: 1px solid var(--line); border-rad
 
 /* gallery */
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+
+/* Gallery group headings. The grid is 22 cards; flat, it reads as a wall and
+   the visitor has to infer why one demo follows another. The groups say it. */
+.grouphead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+             margin: 40px 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.grouphead:first-of-type { margin-top: 0; }
+.grouphead h3 { margin: 0; font-size: 18px; color: var(--ink); }
+.grouphead p { margin: 0; font-size: 14px; color: var(--ink-faint); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
   transition: border-color .15s, transform .15s; }
 .card:hover { border-color: var(--accent); transform: translateY(-2px); }

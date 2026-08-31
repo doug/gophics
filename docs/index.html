@@ -96,7 +96,7 @@
   <h2>Honest status</h2>
   <p class="lead">Young and moving fast — so, the real caveats up front (the architecture is the hard part, and it's done):</p>
   <div class="pillars">
-    <div class="pillar"><h3>The web binary is big</h3><p>Go compiles the whole renderer into WASM, so even the counter above is 3.5&nbsp;MB gzipped. Across the 23 demos on this site the range is 3.1–5.0&nbsp;MB — the floor is the renderer, not your code, and a whole app buys you about a megabyte over an empty one. Desktop ships lean; the web is one <em>option</em> of a single codebase, and the floor only moves when the renderer does.</p></div>
+    <div class="pillar"><h3>Web ships the renderer</h3><p>A WASM build carries the whole rendering stack — 3.1–5.0&nbsp;MB gzipped across every demo here, so your own code is a rounding error on it. That is an application download, not a web-page one: right for an app, wrong for a content site.</p></div>
     <div class="pillar"><h3>No hot reload</h3><p>Go can't match the Dart VM — the answer is fast rebuild + an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second; close.</p></div>
     <div class="pillar"><h3>The catalog compounds</h3><p>You compose primitives rather than assemble hundreds of pre-built widgets. It grows every release, and app-specific widgets are cheap to write.</p></div>
     <div class="pillar"><h3>Bridges are filling in</h3><p>The capability layer — clean Go interfaces, generated wiring, graceful degradation — ships and its web impls are browser-verified; the native desktop/mobile leaves (objc, portals, COM, Kotlin, Swift) land per release. Missing bridges read as <code>nil</code>, so the UI just hides the affordance.</p></div>
