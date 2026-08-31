@@ -14,6 +14,7 @@
 > | C2 strokes → tier 2a | **reverted** | 2b 75%→15%, but parity 0.48%→10.27% | Metal, M-series |
 > | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal + **Vulkan/Mali** |
 > | opacity single-draw fold | **done** | 21→1 passes; Mali 53.7→11.6 ms (4.4×) | Metal + **Vulkan/Mali** |
+> | D coverage-AA instead of MSAA | **closed, not justified** | MSAA now free on both backends | Metal + **Vulkan/Mali** |
 > | Vulkan verification | **done** | MSAA = 2× on multi-pass; C1/F7 hold | **Mali-G615, Galaxy Tab A9+** |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
@@ -136,7 +137,33 @@
 > non-overlapping ones remains available if a real UI is ever found that needs
 > it — but the common shape, a fade over one thing, now costs nothing.
 >
-> **That reframes Phase D.** The cost is `passes × MSAA-per-pass`, so there are
+> **And that closes Phase D.** Re-running the ablation after the fold, three
+> pairs on the same Mali:
+>
+> | Scene | 4× MSAA | 1× ablated |
+> | --- | --- | --- |
+> | mixed | 13.7 / 10.3 / 10.8 ms | 11.9 / 11.7 / 11.3 ms |
+> | stroke-heavy | 12.0 / 11.6 / 11.3 ms | 10.8 / 11.9 / 10.7 ms |
+>
+> No consistent difference, and 1× is often slower — the signature of noise
+> rather than a small win. The 2× that MSAA cost before the fold was
+> `20 passes × per-pass resolve` and nothing else.
+>
+> So the phase this plan called its largest item, and built §3's whole root-cause
+> chain around, is **not justified on either backend**. Its premise was that 4×
+> MSAA taxes every tier to anti-alias tier 2b. The tax was real and was a
+> property of the *pass count*, not of the tier, and the pass count was fixed by
+> a forty-line fold with no quality cost — where Phase D proposed a
+> coverage-rasterizer rewrite that would have changed edge quality by
+> construction.
+>
+> What survives from §3: F3a's multi-pass corruption is still real and still
+> wants `design/gpu-single-pass-surface.md`, and damage-rect scissoring on vector
+> frames (F3b) is still refused by MSAA. Neither needs Phase D — the first is an
+> accumulator, and the second is worth re-measuring now that a UI frame is one
+> pass.
+>
+> **The old reasoning, kept because it was wrong in an instructive way.** The cost is `passes × MSAA-per-pass`, so there are
 > two factors to attack and the plan only considered one. Removing MSAA is the
 > larger, riskier change and costs edge quality; reducing the pass count helps
 > the same frames by the same mechanism, costs no quality, and is what
