@@ -9,29 +9,26 @@
 //
 // # Architecture Overview
 //
-// The gpu backend implements a vello-style GPU rendering pipeline:
-//
-//	Scene Commands -> Decoder -> HybridPipeline (Flatten -> Coarse -> Fine) -> GPU -> Composite
+// Scene rendering is a render-pass pipeline that sorts draws into tiers and
+// records them in a fixed order per scissor group: SDF shapes, convex polygons,
+// stencil-then-cover for everything else, images, and two text tiers. See
+// GPURenderSession.
 //
 // Key components:
 //
 //   - Backend: Main entry point for GPU rendering
-//   - HybridPipeline: 3-stage path rasterization (Flatten, Coarse, Fine)
+//   - GPURenderContext / GPURenderSession: tier routing and pass recording
+//   - VelloAccelerator: the compute path, reachable via PipelineModeCompute
 //   - MemoryManager: GPU texture memory with LRU eviction (configurable budget)
 //   - TextureAtlas: Shelf-packing for efficient GPU memory usage
-//   - ShaderModules: WGSL compute shaders for tile rasterization and blending
 //
-// # HybridPipeline (vello-style)
-//
-// Scene rendering uses a 3-stage tile-based pipeline inspired by Linebender's vello:
-//
-//  1. Flatten: Bezier curves are flattened to line segments using Wang's formula
-//  2. Coarse: Line segments are binned into 4x4 pixel tiles with winding info
-//  3. Fine: Each tile's coverage is computed with anti-aliased edges
-//
-// The pipeline automatically selects GPU or CPU execution per stage based on
-// workload size. This hybrid approach provides optimal performance across
-// different path complexities.
+// This section used to describe a three-stage vello-style HybridPipeline
+// (Flatten, Coarse, Fine) as *the* scene-rendering path. That pipeline was
+// reachable only from its own tests and has been removed; the description
+// outlived the code by long enough to be the most misleading page in the
+// package. The measured compute path that remains is VelloAccelerator, which
+// SelectPipeline does not currently choose — see design/rendering-pipeline.md
+// §1.3 for the table it loses on.
 //
 // # Blend Modes
 //

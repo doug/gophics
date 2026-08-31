@@ -2,7 +2,11 @@
 
 package gpu
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/doug/gophics/internal/gfx/wgpu"
+)
 
 // TestVelloComputeInitialisesOnRealDevice asserts that the compute vector
 // pipeline actually builds on this machine's GPU.
@@ -29,8 +33,41 @@ import "testing"
 //
 // Skips rather than fails where there is no GPU, but a machine that has one
 // must be able to build the pipeline.
+// computeTestDevice opens a device with the adapter's own limits, which the
+// compute pipeline needs and the WebGPU defaults do not give.
+//
+// It moved here when the dead HybridPipeline cluster was deleted: it lived in
+// gpu_fine_dispatch_test.go, and the tests below are the live users of it. A
+// shared helper sitting in a file named after one caller is how deleting dead
+// code takes a live test with it.
+func computeTestDevice(t *testing.T) (*wgpu.Device, *wgpu.Queue) {
+	t.Helper()
+	inst, err := wgpu.CreateInstance(&wgpu.InstanceDescriptor{Backends: wgpu.BackendsPrimary})
+	if err != nil {
+		t.Skipf("no GPU instance: %v", err)
+	}
+	ad, err := inst.RequestAdapter(&wgpu.RequestAdapterOptions{
+		PowerPreference: wgpu.PowerPreferenceHighPerformance,
+	})
+	if err != nil {
+		t.Skipf("no adapter: %v", err)
+	}
+	// Ask for the adapter's own limits, as VelloAccelerator.initGPU does. The
+	// WebGPU default caps a compute stage at 8 storage buffers, and the coarse
+	// stage binds 9 — a device on defaults cannot create that pipeline at all.
+	dev, err := ad.RequestDevice(&wgpu.DeviceDescriptor{
+		Label:          "vello_compute_test",
+		RequiredLimits: ad.Limits(),
+	})
+	if err != nil {
+		t.Skipf("no device: %v", err)
+	}
+	t.Cleanup(func() { dev.Release() })
+	return dev, dev.Queue()
+}
+
 func TestVelloComputeInitialisesOnRealDevice(t *testing.T) {
-	dev, queue := fineDevice(t)
+	dev, queue := computeTestDevice(t)
 
 	d := NewVelloComputeDispatcher(dev, queue)
 	if err := d.Init(); err != nil {
@@ -46,7 +83,7 @@ func TestVelloComputeInitialisesOnRealDevice(t *testing.T) {
 // SelectPipeline's choice, so a false here means the compute backend is dead no
 // matter how much of it builds.
 func TestVelloAcceleratorReportsCompute(t *testing.T) {
-	if _, _ = fineDevice(t); t.Skipped() {
+	if _, _ = computeTestDevice(t); t.Skipped() {
 		return
 	}
 
