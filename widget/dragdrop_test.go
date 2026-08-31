@@ -234,7 +234,7 @@ func TestLongPressDragBeatsTheScrollAroundIt(t *testing.T) {
 	}
 }
 
-// Touching a chip and dragging without the long press must scroll the page.
+// A finger dragging a chip without the long press must scroll the page.
 //
 // LongPressToStart means "this drag is not mine until a long press says so".
 // But the chip is still a drag candidate, and it is deeper than the scroller,
@@ -243,12 +243,16 @@ func TestLongPressDragBeatsTheScrollAroundIt(t *testing.T) {
 // move because it was never armed, and the page does not scroll because the
 // chip took the drag. On a phone that is a chip that will not move when
 // pressed, and a page that will not scroll if your finger starts on one.
+//
+// This must be a touch drag, not a mouse one. LongPressToStart applies only to
+// touch — see TestAMouseDragsAChipWithoutHoldingIt — so driving it with a
+// mouse tests the opposite behaviour to the one described here.
 func TestAnUnarmedChipLetsThePageScroll(t *testing.T) {
 	h, r := newDnDIn(t, true, true)
 
 	// A plain drag starting on the chip itself, with no pause to arm the long
 	// press — the finger goes down on the chip and immediately moves up.
-	h.Drag(geom.Pt{X: 100, Y: scrollPadTop + srcY}, geom.Pt{X: 100, Y: 10})
+	h.TouchDrag(geom.Pt{X: 100, Y: scrollPadTop + srcY}, geom.Pt{X: 100, Y: 10})
 	h.Render()
 
 	if r.starts != 0 {
@@ -256,5 +260,29 @@ func TestAnUnarmedChipLetsThePageScroll(t *testing.T) {
 	}
 	if off := r.scroll.Offset(); off <= 0 {
 		t.Errorf("the page did not scroll (offset %v): the unarmed chip swallowed the drag", off)
+	}
+}
+
+// A mouse drags a chip straight away, with no hold.
+//
+// LongPressToStart exists because a finger drag inside a scrollable is
+// ambiguous — it already means scroll. A mouse has a wheel for that, so
+// press-and-move is unambiguous and holding first is pure friction: a user who
+// simply tries to drag the thing finds it does not move, which reads as broken
+// rather than as modal.
+func TestAMouseDragsAChipWithoutHoldingIt(t *testing.T) {
+	h, r := newDnDIn(t, true, true)
+
+	h.Drag(geom.Pt{X: 100, Y: scrollPadTop + srcY}, geom.Pt{X: 100, Y: scrollPadTop + acceptY})
+	h.Render()
+
+	if r.starts == 0 {
+		t.Fatal("a mouse drag on a chip did nothing; LongPressToStart should not apply to a mouse")
+	}
+	if len(r.dropped) != 1 || r.dropped[0] != "card-1" {
+		t.Errorf("target received %v, want one \"card-1\"", r.dropped)
+	}
+	if off := r.scroll.Offset(); off != 0 {
+		t.Errorf("the page scrolled (offset %v) instead of the chip being dragged", off)
 	}
 }

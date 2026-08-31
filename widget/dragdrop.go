@@ -185,8 +185,14 @@ type Draggable struct {
 	// PreviewOffset shifts the preview relative to the pointer. Zero centers
 	// it on the pointer.
 	PreviewOffset geom.Pt
-	// LongPressToStart requires a long press before the drag begins. Set it
-	// for anything inside a scrollable, where a plain drag means scroll.
+	// LongPressToStart requires a long press before a *touch* drag begins. Set
+	// it for anything inside a scrollable, where a finger drag already means
+	// scroll and the two gestures are otherwise identical.
+	//
+	// It does not apply to a mouse, which has a scroll wheel: a press-and-move
+	// on a mouse is unambiguous, so it starts the drag immediately. Requiring
+	// a hold there makes a draggable feel broken to anyone who just tries to
+	// drag it.
 	LongPressToStart bool
 	// OnDragStart and OnDragEnd bracket the gesture; dropped reports whether
 	// a target took the payload.
@@ -206,6 +212,10 @@ type draggableState struct {
 	tok     OverlayToken
 	origin  geom.Pt // pointer position in root coords at press
 	pressAt geom.Pt // press position in local coords
+	// touch records how the current gesture was made, recorded in DragClaims
+	// because that is the only hook told. It is consulted rather than assumed
+	// so LongPressToStart can apply to a finger and not to a mouse.
+	touch bool
 }
 
 func (s *draggableState) Init(ctx Ctx) {
@@ -290,12 +300,22 @@ func (s *draggableState) Build(ctx Ctx) Widget {
 	return Interactive{
 		Gestures: Gestures{
 			DragAxis: DragAny,
-			// Until the long press arms it, this drag is not ours: stand down
-			// so the page can scroll under a finger that starts on a chip.
-			DragClaims: func(bool) bool { return s.armed },
+			// Until the long press arms it, a touch drag is not ours: stand
+			// down so the page can scroll under a finger that starts on a
+			// chip. A mouse has a wheel for that, so its drag is unambiguous
+			// and is claimed straight away.
+			//
+			// This is also where the gesture's kind is learned — DragClaims is
+			// the only hook told — and it runs before OnDrag, so the flag is
+			// set by the time it is read.
+			DragClaims: func(touch bool) bool {
+				s.touch = touch
+				return s.armed || !touch
+			},
 			OnPress: func(local geom.Pt) {
 				s.pressAt = local
 				s.origin = ctx.Input().Pointer()
+				s.touch = false // assume a mouse until a claim says otherwise
 				s.armed = !w.LongPressToStart
 			},
 			OnLongPress: func() {
@@ -308,7 +328,7 @@ func (s *draggableState) Build(ctx Ctx) Widget {
 			// A drag that has not passed the slop yet is still a candidate
 			// tap, so the session is not touched until it commits.
 			OnDrag: func(local, _ geom.Pt) {
-				if !s.armed {
+				if !s.armed && s.touch {
 					return
 				}
 				at := ctx.Input().Pointer()
