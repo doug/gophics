@@ -300,7 +300,11 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 	} else {
 		n := len(s.comments)
 		openURL := func(u string) { _ = ctx.OpenURL(u) }
-		body = widget.LazyList{
+		// A thread is for reading, and reading includes quoting: without a
+		// SelectionArea every Text here is inert and a comment cannot be
+		// copied out. Wrapping the list rather than each row is what makes a
+		// drag across two comments one continuous selection.
+		body = widget.SelectionArea{Child: widget.LazyList{
 			Count:           n + 1,
 			EstimatedExtent: 90,
 			Build: func(i int) widget.Widget {
@@ -309,7 +313,7 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 				}
 				return commentRow(th, s.comments[i-1], openURL)
 			},
-		}
+		}}
 	}
 	return page(ctx, header(th, st.Title, backButton(ctx)), body)
 }
