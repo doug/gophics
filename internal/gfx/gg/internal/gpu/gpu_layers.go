@@ -54,6 +54,25 @@ func (s *GPUShared) releaseChildContext(c *GPURenderContext) {
 	c.clipRect = nil
 	c.clipRRect = nil
 	c.clipPath = nil
+	// Frame state must go too, and this is load-bearing rather than tidiness.
+	//
+	// The surface pass picks LoadOpClear or LoadOpLoad from frameRendered, and
+	// resets it only when the target view changes. That was sound while every
+	// layer got a freshly created texture: a new view each frame, so the reset
+	// always fired. Once offscreen textures were pooled, a same-size layer gets
+	// the same view back — and a pooled context that still remembered it would
+	// compare equal, skip the reset, and load the recycled texture's previous
+	// contents instead of clearing them.
+	//
+	// A layer's backdrop is transparent by definition, which is what makes
+	// group opacity mean anything, so a child always begins its target cleared.
+	// Left in, this showed up as a drag preview leaving a copy of itself at
+	// every position the pointer passed through.
+	c.frameRendered = false
+	c.lastView = nil
+	if c.session != nil {
+		c.session.SetFrameState(false, nil)
+	}
 	s.mu.Lock()
 	if len(s.childCtxPool) < maxChildCtxPool {
 		s.childCtxPool = append(s.childCtxPool, c)
