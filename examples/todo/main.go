@@ -43,6 +43,13 @@ type todoState struct {
 	items []item
 	input string
 	hover int // last hovered row index (observed by tests)
+	// editing is the row being edited, or -1. It lives here rather than in the
+	// row because closing it is not the row's business: a tap on the page
+	// background has to end the edit, and gophics leaves focus alone when a
+	// press lands on nothing focusable, so there is no blur event to hang it
+	// on. Keeping it here also makes two editors at once unrepresentable.
+	editing int
+	draft   string
 }
 
 // stateHook lets tests observe the mounted state.
@@ -53,6 +60,7 @@ func (s *todoState) Init(widget.Ctx) {
 		stateHook(s)
 	}
 	s.hover = -1
+	s.editing = -1
 	s.items = []item{
 		{text: "Plan the port", done: true},
 		{text: "Open a window", done: true},
@@ -85,9 +93,16 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 				),
 			}},
 			Child: todoRow{
-				Item:     it,
-				OnToggle: func() { s.SetState(func() { s.items[i].done = !s.items[i].done }) },
+				Item:    it,
+				Editing: s.editing == i,
+				Draft:   s.draft,
+				// Toggling also ends an open edit, so clicking another row
+				// commits the one in progress instead of leaving it behind.
+				OnToggle: func() { s.SetState(func() { s.commitEdit(); s.items[i].done = !s.items[i].done }) },
 				OnDelete: func() { s.SetState(func() { s.remove(i) }) },
+				OnBegin:  func() { s.SetState(func() { s.editing, s.draft = i, s.items[i].text }) },
+				OnDraft:  func(v string) { s.SetState(func() { s.draft = v }) },
+				OnCommit: func() { s.SetState(s.commitEdit) },
 				OnHover:  func() { s.hover = i },
 				OnLeave:  func() { s.leave(i) },
 			},
@@ -96,7 +111,7 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 	list := widget.Column(rows...)
 	list.CrossAlign = layout.CrossStretch
 
-	footer := fmt.Sprintf("%d left · click row to toggle · hover shows delete", left)
+	footer := fmt.Sprintf("%d left · click toggles · double-click edits · hover shows delete", left)
 	col := widget.Column(
 		widget.Text{S: "gophics · todo", Size: th.Type.Body, Color: th.Muted},
 		widget.Sized{H: 16},
@@ -112,17 +127,29 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 		widget.Text{S: footer, Size: th.Type.Caption, Color: th.Muted},
 	)
 	col.CrossAlign = layout.CrossStretch
-	return widget.Provide[theme.Theme]{
-		Value: th,
-		Child: widget.Fill{Color: th.Bg, Child: widget.Padding{All: 20, Child: col}},
+	// A tap that reaches the page background ends an open edit. gophics leaves
+	// keyboard focus alone when a press lands on nothing focusable, so the
+	// field itself never hears about the click — the page has to notice.
+	var page widget.Widget = widget.Fill{Color: th.Bg, Child: widget.Padding{All: 20, Child: col}}
+	if s.editing >= 0 {
+		page = widget.Interactive{
+			Gestures: widget.Gestures{OnTap: func() { s.SetState(s.commitEdit) }},
+			Child:    page,
+		}
 	}
+	return widget.Provide[theme.Theme]{Value: th, Child: page}
 }
 
 // todoRow is one list row, with its own animated hover state.
 type todoRow struct {
 	Item     item
+	Editing  bool
+	Draft    string
 	OnToggle func()
 	OnDelete func()
+	OnBegin  func()
+	OnDraft  func(string)
+	OnCommit func()
 	OnHover  func()
 	OnLeave  func()
 }
@@ -151,9 +178,41 @@ func (s *rowState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	r := s.W()
 	bg := paint.Lerp(th.Surface, th.SurfaceHover, s.hover.Value())
-	label := widget.Text{S: r.Item.text, Color: th.Text}
+
+	// Editing replaces the whole row rather than just the label: the row's own
+	// tap-to-toggle and swipe-to-delete would otherwise still be live under a
+	// text field, so dragging to select a word would delete the item.
+	if r.Editing {
+		return widget.Decorated{
+			Color: bg, Radius: 8,
+			Child: widget.Padding{
+				Insets: geom.InsetsSymmetric(6, 12),
+				Child: theme.Field{
+					Value:     r.Draft,
+					Autofocus: true,
+					OnChange:  r.OnDraft,
+					OnSubmit:  func(string) { r.OnCommit() },
+				},
+			},
+		}
+	}
+
+	text := widget.Text{S: r.Item.text, Color: th.Text}
 	if r.Item.done {
-		label.Color, label.Strike = th.Muted, true
+		text.Color, text.Strike = th.Muted, true
+	}
+	// The double-click target is the text itself, not the row. Setting
+	// OnDoubleTap defers that handler's single tap by the double-tap window to
+	// disambiguate, and paying that delay on the checkbox — the one control
+	// that should feel instant — to buy editing on the label is a bad trade.
+	// Scoped here, a click on the box or the empty right-hand side still
+	// toggles immediately.
+	var label widget.Widget = widget.Interactive{
+		Gestures: widget.Gestures{
+			OnTap:       r.OnToggle,
+			OnDoubleTap: r.OnBegin,
+		},
+		Child: text,
 	}
 	var del widget.Widget = widget.Sized{W: 20, H: 20}
 	if s.hovered {
@@ -218,6 +277,20 @@ func (s *todoState) submit(v string) {
 			s.input = ""
 		})
 	}
+}
+
+// commitEdit closes any open editor, keeping the draft if it says anything.
+// An empty draft is "leave it alone", not a delete: deleting is the swipe or
+// the ×, and losing a todo to a stray double-click and a held backspace would
+// be a nasty surprise. Callers already hold SetState.
+func (s *todoState) commitEdit() {
+	if s.editing < 0 {
+		return
+	}
+	if text := strings.TrimSpace(s.draft); text != "" && s.editing < len(s.items) {
+		s.items[s.editing].text = text
+	}
+	s.editing, s.draft = -1, ""
 }
 
 func (s *todoState) remove(i int) {

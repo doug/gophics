@@ -1326,9 +1326,11 @@ theme.Dropdown.Options field
 theme.Dropdown.Placeholder field
 theme.Dropdown.Selected field
 theme.Field type
+theme.Field.Autofocus field
 theme.Field.CreateState method
 theme.Field.Multiline field
 theme.Field.OnChange field
+theme.Field.OnFocus field
 theme.Field.OnSubmit field
 theme.Field.Placeholder field
 theme.Field.Value field
@@ -1690,6 +1692,7 @@ widget.Image.W field
 widget.Initer type
 widget.Initer.Init method
 widget.Interactive type
+widget.Interactive.Autofocus field
 widget.Interactive.Child field
 widget.Interactive.Gestures field
 widget.Interactive.Sem field
@@ -1917,6 +1920,7 @@ widget.Text.Strike field
 widget.Text.Underline field
 widget.Text.Wrap field
 widget.TextField type
+widget.TextField.Autofocus field
 widget.TextField.CaretColor field
 widget.TextField.CreateState method
 widget.TextField.Multiline field

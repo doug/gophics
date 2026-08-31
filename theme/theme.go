@@ -392,6 +392,12 @@ type Field struct {
 	Multiline   bool
 	OnChange    func(string)
 	OnSubmit    func(string)
+	// Autofocus takes keyboard focus when the field mounts. See
+	// widget.Interactive.Autofocus.
+	Autofocus bool
+	// OnFocus reports focus gained and lost. Losing it is how a field that
+	// appeared for one edit knows to put itself away.
+	OnFocus func(bool)
 }
 
 func (f Field) CreateState() widget.State { return &fieldState{} }
@@ -413,12 +419,18 @@ func (s *fieldState) Build(ctx widget.Ctx) widget.Widget {
 		Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(12, 10),
 			Child: widget.TextField{
-				Value:            f.Value,
-				Placeholder:      f.Placeholder,
-				Multiline:        f.Multiline,
-				OnChange:         f.OnChange,
-				OnSubmit:         f.OnSubmit,
-				OnFocus:          func(v bool) { s.SetState(func() { s.focused = v }) },
+				Autofocus:   f.Autofocus,
+				Value:       f.Value,
+				Placeholder: f.Placeholder,
+				Multiline:   f.Multiline,
+				OnChange:    f.OnChange,
+				OnSubmit:    f.OnSubmit,
+				OnFocus: func(v bool) {
+					s.SetState(func() { s.focused = v })
+					if f.OnFocus != nil {
+						f.OnFocus(v)
+					}
+				},
 				TextColor:        th.Text,
 				PlaceholderColor: th.Muted,
 				CaretColor:       th.Primary,

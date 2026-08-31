@@ -36,6 +36,10 @@ type TextField struct {
 	OnChange  func(string)
 	OnSubmit  func(string)
 	OnFocus   func(bool)
+	// Autofocus takes keyboard focus when the field mounts, even if another
+	// widget holds it — for a field that appears in response to an action,
+	// such as edit-in-place. See Interactive.Autofocus.
+	Autofocus bool
 
 	TextColor        paint.Color
 	PlaceholderColor paint.Color
@@ -594,6 +598,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	}
 
 	view := Interactive{
+		Autofocus: f.Autofocus,
 		Gestures: Gestures{
 			OnPress: func(p geom.Pt) {
 				s.activity()

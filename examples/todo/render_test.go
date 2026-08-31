@@ -125,3 +125,77 @@ func TestRenderOffscreen(t *testing.T) {
 		}
 	}
 }
+
+// Double-clicking a todo's text opens an inline editor, and Enter commits it.
+// Without this there is no way to fix a typo in an item: the row toggles, the
+// swipe deletes, and the text is otherwise read-only.
+func TestDoubleClickEditsItemText(t *testing.T) {
+	h, st := newHeadless(t)
+	p := rowPoint(t, h, st, 0)
+
+	// The editor opens from the label, not the whole row, so find the x that
+	// covers the text. Probing by st.editing rather than by typing keeps a
+	// miss harmless — a stray Enter into the top field would add a todo.
+	opened := openEditor(h, st, p)
+	if !opened {
+		t.Fatal("no x across the row opened the editor — double-click to edit is not wired")
+	}
+
+	// The editor opens with the existing text and the caret at its end, so
+	// typing appends — the point is that the edit lands, not that it replaces.
+	want := st.items[0].text + " (edited)"
+	h.Type(" (edited)")
+	h.Key(shell.KeyEnter)
+	h.Step(0.016)
+
+	if st.editing != -1 {
+		t.Errorf("editor still open after Enter (editing=%d)", st.editing)
+	}
+	if st.items[0].text != want {
+		t.Fatalf("items[0].text = %q, want %q", st.items[0].text, want)
+	}
+}
+
+// Clicking the page background ends an open edit. gophics leaves focus alone
+// when a press lands on nothing focusable, so without the page handling it the
+// row stays an editor forever.
+func TestClickingAwayClosesTheEditor(t *testing.T) {
+	h, st := newHeadless(t)
+	p := rowPoint(t, h, st, 0)
+
+	opened := openEditor(h, st, p)
+	if !opened {
+		t.Fatal("editor did not open")
+	}
+
+	h.Tap(geom.Pt{X: 220, Y: 520}) // empty space below the list
+	h.Step(0.016)
+	if st.editing != -1 {
+		t.Fatalf("editing = %d after clicking away, want -1", st.editing)
+	}
+}
+
+// openEditor double-clicks row 0's label. rowPoint finds the row by hovering
+// at x=220, which is past these short labels and lands on the row background;
+// the label is inset by the padding and checkbox and sits mid-row, so the
+// exact point has to be searched for rather than assumed. Probing on
+// st.editing keeps a miss harmless — a stray Enter into the top field would
+// add a todo instead.
+func openEditor(h *app.Headless, st *todoState, p geom.Pt) bool {
+	for dy := float32(0); dy <= 30; dy += 6 {
+		for x := float32(40); x < 200; x += 8 {
+			q := geom.Pt{X: x, Y: p.Y + dy}
+			h.Tap(q)
+			h.Step(0.05) // still inside the double-tap window
+			h.Tap(q)
+			h.Step(0.016)
+			if st.editing == 0 {
+				return true
+			}
+			if st.editing != -1 {
+				st.editing = -1 // opened the wrong row; reset and keep looking
+			}
+		}
+	}
+	return false
+}
