@@ -611,34 +611,27 @@ capability set.
 Ordered by value, and this ordering is a judgment rather than a reading of the
 tree.
 
-1. **Honesty before coverage.** Three capabilities answer without meaning
-   anything, which is worse than being absent because a caller cannot detect
-   it: mobile `Gamepads` returns a poller that never reports a pad, Windows
-   `AnnounceA11y` has an empty body, and `ctx.Accessibility()` is nil on mobile
-   even though mobile publishes a full semantics tree through the Bridge — so a
-   mobile app cannot announce to a screen reader at all. Each is small, and
-   each currently misleads.
+1. **Honesty before coverage.** A capability that answers without meaning
+   anything is worse than one that is absent, because a caller cannot detect
+   it. `shell/mobile/gamepad.go` still returns a poller whose `Poll` always
+   returns nil, so `ctx.Gamepads()` is non-nil on a phone with no pad support
+   behind it. Mobile accessibility and the Metal timestamp-query bit were the
+   other two examples here and are fixed — mobile publishes `Accessibility`,
+   and the Metal adapter no longer advertises a feature it cannot perform.
 2. **GPU vector backend** (§5) — the sparse-strips renderer. The CPU path is
    the fallback and the reference either way.
-3. **Mobile's thin shell.** `Permissions` is nil on the one platform with a
-   real permission model; `SecureStorage` is nil, so an app has nowhere safe
-   for a token; `Share` is nil on both platforms that have a share sheet.
-4. **Damage-rect texture upload** on the CPU present path (§6.4) — damage is
-   tracked and the raster is already damage-culled (`ReplayDamaged`); only the
-   upload sends the whole surface. It is *not* the one-line change it looks
-   like, and the trap is worth stating because the API invites it:
+3. **Mobile's thin shell.** `Permissions` is still absent on the one platform
+   with a real permission model. `SecureStorage` and `Share` now exist and are
+   host-backed — nil there means the app did not register a host, which is the
+   opt-in contract rather than a gap.
+4. ~~**Damage-rect texture upload** on the CPU present path (§6.4)~~ — done
+   2026-08-31. The desktop path retains its upload texture across frames and
+   sends only the damaged rows: 8,480 KB/frame → 230 KB on a 640×640 window at
+   2× with one label changing. The two-frame buffer-age union this entry warned
+   about turned out to already exist in `ggcanvas.forwardDamageRects`, and
+   `Painter.PresentGPU` — the API this entry described — no longer exists.
+   See `design/rendering-pipeline.md` Phase E.
 
-   `Painter.PresentGPU` already calls `FlushGPUWithViewDamage`, passing an
-   empty rect. Filling that rect in would work — the CPU present path is
-   blit-only, so damage is honoured rather than dropped with the MSAA warning —
-   and would be **wrong**. The two-frame union that makes partial damage safe
-   against a recycled swapchain image lives in `ggcanvas.Canvas`
-   (`prevFrameDamageRects`, the Wayland buffer-age pattern), and `PresentGPU`
-   goes to the context directly, bypassing it. Single-frame damage into a
-   double- or triple-buffered surface leaves pixels from two frames ago:
-   intermittent, invisible to tests, visible to users.
-
-   So the work is the buffer-age accounting on this path, not the plumbing.
 5. **Accessibility, the remainder** (§6.5) — Windows `BoundingRectangle`
    arrives at clients as zero, and `Expanded` is dropped at the desktop bridge
    (web already emits `aria-expanded`). iOS has only been checked in the

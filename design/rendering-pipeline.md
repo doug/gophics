@@ -1,344 +1,65 @@
 # Rendering pipeline — improvement and cleanup plan
 
-> **STATUS 2026-08-29 (rev 4) — Phase A partly landed; F1 and F2 confirmed,
-> §1.2 corrected.**
+> **STATUS 2026-08-31 (rev 5).** Phase A landed, C1 landed, Phase D closed as
+> not justified, Phase E done. Measured on Metal (M1 Ultra) and Vulkan
+> (Mali-G615, Galaxy Tab A9+) unless noted.
 >
-> | Phase | Status | Number it moved | Measured on |
-> | --- | --- | --- | --- |
-> | A1 buffer/bind-group counters | **done** | F1 made observable | Metal, M-series |
-> | A2 tier populations | **done** | §1.2 corrected — see below | Metal |
-> | A3 passes / draws / switches | **done** | F2 confirmed | Metal |
-> | A4 MSAA ablation hook | **done** | MSAA priced: free on Metal | Metal, M-series |
-> | C1 hoist tier 2b allocations | **done** | 121→1 obj/frame; -45% frame time | Metal, M-series |
-> | glyph bind-group reuse (unplanned) | **done** | 38→0 bind groups/frame; no time change | Metal, M-series |
-> | C2 strokes → tier 2a | **reverted** | 2b 75%→15%, but parity 0.48%→10.27% | Metal, M-series |
-> | F7 text layout divergence | **fixed** | GPU drift 9px→0; text parity 11.0%→4.98% | Metal + **Vulkan/Mali** |
-> | opacity single-draw fold | **done** | 21→1 passes; Mali 53.7→11.6 ms (4.4×) | Metal + **Vulkan/Mali** |
-> | D coverage-AA instead of MSAA | **closed, not justified** | MSAA now free on both backends | Metal + **Vulkan/Mali** |
-> | E damage-rect present | **done** | CPU present 8,480→230 KB/frame (37×) | Metal, M-series |
-> | E HiDPI fix, web | **verified** | no stale rows below the halfway line | Chrome, dpr 2 |
-> | Vulkan verification | **done** | MSAA = 2× on multi-pass; C1/F7 hold | **Mali-G615, Galaxy Tab A9+** |
-> | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
-> | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
->
-> **F1 is real, and the ratio is exact.** Steady state, after warm-up, zero
-> pipelines created — so this is per-frame churn, not first-use cost. Measured
-> against `createRenderBuffers`' 4 buffers + 2 bind groups per path:
->
-> | Scene | 2b paths | predicted | measured per frame |
-> | --- | --- | --- | --- |
-> | curve-heavy | 24 | 96 buf / 48 bg | **97 / 48** |
-> | stroke-heavy | 30 | 120 / 60 | **121 / 60** |
-> | ui-screen | 12 | 48 / 24 | **49 / 62** |
-> | text-heavy | 0 | ~0 | **1 / 2** |
->
-> **F2 is real.** Pipeline switches ≈ 2× the stencil population: 49 measured
-> against 48 predicted on curve-heavy, 62 against 60 on stroke-heavy.
->
-> **§1.2 is overstated and is corrected below.** "Tier 2b catches most of a UI"
-> holds for stroke- and curve-dominated content (75%, 92% of items) but not for
-> a real screen: `renderref.UIScreen()`, six themed cards with buttons, text and
-> dividers, is **23%** tier 2b — 12 paths of 51 items, behind 20 SDF and 19
-> glyph batches. §4.6 set this as the kill condition for Phases C and D, so it
-> matters that it is not met: 23% is not a small minority, and those 12 paths
-> cost **111 GPU objects created and destroyed every frame**. Phase C stands;
-> the sentence that motivated it does not.
->
-> One detail worth chasing: on ui-screen, pipeline switches (62) *exceed* draws
-> (43), which the stencil alternation alone does not explain.
->
-> **The MSAA ablation says Phase D is not justified — on Metal.** `GOGPU_NO_MSAA=1`
-> against the default, mean of 40 frames after warm-up, repeated three times
-> because the first run's ui-screen figure was a cold-machine outlier that
-> flattered the ablation by 42%:
->
-> | Scene | 4× MSAA | 1× ablated |
+> | Item | Status | What it moved |
 > | --- | --- | --- |
-> | mixed | 4.94 / 4.92 ms | 4.91 / 5.03 ms |
-> | ui-screen | 2.29 / 2.36 ms | 2.33 / 2.32 ms |
-> | stroke-heavy | 3.09 ms | 3.14 ms |
-> | curve-heavy | 2.38 ms | 2.41 ms |
+> | A1 buffer/bind-group counters | done | made F1 observable at all |
+> | A2 tier populations | done | corrected §1.2 — see below |
+> | A3 passes / draws / switches | done | confirmed F2 |
+> | A4 MSAA ablation hook | done | priced MSAA on both backends |
+> | A6 Metal timestamp honesty | done | removed a feature bit that lied |
+> | C1 hoist tier 2b allocations | done | 121 → 1 objects/frame; −45% frame time |
+> | glyph bind-group reuse | done | 38 → 0 bind groups/frame |
+> | C2 strokes → tier 2a | **reverted** | worked, but GPU/CPU parity 0.48% → 10.27% |
+> | D coverage-AA instead of MSAA | **closed** | not justified; see below |
+> | E damage-rect present | done | CPU present 8,480 → 230 KB/frame |
+> | F7 text layout divergence | done | GPU drift 9px → 0 |
+> | opacity single-draw fold | done | 21 → 1 passes; Mali 54 → 12 ms |
+> | A5 baseline file | not started | — |
+> | B remaining cleanup | partly done | 5,839 lines of dead pipeline removed |
 >
-> No difference on any scene. §3's bandwidth argument does not hold on an
-> M-series, which has bandwidth to spare — and §6 Phase D is explicitly gated on
-> this: "if 4× MSAA is cheap on both backends this phase is not worth its risk."
+> **What the measurements changed about the model.**
 >
-> **The tiler half is now measured, and it justifies Phase D — with a sharper
-> mechanism than §3 proposed.** Mali-G615 MC2, Vulkan, Galaxy Tab A9+, three
-> repeats each:
+> - **F1 and F2 are real and exact.** Tier 2b created 4 buffers + 2 bind groups
+>   per path per frame, in steady state with no pipeline creation beside it, so
+>   none of it amortized. Pipeline switches land within two of 2× the stencil
+>   population.
+> - **§1.2 was overstated.** "Tier 2b catches most of a UI" holds for stroke-
+>   and curve-dominated content (75%, 92% of items) and not for a real screen:
+>   `renderref.UIScreen()` is 23% tier 2b. `theme.Divider` is a filled rect, not
+>   a stroke, so the commonest rule in this UI lands in SDF.
+> - **One opacity group costs one render pass.** Clips, gradients and sprites
+>   cost none. That, not tier 2b, is what made the reference scene 21 passes.
+> - **MSAA is free once the pass count is low.** It appeared to cost 2× on the
+>   tiler; that was `passes × per-pass resolve`, and folding single-draw opacity
+>   groups removed it. Phase D's premise — that MSAA taxes every tier to
+>   anti-alias tier 2b — does not survive: the tax was proportional to passes,
+>   and a forty-line fold fixed it with no quality cost.
 >
-> | Scene | passes | 4× MSAA | 1× ablated |
-> | --- | ---: | --- | --- |
-> | mixed | **21** | 53.7 / 54.3 / 55.8 ms | **27.1 / 27.7 / 27.7 ms** |
-> | ui-screen | 1 | 10.2 / 11.6 / 12.5 ms | 12.7 / 10.6 / 12.1 ms |
-> | stroke-heavy | 1 | 9.6 ms | 9.3 ms |
-> | curve-heavy | 1 | 8.8 ms | 7.8 ms |
-> | text-heavy | 1 | 9.3 ms | 10.1 ms |
+> **Still open from §2/§3:** F3a's multi-pass corruption is real and wants
+> `design/gpu-single-pass-surface.md`; F3b (damage scissoring refused on vector
+> frames) is still refused, and worth re-measuring now that a UI frame is one
+> pass. C2 is blocked on tier 2a's AA quality rather than on its routing.
 >
-> MSAA costs **2× on the multi-pass scene and nothing measurable on any
-> single-pass scene**. The distinguishing variable is not content — stroke-heavy
-> and curve-heavy are the tier-2b-dominated scenes and they do not move — it is
-> the render pass count. §3 predicted "4× the attachment and a resolve every
-> pass"; the measurement says the per-pass resolve is the whole term, at roughly
-> 1.3 ms per pass on this device.
->
-> **What spends the passes: opacity groups, one pass each.** Measured by adding
-> one construct at a time to a fixed baseline (`TestWhatCostsARenderPass`):
->
-> | Scene | passes |
-> | --- | ---: |
-> | baseline, one fill | 1 |
-> | + rect clip | 1 |
-> | + rrect clip | 1 |
-> | + nested clips | 1 |
-> | + gradient | 1 |
-> | + sprite | 1 |
-> | **+ opacity group** | **2** |
-> | **+ two opacity groups** | **3** |
->
-> Clips, gradients and sprites are free; every opacity group costs a pass. That
-> accounts for the reference scene exactly: its tile loop is 2 rows × 5 columns
-> with two PushOpacity calls per tile — 20 groups, plus the base pass, is the 21
-> observed. At ~1.3 ms per pass on the Mali, `1 + 20 × 1.3` is the 53 ms frame.
->
-> The scene's own comment says those tiles carry two layer pushes "like real
-> UIs", and that is the part which generalizes: a UI fading ten elements pays
-> ~13 ms/frame on this class of device for the layers alone, which drops a frame
-> by itself. `ui-screen` has no opacity groups and runs 1 pass, which is why it
-> was never slow.
->
-> **Fixed by folding single-draw groups.** A group holding exactly one draw does
-> not need an offscreen at all: source-over of one primitive is associative in
-> alpha, so drawing it into a transparent layer and compositing at group alpha g
-> equals drawing it at colour-alpha × g. `GPURenderContext.PopLayer` now
-> collapses push/draw/pop into the draw, guarded on all three conditions that
-> make the identity hold — exactly one draw (two would double-blend where they
-> overlap), Normal blend (any other is defined against a backdrop, and a layer's
-> is transparent), and a solid colour (a gradient's alpha is per-stop).
->
-> The reference scene's 20 groups are all single-draw, so:
->
-> | | before | after |
-> | --- | --- | --- |
-> | passes | 21 | **1** |
-> | draws | 58 | 38 |
-> | Mali frame, mean of 3 | 53.7 / 54.3 / 55.8 ms | **11.6 / 12.8 / 12.2 ms** |
-> | Mali frame, best | 42.3 ms | **4.0 ms** |
->
-> **4.4× on the tiler**, and pixel-identical: GPU/CPU parity on `mixed` is
-> 1.178% before and after. That is the right check rather than a weak one — the
-> CPU path does not fold, so the GPU agreeing with it exactly as much as it did
-> before is evidence the fold changed nothing visible.
->
-> `TestWhatCostsARenderPass` gates both directions: a single-draw group must
-> cost 1 pass, a two-draw group must cost 2. The second matters as much as the
-> first, because folding it would be silently wrong rather than slow.
->
-> This did not need the offscreen batching `design/gpu-opacity-layers.md`
-> scopes. Groups with several draws still take a pass each, and batching
-> non-overlapping ones remains available if a real UI is ever found that needs
-> it — but the common shape, a fade over one thing, now costs nothing.
->
-> **And that closes Phase D.** Re-running the ablation after the fold, three
-> pairs on the same Mali:
->
-> | Scene | 4× MSAA | 1× ablated |
-> | --- | --- | --- |
-> | mixed | 13.7 / 10.3 / 10.8 ms | 11.9 / 11.7 / 11.3 ms |
-> | stroke-heavy | 12.0 / 11.6 / 11.3 ms | 10.8 / 11.9 / 10.7 ms |
->
-> No consistent difference, and 1× is often slower — the signature of noise
-> rather than a small win. The 2× that MSAA cost before the fold was
-> `20 passes × per-pass resolve` and nothing else.
->
-> So the phase this plan called its largest item, and built §3's whole root-cause
-> chain around, is **not justified on either backend**. Its premise was that 4×
-> MSAA taxes every tier to anti-alias tier 2b. The tax was real and was a
-> property of the *pass count*, not of the tier, and the pass count was fixed by
-> a forty-line fold with no quality cost — where Phase D proposed a
-> coverage-rasterizer rewrite that would have changed edge quality by
-> construction.
->
-> What survives from §3: F3a's multi-pass corruption is still real and still
-> wants `design/gpu-single-pass-surface.md`, and damage-rect scissoring on vector
-> frames (F3b) is still refused by MSAA. Neither needs Phase D — the first is an
-> accumulator, and the second is worth re-measuring now that a UI frame is one
-> pass.
->
-> **The old reasoning, kept because it was wrong in an instructive way.** The cost is `passes × MSAA-per-pass`, so there are
-> two factors to attack and the plan only considered one. Removing MSAA is the
-> larger, riskier change and costs edge quality; reducing the pass count helps
-> the same frames by the same mechanism, costs no quality, and is what
-> `design/gpu-single-pass-surface.md` already scopes for F3a's corruption. A
-> scene needing 21 passes is itself the anomaly — and 53 ms/frame on a mid-range
-> tablet is a real problem whichever factor is attacked.
->
-> Everything else was backend-independent: tier populations, encoder counts,
-> post-C1 churn (0 bind groups), corpus parity within 1–3 px of Metal, and the
-> F7 text metrics identical to the digit.
->
-> **How this was measured**, because it is cheaper than it looks and nothing
-> recorded it:
+> **Running the GPU suite on a phone**, which is cheaper than it looks — the
+> zero-CGo build means no app, no JNI, no gomobile:
 >
 >     CGO_ENABLED=0 GOOS=android GOARCH=arm64 go test -c -tags gophics_gpu -o app.test.android ./app
 >     adb push app.test.android /data/local/tmp/ && adb shell chmod +x /data/local/tmp/app.test.android
 >     adb shell "cd /data/local/tmp && ./app.test.android -test.run TestMSAAAblation -test.v"
 >
-> The zero-CGo build means the GPU test binary cross-compiles and runs under
-> `adb shell` with no app, no JNI and no gomobile — headless Vulkan comes up
-> against `/vendor/lib64/hw/vulkan.mali.so` directly. Prefix `GOGPU_NO_MSAA=1`
-> for the ablation.
+> Prefix `GOGPU_NO_MSAA=1` for the ablation. Headless Vulkan comes up against
+> `vulkan.mali.so` directly.
 >
-> Phase C is unaffected: it is justified by object churn, not by MSAA.
->
-> **C1 landed and hit its target.** Tier 2b now creates nothing per frame in
-> steady state. Five of the six objects turned out to need no capacity tracking
-> at all — the cover quad and both uniforms are fixed-size, and the bind groups
-> only reference those uniform buffers — so only the fan vertices needed the
-> grow-only treatment buildConvexResources already used one function away.
->
-> | Scene | objects/frame before | after | frame time before → after |
-> | --- | --- | --- | --- |
-> | stroke-heavy | 121 buf / 60 bg | **1 / 0** | 3.09 → 1.71 ms (**-45%**) |
-> | curve-heavy | 97 / 48 | **1 / 0** | 2.38 → 1.55 ms (**-35%**) |
-> | ui-screen | 49 / 62 | **1 / 38** | 2.33 → 1.83 ms (**-21%**) |
-> | mixed | 13 / 34 | **1 / 28** | 4.93 → 4.82 ms (-2%) |
-> | text-heavy | 1 / 2 | 1 / 2 | 1.34 → 1.31 ms (unchanged) |
->
-> Three repeats each; text-heavy not moving is the control, since it had no
-> churn to remove. GPU/CPU parity and scale consistency are identical to the
-> pixel before and after — 1845/132000 differing, worst diff 161 at the same
-> cell — so this is a pure allocation change.
->
-> **It also exposed the next one, which is now fixed.** ui-screen was still
-> making 38 bind groups a frame and none were tier 2b. Not buildTextResources,
-> which is already well-behaved — the glyph-mask tier:
-> `materializeGlyphMaskBindGroups` released and recreated every batch's bind
-> group unconditionally, every frame. Keying each bind group on what it actually
-> references — atlas view, layout, uniform buffer, sampler — makes an unchanged
-> batch reuse it. The layout is in the key deliberately: BUG-GPU-001 was a bind
-> group outliving the layout it was built against, and keying on it turns that
-> into a rebuild instead of a stale binding.
->
-> ui-screen and text-heavy now allocate **nothing** per frame: 1 buffer, 0 bind
-> groups. **But it bought no time on Metal** — 1.83 → 1.85 ms, inside the noise.
-> Bind-group creation is cheap there. §2.1 predicts it is not on Vulkan, where
-> every set goes through descriptorAllocator.Allocate/Free per path per frame,
-> and that is unmeasured. Recorded as churn removed, not as a speedup.
->
-> What is left, and is a third subsystem again: mixed still makes 26 bind groups
-> and 17 textures a frame, from the image/sprite and offscreen-layer paths.
->
-> **C2 was implemented, measured, and reverted.** Removing the EvenOdd gate does
-> what §6 C2 predicts — 24 of stroke-heavy's 30 stencil paths move to the convex
-> tier, dropping 2b from 75% to 15% of items — and the fill-rule argument holds:
-> on a verified convex simple polygon EvenOdd and NonZero classify every point
-> identically, so the routing is not incorrect.
->
-> But it renders worse. GPU/CPU agreement on stroke-heavy goes from **0.48% of
-> pixels differing to 10.27%**, a 21× regression, while every other scene is
-> untouched. The unstated assumption in C2 was that the two tiers render
-> equally; they do not. Tier 2a's per-vertex coverage ramp is a cruder
-> approximation for a thin stroke outline than 4× MSAA'd stencil, which is the
-> same asymmetry §1.1 records in the "Own AA?" column read the other way round:
-> 2b has no AA of its own *and gets the good one from MSAA*.
->
-> So C2 is blocked on tier 2a's AA quality, not on its routing. It becomes
-> available if Phase D gives 2b coverage-based AA and drops MSAA — at which
-> point 2a and 2b would be compared on equal terms, and this measurement should
-> be redone rather than assumed.
->
-> **The corpus was not under any correctness test until this was written**, which
-> is how C2 nearly landed. `TestGPUMatchesCPU` renders its own `equivScene` and
-> `TestRenderScaleConsistency` renders `renderref.Scene`; neither ever saw
-> StrokeHeavy or the others, so the parity number was identical before and after
-> a change that moved 24 paths to a different rasterizer. A5's claim that
-> putting the scenes in renderref would let the harnesses pick them up for free
-> was wrong. `TestGPUMatchesCPUOnCorpus` closes it, with per-scene budgets.
->
-> **The finding it surfaced, now diagnosed — F7, and it is a correctness bug
-> rather than a performance one.**
->
-> text-heavy's 11.0% is not anti-aliasing noise. The backends lay the same
-> string out differently: every line *starts* on the same pixel and *ends* on a
-> different one, drifting up to **9 pixels across 43 characters at 9px**, with
-> total ink within 0.2% and no global shift that improves agreement. That is
-> accumulation, not offset.
->
-> `glyph_mask_engine.snapXGrid` (`:262`) gives each GPU glyph a position
-> accumulated from **rounded** advances — a deliberate hinted-text technique,
-> documented there, that keeps vertical stems on pixel boundaries and is the
-> right call for crispness taken on its own. `text/glyph_renderer.go:251` places
-> CPU glyphs at the shaper's exact `glyph.X`. `text/layout.go:495`
-> (`MeasureWidthIn`) also sums unrounded advances.
->
-> So **measurement and the CPU agree; the GPU disagrees with both** — and the
-> GPU is the default renderer. Measured against MeasureWidthIn on a 43-character
-> string:
->
-> | size | measured | CPU ink Δ | GPU ink Δ | GPU − CPU |
-> | --- | --- | --- | --- | --- |
-> | 9 | 178.95 | −2.0 | **+7.0** | **+9.0** |
-> | 11 | 218.98 | −3.0 | +0.0 | +3.0 |
-> | 15 | 298.47 | −2.5 | **−5.5** | −3.0 |
->
-> The CPU's constant −1.7 to −3.0 is side bearings — ink is narrower than
-> advance width, as it should be. The GPU's swing from +7 to −5.5, changing sign
-> with size, is the accumulated rounding.
->
-> What that costs, since layout is computed from the measured width: centred
-> text is off-centre, text sized to its measured box can overflow it, and a
-> caret positioned from shaper metrics does not sit where the glyph was drawn —
-> all on the GPU backend only, and worst at the small sizes UIs use most.
->
-> **Fixed by removing snapXGrid.** The shaper looked like the right home for a
-> single shared answer, but snapping is not a property of the text: it is a
-> function of device scale, hinting mode, LCD mode and the transform, none of
-> which the shaper knows and all of which belong to the target. LCD deliberately
-> keeps fractional X because the fraction selects the R/G/B phase, so a shaper
-> that snapped unconditionally would break subpixel rendering outright.
->
-> What made the choice clear is that snapXGrid was the only snapping in the
-> codebase that *accumulated*. The autohinter rounds each advance in f26dot6 and
-> applyGridFit snaps outline coordinates inside a glyph; both are bounded per
-> glyph. Only the pen-position grid compounded, which is why the error grew with
-> string length instead of staying within half a pixel.
->
-> Removing it makes GPU ink match CPU ink exactly at four of five sizes and to
-> within 1px at the fifth, and text-heavy parity falls from 11.0% to 4.98% —
-> what remains is genuine rasterizer difference, which does not accumulate.
->
-> The cost is real and was measured rather than argued. Solid ink drops from
-> 33.9% of ink pixels to 28.6%, midtones rise 46.0% to 56.7%: text is softer,
-> landing between the old GPU output and the CPU's 22.7%/58.4%. Reviewed by eye
-> at 9px and 15px as well as by number; at 15px the three are hard to tell
-> apart, and at 9px the old output is visibly *wider* rather than visibly
-> crisper. This is also what browsers, CoreText and Skia all do, and what gophics
-> already did whenever LCD was active — so it is not a new class of appearance,
-> just a wider application of one that already shipped.
-> A grounded pass over the whole pipeline, generalizing
-> `design/strip-rendering.md`.
->
-> **The optimization target is GPU rendering on Metal and Vulkan.** The CPU
-> rasterizer stays the correctness oracle, the no-GPU floor, and the
-> measurement baseline.
->
-> **The finding that organizes everything else:** tier 2b — stencil-then-cover —
-> is the only tier without its own anti-aliasing. That gap is why the renderer
-> runs 4× MSAA, and 4× MSAA is why `LoadOpLoad` is illegal, and *that* is why
-> multi-pass frames corrupt on tile-based GPUs **and** why damage-rect
-> scissoring is refused on every vector frame. Tier 2b is also where every
-> stroke and every curved fill lands, and where 6 GPU objects are created and
-> destroyed per path per changed frame. One root cause, four symptoms (§3).
->
-> **Rev 3 adds §4–§5: how this work gets measured and grounded**, built on the
-> frame-stats and device-counter spine that landed in `e18bee7`, plus the
-> per-phase exit gates that turn each phase from an intention into a claim
-> something can falsify. §4.2 names five gaps in that spine — the largest being
-> that **F1, the plan's headline finding, is invisible to every instrument in
-> the repo today** — and Phase A (§6) closes each one as a scoped work item
-> with its call sites.
-
+> **Two instrument traps worth knowing**, both of which produced confident wrong
+> answers here: frame time measured through `RenderToImage` charges a full
+> surface readback every frame (575 KB against 20 KB uploaded), which hides
+> anything damage-related; and `getImageData` on the web canvas returns
+> all-black through browser automation while the page renders correctly, so
+> pixel sampling reads as "nothing changed".
 ---
 
 ## 1. The pipeline as it actually is
