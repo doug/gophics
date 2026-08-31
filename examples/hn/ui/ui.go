@@ -182,16 +182,28 @@ func (s *feedState) fetch(wctx widget.Ctx) {
 		if len(ids) > n {
 			ids = ids[:n]
 		}
-		items := make([]Item, 0, len(ids))
-		for _, id := range ids {
-			if ctx.Err() != nil {
-				return // the feed is gone; nothing wants these
+		// Concurrent, and streamed: each time the run of resolved items from
+		// the top grows, show it. The list is ranked, so it fills in from the
+		// first story down and never reorders under the reader.
+		show := func(items []Item, done bool) {
+			keep := items[:0]
+			for _, it := range items {
+				if it.Title != "" {
+					keep = append(keep, it)
+				}
 			}
-			if it, err := api.Item(ctx, id); err == nil && it.Title != "" {
-				items = append(items, it)
-			}
+			s.PostState(func() {
+				s.feed = feed{items: keep, done: done}
+				if done {
+					s.refreshing = false
+				}
+			})
 		}
-		s.PostState(func() { s.feed, s.refreshing = feed{items: items, done: true}, false })
+		items := fetchItems(ctx, api, ids, func(partial []Item) { show(partial, false) })
+		if ctx.Err() != nil {
+			return // the feed is gone; nothing wants these
+		}
+		show(items, true)
 	}()
 }
 
@@ -266,7 +278,15 @@ func (s *threadState) Init(wctx widget.Ctx) {
 	api := wctx.MustOf[API]()
 	story := s.W().Story
 	go func() {
-		comments := loadComments(ctx, api, story, 80)
+		// Reported per level, so the top-level comments draw after one round
+		// trip instead of after the last reply in the tree.
+		comments := streamComments(ctx, api, story, 80, func(partial []Comment) {
+			s.PostState(func() {
+				if len(partial) > 0 {
+					s.comments, s.loading = partial, false
+				}
+			})
+		})
 		s.PostState(func() { s.comments, s.loading = comments, false })
 	}()
 }

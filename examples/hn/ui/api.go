@@ -55,20 +55,67 @@ type Comment struct {
 	Depth int
 }
 
-// loadComments fetches the comment tree depth-first up to limit comments.
+// loadComments fetches a story's comment tree, up to limit comments.
 func loadComments(ctx context.Context, api API, story Item, limit int) []Comment {
+	return streamComments(ctx, api, story, limit, nil)
+}
+
+// streamComments fetches breadth-first and assembles depth-first.
+//
+// Those are two different orders on purpose. Reading order is depth-first — a
+// comment followed by its replies, indented — but *fetching* in that order
+// means descending one deep reply chain before the second top-level comment is
+// even requested, over 80 serial round trips. Fetching by level instead makes
+// every id at one depth a single concurrent batch, so the top-level comments,
+// which are what the reader actually wants first, land in one trip.
+//
+// onProgress, when non-nil, is called after each level with the tree as
+// assembled so far, so the thread fills in from the top instead of showing a
+// spinner until the last reply arrives.
+func streamComments(ctx context.Context, api API, story Item, limit int, onProgress func([]Comment)) []Comment {
+	loaded := map[int]Item{}
+	frontier := story.Kids
 	var out []Comment
+
+	for len(frontier) > 0 && ctx.Err() == nil {
+		items := fetchItems(ctx, api, frontier, nil)
+
+		var next []int
+		for _, it := range items {
+			loaded[it.ID] = it
+			// A comment with no text is deleted or dead; it is not shown, and
+			// its replies are not pursued — matching what the depth-first walk
+			// did, so a dead subtree does not cost a level of fetching.
+			if it.Text != "" {
+				next = append(next, it.Kids...)
+			}
+		}
+
+		out = assembleComments(story, loaded, limit)
+		if onProgress != nil {
+			onProgress(out)
+		}
+		if len(out) >= limit {
+			break // the tree is already longer than anything that will be shown
+		}
+		frontier = next
+	}
+	return out
+}
+
+// assembleComments walks the story depth-first over whatever has been loaded,
+// which is what puts a reply directly under its parent at depth+1. Ids not yet
+// fetched are simply absent, so the same walk works on a partial tree.
+func assembleComments(story Item, loaded map[int]Item, limit int) []Comment {
+	out := make([]Comment, 0, limit)
 	var walk func(ids []int, depth int)
 	walk = func(ids []int, depth int) {
 		for _, id := range ids {
 			if len(out) >= limit {
 				return
 			}
-			if ctx.Err() != nil {
-				return // the thread was closed; stop walking it
-			}
-			it, err := api.Item(ctx, id)
-			if err != nil || it.Text == "" {
+			it, ok := loaded[id]
+			if !ok || it.Text == "" {
 				continue
 			}
 			out = append(out, Comment{Item: it, Depth: depth})
