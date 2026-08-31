@@ -66,8 +66,24 @@ func computeTestDevice(t *testing.T) (*wgpu.Device, *wgpu.Queue) {
 	return dev, dev.Queue()
 }
 
+// coarseStorageBuffers is how many storage buffers the coarse stage binds. The
+// WebGPU baseline allows 8, so a device reporting the baseline cannot create
+// this pipeline at all — which is a property of the device, not a defect.
+const coarseStorageBuffers = 9
+
 func TestVelloComputeInitialisesOnRealDevice(t *testing.T) {
 	dev, queue := computeTestDevice(t)
+
+	// A device whose limit is below what the coarse stage binds cannot build
+	// this pipeline however correct the code is. lavapipe, the software Vulkan
+	// implementation CI runs, reports the WebGPU baseline of 8 — so failing
+	// here would report a device capability as a regression, every run,
+	// forever. Skipping with the number named keeps that distinct from the
+	// thing this test is for: a device that *can* build it failing to.
+	if lim := dev.Limits(); lim.MaxStorageBuffersPerShaderStage < coarseStorageBuffers {
+		t.Skipf("device caps storage buffers per stage at %d; the coarse stage binds %d",
+			lim.MaxStorageBuffersPerShaderStage, coarseStorageBuffers)
+	}
 
 	d := NewVelloComputeDispatcher(dev, queue)
 	if err := d.Init(); err != nil {

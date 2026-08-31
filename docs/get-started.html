@@ -150,7 +150,7 @@ gophics doctor                              # check the toolchain per platform</
 <span class="t-kw">func</span> <span class="t-fn">TestCounter</span>(t *testing.T) {
 	a := apptest.<span class="t-fn">New</span>(t, Counter{Start: <span class="t-num">3</span>}, apptest.<span class="t-fn">WithConfig</span>(app.Config{
 		Size: geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">220</span>}, Font: goregular.TTF,
-	}))
+	}), apptest.<span class="t-fn">Tol</span>(apptest.AntiAliased))
 
 	<span class="t-com">// Tap the button the way a screen reader would find it, rather than</span>
 	<span class="t-com">// hardcoding a pixel that moves the moment the layout changes.</span>
@@ -162,6 +162,17 @@ gophics doctor                              # check the toolchain per platform</
 
 	<span class="t-com">// The frame itself is checked against a committed golden, so a change in</span>
 	<span class="t-com">// how it looks fails here rather than being noticed later by a person.</span>
+	<span class="t-com">//</span>
+	<span class="t-com">// AntiAliased rather than Exact, because the golden is committed from one</span>
+	<span class="t-com">// machine and checked on another: CI runs Linux and this file&#39;s reference</span>
+	<span class="t-com">// image was rendered on macOS. Exact failed there on 4 of 70,400 pixels</span>
+	<span class="t-com">// differing by 1/255 — sub-LSB float rounding in the rasteriser, not a</span>
+	<span class="t-com">// change anyone made. Tolerance&#39;s own documentation draws this line:</span>
+	<span class="t-com">// &#34;use it when comparing across machines; prefer Exact within one.&#34;</span>
+	<span class="t-com">//</span>
+	<span class="t-com">// The bound is still tight enough to do its job. 2/255 on at most 0.5% of</span>
+	<span class="t-com">// pixels catches a colour shift or a moved element; it does not catch a</span>
+	<span class="t-com">// last-bit difference in how two libms round the same blend.</span>
 	a.<span class="t-fn">Golden</span>(<span class="t-str">&#34;counter&#34;</span>)
 }
 </code></pre>
