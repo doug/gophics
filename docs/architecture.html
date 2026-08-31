@@ -22,15 +22,39 @@
   <h2>Architecture</h2>
   <p class="lead">Gophics is one idea carried all the way down: a <em>pipeline</em>. You describe the UI as immutable values; the framework diffs them into a retained tree, lays it out once, and composites it on the GPU — every frame, in pure Go.</p>
 
+  <h3>Two trees, and why</h3>
+  <p>Everything below rests on one split, so it is worth getting first. A <b>widget</b> is an immutable description — a plain struct value, cheap to make, thrown away every frame. An <b>element</b> is the retained node the framework keeps behind it: it holds your state, and it persists across rebuilds.</p>
+  <pre class="code"><code><span class="t-com">// The widget: a value. Rebuilt constantly, owns nothing.</span>
+<span class="t-kw">type</span> Counter <span class="t-kw">struct</span>{ Start <span class="t-typ">int</span> }
+
+<span class="t-com">// The state: kept alive by the element behind that widget.</span>
+<span class="t-kw">type</span> counterState <span class="t-kw">struct</span> {
+        widget.StateBase[Counter]
+        n <span class="t-typ">int</span>
+}
+
+<span class="t-kw">func</span> (s *counterState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+        <span class="t-kw">return</span> theme.Button{
+                Label:  fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">"%d"</span>, s.n),
+                OnTap:  <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.n++ }) },
+        }
+}</code></pre>
+  <p>So <code>Build</code> is not a draw call and describes nothing about pixels. It returns a fresh description; the framework diffs it against the element tree and touches only what actually differs. That is what makes rebuilding the whole subtree on every tap cheap, and it is why widgets can be compared, serialized, and asserted on in a test without a window.</p>
+
   <h3>The frame pipeline</h3>
-  <p>Each frame flows through the same phases (mirroring the model that made own-rendering UIs fast). Every phase is independently instrumentable and testable:</p>
-  <pre class="code">input → gestures → callbacks           mark widgets dirty
-      → tickers fire                    animations advance
-      → <b>build</b>                           rebuild dirty widgets, reconcile the element tree
-      → <b>layout</b>                          constraints down, sizes up (one pass, relayout boundaries)
-      → <b>paint</b>                           dirty nodes record display lists into a layer tree
-      → <b>composite</b>                       layer tree → GPU commands → present</pre>
-  <p>Only what changed is rebuilt, re-laid-out, and repainted — damage tracking rides on the layer tree, so a one-widget change costs about one widget's worth of work.</p>
+  <p>Those two trees are what the frame runs over. Each frame flows through the same phases (mirroring the model that made own-rendering UIs fast), and every phase is independently instrumentable and testable:</p>
+  <pre class="code">      <b>input</b>       gestures and callbacks mark widgets dirty
+      <b>tickers</b>     animations advance, marking more
+        ↓
+      <b>build</b>       rebuild dirty widgets, reconcile against the element tree
+        ↓
+      <b>layout</b>      constraints down, sizes up — one pass, with relayout boundaries
+        ↓
+      <b>paint</b>       dirty nodes record display lists into a layer tree
+        ↓
+      <b>composite</b>   layer tree → GPU commands → present</pre>
+  <p>Input and tickers are the two things that start a frame; the four phases below them are the frame itself.</p>
+  <p><b>Only what changed is redone</b>, and that is the point of the whole arrangement rather than an optimisation on top of it. Each phase has its own boundary: a rebuild stops where the description is unchanged, a relayout stops at a node whose constraints did not move, and a repaint stops at the layer whose damage rectangle covers it. Typing a character in a text field does not re-lay-out the page around it, and a one-widget change costs about one widget's worth of work.</p>
 
   <h3>The layers</h3>
   <p>Each concern is a small Go package; dependencies point downward. You build apps against the top; everything below is the engine.</p>
