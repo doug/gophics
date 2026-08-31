@@ -51,10 +51,17 @@ docs/source/
 !/LICENSE
 !/NOTICE
 
-# ...but `!/*.*` above would re-admit the test binaries the *.test rule near
-# the top of this file excludes, because a later pattern wins. Re-assert them.
+# ...but a later pattern beats an earlier one, so the two negations above
+# re-admit anything matched by a root rule further up this file: `!/*.*` takes
+# back .DS_Store and the test binaries, and `!/*/` takes back /build/. Every
+# such rule has to be restated here, below the negations, or it silently stops
+# working — which is how .DS_Store and build/ reappeared in `git status` the
+# moment the block above was added.
 /*.test
 /*.test.exe
+/.DS_Store
+/.claude/settings.local.json
+/build/
 
 # gomobile bind output. These were tracked and reached ~200 MB across their
 # versions before being purged from history; package/ios.sh regenerates them.
