@@ -237,3 +237,57 @@ func TestBackgroundWithoutDarkVariant(t *testing.T) {
 		t.Errorf("background red = %#x, want the single colour unchanged", r)
 	}
 }
+
+// A tree node's open/closed state must reach the platform bridge.
+//
+// It did not on desktop: shell.A11yNode carried Expandable and Expanded, the
+// widget layer set them, and shell/desktop/a11y_desktop.go dropped both while
+// copying to the windowing layer's node — so a screen-reader user could not
+// tell a collapsed branch from a leaf. Web emitted aria-expanded the whole
+// time, which is what made it easy to miss: the feature demonstrably worked on
+// one platform.
+//
+// This asserts the semantics reach the bridge. The per-backend mapping —
+// AT-SPI EXPANDABLE/EXPANDED, UIA ExpandCollapsePattern, AXDisclosing — is
+// below that seam and cannot be exercised headlessly.
+func TestPublishA11yCarriesExpandedState(t *testing.T) {
+	h, err := NewHeadless(widget.Tree{
+		Nodes: []widget.TreeNode{{
+			ID:    "root",
+			Child: widget.Text{S: "Root"},
+			Children: []widget.TreeNode{
+				{ID: "child", Child: widget.Text{S: "Child"}},
+			},
+		}},
+		InitiallyExpanded: []string{"root"},
+	}, Config{Size: geom.Size{W: 200, H: 200}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := &fakeAT{}
+	installAT(h, at)
+	sh := &shellHandler{core: h.core}
+	h.Render()
+	sh.publishA11y()
+
+	if len(at.trees) == 0 {
+		t.Fatal("no tree published")
+	}
+	var expandable, expanded int
+	for _, n := range at.trees[len(at.trees)-1] {
+		if n.Expandable {
+			expandable++
+			if n.Expanded {
+				expanded++
+			}
+		}
+	}
+	if expandable == 0 {
+		t.Error("no node reached the bridge marked Expandable: a tree's " +
+			"open/closed state is being dropped between the widget and the shell")
+	}
+	if expanded == 0 {
+		t.Errorf("%d expandable nodes reached the bridge and none was Expanded, "+
+			"though the tree was built with root open", expandable)
+	}
+}

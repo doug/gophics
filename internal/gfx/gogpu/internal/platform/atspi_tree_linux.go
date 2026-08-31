@@ -63,6 +63,8 @@ const (
 	stateActive     = 1
 	stateChecked    = 4
 	stateEnabled    = 8
+	stateExpandable = 15
+	stateExpanded   = 16
 	stateFocusable  = 11
 	stateFocused    = 12
 	stateSelectable = 22
@@ -184,6 +186,12 @@ func atspiStates(n A11yNode) []uint32 {
 	if n.Selected {
 		set(stateSelectable)
 		set(stateSelected)
+	}
+	if n.Expandable {
+		set(stateExpandable)
+		if n.Expanded {
+			set(stateExpanded)
+		}
 	}
 	return bits[:]
 }

@@ -1760,6 +1760,7 @@ func (dw *darwinPlatformWindow) SetA11yTree(nodes []A11yNode, activate func(id i
 			X: n.X, Y: n.Y, W: n.W, H: n.H,
 			Tappable: n.Tappable, Focused: n.Focused, Disabled: n.Disabled,
 			Selected: n.Selected, Checkable: n.Checkable, Checked: n.Checked,
+			Expandable: n.Expandable, Expanded: n.Expanded,
 		}
 	}
 	dw.window.SetA11yTree(out, activate)

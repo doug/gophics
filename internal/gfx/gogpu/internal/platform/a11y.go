@@ -31,6 +31,15 @@ type A11yNode struct {
 	Selected   bool
 	Checkable  bool
 	Checked    bool
+	// Expandable marks a node that can be opened or closed — a tree node, a
+	// disclosure row, a combo box. Expanded is its current state and is only
+	// meaningful when Expandable is set.
+	//
+	// Both are needed, not just Expanded: assistive technology distinguishes
+	// "collapsed" from "not expandable at all", and a leaf reported as
+	// not-expanded is announced as a closed branch the user can open.
+	Expandable bool
+	Expanded   bool
 }
 
 // A11yWindow is implemented by a PlatformWindow that can publish an

@@ -40,10 +40,16 @@ func a11ySupported(app *gogpu.App) bool {
 
 type desktopA11y struct{ w *window }
 
-// SetTree converts the shell's nodes to the windowing layer's and publishes
-// them. The two types are field-identical by design — the windowing layer must
-// not depend on gophics — so this is a copy, not a translation.
-func (a desktopA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
+// toPlatformNodes copies the shell's nodes to the windowing layer's.
+//
+// Extracted from SetTree so it can be tested: this copy silently dropped
+// Expandable and Expanded for as long as they existed, so a screen reader on
+// desktop could not tell a collapsed branch from a leaf while web announced it
+// correctly the whole time. A field-by-field copy between two structs that are
+// identical by design is exactly the code where a missing line is invisible,
+// and a test one layer up cannot see it — the bug lives below the seam where
+// the shell's nodes are handed over.
+func toPlatformNodes(nodes []shell.A11yNode) []gogpu.A11yNode {
 	out := make([]gogpu.A11yNode, len(nodes))
 	for i, n := range nodes {
 		out[i] = gogpu.A11yNode{
@@ -52,14 +58,17 @@ func (a desktopA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
 			X: n.X, Y: n.Y, W: n.W, H: n.H,
 			Tappable: n.Tappable, Focused: n.Focused, Disabled: n.Disabled,
 			Selected: n.Selected, Checkable: n.Checkable, Checked: n.Checked,
-			// TODO(platform): Expandable/Expanded are dropped here. Carrying
-			// them needs the field on the substrate's A11yNode and a mapping in
-			// each backend — AT-SPI EXPANDABLE/EXPANDED states, UIA's
-			// ExpandCollapsePattern, NSAccessibilityDisclosureTriangle. Web
-			// already emits aria-expanded, so a tree announces its state there
-			// and not yet on the desktop.
+			Expandable: n.Expandable, Expanded: n.Expanded,
 		}
 	}
+	return out
+}
+
+// SetTree converts the shell's nodes to the windowing layer's and publishes
+// them. The two types are field-identical by design — the windowing layer must
+// not depend on gophics — so this is a copy, not a translation.
+func (a desktopA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
+	out := toPlatformNodes(nodes)
 	// activate is passed straight through. It arrives on whichever thread the
 	// platform calls us from, but the marshalling is already handled one layer
 	// up: Accessibility gained a callback parameter when SetTree was added, so

@@ -49,6 +49,8 @@ type A11yNode struct {
 	Selected   bool
 	Checkable  bool
 	Checked    bool
+	Expandable bool
+	Expanded   bool
 }
 
 var (
@@ -179,6 +181,7 @@ var (
 		setAccessibilityParent       SEL
 		setAccessibilityFrameInParen SEL
 		setAccessibilityEnabled      SEL
+		setAccessibilityDisclosing   SEL
 		setAccessibilityChildren     SEL
 		numberWithBool               SEL
 		array                        SEL
@@ -198,6 +201,7 @@ func initA11ySelectors() {
 		a11ySels.setAccessibilityLabel = RegisterSelector("setAccessibilityLabel:")
 		a11ySels.setAccessibilityValue = RegisterSelector("setAccessibilityValue:")
 		a11ySels.setAccessibilityHelp = RegisterSelector("setAccessibilityHelp:")
+		a11ySels.setAccessibilityDisclosing = RegisterSelector("setAccessibilityDisclosing:")
 		a11ySels.setAccessibilityParent = RegisterSelector("setAccessibilityParent:")
 		a11ySels.setAccessibilityFrameInParen = RegisterSelector("setAccessibilityFrameInParentSpace:")
 		a11ySels.setAccessibilityEnabled = RegisterSelector("setAccessibilityEnabled:")
@@ -344,6 +348,13 @@ func newA11yElement(n A11yNode, viewH, scale float64) ID {
 	}
 	if n.Disabled {
 		el.SendBool(a11ySels.setAccessibilityEnabled, false)
+	}
+	// AXDisclosing is how NSAccessibility reports an open/closed row —
+	// outline rows and disclosure triangles both read it. Set only when the
+	// node is expandable: on an element that cannot disclose, "not disclosing"
+	// is announced as a closed branch rather than as a leaf.
+	if n.Expandable {
+		el.SendBool(a11ySels.setAccessibilityDisclosing, n.Expanded)
 	}
 
 	// Physical pixels, y down from the top — to points, y up from the bottom,

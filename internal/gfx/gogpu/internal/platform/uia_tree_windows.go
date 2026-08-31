@@ -52,26 +52,35 @@ const (
 	// and the tree comes back as an endless chain of identical window
 	// elements. The host provider is what ties us to the HWND; this must stay
 	// unanswered.
-	propNativeWindowHandle   = 30020
-	propControlType          = 30003
-	propName                 = 30005
-	propHasKeyboardFocus     = 30008
-	propIsKeyboardFocusable  = 30009
-	propIsEnabled            = 30010
-	propAutomationID         = 30011
-	propHelpText             = 30013
-	propIsControlElement     = 30016
-	propIsContentElement     = 30017
-	propIsOffscreen          = 30022
-	propToggleState          = 30086
-	propIsInvokePatternAvail = 30031
-	propIsTogglePatternAvail = 30041
+	propNativeWindowHandle    = 30020
+	propControlType           = 30003
+	propName                  = 30005
+	propHasKeyboardFocus      = 30008
+	propIsKeyboardFocusable   = 30009
+	propIsEnabled             = 30010
+	propAutomationID          = 30011
+	propHelpText              = 30013
+	propIsControlElement      = 30016
+	propIsContentElement      = 30017
+	propIsOffscreen           = 30022
+	propToggleState           = 30086
+	propIsInvokePatternAvail  = 30031
+	propIsTogglePatternAvail  = 30041
+	propExpandCollapseState   = 30070
+	propIsExpandCollapseAvail = 30047
 )
 
 // UIA pattern IDs (UIA_*PatternId).
 const (
 	patternInvoke = 10000
 	patternToggle = 10015
+)
+
+// ExpandCollapseState values (ExpandCollapseState enum).
+const (
+	expandCollapsed = 0
+	expandExpanded  = 1
+	expandLeafNode  = 3
 )
 
 // ToggleState values.
@@ -154,6 +163,21 @@ func supportsInvoke(n A11yNode) bool {
 
 // supportsToggle reports whether a node offers TogglePattern.
 func supportsToggle(n A11yNode) bool { return n.Checkable }
+
+// supportsExpandCollapse reports whether a node offers ExpandCollapsePattern —
+// what UIA clients read to announce a tree item as open or closed.
+func supportsExpandCollapse(n A11yNode) bool { return n.Expandable }
+
+// expandCollapseState maps the node onto UIA's enum. LeafNode is deliberately
+// not returned here: a node that is not expandable does not offer the pattern
+// at all, so a client never asks. Returning LeafNode for it would advertise the
+// pattern and then describe every button as an unopenable branch.
+func expandCollapseState(n A11yNode) int32 {
+	if n.Expanded {
+		return expandExpanded
+	}
+	return expandCollapsed
+}
 
 // toggleState maps a node's checked flag onto UIA's tri-state.
 func toggleState(n A11yNode) int32 {

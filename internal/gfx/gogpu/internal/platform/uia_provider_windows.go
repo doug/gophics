@@ -82,6 +82,12 @@ func (e *uiaElem) property(id int32, v *variant) {
 		v.setBool(supportsInvoke(n))
 	case propIsTogglePatternAvail:
 		v.setBool(supportsToggle(n))
+	case propExpandCollapseState:
+		if supportsExpandCollapse(n) {
+			v.setI4(expandCollapseState(n))
+		}
+	case propIsExpandCollapseAvail:
+		v.setBool(supportsExpandCollapse(n))
 	}
 }
 
