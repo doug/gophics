@@ -55,4 +55,16 @@ func TestDeviceStatsCountARealFrame(t *testing.T) {
 	}
 	t.Logf("one GPU frame made %d buffers, %d bind groups, %d textures, %d pipelines",
 		made.Buffers, made.BindGroups, made.Textures, made.Pipelines)
+
+	// Same proof for the transfer counters. They exist to make Phase E's own
+	// success criterion — uploaded bytes falling to the damage rect's area —
+	// measurable at all, and a byte counter sitting off the path data actually
+	// takes would read zero forever while looking like evidence.
+	x := wgpu.TransferStats()
+	if x.Uploaded() == 0 {
+		t.Error("a GPU frame uploaded no bytes: WriteBuffer/WriteTexture are not " +
+			"where data reaches this device, and the transfer counters are blind")
+	}
+	t.Logf("one GPU frame moved %d bytes up (%d buffer, %d texture), %d back",
+		x.Uploaded(), x.BufferBytes, x.TextureBytes, x.ReadbackBytes)
 }

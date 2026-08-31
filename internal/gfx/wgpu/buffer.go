@@ -199,6 +199,10 @@ func (b *Buffer) MappedRange(offset, size uint64) (*MappedRange, error) {
 	if cerr := b.core.TryRegisterMappedRange(offset, size); cerr != nil {
 		return nil, coreErrToTyped(cerr)
 	}
+	// A mapped range is how data comes back from the device; counting it here
+	// catches every readback path, including the offscreen frame readback that
+	// dominates the headless harness. See transferstats.go.
+	countReadback(int(size)) //nolint:gosec // a mapped size fits int on every target here
 	base, pendingOffset, _, ok := b.core.MappingInfo()
 	if !ok || base == nil {
 		return nil, ErrMapNotMapped

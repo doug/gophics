@@ -43,6 +43,7 @@ func (q *Queue) Poll() uint64 {
 // Uses js.CopyBytesToJS for Go-to-JS data transfer (same pattern as Rust's
 // Uint8Array::from(data).buffer()).
 func (q *Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) error {
+	bufferBytes.Add(uint64(len(data))) //nolint:gosec // a slice length is non-negative
 	if q.released {
 		return ErrReleased
 	}
@@ -57,6 +58,7 @@ func (q *Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) error {
 // Matches Rust wgpu WebQueue::write_texture layout: offset/bytesPerRow/rowsPerImage
 // are set on a GPUTexelCopyBufferLayout JS object.
 func (q *Queue) WriteTexture(dst *ImageCopyTexture, data []byte, layout *ImageDataLayout, size *Extent3D) error {
+	textureBytes.Add(uint64(len(data))) //nolint:gosec // a slice length is non-negative
 	if q.released {
 		return ErrReleased
 	}

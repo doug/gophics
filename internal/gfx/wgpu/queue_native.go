@@ -225,6 +225,7 @@ func (q *Queue) Poll() uint64 {
 //
 // Matches Rust wgpu-core queue.rs:647-672 (validate_write_buffer_impl).
 func (q *Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) error {
+	bufferBytes.Add(uint64(len(data))) //nolint:gosec // a slice length is non-negative
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -292,6 +293,7 @@ func (q *Queue) WriteBuffer(buffer *Buffer, offset uint64, data []byte) error {
 // Resource barriers are computed from the texture's tracked CurrentUsage().
 // For GLES/Software backends, the write is performed immediately via HAL.
 func (q *Queue) WriteTexture(dst *ImageCopyTexture, data []byte, layout *ImageDataLayout, size *Extent3D) error {
+	textureBytes.Add(uint64(len(data))) //nolint:gosec // a slice length is non-negative
 	q.mu.Lock()
 	defer q.mu.Unlock()
 

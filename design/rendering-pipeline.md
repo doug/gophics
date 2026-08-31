@@ -993,6 +993,30 @@ bandwidth nor damage on vector frames.
 > Building Phase E first would mean changing buffer-age and two-frame-union
 > semantics with no way to show it helped, which is how a risky change gets
 > merged on faith.
+>
+> **The counter now exists** (`wgpu.TransferStats`, counted at WriteBuffer,
+> WriteTexture and MappedRange — the only ways data reaches or leaves a device),
+> and it priced the problem on the first run. Identical on Metal and Mali:
+>
+> | | per frame |
+> | --- | --- |
+> | uploaded | **20.6 KB** — all buffer, no texture |
+> | read back | **575.0 KB** — 320×460×4, the whole surface |
+>
+> Two things follow, and they change what Phase E is for.
+>
+> The readback is 28× the upload and is the full surface every frame regardless
+> of what changed. That is why frame time could not see scissoring: the harness
+> was paying a fixed 575 KB that damage cannot touch. It is a property of the
+> headless harness rather than of an app, and it means **frame time from
+> RenderToImage is not a usable signal for any damage work**.
+>
+> The uploads are 20.6 KB of vertices and uniforms and **zero texture bytes**.
+> So `context.go:1460`'s "8 MB at 1080p" is not describing this path at all — it
+> describes the CPU present path, which uploads the surface with WriteTexture.
+> On the GPU render path the surface is rendered in place and never uploaded, so
+> Phase E's value there is scissoring fragment work, not saving bandwidth. Those
+> are different wins with different sizes, and the plan conflated them.
 
 
 `paint.PresentGPU` (`paint/paint.go:597`) passes an empty `image.Rectangle{}`,

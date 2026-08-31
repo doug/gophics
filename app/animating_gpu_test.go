@@ -67,10 +67,14 @@ func TestAnimatingFrameCost(t *testing.T) {
 		d := time.Since(t0)
 		made := wgpu.DeviceStats().Sub(before)
 		enc := wgpu.EncoderStats()
-		t.Logf("%-22s %6.2f ms/frame   passes=%d draws=%d   made/frame: %.1f buf %.1f bg",
+		x := wgpu.TransferStats()
+		t.Logf("%-22s %6.2f ms/frame  passes=%d draws=%d  made/frame %.1f buf %.1f bg  "+
+			"bytes/frame: up %s (buf %s + tex %s) back %s",
 			label, float64(d.Microseconds())/float64(frames)/1000,
 			enc.RenderPasses, enc.DrawCalls,
-			float64(made.Buffers)/frames, float64(made.BindGroups)/frames)
+			float64(made.Buffers)/frames, float64(made.BindGroups)/frames,
+			human(x.Uploaded()), human(x.BufferBytes), human(x.TextureBytes),
+			human(x.ReadbackBytes))
 	}
 	measure("full scene", false)
 	measure("full scene, mutating", true)
@@ -136,3 +140,15 @@ func (animScene) Build(ctx widget.Ctx) widget.Widget {
 }
 
 var animTick atomic.Int32
+
+// human renders a byte count the way a person reads one.
+func human(n uint64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1fMB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1fKB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
+}

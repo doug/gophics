@@ -9,4 +9,9 @@ import (
 // call site; the frame boundary that zeroes them lives in gg. This package
 // imports both, so it is where they are joined — see gg.RegisterEncoderReset
 // for why gg does not simply import wgpu.
-func init() { gg.RegisterEncoderReset(wgpu.ResetEncoderStats) }
+func init() {
+	gg.RegisterEncoderReset(func() {
+		wgpu.ResetEncoderStats()
+		wgpu.ResetTransferStats()
+	})
+}
