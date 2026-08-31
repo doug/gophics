@@ -2,10 +2,8 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"html"
-	"net/http"
 	"strings"
 	"time"
 
@@ -34,24 +32,10 @@ type API interface {
 	Item(ctx context.Context, id int) (Item, error)
 }
 
-type liveAPI struct{ client http.Client }
-
-func newLiveAPI() *liveAPI {
-	return &liveAPI{client: http.Client{Timeout: 15 * time.Second}}
-}
-
-func (a *liveAPI) get(ctx context.Context, url string, v any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	return json.NewDecoder(resp.Body).Decode(v)
-}
+// The one GET this app makes is build-tagged: net/http on native, the
+// browser's fetch() on web. See api_fetch_js.go for why that is worth two
+// files — the short version is 2.1MB of gzipped wasm.
+const apiTimeout = 15 * time.Second
 
 func (a *liveAPI) TopStories(ctx context.Context) ([]int, error) {
 	var ids []int
