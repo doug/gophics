@@ -1,23 +1,8 @@
-<h1 align="center">gg</h1>
+# gg
 
-<p align="center">
-  <strong>2D Graphics Library for Go</strong><br>
-  Pure Go | GPU Accelerated | Production Ready
-</p>
-
-<p align="center">
-  <a href="https://github.com/gogpu/gg/actions/workflows/ci.yml"><img src="https://github.com/gogpu/gg/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://codecov.io/gh/gogpu/gg"><img src="https://codecov.io/gh/gogpu/gg/branch/main/graph/badge.svg" alt="codecov"></a>
-  <a href="https://pkg.go.dev/github.com/gogpu/gg"><img src="https://pkg.go.dev/badge/github.com/gogpu/gg.svg" alt="Go Reference"></a>
-  <a href="https://goreportcard.com/report/github.com/gogpu/gg"><img src="https://goreportcard.com/badge/github.com/gogpu/gg" alt="Go Report Card"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-  <a href="https://github.com/gogpu/gg/releases"><img src="https://img.shields.io/github/v/release/gogpu/gg" alt="Latest Release"></a>
-  <a href="https://github.com/gogpu/gg"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version"></a>
-</p>
-
-<p align="center">
-  <sub>Part of the <a href="https://github.com/gogpu">GoGPU</a> ecosystem</sub>
-</p>
+> Vendored into gophics from the gogpu lineage; see `THIRD_PARTY.md`.
+> This describes the package as it exists here, as an `internal/` dependency —
+> it is not separately installable, and the upstream project's own docs may differ.
 
 ---
 
@@ -47,52 +32,6 @@
 | **Vector Export** | Recording system with PDF and SVG backends |
 | **Rasterizer** | Smart per-path algorithm selection (scanline, 4×4 tiles, 16×16 tiles, SDF, compute), text-aware area-based routing |
 | **Performance** | Tile-based parallel rendering, LRU caching, four-level damage pipeline (ADR-021: object diff → tile dirty → GPU scissor → OS present), **text batch coalescing** (ADR-031: same-style DrawString calls merge into 1 GPU draw call, Skia TextBlob pattern), **zero-copy buffer reuse** (NewPixmapFromBuffer + ImageView for hot rendering loops), incremental Path.Bounds (Skia pattern), `GOGPU_DEBUG_DAMAGE=1` overlay |
-
----
-
-## Installation
-
-```bash
-go get github.com/gogpu/gg
-```
-
-**Requirements:** Go 1.25+
-
----
-
-## Quick Start
-
-```go
-package main
-
-import (
-    "github.com/gogpu/gg"
-    "github.com/gogpu/gg/text"
-)
-
-func main() {
-    // Create drawing context
-    dc := gg.NewContext(512, 512)
-    defer dc.Close()
-
-    dc.ClearWithColor(gg.White)
-
-    // Draw shapes
-    dc.SetHexColor("#3498db")
-    dc.DrawCircle(256, 256, 100)
-    dc.Fill()
-
-    // Render text
-    source, _ := text.NewFontSourceFromFile("arial.ttf")
-    defer source.Close()
-
-    dc.SetFont(source.Face(32))
-    dc.SetColor(gg.Black)
-    dc.DrawString("Hello, GoGPU!", 180, 260)
-
-    dc.SavePNG("output.png")
-}
-```
 
 ---
 
@@ -575,68 +514,3 @@ Green flash-and-fade overlay shows damaged (repainted) regions. Useful for verif
 | `GOGPU_DEBUG_DAMAGE` | `1` | Show damage region overlay (flash-and-fade) |
 
 ---
-
-## Ecosystem
-
-**gg** is part of the [GoGPU](https://github.com/gogpu) ecosystem.
-
-| Project | Description |
-|---------|-------------|
-| [gogpu/gogpu](https://github.com/gogpu/gogpu) | GPU framework with windowing and input |
-| [gogpu/wgpu](https://github.com/gogpu/wgpu) | Pure Go WebGPU implementation |
-| [gogpu/naga](https://github.com/gogpu/naga) | Shader compiler (WGSL to SPIR-V, MSL, GLSL) |
-| **gogpu/gg** | **2D graphics (this repo)** |
-| [gogpu/gg-pdf](https://github.com/gogpu/gg-pdf) | PDF export backend for recording |
-| [gogpu/gg-svg](https://github.com/gogpu/gg-svg) | SVG export backend for recording |
-| [gogpu/ui](https://github.com/gogpu/ui) | GUI toolkit (planned) |
-
----
-
-## Documentation
-
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — System architecture
-- **[ROADMAP.md](ROADMAP.md)** — Development milestones
-- **[CHANGELOG.md](CHANGELOG.md)** — Release notes
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Contribution guidelines
-- **[pkg.go.dev](https://pkg.go.dev/github.com/gogpu/gg)** — API reference
-
-### Community Tutorials
-
-We haven't written comprehensive tutorials yet, but the community has started:
-
-🇨🇿 **Pavel Tišnovský** ([root.cz](https://www.root.cz)) wrote two in-depth `gg` tutorials with 54 working [examples](https://github.com/tisnik/go-root):
-
-1. [Creating 2D/3D Graphics in Go with GoGPU](https://www.root.cz/clanky/tvorba-2d-i-3d-grafiky-a-animaci-v-go-s-vyuzitim-projektu-gogpu/) — 49 min. Paths, Bézier curves, transforms, text, animations.
-2. [Part 2: Gradients, SVG & PDF Export](https://www.root.cz/clanky/tvorba-2d-i-3d-grafiky-a-animaci-v-go-s-vyuzitim-projektu-gogpu-2-cast/) — 39 min. Linear/radial/angular gradients, vector export.
-
-> Czech language — use [Google Translate](https://translate.google.com/). Code examples are universal.
-
-### Articles
-
-- [GoGPU: From Idea to 100K Lines in Two Weeks](https://dev.to/kolkov/gogpu-from-idea-to-100k-lines-in-two-weeks-building-gos-gpu-ecosystem-3b2)
-- [Pure Go 2D Graphics Library with GPU Acceleration](https://dev.to/kolkov/pure-go-2d-graphics-library-with-gpu-acceleration-introducing-gogpugg-538h)
-- [GoGPU Announcement](https://dev.to/kolkov/gogpu-a-pure-go-graphics-library-for-gpu-programming-2j5d)
-
----
-
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-**Priority areas:**
-- API feedback and testing
-- Examples and documentation
-- Performance benchmarks
-- Cross-platform testing
-
----
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <strong>gg</strong> — 2D Graphics for Go
-</p>

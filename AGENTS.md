@@ -74,6 +74,17 @@ backend's opinion, and it has repeatedly disagreed with the Mac's.
 
 ## Traps that have actually bitten
 
+- **Logical pixels above, physical below.** `geom` and everything in the widget
+  tree are logical; the painter's surface, damage rects handed to a presenter,
+  and anything touching a texture are physical — logical × device scale. Mixing
+  them is invisible at 1× and wrong at 2×, where a logical rect names the
+  top-left quadrant of a physical surface. That shipped: the web presenter
+  uploaded half the height of every frame and left the rest showing the previous
+  frame. `app.present` is where the conversion belongs.
+- **GPU handles cross package boundaries as `gpucontext` struct tokens**, not
+  `interface{}` or raw pointers — `wgpu.DeviceFromHandle` turns one back into a
+  device. It is what lets the layers pass a device around without importing each
+  other.
 - **Golden images across machines** need `apptest.Tol(apptest.AntiAliased)`.
   `Exact` is right within one machine and fails across two on sub-LSB float
   rounding — 4 pixels differing by 1/255 was enough.

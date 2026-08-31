@@ -1,5 +1,9 @@
 # gpucontext
 
+> Vendored into gophics from the gogpu lineage; see `THIRD_PARTY.md`.
+> This describes the package as it exists here, as an `internal/` dependency —
+> it is not separately installable, and the upstream project's own docs may differ.
+
 Shared GPU infrastructure for the [gogpu](https://github.com/gogpu) ecosystem.
 
 ## Overview
@@ -14,14 +18,6 @@ Shared GPU infrastructure for the [gogpu](https://github.com/gogpu) ecosystem.
 | **gpucontext** | Interfaces (DeviceProvider, EventSource, WindowChrome, Texture) | imports gputypes |
 
 gpucontext imports gputypes to use shared types in interface signatures, ensuring type compatibility across the ecosystem.
-
-## Installation
-
-```bash
-go get github.com/gogpu/gpucontext
-```
-
-**Requires:** Go 1.25+
 
 ## Features
 
@@ -337,16 +333,3 @@ names := backends.Available() // ["vulkan", "software"]
           ▼
        wgpu/hal
 ```
-
-## Ecosystem
-
-| Package | Description |
-|---------|-------------|
-| [gogpu/gogpu](https://github.com/gogpu/gogpu) | Graphics framework, implements DeviceProvider |
-| [gogpu/gg](https://github.com/gogpu/gg) | 2D graphics, uses DeviceProvider |
-| [gogpu/wgpu](https://github.com/gogpu/wgpu) | Pure Go WebGPU implementation |
-| [born-ml/born](https://github.com/born-ml/born) | ML framework, implements & uses |
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.

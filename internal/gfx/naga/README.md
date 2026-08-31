@@ -1,28 +1,8 @@
-<h1 align="center">naga</h1>
+# naga
 
-<p align="center">
-  <strong>Pure Go Shader Compiler</strong><br>
-  WGSL to SPIR-V, MSL, GLSL, HLSL, and DXIL. Zero CGO.
-</p>
-
-<p align="center">
-  <a href="https://github.com/gogpu/naga/actions/workflows/ci.yml"><img src="https://github.com/gogpu/naga/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://codecov.io/gh/gogpu/naga"><img src="https://codecov.io/gh/gogpu/naga/branch/main/graph/badge.svg" alt="codecov"></a>
-  <a href="https://pkg.go.dev/github.com/gogpu/naga"><img src="https://pkg.go.dev/badge/github.com/gogpu/naga.svg" alt="Go Reference"></a>
-  <a href="https://goreportcard.com/report/github.com/gogpu/naga"><img src="https://goreportcard.com/badge/github.com/gogpu/naga" alt="Go Report Card"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-  <a href="https://github.com/gogpu/naga/releases"><img src="https://img.shields.io/github/v/release/gogpu/naga" alt="Latest Release"></a>
-  <a href="https://github.com/gogpu/naga"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version"></a>
-  <a href="https://github.com/gogpu/naga"><img src="https://img.shields.io/badge/CGO-none-success" alt="Zero CGO"></a>
-  <a href="https://github.com/gogpu/gogpu/stargazers"><img src="https://img.shields.io/github/stars/gogpu/gogpu?style=flat&labelColor=555&color=yellow" alt="Stars"></a>
-  <a href="https://github.com/gogpu/gogpu/discussions"><img src="https://img.shields.io/github/discussions/gogpu/gogpu?style=flat&labelColor=555&color=blue" alt="Discussions"></a>
-</p>
-
-<p align="center">
-  <sub>Part of the <a href="https://github.com/gogpu">GoGPU</a> ecosystem</sub>
-</p>
-
-
+> Vendored into gophics from the gogpu lineage; see `THIRD_PARTY.md`.
+> This describes the package as it exists here, as an `internal/` dependency —
+> it is not separately installable, and the upstream project's own docs may differ.
 
 ---
 
@@ -68,16 +48,6 @@
 - **Warnings** — Unused variable detection with `_` prefix exception
 - **Validation** — Type checking, semantic validation, function call argument type/count verification, `@must_use` enforcement, `const_assert` evaluation, `@binding`/`@group` pairing, array size validation, swizzle namespace enforcement, mandatory semicolons
 - **CLI Tool** — `nagac` command-line compiler
-
----
-
-## Installation
-
-```bash
-go get github.com/gogpu/naga
-```
-
-**Requirements:** Go 1.25+
 
 ---
 
@@ -374,44 +344,3 @@ All backends follow the DXIL internal package pattern — implementation in `int
 naga is tested against **all 144 reference WGSL shaders** from the [Rust naga](https://github.com/gfx-rs/naga) test suite — **100% compatibility** across all five layers: **IR 144/144**, **SPIR-V 87/87**, **MSL 91/91**, **GLSL 68/68**, **HLSL 72/72** exact output match. Total: 164 test shaders with 994 golden outputs.
 
 ---
-
-## Ecosystem
-
-**naga** is the shader compiler for the [GoGPU](https://github.com/gogpu) ecosystem.
-
-| Project | Description |
-|---------|-------------|
-| [gogpu/gogpu](https://github.com/gogpu/gogpu) | GPU framework with windowing and input |
-| [gogpu/wgpu](https://github.com/gogpu/wgpu) | Pure Go WebGPU implementation |
-| **gogpu/naga** | **Shader compiler (this repo)** |
-| [gogpu/gg](https://github.com/gogpu/gg) | 2D graphics library |
-| [gogpu/ui](https://github.com/gogpu/ui) | GUI toolkit (22 widgets, M3/Fluent/Cupertino) |
-
----
-
-## Documentation
-
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Compiler architecture, pipeline, IR design
-- **[ROADMAP.md](ROADMAP.md)** — Development milestones
-- **[CHANGELOG.md](CHANGELOG.md)** — Release notes
-- **[pkg.go.dev](https://pkg.go.dev/github.com/gogpu/naga)** — API reference
-
----
-
-## Contributing
-
-We welcome contributions! Areas where help is needed:
-- Additional WGSL features
-- Test cases from real shaders
-- Backend optimizations
-- Documentation improvements
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <b>naga</b> — Shaders in Pure Go
-</p>

@@ -1,5 +1,9 @@
 # SPIR-V Binary Writer
 
+> Vendored into gophics from the gogpu lineage; see `THIRD_PARTY.md`.
+> This describes the package as it exists here, as an `internal/` dependency —
+> it is not separately installable, and the upstream project's own docs may differ.
+
 This package provides a low-level SPIR-V binary writer for constructing SPIR-V modules programmatically.
 
 ## Status
@@ -204,7 +208,3 @@ The next phase of implementation will add:
 - [SPIR-V Specification](https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html)
 - [SPIR-V Headers](https://github.com/KhronosGroup/SPIRV-Headers)
 - [Rust naga SPIR-V backend](https://github.com/gfx-rs/naga/tree/main/src/back/spv)
-
-## License
-
-Same as gogpu/naga project.

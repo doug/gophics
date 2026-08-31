@@ -1,18 +1,14 @@
 # gputypes
 
+> Vendored into gophics from the gogpu lineage; see `THIRD_PARTY.md`.
+> This describes the package as it exists here, as an `internal/` dependency —
+> it is not separately installable, and the upstream project's own docs may differ.
+
 WebGPU type definitions for the [gogpu](https://github.com/gogpu) ecosystem.
 
 ## Overview
 
 `gputypes` provides all WebGPU enums, structs, and constants as pure Go types with **zero dependencies**. It serves as the **single source of truth** for WebGPU types across the entire ecosystem.
-
-## Installation
-
-```bash
-go get github.com/gogpu/gputypes
-```
-
-**Requires:** Go 1.25+
 
 ## Why gputypes?
 
@@ -157,17 +153,6 @@ type Texture interface {
 
 This ensures **type compatibility** across all implementations.
 
-## Ecosystem
-
-| Package | Description | Uses gputypes |
-|---------|-------------|---------------|
-| [gogpu/gogpu](https://github.com/gogpu/gogpu) | Graphics framework | ✅ |
-| [gogpu/wgpu](https://github.com/gogpu/wgpu) | Pure Go WebGPU | ✅ |
-| [gogpu/gg](https://github.com/gogpu/gg) | 2D graphics library | ✅ (via gpucontext) |
-| [gogpu/gpucontext](https://github.com/gogpu/gpucontext) | Shared interfaces | ✅ (imports) |
-| [go-webgpu/webgpu](https://github.com/go-webgpu/webgpu) | Rust FFI bindings | ✅ |
-| [born-ml/born](https://github.com/born-ml/born) | ML framework | ✅ |
-
 ## Comparison with Rust
 
 | Rust | Go (gogpu) | Purpose |
@@ -180,11 +165,3 @@ This ensures **type compatibility** across all implementations.
 ## Status
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [ROADMAP.md](ROADMAP.md) for upcoming plans.
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-*Part of the [gogpu](https://github.com/gogpu) ecosystem — Pure Go GPU Computing.*

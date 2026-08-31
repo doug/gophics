@@ -1,5 +1,9 @@
 # text — GPU Text Pipeline for gg
 
+> Vendored into gophics from the gogpu lineage; see `THIRD_PARTY.md`.
+> This describes the package as it exists here, as an `internal/` dependency —
+> it is not separately installable, and the upstream project's own docs may differ.
+
 **Status:** v0.14.0 (Released as part of gg v0.31.0)
 
 This package implements a modern GPU-ready text pipeline for gogpu/gg, inspired by Ebitengine text/v2, skrifa/fontations, and vello.
