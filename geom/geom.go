@@ -1,8 +1,29 @@
 // Package geom provides the geometric primitives used throughout gophics:
-// points, sizes, rectangles, and edge insets.
+// points, sizes, rectangles, and edge insets. Types are small immutable
+// values; methods return new values.
 //
-// All values are float32 in logical pixels (see docs/adr/0001-float32-geometry.md).
-// Types are small immutable values; methods return new values.
+// # float32, in logical pixels
+//
+// Everything above this package is float32 too, and physical device pixels
+// appear only at the shell/GPU boundary, via a scale factor.
+//
+// Flutter uses double because Dart has no 32-bit float; Go gives a choice, and
+// float32 is the one that matches what is underneath. The substrate — wgpu, gg,
+// the WGSL shader interfaces — is float32 throughout, so double would mean
+// converting at every boundary. Gio and Cogent Core landed here for the same
+// reason.
+//
+// The precision is sufficient for the domain. float32 holds 24 mantissa bits:
+// integers are exact to 16.7M, and resolution is ~0.001px at coordinate 10,000,
+// while UI coordinates live inside a window. The accumulated-error risk is in
+// transform chains rather than stored coordinates, so deep compositions should
+// recompose from authoritative values each frame instead of mutating a matrix
+// incrementally.
+//
+// Layout arithmetic that Flutter does in double — flex distribution,
+// intrinsics — inherits float32 rounding here. If a case ever demands more, the
+// escape hatch is float64 inside that one computation and float32 at rest,
+// never a type change in this package.
 package geom
 
 // Pt is a point or vector in 2D space.

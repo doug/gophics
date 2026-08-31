@@ -10,7 +10,7 @@ One static binary on desktop and the WebGPU web — and a UI you test headlessly
 
 The rendering pipeline behind the best cross-platform UIs — immutable widgets → element reconciliation → constraint layout → GPU layer compositing — reimagined with idiomatic Go APIs, on a **zero-CGo** WebGPU stack. It draws every pixel itself, so one codebase renders the same UI — from the same renderer — on desktop, web, iOS, and Android, and even in a terminal. No platform forks, no Dart, no JavaScript, no webview, no SDK.
 
-[Quick start](#quick-start) · [Why Gophics](#why-gophics) · [A taste](#a-taste-of-the-api) · [Examples](#examples) · [API tiers](docs/api-tiers.md) · [Decisions](docs/adr/)
+[Quick start](#quick-start) · [Why Gophics](#why-gophics) · [A taste](#a-taste-of-the-api) · [Examples](#examples) · [API tiers](docs/api-tiers.md)
 
 </div>
 
@@ -239,7 +239,6 @@ architecture; see the script's header for what that misses.
 
 - **[docs/](docs/)** — the docs site (live demos + guides), deployed to GitHub Pages.
 - **[docs/api-tiers.md](docs/api-tiers.md)** — what each package promises after 1.0, and why the guarantee differs by tier.
-- **[docs/adr/](docs/adr/)** — architecture decision records: why the API is shaped the way it is.
 - **[docs/design-capabilities.md](docs/design-capabilities.md)** — the platform capability matrix, generated from the tree.
 
 ---
