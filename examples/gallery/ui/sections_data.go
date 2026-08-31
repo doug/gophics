@@ -343,7 +343,7 @@ func (s *dragDropDemo) bin(th theme.Theme, title string, items []string, toDone 
 func (s *dragDropDemo) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	return sectionColumn(
-		groupLabel("Long-press a chip, then drag it across"),
+		groupLabel("Drag a chip across — long-press first on touch"),
 		widget.DragHost{Child: widget.Column(
 			s.bin(th, "TO DO", s.todo, false),
 			widget.Sized{H: 10},
