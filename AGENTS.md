@@ -91,6 +91,12 @@ backend's opinion, and it has repeatedly disagreed with the Mac's.
 - **`git add -A` sweeps build outputs.** Stage named paths. Compiled examples
   and measurement harnesses land in the repo root and have reached commits at
   19–27MB more than once; the size gate catches them, but only after the fact.
+  They arrive from ordinary commands, not careless ones: `go build ./examples/x`
+  writes `x` to the working directory, and `go test -cpuprofile` *keeps* the
+  `pkg.test` binary after the run. Build with `-o /dev/null` when you only want
+  to know it compiles, and delete the `.test` file after profiling. `.gitignore`
+  now excludes extensionless files at the repo root by shape rather than by
+  name, so a new example is covered without being listed.
 - **Do not hand-edit generated blocks.** The capability matrix inside
   `internal/capgen/README.md` sits between `<!-- planfacts -->` markers and is
   rewritten by `scripts/tools/planfacts.py`; the prose around it is yours. The

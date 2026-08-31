@@ -30,46 +30,31 @@ examples/*/ios/build-sim/
 docs/demos/
 docs/source/
 
-# Stray example binaries from `go build ./examples/<x>` without -o.
-# One entry per example (regenerate with: ls examples/ | grep -v build).
-# CI's tracked-binary guard catches any that slip through.
-# Compiled example binaries. `go build ./examples/<name>` drops an
-# extensionless binary here named after the example, and this list is
-# maintained by hand — so every new example is unignored until someone
-# remembers to add a line. That is how a 19MB luminaria binary reached the
-# index; the pre-push size gate is what caught it.
-/luminaria
-/mirror
-/telemetry
-/2048
-/canvas
-/drummachine
-/epub
-/flocking
-/flowfield
-/gallery
-/glass
-/gpucheck
-/health
-/hello
-/hn
-/journal
-/ledger
-/match3
-/mover
-/notes
-/particles
-/roguelike
-/solitaire
-/ssh
-/sudoku
-/todo
-/whiteboard
+# Compiled binaries at the repo root.
+#
+# `go build ./examples/<name>` and `go test -c` both drop their output in the
+# working directory, and `go test -cpuprofile` keeps the test binary too — so
+# these appear from ordinary commands, not from anything unusual. Several
+# reached commits at 18-27MB before the pre-push size gate existed.
+#
+# Matched by shape rather than by name. The list this replaces had one line per
+# example and had to be extended every time one was added, which is a rule that
+# works right up until the moment it matters. Every tracked file at this level
+# has an extension except LICENSE and NOTICE, so "no dot at the repo root"
+# means "compiled output" here.
+#
+# If you need to track a new extensionless root file — a Makefile, say — add a
+# negation for it beside the two below, or git will ignore it without saying so.
+/*
+!/*.*
+!/*/
+!/LICENSE
+!/NOTICE
 
-# `go build ./examples/<name>` drops the binary in the repo root by default.
-# Several slipped into commits at ~18 MB each; the compiled examples are build
-# output. The named entries above cover the ones that did.
-/counter
+# ...but `!/*.*` above would re-admit the test binaries the *.test rule near
+# the top of this file excludes, because a later pattern wins. Re-assert them.
+/*.test
+/*.test.exe
 
 # gomobile bind output. These were tracked and reached ~200 MB across their
 # versions before being purged from history; package/ios.sh regenerates them.
