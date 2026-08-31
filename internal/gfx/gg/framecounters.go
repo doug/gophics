@@ -8,7 +8,7 @@ import "sync/atomic"
 // These answer questions the existing device counters cannot. wgpu.DeviceStats
 // says how many GPU objects a frame created; this says *which tier* was
 // responsible, and whether the population of that tier explains the count.
-// design/rendering-pipeline.md rests on the claim that tier 2b —
+// The renderer's tier model rests on the claim that tier 2b —
 // stencil-then-cover, which has no anti-aliasing of its own — catches every
 // stroke and every curved fill, and therefore most of a real UI. Nothing
 // reported that, while the loop that decides whether a frame is empty summed

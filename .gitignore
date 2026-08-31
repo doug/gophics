@@ -79,6 +79,14 @@ examples/*/ios/*.xcframework/
 # Other files under internal/gfx/gg/tmp/ are tracked golden references.
 internal/gfx/gg/tmp/compute_*.png
 
+# Ad-hoc measurement harnesses built into the repo root. These are named after
+# whatever they were probing, so the per-example list below cannot anticipate
+# them — cpudmg and webdmg were built to measure present-path bytes and reached
+# a commit at 19MB each, together with a stale `gophics` CLI build.
+/cpudmg
+/webdmg
+/gophics
+
 # Binaries from a separate-module example, which are named after the module
 # rather than the directory and so are missed by the per-example list above.
 # `go build ./...` inside examples/ssh or examples/embed-ebiten drops one; both

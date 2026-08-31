@@ -15,7 +15,7 @@ import (
 
 // Which tier draws a real UI, and does the encoder work scale with it?
 //
-// design/rendering-pipeline.md §1.2 claims tier 2b — stencil-then-cover, the
+// The tier model claims tier 2b — stencil-then-cover, the
 // one tier with no anti-aliasing of its own — catches every stroke and every
 // curved fill, and so most of a UI. Everything downstream depends on that: the
 // 4× MSAA that exists to anti-alias 2b is what makes LoadOpLoad illegal, which
@@ -65,9 +65,9 @@ func TestTierPopulationsAndEncoderWork(t *testing.T) {
 	}
 
 	if totalStencil == 0 {
-		t.Error("the stencil tier drew nothing across the entire corpus: §1.2 is wrong " +
-			"and Phases C and D of design/rendering-pipeline.md are aimed at a tier " +
-			"nothing reaches — re-scope before writing them")
+		t.Error("the stencil tier drew nothing across the entire corpus: the tier " +
+			"model is wrong, and the optimisation work aimed at tier 2b is aimed " +
+			"at a tier nothing reaches")
 	}
 }
 

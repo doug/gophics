@@ -1,7 +1,7 @@
 // Package mobile implements shell for embedded hosts (Android/iOS): the
 // host platform owns the surface and event loop and drives a Bridge —
 // pushing input in, presenting frames out. This is the M9 embedding
-// model (PLAN.md §6.4): Go as a library inside a thin native shell.
+// model: Go as a library inside a thin native shell.
 //
 // Rendering is GPU-first: the host hands over a native render surface
 // (SetSurface — iOS CAMetalLayer / Android ANativeWindow) and RenderFrame

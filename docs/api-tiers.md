@@ -1,6 +1,6 @@
 # Which packages promise what
 
-PLAN.md §1.7 commits to "a small surface and the Go 1 compatibility ethos after
+gophics commits to "a small surface and the Go 1 compatibility ethos after
 1.0". That is one promise made to packages with very different jobs: an app
 names `widget.Text`, a backend implements `shell.Window`, and freezing both at
 the same moment would either hold the platform layer back or break apps.
@@ -8,7 +8,7 @@ the same moment would either hold the platform layer back or break apps.
 So the promise is per tier. The tiers below are what each package is *for*, and
 the guarantee follows from that.
 
-Counts come from `design/api-surface.txt`, which is generated and enforced —
+Counts come from `internal/apisurface/testdata/api-surface.txt`, which is generated and enforced —
 `internal/apisurface` fails a test when the tree and the file disagree, so the
 numbers in this table cannot quietly drift from the code.
 
@@ -81,15 +81,14 @@ host app that binds them.
 
 A module split would fight the build rather than help it: `gomobile bind` binds
 `Bridge` in the same invocation as the app's own package, it needs
-`golang.org/x/mobile` in the module, and `design/substrate-consolidation.md`
-records that consolidating *into* one module is what fixed the
-gomobile-ignores-`go.work` trap. So it is a documented exclusion and an
+`golang.org/x/mobile` in the module, and consolidating *into* one module is
+what fixed the gomobile-ignores-`go.work` trap. So it is a documented exclusion and an
 exclusion from the generated manifest, which is why the total above is
 1,956 rather than well over 2,000.
 
 ## How this is kept honest
 
-`internal/apisurface` writes `design/api-surface.txt` and a test fails on drift,
+`internal/apisurface` writes `internal/apisurface/testdata/api-surface.txt` and a test fails on drift,
 listing what was added and removed. Regenerate deliberately:
 
     GOPHICS_UPDATE_API=1 go test ./internal/apisurface

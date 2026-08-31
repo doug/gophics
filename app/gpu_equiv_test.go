@@ -169,7 +169,7 @@ func TestGPUGradientInterpolates(t *testing.T) {
 }
 
 // TestGPUOpacityGroup is the minimal repro for GPU opacity-layer compositing
-// (design/gpu-opacity-layers.md). A base fill, then a PushOpacity(0.5) group
+// . A base fill, then a PushOpacity(0.5) group
 // containing an overlapping fill. Before GPU layers, the accelerator lost the
 // base content and ignored the group alpha; now the base must survive and the
 // group must composite at ~50%. Checked both against the (correct) CPU path and

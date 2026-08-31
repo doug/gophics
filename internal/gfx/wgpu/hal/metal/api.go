@@ -84,7 +84,6 @@ func (i *Instance) EnumerateAdapters(surfaceHint hal.Surface) []hal.ExposedAdapt
 		//
 		// Restore this line together with an implementation over Metal counter
 		// sample buffers (MTLCounterSampleBuffer), not before.
-		// See design/rendering-pipeline.md A6.
 		features.Insert(gputypes.FeatureDepthClipControl)
 		features.Insert(gputypes.FeatureTextureCompressionBC)
 

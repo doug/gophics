@@ -15,13 +15,13 @@ import (
 
 // What does 4x MSAA cost?
 //
-// design/rendering-pipeline.md §3 argues that 4x MSAA exists solely to
-// anti-alias tier 2b — every other tier brings its own coverage — and that
-// every tier pays for it: 4x the color attachment, 4x the depth/stencil
-// attachment, and a resolve per pass. §4.5(3) calls pricing that the highest
-// information available without building timestamp queries, and Phase D is
-// explicitly gated on the answer: if MSAA is cheap, the largest item in the
-// plan is not worth its risk.
+// 4x MSAA exists solely to anti-alias the stencil tier — every other tier
+// brings its own coverage — and every tier pays for it: 4x the colour
+// attachment, 4x the depth/stencil attachment, and a resolve per pass. Pricing
+// that is the highest information available without building timestamp
+// queries, and it decides whether replacing MSAA with coverage-based AA is
+// worth its risk. (Measured: it is not. The cost was proportional to the pass
+// count, and folding single-draw opacity groups removed it.)
 //
 // Run both halves and compare:
 //

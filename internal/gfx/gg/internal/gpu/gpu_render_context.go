@@ -679,7 +679,7 @@ func (rc *GPURenderContext) PushLayer(opacity float64, blend gg.BlendMode) {
 // what makes opacity affordable. Every group otherwise costs a full render pass
 // — measured at one pass per group, and ~1.3 ms per pass on a Mali tiler, so
 // the ten-tile reference scene spent 20 of its 21 passes and 53 ms of its frame
-// on layers (design/rendering-pipeline.md). Most opacity in a real UI is a fade
+// on layers. Most opacity in a real UI is a fade
 // over a single thing, and a single thing does not need an offscreen.
 func (rc *GPURenderContext) PopLayer() {
 	if rc.foldSingleDrawLayer() {

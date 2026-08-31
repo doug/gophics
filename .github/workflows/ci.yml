@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# Test scoping (see design/substrate-consolidation.md):
+# Test scoping:
 #   - lint:           fast gates — gofmt, go vet (framework scope), generated-code
 #                     freshness, and a tracked-binary size guard.
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.

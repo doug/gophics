@@ -365,7 +365,7 @@ func (s *GPURenderSession) SetSurfaceTarget(view *wgpu.TextureView, width, heigh
 func (s *GPURenderSession) BeginFrame() {
 	// The measurement frame boundary too: tier populations and encoder activity
 	// describe one frame, so they are zeroed where the frame starts rather than
-	// at a boundary invented for them (design/rendering-pipeline.md A2/A3).
+	// at a boundary invented for them.
 	gg.ResetFrameCounters()
 	wgpu.ResetEncoderStats()
 
@@ -712,7 +712,7 @@ func (s *GPURenderSession) RenderFrameGrouped(target gg.GPURenderTarget, groups 
 	// Check if all groups are empty — and record the breakdown while it is in
 	// hand. This loop already had every tier population and reduced them to a
 	// sum, so the claim that tier 2b catches most of a UI
-	// (design/rendering-pipeline.md §1.2) was one addition away from being
+	// was one addition away from being
 	// measurable and was never measured.
 	totalItems := 0
 	for i := range groups {
@@ -1676,8 +1676,9 @@ func (s *GPURenderSession) buildStencilResourcesBatch(paths []StencilPathCommand
 		// Reuse the pooled entry rather than destroying it. Five of its six GPU
 		// objects are fixed-size and can be rewritten in place; only the fan
 		// vertices grow. See ensureRenderBuffers for why the bind groups
-		// survive, and design/rendering-pipeline.md F1 for what the old
-		// destroy-and-recreate cost per frame.
+		// survive. The old destroy-and-recreate cost six GPU objects per path
+		// per frame, measured at 121 buffers and 60 bind groups on stroke-heavy
+		// content, none of which amortized.
 		bufs, err := s.stencilRenderer.ensureRenderBuffers(
 			s.stencilBufPool[i], w, h, cmd.Vertices, cmd.CoverQuad, color)
 		if err != nil {

@@ -9,14 +9,16 @@ import (
 	"github.com/doug/gophics/internal/apisurface"
 )
 
-// manifest is the committed public surface. It lives under design/ because it
-// is a document as much as a fixture: the diff on a pull request is the review.
-const manifest = "../../design/api-surface.txt"
+// manifest is the committed public surface: testdata, because that is what it
+// is — a fixture this package's test reads and rewrites, not a document. It
+// used to live under design/, which put a gate's input in a directory of
+// planning prose.
+const manifest = "testdata/api-surface.txt"
 
 // The public surface is a promise, so it is a committed artifact and a change
 // to it is a change to the diff.
 //
-// PLAN.md §1.7 commits to "a small surface and the Go 1 compatibility ethos
+// gophics commits to "a small surface and the Go 1 compatibility ethos
 // after 1.0". Before this test the number in that promise could only be
 // asserted — every audit re-derived it by hand, and the last one shipped with a
 // wrong conclusion in it. Now a refactor that claims to shrink the surface

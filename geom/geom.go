@@ -1,7 +1,7 @@
 // Package geom provides the geometric primitives used throughout gophics:
 // points, sizes, rectangles, and edge insets.
 //
-// All values are float32 in logical pixels (see design/adr/0001-float32-geometry.md).
+// All values are float32 in logical pixels (see docs/adr/0001-float32-geometry.md).
 // Types are small immutable values; methods return new values.
 package geom
 

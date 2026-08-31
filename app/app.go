@@ -2,7 +2,7 @@
 //
 // Run drives a real window; Headless drives the same core without a display
 // for tests and golden images. Both share core, so behavior verified
-// headless is the shipping behavior (PLAN.md principle 3).
+// headless is the shipping behavior.
 package app
 
 import (
@@ -158,7 +158,7 @@ type core struct {
 	// By kind rather than as a total, because the two kinds mean opposite
 	// things. Textures and pipelines are first-use costs that amortize away;
 	// buffers and bind groups are recreated every frame by the stencil tier,
-	// six per path, and never amortize (design/rendering-pipeline.md F1).
+	// six per path, and never amortize.
 	// "Made 312 objects" and "made 312 buffers and bind groups" are different
 	// diagnoses, and the total could not tell them apart.
 	frameMade [60]MadeCounts
@@ -723,7 +723,7 @@ type hitInteractive struct {
 }
 
 // Semantics returns the semantics tree of the current layout (a11y
-// foundation, PLAN.md §6.5). Call after a frame (or Headless.Render).
+// foundation). Call after a frame (or Headless.Render).
 func (c *core) Semantics() []layout.SemNode {
 	box := c.Owner.RootBox()
 	if box == nil {
@@ -1118,7 +1118,7 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 		h.core.Owner.DarkMode = dark
 		h.core.Owner.RebuildAll()
 	}
-	// Frame pipeline (PLAN.md §3): posted work → tick animations → build →
+	// Frame pipeline: posted work → tick animations → build →
 	// layout → record → diff → replay damage → present.
 	h.core.drainPosted()
 	h.core.TickGestures(dt)

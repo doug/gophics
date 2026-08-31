@@ -33,8 +33,29 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(ROOT)
 
-PLAN = "PLAN.md"
+# PLAN.md is not in this repo: the planning material lives in a separate
+# private tree. This tool still maintains its generated inventories when that
+# tree is present, because the alternative is a plan whose tables rot — which
+# is the failure this whole script exists to prevent. Point GOPHICS_PLAN at it,
+# or keep it checked out beside this repo as ../gophics-plans.
+#
+# The capability matrix is different: it is public documentation, always
+# generated, and its absence is an error rather than a skip.
 CAPDOC = "docs/design-capabilities.md"
+
+
+def plan_path():
+    """The plan file to maintain, or None when the planning tree is absent."""
+    env = os.environ.get("GOPHICS_PLAN")
+    if env:
+        return env if os.path.exists(env) else None
+    for cand in ("PLAN.md", os.path.join("..", "gophics-plans", "PLAN.md")):
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+PLAN = plan_path()
 SHELLS = ["desktop", "web", "mobile", "terminal"]
 
 
@@ -370,10 +391,9 @@ BLOCKS = {
 # all, and called TextInput and Accessibility unimplemented on mobile while the
 # keyboard and the AT tree were working. Prose is judgment and stays by hand;
 # status is a fact about the tree and is generated.
-FILES = {
-    PLAN: {"capabilities", "devices", "layout", "widgets"},
-    CAPDOC: {"capabilities"},
-}
+FILES = {CAPDOC: {"capabilities"}}
+if PLAN:
+    FILES[PLAN] = {"capabilities", "devices", "layout", "widgets"}
 
 SPAN = re.compile(
     r"<!-- planfacts:(\w+) -->\n(?:.*?\n)??<!-- /planfacts -->", re.S

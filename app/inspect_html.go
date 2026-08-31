@@ -12,7 +12,7 @@ import (
 // self-contained HTML page: a depth-indented outline of every box — its type,
 // semantic role/label, and bounds — beside a to-scale overlay showing where each
 // box sits and nests. This is the "tree dump → browser view" widget inspector
-// (PLAN.md M8). Call after a frame. The page inlines all CSS (no external
+// . Call after a frame. The page inlines all CSS (no external
 // assets); write it to a .html file and open it, or hand it to a viewer.
 func (c *core) InspectHTML() string {
 	nodes := c.InspectTree()

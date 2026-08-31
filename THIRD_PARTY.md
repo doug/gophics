@@ -17,8 +17,8 @@ copyright notices there are retained as MIT requires.
 | `internal/audio` | `github.com/gogpu/audio` (via `github.com/doug/audio`) — audio output drivers | MIT |
 
 These packages are `internal/` on purpose: they are gophics's private
-implementation substrate, not a public API. See
-`design/substrate-consolidation.md` for the rationale and structure.
+implementation substrate, not a public API. The rationale is that gomobile ignores go.work, so a multi-module layout
+could not be bound for Android or iOS at all.
 
 ## Still-external dependencies
 

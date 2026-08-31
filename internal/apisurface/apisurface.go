@@ -1,9 +1,10 @@
 // Package apisurface enumerates the module's public API.
 //
-// PLAN.md §1.7 promises "a small surface and the Go 1 compatibility ethos after
+// gophics promises "a small surface and the Go 1 compatibility ethos after
 // 1.0". A promise about a number needs the number to be measurable, and every
 // refactor that claims to shrink it needs a diff rather than an assertion — so
-// the surface is written to design/api-surface.txt and a test fails when the
+// the surface is written to internal/apisurface/testdata/api-surface.txt and a
+// test fails when the
 // tree and the file disagree.
 //
 // What counts as surface is what a caller can name and a rename can break:

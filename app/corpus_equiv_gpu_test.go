@@ -115,9 +115,8 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 			// They are worth reading. On the UTM software renderer, three
 			// scenes beat every real GPU (curve-heavy is pixel-exact) and
 			// `mixed` disagrees on 18.8%, scene-wide rather than in one region.
-			// That is an open finding, recorded in design/rendering-pipeline.md
-			// and not diagnosed: a machine with no working GPU driver renders
-			// complex scenes visibly differently.
+			// That is an open finding and not diagnosed: a machine with no
+			// working GPU driver renders complex scenes visibly differently.
 			if softwareAdapter() {
 				t.Logf("%-13s (software adapter: reported, not gated)", sc.name)
 				return
@@ -153,7 +152,6 @@ func softwareAdapter() bool {
 func skipWithoutHardwareGPU(t *testing.T) {
 	t.Helper()
 	if softwareAdapter() {
-		t.Skip("software adapter: this GPU feature is not implemented there; " +
-			"see design/rendering-pipeline.md")
+		t.Skip("software adapter: this GPU feature is not implemented there")
 	}
 }

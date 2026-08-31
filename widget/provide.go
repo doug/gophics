@@ -1,7 +1,7 @@
 package widget
 
 // Provide makes a value available to every widget below it in the tree,
-// looked up by type with Of — gophics's InheritedWidget (PLAN.md §4.4)
+// looked up by type with Of — gophics's InheritedWidget
 // with generics instead of runtime type lookups at the call site:
 //
 //	widget.Provide[Theme]{Value: dark, Child: app}

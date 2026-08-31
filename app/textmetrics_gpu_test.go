@@ -47,8 +47,7 @@ func inkExtentX(im *image.RGBA) (lo, hi int) {
 // accumulates with every glyph instead of cancelling.
 //
 // Reported, not gated: which backend should change is a design decision, and
-// all three answers move text appearance framework-wide. See
-// design/rendering-pipeline.md.
+// every answer moves text appearance framework-wide.
 func TestGPUTextWidthVersusMeasuredWidth(t *testing.T) {
 	const s = "The quick brown fox jumps over the lazy dog"
 	for _, size := range []float32{9, 11, 13, 15, 20} {

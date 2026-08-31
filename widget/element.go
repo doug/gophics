@@ -294,7 +294,7 @@ func canUpdate(old Widget, new Widget) bool {
 }
 
 // safeBuild runs a widget's Build, converting a panic into an inline error
-// widget so one failing subtree cannot take down the app (PLAN.md §4.7).
+// widget so one failing subtree cannot take down the app.
 // The panic is reported through OnBuildPanic (default: log).
 func (o *Owner) safeBuild(build func() Widget) (w Widget) {
 	defer func() {

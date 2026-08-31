@@ -1,6 +1,6 @@
 // Package widget implements gophics's declarative layer: immutable widget
 // values describing the UI, reconciled into a retained element tree that owns
-// layout boxes. It is Flutter's widgets/ analog (PLAN.md M3, §4).
+// layout boxes. It is Flutter's widgets/ analog.
 //
 // The three widget kinds (mirroring Flutter, expressed as Go interfaces):
 //

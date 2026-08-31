@@ -26,12 +26,12 @@ func TestTierCountsMatchTheManifest(t *testing.T) {
 		"3": {"shell", "shell/desktop", "shell/terminal", "shell/web"},
 	}
 
-	manifest, err := os.ReadFile("../../design/api-surface.txt")
+	surface, err := os.ReadFile(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	perPkg := map[string]int{}
-	for _, line := range strings.Split(string(manifest), "\n") {
+	for _, line := range strings.Split(string(surface), "\n") {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}

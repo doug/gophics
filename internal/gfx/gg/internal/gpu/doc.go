@@ -27,8 +27,8 @@
 // reachable only from its own tests and has been removed; the description
 // outlived the code by long enough to be the most misleading page in the
 // package. The measured compute path that remains is VelloAccelerator, which
-// SelectPipeline does not currently choose — see design/rendering-pipeline.md
-// §1.3 for the table it loses on.
+// SelectPipeline does not currently choose: a measured table has the render
+// pass winning every cell by 1.4x-7x on Metal.
 //
 // # Blend Modes
 //

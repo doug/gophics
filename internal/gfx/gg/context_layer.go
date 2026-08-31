@@ -68,8 +68,7 @@ func (c *Context) PushLayer(blendMode BlendMode, opacity float64) {
 	// GPU path: record a layer marker on the per-context render context so the
 	// accelerator composites an offscreen target (Skia saveLayer). Skip the
 	// CPU-pixmap swap below — accelerated fills bypass c.pixmap, so the swap
-	// loses prior GPU content and cannot apply the group alpha. See
-	// design/gpu-opacity-layers.md.
+	// loses prior GPU content and cannot apply the group alpha.
 	if rc := c.gpuCtxOps(); rc != nil {
 		if la, ok := rc.(layerCtxOps); ok {
 			la.PushLayer(opacity, blendMode)

@@ -1,7 +1,7 @@
 // Command embed-ebiten runs a gophics UI as a translucent overlay on a live
 // Ebiten game — the embedding seam, exercised rather than described.
 //
-// PLAN.md names "UIs embedded inside larger Go programs" a center of gravity,
+// gophics names "UIs embedded inside larger Go programs" a center of gravity,
 // and app.NewHandler has always existed "for embedded hosts that own the
 // surface and event loop". What was missing is a host that proves it: this is
 // roughly 200 lines, and every line of it is something a real embedder has to

@@ -160,7 +160,7 @@ no-op everywhere.
 ## Capability status
 
 The matrix is generated from the tree by `scripts/tools/planfacts.py`, the same
-generator that fills PLAN.md, and `scripts/gates.sh` fails when it drifts.
+generator that fills this table, and `scripts/gates.sh` fails when it drifts.
 
 It is generated because the hand-maintained version it replaces was wrong in
 both directions at once: it called Share, Notifier, SecureStorage, Permissions,

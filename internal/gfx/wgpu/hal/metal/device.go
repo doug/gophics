@@ -1037,7 +1037,7 @@ func (d *Device) DestroyComputePipeline(pipeline hal.ComputePipeline) {
 // caller reaches this only by ignoring the feature set; returning the error is
 // the honest answer. Implementing it means Metal counter sample buffers
 // (MTLCounterSampleBuffer) here, plus QuerySet API through wgpu and core, which
-// have none — see design/rendering-pipeline.md §2.5.
+// have none.5.
 func (d *Device) CreateQuerySet(_ *hal.QuerySetDescriptor) (hal.QuerySet, error) {
 	return nil, hal.ErrTimestampsNotSupported
 }

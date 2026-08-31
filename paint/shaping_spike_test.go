@@ -13,7 +13,7 @@ import (
 
 // TestArabicShapingSpike probes whether gg's from-scratch GSUB engine
 // actually applies contextual (positional) shaping to Arabic — the plan's
-// standing skepticism about gg's text stack (PLAN.md §5.1). It is an
+// standing skepticism about gg's text stack. It is an
 // ecosystem spike, not a framework test: it uses a macOS system font and
 // skips elsewhere.
 //
@@ -82,10 +82,10 @@ func TestArabicShapingSpike(t *testing.T) {
 	if substituted == 0 {
 		// Verdict as of gg v0.50.x, recorded 2026-07-24: no Arabic contextual
 		// joining in OwnShaper (and no bidi anywhere). Latin-only until the
-		// go-text/typesetting-based text package lands (PLAN.md §6.1). This
+		// go-text/typesetting-based text package lands. This
 		// skip flips to a hard assertion when that happens.
 		t.Skip("FINDING CONFIRMED: gg applies no Arabic positional substitution; " +
-			"complex scripts require go-text/typesetting (PLAN.md §5.1)")
+			"complex scripts require go-text/typesetting")
 	}
 	if diff := shaperAdvance - face.Advance(word); diff > 0.5 || diff < -0.5 {
 		t.Errorf("LAYOUT/PAINT MISMATCH: Face.Advance=%.1f (unshaped, used by layout) "+

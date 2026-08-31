@@ -274,7 +274,7 @@ func (sr *StencilRenderer) ensureReady(w, h uint32) error {
 // ensureRenderBuffers updates b in place for a new path, creating only what it
 // cannot reuse, and returns a fresh set when b is nil.
 //
-// This is F1's fix (design/rendering-pipeline.md C1). The batch builder used to
+// This is F1's fix. The batch builder used to
 // destroy the pooled entry and call createRenderBuffers for every path on every
 // changed frame — six GPU objects per path, measured at 111 per frame on a plain
 // themed screen and 181 on stroke-heavy content, with no pipeline creation

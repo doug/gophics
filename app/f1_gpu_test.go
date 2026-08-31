@@ -14,13 +14,12 @@ import (
 
 // F1: does the renderer create GPU objects on every frame, or only at first use?
 //
-// design/rendering-pipeline.md's headline finding is that tier 2b destroys and
-// recreates six GPU objects per path per changed frame — four buffers and two
-// bind groups from createRenderBuffers — and that this never amortizes the way
-// a compiled pipeline or an allocated texture does. Until buffers and bind
-// groups were counted, that claim was unfalsifiable: the repo's instruments
-// could see textures and pipelines, which are exactly the two kinds the finding
-// does *not* accuse.
+// Tier 2b used to destroy and recreate six GPU objects per path per changed
+// frame — four buffers and two bind groups from createRenderBuffers — and that
+// never amortizes the way a compiled pipeline or an allocated texture does.
+// Until buffers and bind groups were counted the claim was unfalsifiable: the
+// instruments could see textures and pipelines, which are exactly the two kinds
+// it does *not* accuse.
 //
 // This is the shape of the measurement, not a threshold to pass. It reports
 // per-frame creation after warm-up for each corpus scene, so the numbers land
@@ -72,8 +71,8 @@ func TestF1SteadyStateObjectChurn(t *testing.T) {
 	}
 
 	if !anyChurn {
-		t.Error("no scene created a buffer or bind group in steady state: F1 does not " +
-			"exist as described, and Phase C of design/rendering-pipeline.md is " +
-			"aimed at nothing — re-scope before writing it")
+		t.Error("no scene created a buffer or bind group in steady state: the " +
+			"per-frame allocation churn does not exist as described, so the work " +
+			"aimed at it is aimed at nothing")
 	}
 }

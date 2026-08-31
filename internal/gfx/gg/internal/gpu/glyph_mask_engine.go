@@ -264,7 +264,7 @@ func (e *GlyphMaskEngine) LayoutShapedGlyphs(
 // characters at 9px, because the rounding compounded instead of cancelling.
 // MeasureWidthIn and the CPU rasterizer both use the shaper's exact positions,
 // so the GPU was the only component that disagreed, and layout is computed from
-// the measurement. See design/rendering-pipeline.md F7.
+// the measurement.
 //
 // The fraction MUST be measured in device space: the mask is rasterized at
 // device size and the quad is scaled by deviceScale at flush.

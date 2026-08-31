@@ -416,7 +416,7 @@ func (s *GPUShared) detectStrategy() gpuRenderStrategy {
 // implementations, but software backends may not be fully compliant.
 //
 // GOGPU_NO_MSAA=1 forces 1x on hardware that supports 4x. This is the MSAA
-// ablation from design/rendering-pipeline.md §4.5(3): 4x MSAA exists to
+// ablation: 4x MSAA exists to
 // anti-alias tier 2b, the one tier with no coverage of its own, and every other
 // tier pays for it in attachment bandwidth and a resolve per pass. On a tiler
 // that is the dominant term, and it is also why LoadOpLoad is illegal, which is

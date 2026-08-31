@@ -26,7 +26,7 @@ func TestGlyphMaskFullHintingForLatin(t *testing.T) {
 // Letter-spacing evenness — that a word's internal advances do not depend on
 // the sub-pixel position it starts at — used to be tested here by comparing
 // GlyphMaskQuad.X0 values. That proxy stopped being valid when snapXGrid was
-// removed (design/rendering-pipeline.md F7): a quad's X0 is now an integer
+// removed: a quad's X0 is now an integer
 // bucket and the rest of the position lives in which sub-pixel mask variant is
 // drawn, so differences between X0 values read as ±1px jitter while nothing
 // visible moves.

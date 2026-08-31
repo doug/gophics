@@ -10,5 +10,5 @@ import (
 )
 
 // scene (verify build) is the GPU bring-up diagnostic instead of HN. Selected
-// by -tags gophics_verify. See design/mobile-gpu-bringup.md.
+// by -tags gophics_verify.
 func scene() (widget.Widget, app.Config) { return gpucheck.Root(), gpucheck.Config() }

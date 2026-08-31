@@ -17,7 +17,7 @@ import "sync/atomic"
 // no state, so instrumenting the callers would have been seven chances to be
 // wrong and to look right.
 //
-// What they are for (design/rendering-pipeline.md):
+// What they are for:
 //   - F2 predicts pipeline switches ≈ 2× the stencil-tier population, because
 //     stencil-then-cover alternates two pipelines per path. That is falsifiable
 //     only once both are counted.

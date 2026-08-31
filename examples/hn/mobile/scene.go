@@ -11,6 +11,6 @@ import (
 
 // scene returns the widget tree the mobile host runs. The default is the HN
 // app; building with -tags gophics_verify swaps in the GPU bring-up scene
-// (see scene_verify.go and design/mobile-gpu-bringup.md) — e.g.
+// (see scene_verify.go) — e.g.
 // `gophics run -p ios -tags gophics_verify ./examples/hn/mobile`.
 func scene() (widget.Widget, app.Config) { return hn.Root(), hn.Config() }

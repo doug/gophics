@@ -18,7 +18,7 @@ import "sync/atomic"
 // Buffers and bind groups are counted for a sharper reason than textures and
 // pipelines were. Those two are mostly first-use costs that amortize; buffers
 // and bind groups are created and destroyed *every frame* by tier 2b, six per
-// path (design/rendering-pipeline.md F1), and until they were counted that
+// path, and until they were counted that
 // finding was invisible to every instrument in the repo — including the
 // on-device pacing readout, which reported "made N gpu objects" without ever
 // being able to see the N that mattered.

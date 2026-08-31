@@ -15,10 +15,10 @@ import (
 
 // What costs a render pass?
 //
-// design/rendering-pipeline.md measured MSAA at roughly 1.3ms per pass on a
-// Mali tiler, and the reference scene at 21 passes against 1 for every other
-// corpus scene — 53ms/frame. So the pass count, not the scene content, is what
-// makes that frame expensive, and nothing said which construct spends them.
+// MSAA costs roughly 1.3ms per render pass on a Mali tiler, and the reference
+// scene once ran 21 passes against 1 for every other corpus scene — 53ms/frame.
+// So the pass count, not the scene content, is what made that frame expensive,
+// and nothing said which construct spends them.
 //
 // Each case below adds one construct to the same baseline, so the difference is
 // attributable. Reported, not gated: this exists to aim the work.

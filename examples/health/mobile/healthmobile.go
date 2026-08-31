@@ -3,7 +3,7 @@
 // It holds only what is health's own: building the tree, and the calls a
 // native host uses to feed real HealthKit / Health Connect samples into the
 // shared Go UI (package healthui). One widget tree, real device data. See
-// design/health-native-providers.md for the iOS/Android host wiring.
+// the iOS/Android host wiring for a native health provider.
 //
 // Everything generic — the frame loop, input, lifecycle, accessibility — is on
 // shell/mobile.Bridge, which the CLI binds alongside this package, so a host
@@ -52,7 +52,7 @@ func SetAuthorized(ok bool) { dev.SetAuthorized(ok) }
 // is fresh each Start, so appended samples build the series. (There is
 // deliberately no batch PushSeries — gomobile can't bind a []float64 parameter,
 // only []byte, so such a method never appears in the generated iOS/Android
-// binding. See design/health-native-providers.md.)
+// binding.)
 func PushSample(m int, t, v float64, capN int) {
 	dev.Push(healthui.Metric(m), t, v, capN)
 }

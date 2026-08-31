@@ -65,7 +65,7 @@ func TestFrameStatsReportsWhatTheWorstFrameCreated(t *testing.T) {
 		c.recordFrameMade(5, 100, 0, MadeCounts{}) // steady frames make nothing
 	}
 	// The spike, on a *smaller* scene: one pipeline compiled, six buffers and
-	// bind groups churned — the tier-2b shape from design/rendering-pipeline.md.
+	// bind groups churned — the shape the stencil tier used to produce.
 	c.recordFrameMade(48, 99, 0, MadeCounts{Pipelines: 1, Buffers: 4, BindGroups: 2})
 
 	f := c.FrameStats()

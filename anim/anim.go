@@ -1,5 +1,5 @@
 // Package anim provides animation primitives: curves and controllers.
-// It is Flutter's animation/ analog (PLAN.md M4), driven by the app's frame
+// It is Flutter's animation/ analog, driven by the app's frame
 // tickers — a Controller registered with widget.Ctx.AddTicker advances every
 // frame while running and stops consuming work when idle.
 package anim

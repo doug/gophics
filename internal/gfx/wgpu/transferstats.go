@@ -6,9 +6,9 @@ import "sync/atomic"
 //
 // The counters already here answer "how many objects" and "how much encoder
 // work". Neither answers "how much data moved", and that is the question a
-// damage rect exists to change: design/rendering-pipeline.md Phase E asks for
-// uploaded bytes to fall to the damage rect's area, and nothing counted bytes,
-// so the phase could not be shown to have worked. Frame time was tried as a
+// damage rect exists to change: damage-aware present asks for uploaded bytes
+// to fall to the damage rect's area, and nothing counted bytes, so the work
+// could not be shown to have worked. Frame time was tried as a
 // proxy and is a bad one — a readback harness charges the full surface every
 // frame whatever the damage says, which is enough to hide the effect entirely.
 //

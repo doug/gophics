@@ -11,7 +11,7 @@ each frame with wgpu.
 `connect-client` (after the user grants the permission sheet) and pushes each
 series into the shared Go provider with the scalar `Healthmobile.pushSample`
 (gomobile can't bind a `[]float64`, so there is no batch push). Metric codes:
-0 heart rate, 1 steps, 2 weight, 3 sleep. See `design/health-native-providers.md`.
+0 heart rate, 1 steps, 2 weight, 3 sleep.
 
 ## Build & run
 
@@ -34,5 +34,4 @@ At first launch the app requests the Health Connect read permissions; grant them
 in the system sheet and the dashboard fills with real data. A metric with no
 source (no watch/scale/sleep-tracker feeding Health Connect) simply shows "no
 data" — that is not an error. The GPU present path needs a **real device**; the
-emulator falls back to CPU and lacks health data. See
-`design/mobile-gpu-bringup.md`.
+emulator falls back to CPU and lacks health data.

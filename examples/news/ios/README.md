@@ -39,7 +39,7 @@ live on Android and by `shell/mobile`'s headless tests.
 - Presentation is GPU-first: the Go side renders straight to the
   `CAMetalLayer` via wgpu. When the GPU surface is unavailable (the
   Simulator), the host blits `Snapshot()` RGBA into a `CALayer` — the
-  same CPU fallback as Android. See `design/mobile-gpu-bringup.md`.
+  same CPU fallback as Android.
 - Keyboard input uses `UIKeyInput` (committed text); full IME preedit on
   iOS needs `UITextInput` adoption — tracked with M9 polish.
 - The bridge API is identical to Android's, so behavior verified by

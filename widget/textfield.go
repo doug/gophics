@@ -24,7 +24,7 @@ import (
 // IME composition is handled: preedit text is spliced in at the caret and
 // underlined until the input method commits it.
 //
-// Known limits (PLAN.md §6.1): LTR caret geometry, single line.
+// Known limits: LTR caret geometry, single line.
 type TextField struct {
 	Value       string
 	Placeholder string

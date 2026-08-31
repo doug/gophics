@@ -19,10 +19,10 @@ import (
 
 // What does changing one small thing cost?
 //
-// design/rendering-pipeline.md F4: the GPU replays the whole display list on
-// every changed frame, and paint.PresentGPU passes an empty damage rect, so the
-// rect the app already computed is discarded. context.go:1460 puts the miss at
-// a 48x48 spinner updating 9KB instead of 8MB at 1080p.
+// The GPU replays the whole display list on every changed frame. The CPU
+// present path used to discard the damage rect the app had already computed —
+// gg/context.go puts that miss at a 48x48 spinner updating 9KB instead of 8MB
+// at 1080p — and now honours it.
 //
 // This measures the claim rather than repeating it — and the answer is that
 // this harness cannot size it, which is worth recording where the next person

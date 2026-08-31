@@ -57,8 +57,7 @@ func blurSeam(t *testing.T, gpu bool) []int {
 		// broken gate rather than a caught defect: blur is a GPU feature and
 		// this test asserts it works, not that every adapter has it.
 		if softwareAdapter() {
-			t.Skip("software adapter does not implement backdrop blur; see " +
-				"design/rendering-pipeline.md")
+			t.Skip("software adapter does not implement backdrop blur")
 		}
 	} else {
 		img = hl.Render()

@@ -126,7 +126,7 @@ func buildAtlas() *image.RGBA {
 	return a
 }
 
-// The performance corpus (design/rendering-pipeline.md §4.3).
+// The performance corpus.
 //
 // Three scenes beside Scene(), chosen because the tier table in that plan's
 // §1.1 predicts they diverge: strokes and curved fills are claimed to land in
