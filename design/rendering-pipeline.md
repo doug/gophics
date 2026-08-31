@@ -16,6 +16,7 @@
 > | opacity single-draw fold | **done** | 21→1 passes; Mali 53.7→11.6 ms (4.4×) | Metal + **Vulkan/Mali** |
 > | D coverage-AA instead of MSAA | **closed, not justified** | MSAA now free on both backends | Metal + **Vulkan/Mali** |
 > | E damage-rect present | **done** | CPU present 8,480→230 KB/frame (37×) | Metal, M-series |
+> | E HiDPI fix, web | **verified** | no stale rows below the halfway line | Chrome, dpr 2 |
 > | Vulkan verification | **done** | MSAA = 2× on multi-pass; C1/F7 hold | **Mali-G615, Galaxy Tab A9+** |
 > | A5 corpus + baseline file | scenes landed; baseline file not started | — | — |
 > | A6 Metal timestamp honesty | **done** | one lie removed | Metal |
@@ -1007,6 +1008,17 @@ bandwidth nor damage on vector frames.
 > | after | **230 KB** |
 >
 > **37× less uploaded**, on a 640×640 window at 2× with one label changing.
+>
+> **Verified in Chrome at devicePixelRatio 2** (2230×2434 canvas, CPU renderer):
+> two consecutive frames of an animating scene differ across the entire height,
+> including physical rows 1400–2030 — well below the 1217 halfway line the
+> pre-fix code never uploaded. No stale pixels.
+>
+> Worth recording how, because the obvious instrument does not work:
+> `getImageData` on this canvas returns all-black through the extension even
+> while the page renders correctly, so pixel sampling reads as "nothing changed"
+> and would have reported the bug as present after it was fixed. Screenshots are
+> the reliable readback here.
 >
 > **A HiDPI bug found on the way, and it was mine.** `PixelTarget.Put` receives
 > the *physical* surface, and the damage rect was being passed in *logical*
