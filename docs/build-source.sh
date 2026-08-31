@@ -12,13 +12,13 @@ cd "$(dirname "$0")/.."
 # with a source link must appear here or its "source" page 404s.
 demos=(counter hn gallery canvas flowfield flocking particles match3 solitaire roguelike todo notes health ledger telemetry mirror 2048 sudoku drummachine luminaria whiteboard epub capabilities)
 
-nav='<nav class="top"><div class="wrap">
-  <a class="brand" href="../index.html">gophics<span class="dot">.</span></a>
-  <a class="link" href="../gallery.html">Gallery</a>
-  <a class="link" href="../get-started.html">Get started</a>
-  <span class="spacer"></span>
-  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
-</div></nav>'
+# The nav is lifted from gallery.html rather than restated here, and the only
+# edit is prefixing page-relative links with ../ for the subdirectory. A copy
+# drifts silently: this one had gone stale by a whole "Architecture" tab, which
+# nothing failed on because a nav that is merely *missing a link* still renders.
+nav=$(sed -n '/<nav class="top">/,/<\/nav>/p' docs/gallery.html |
+	sed -E 's|href="([a-z0-9-]+\.html)"|href="../\1"|g')
+[ -n "$nav" ] || { echo "build-source: could not read the nav out of docs/gallery.html" >&2; exit 1; }
 
 footer='<footer><div class="wrap">
   <span>Gophics — cross-platform native UI in pure Go.</span>

@@ -39,7 +39,6 @@
   #bar a:hover { color: #fff; }
   #bar .name { color: #8aa0ff; font-weight: 600; }
   #bar .sp { flex: 1; }
-  #bar #rend { border: 1px solid #333a52; border-radius: 6px; padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -47,7 +46,6 @@
     <a href="gallery.html">← gallery</a>
     <span class="name" id="nm">demo</span>
     <span class="sp"></span>
-    <a id="rend" href="#" title="Toggle renderer">GPU</a>
     <a id="src" href="gallery.html">view source</a>
   </div>
   <div id="loader">
@@ -89,21 +87,29 @@
     if (forceCPU && "gpu" in navigator) {
       Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true });
     }
-    const onCPU = !navigator.gpu;
-    nm.textContent = onCPU ? demo + " · CPU" : demo;
+    // WebGPU is the default wherever the browser offers it, and there is no
+    // visible switch: a visitor choosing the slower rasterizer from a toolbar
+    // is judging gophics by a path it does not ship on. The renderer is named
+    // only when ?cpu forced it, so whoever set the flag can see it took.
+    nm.textContent = forceCPU ? demo + " \u00b7 CPU" : demo;
 
-    // Renderer toggle — always available, so a blank GPU canvas (a flaky mobile
-    // WebGPU driver) is one tap from the working CPU path, and vice versa.
-    const rend = document.getElementById("rend");
-    if (rend) {
-      rend.textContent = onCPU ? "GPU" : "CPU";
-      rend.title = onCPU ? "Try the WebGPU renderer" : "Switch to the CPU renderer (use if the demo is blank)";
-      rend.onclick = (e) => {
-        e.preventDefault();
+    // The toggle used to double as the recovery path for a flaky mobile WebGPU
+    // driver, which loads the wasm fine and then presents nothing — a failure
+    // the .catch below never sees, because nothing threw. So recovery is
+    // offered where that actually shows up: if no frame arrives, say so and
+    // link to ?cpu. On a working demo reveal() cancels this before it fires.
+    let stall = null;
+    if (!forceCPU && navigator.gpu) {
+      stall = setTimeout(() => {
+        if (revealed) return;
+        loader.remove();
+        err.style.display = "flex";
         const u = new URL(location.href);
-        if (forceCPU) u.searchParams.delete("cpu"); else u.searchParams.set("cpu", "1");
-        location.replace(u.toString());
-      };
+        u.searchParams.set("cpu", "1");
+        err.innerHTML = "<div><code>" + demo + "</code> hasn\'t drawn a frame — " +
+          "this browser\'s WebGPU driver may not be working.<br>" +
+          "<a href=\"" + u.toString() + "\">Load it with the CPU renderer</a></div>";
+      }, 12000);
     }
 
     // The Go web shell creates its own <canvas>; when it appears, wait two
@@ -113,6 +119,7 @@
     function reveal() {
       if (revealed) return;
       revealed = true;
+      if (stall) { clearTimeout(stall); stall = null; }
       // Tell an embedding page straight away, before the local fade. This used
       // to sit inside the double requestAnimationFrame below, which was a bug:
       // the home hero loads this frame at opacity 0, and a browser is free to
@@ -146,6 +153,7 @@
     WebAssembly.instantiateStreaming(fetch("demos/" + demo + ".wasm"), go.importObject)
       .then((res) => go.run(res.instance))
       .catch((e) => {
+        if (stall) { clearTimeout(stall); stall = null; }
         loader.remove();
         err.style.display = "flex";
         err.innerHTML = "Couldn't load <code>" + demo + "</code>: " + e;
