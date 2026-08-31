@@ -254,17 +254,30 @@ func (e *GlyphMaskEngine) LayoutShapedGlyphs(
 
 // glyphPlacement computes the device-space position (returned in user space as
 // absX/absY) and sub-pixel fraction for one glyph, applying hinting
-// pixel-snapping. Y is snapped for any hinting: the baseline and horizontal
-// stems grid-fit to the pixel grid, and a run shares one baseline, so snapping
-// it cannot accumulate.
+// pixel-snapping. Both axes snap to whole device pixels when the glyph is
+// hinted, because a grid-fit outline is only crisp if it is drawn on the grid
+// it was fit to.
 //
-// X is deliberately NOT snapped. It used to be, to a grid of accumulated
-// rounded advances, which kept vertical stems on pixel boundaries at the cost
-// of the run drifting from its own measured width — up to 9px across 43
-// characters at 9px, because the rounding compounded instead of cancelling.
-// MeasureWidthIn and the CPU rasterizer both use the shaper's exact positions,
-// so the GPU was the only component that disagreed, and layout is computed from
-// the measurement.
+// X snapping is rounded from each glyph's own exact position, and that detail
+// is the whole point. It has been wrong in both directions:
+//
+//   - Accumulating *rounded advances* (the original snapXGrid) kept every glyph
+//     on the grid but compounded the rounding, so a run drifted off the width
+//     MeasureWidthIn had promised — 9px across 43 characters at 9px.
+//   - Dropping the snap fixed that drift and introduced a worse artefact. The
+//     mask cache quantizes the sub-pixel fraction to quarters, so glyphs began
+//     drawing from four different masks whose stems fall differently against
+//     the pixel grid. On Go Regular at 13px the share of saturated ink swings
+//     between 15% and 42% across those four offsets, and that swing inside a
+//     single word is text that looks blurry in places and too heavy in others
+//     — worst at small sizes, where one pixel is a large share of a stem. See
+//     TestHintingSubpixelStability in internal/gfx/gg/text.
+//
+// Rounding each absolute position independently has neither problem: the error
+// cannot accumulate, so a run stays within half a pixel of its measured width,
+// and every glyph draws the fracX=0 mask, so weight is uniform. The cost is up
+// to a pixel of variation in the gap between two glyphs — the standard trade
+// for hinted text, and far less visible than either failure above.
 //
 // The fraction MUST be measured in device space: the mask is rasterized at
 // device size and the quad is scaled by deviceScale at flush.
@@ -276,6 +289,8 @@ func glyphPlacement(absX, absY, deviceScale float64, hinting text.Hinting) (px, 
 	if hinting != text.HintingNone {
 		fracY = 0
 		absY = math.Round(devY) / deviceScale
+		fracX = 0
+		absX = math.Round(devX) / deviceScale
 	}
 	return absX, absY, fracX, fracY
 }
@@ -720,9 +735,9 @@ func selectGlyphMaskHinting(fontSize float64, matrix gg.Matrix, isCJK bool, devi
 		return text.HintingVertical
 	}
 
-	// Full hinting grid-fits stems for crisp rendering. layoutGlyphs places
-	// fully hinted glyphs on integer device pixels using rounded advances, so
-	// the grid-fit stems stay pixel-aligned (crisp) while spacing stays even.
+	// Full hinting grid-fits stems for crisp rendering. glyphPlacement puts
+	// hinted glyphs on whole device pixels, so the grid-fit stems stay aligned
+	// to the grid they were fit to instead of being resampled off it.
 	return text.HintingFull
 }
 

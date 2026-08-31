@@ -44,14 +44,27 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 		{"curve-heavy", renderref.CurveHeavy(), 0.02},   // measured 0.36%
 		{"ui-screen", renderref.UIScreen(), 0.02},       // measured 0.62%
 		{"mixed", renderref.Scene(), 0.03},              // measured 1.52%
-		// text-heavy was 11.0% until snapXGrid was removed: the GPU used to
-		// place glyphs on a grid of accumulated rounded advances while the CPU
-		// and MeasureWidthIn used the shaper's exact positions, so a line
-		// drifted up to 9px across 43 characters. What is left is genuine
-		// rasterizer difference — CPU analytic coverage against the GPU glyph
-		// atlas — which is the expected kind and does not accumulate. It stays
-		// the highest of the five because this scene is nothing but text.
-		{"text-heavy", renderref.TextHeavy(), 0.07}, // measured 4.98%
+		// text-heavy has moved twice and the history is the point.
+		//
+		// It was 11.0% when the GPU placed glyphs on a grid of accumulated
+		// rounded advances: that drifted a line up to 9px across 43 characters
+		// away from the width MeasureWidthIn had promised, and the divergence
+		// was a real bug. Removing the snap took it to 4.98% and replaced the
+		// drift with a worse artefact — glyphs drawing from four different
+		// sub-pixel masks, so weight varied inside a word.
+		//
+		// The GPU now rounds each glyph's own position to a whole device
+		// pixel, which is bounded (half a pixel, never accumulating) and puts
+		// every glyph on the fracX=0 mask. That is deliberately *not* what the
+		// CPU rasterizer does — it draws unhinted at exact sub-pixel positions
+		// — so the two backends now disagree by design about where a glyph
+		// sits, not about how to rasterize one. Hence 7.35% rather than 4.98%:
+		// a real difference in placement policy, not a defect.
+		//
+		// Aligning the CPU path to snap the same way would close most of this
+		// gap and make small text crisper there too. Worth doing; it is a
+		// change to the CPU rasterizer's output and belongs in its own pass.
+		{"text-heavy", renderref.TextHeavy(), 0.08}, // measured 7.35%
 	}
 	for _, sc := range scenes {
 		t.Run(sc.name, func(t *testing.T) {
