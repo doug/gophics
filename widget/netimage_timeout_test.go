@@ -1,5 +1,3 @@
-//go:build !js
-
 package widget
 
 import "testing"
@@ -13,17 +11,15 @@ import "testing"
 // has no timeout of its own — the bound was simply gone, and nothing failed
 // to say so.
 //
-// This can only assert the native half: the js half cannot run here. What
-// keeps the two together is that neither writes a duration of its own —
-// http.Client.Timeout and setTimeout both read imgFetchTimeout — so this
-// catches the native path losing its bound, and there is no second literal
-// for the js path to drift to.
+// The shape of that risk has changed. There used to be two loaders, one per
+// platform, each applying its own bound, and this asserted the native one
+// matched the constant so the two could not drift. There is one loader now:
+// it wraps a context with imgFetchTimeout and hands it to gophics/fetch, which
+// aborts the request on both platforms. So the drift this guarded against is
+// gone, and what is left to check is that the bound exists at all — that
+// fetch honours the deadline is covered by the fetch package's own test.
 func TestImageFetchesAreBounded(t *testing.T) {
 	if imgFetchTimeout <= 0 {
 		t.Fatalf("imgFetchTimeout is %v: an unbounded fetch holds its concurrency slot forever", imgFetchTimeout)
-	}
-	if httpClient.Timeout != imgFetchTimeout {
-		t.Errorf("native client timeout is %v, want the shared imgFetchTimeout %v",
-			httpClient.Timeout, imgFetchTimeout)
 	}
 }

@@ -2,11 +2,13 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"strings"
 	"time"
 
+	"github.com/doug/gophics/fetch"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
@@ -32,10 +34,27 @@ type API interface {
 	Item(ctx context.Context, id int) (Item, error)
 }
 
-// The one GET this app makes is build-tagged: net/http on native, the
-// browser's fetch() on web. See api_fetch_js.go for why that is worth two
-// files — the short version is 2.1MB of gzipped wasm.
 const apiTimeout = 15 * time.Second
+
+type liveAPI struct{}
+
+func newLiveAPI() *liveAPI { return &liveAPI{} }
+
+// get fetches url and decodes the JSON into v.
+//
+// gophics/fetch rather than net/http directly, because this app is also built
+// for the browser and net/http costs 2MB of gzipped wasm there for a socket
+// path that cannot run — see that package. The timeout is the caller's
+// context, so it is visible here rather than buried in a client.
+func (a *liveAPI) get(ctx context.Context, url string, v any) error {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	b, err := fetch.Get(ctx, url)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
+}
 
 func (a *liveAPI) TopStories(ctx context.Context) ([]int, error) {
 	var ids []int
