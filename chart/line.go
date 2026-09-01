@@ -58,9 +58,9 @@ func (l LineMark) draw(p plot) {
 		}
 	}
 	if l.Points {
-		for _, d := range l.Data {
-			dot(p.Canvas, p.px(d.X), p.py(d.Y), w+3, col)
-		}
+		// The same batch a scatter uses; a line's vertices are a scatter that
+		// happens to have a stroke through it.
+		p.Canvas.DrawMarks(dotBatch(p, l.Data, w+3, col))
 	}
 }
 

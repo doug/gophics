@@ -40,26 +40,33 @@ func (m PointMark) draw(p plot) {
 		d = 7
 	}
 	d *= 0.4 + 0.6*p.T // subtle grow-in
-	// One batch rather than a fill per point. A scatter is the case where that
-	// distinction stops being an optimisation and becomes whether the chart is
-	// interactive at all: as separate fills, 10,000 points cost ~65ms a frame,
-	// nearly all of it in the rasterizer deciding the same circle over and
-	// over.
-	batch := &paint.Marks{
-		Kind:  paint.MarkCircle,
-		X:     make([]float32, len(m.Data)),
-		Y:     make([]float32, len(m.Data)),
-		Size:  []float32{d},
-		Color: make([]paint.Color, len(m.Data)),
-	}
-	for i, pt := range m.Data {
-		batch.X[i], batch.Y[i] = p.px(pt.X), p.py(pt.Y)
-		batch.Color[i] = colorOr(pt.Color, col)
-	}
-	p.Canvas.DrawMarks(batch)
+	p.Canvas.DrawMarks(dotBatch(p, m.Data, d, col))
 }
 
 func (m PointMark) seriesData() []Datum    { return m.Data }
 func (m PointMark) baseColor() paint.Color { return m.Color }
 
 func (m PointMark) markName() string { return m.Name }
+
+// dotBatch builds one Marks batch for data, so a scatter is a single draw
+// rather than a fill per point.
+//
+// That distinction is not an optimisation at this scale, it is whether the
+// chart is interactive: as separate fills, 10,000 points cost ~65ms a frame,
+// nearly all of it in the rasterizer deciding the same circle over and over.
+// A per-datum Color still shares the batch — colour is per mark, and only the
+// shape and size have to match.
+func dotBatch(p plot, data []Datum, d float32, col paint.Color) *paint.Marks {
+	b := &paint.Marks{
+		Kind:  paint.MarkCircle,
+		X:     make([]float32, len(data)),
+		Y:     make([]float32, len(data)),
+		Size:  []float32{d},
+		Color: make([]paint.Color, len(data)),
+	}
+	for i, pt := range data {
+		b.X[i], b.Y[i] = p.px(pt.X), p.py(pt.Y)
+		b.Color[i] = colorOr(pt.Color, col)
+	}
+	return b
+}
