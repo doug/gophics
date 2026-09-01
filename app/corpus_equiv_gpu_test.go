@@ -61,9 +61,21 @@ func TestGPUMatchesCPUOnCorpus(t *testing.T) {
 		// sits, not about how to rasterize one. Hence 7.35% rather than 4.98%:
 		// a real difference in placement policy, not a defect.
 		//
-		// Aligning the CPU path to snap the same way would close most of this
-		// gap and make small text crisper there too. Worth doing; it is a
-		// change to the CPU rasterizer's output and belongs in its own pass.
+		// I first wrote that aligning the CPU path would close the gap and make
+		// small text crisper there too. That was wrong, and the reason is worth
+		// keeping: the GPU snaps *because* it grid-fits. Full hinting moves a
+		// glyph's stems onto the pixel grid, and an outline fitted that way is
+		// only crisp if it is then drawn on that grid. The CPU rasterizer draws
+		// unhinted — HintingNone, everywhere, no exceptions — so snapping it
+		// would quantize positions without any grid-fitting to justify it:
+		// uniformity bought with the positional accuracy that sub-pixel
+		// placement gives, and nothing gained in return.
+		//
+		// So each path is internally consistent — hinted snaps, unhinted does
+		// not — and the divergence is the visible consequence of that, not a
+		// defect waiting to be closed. Making the numbers agree would mean
+		// changing one path's quality policy to match the other's, and neither
+		// direction is an improvement on its own terms.
 		{"text-heavy", renderref.TextHeavy(), 0.08}, // measured 7.35%
 	}
 	for _, sc := range scenes {
