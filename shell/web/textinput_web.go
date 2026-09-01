@@ -33,9 +33,20 @@ func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandle
 		in.Set("autocapitalize", "off")
 		in.Set("spellcheck", false)
 	}
-	// Off-screen but focusable — display:none can't take focus / raise the keyboard.
+	// Invisible but focusable — display:none and visibility:hidden cannot take
+	// focus, so this is opacity instead.
+	//
+	// Pinned to the *top*, which matters more than it looks. A phone keyboard
+	// shrinks the visual viewport without changing the layout viewport, so an
+	// element at bottom:0 ends up behind the keyboard — and focusing something
+	// the browser thinks is off-screen makes it scroll to reveal it. That
+	// scroll fires visualViewport's scroll event, which this shell treats as a
+	// resize, so raising the keyboard could put the canvas into a
+	// resize-and-scroll fight with the browser for the length of the keyboard
+	// animation. At top:0 the element is already in view and revealing it is a
+	// no-op.
 	for k, v := range map[string]string{
-		"position": "fixed", "opacity": "0", "left": "0", "bottom": "0",
+		"position": "fixed", "opacity": "0", "left": "0", "top": "0",
 		"width": "1px", "height": "1px", "border": "0", "padding": "0", "zIndex": "-1",
 	} {
 		in.Get("style").Set(k, v)

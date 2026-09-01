@@ -119,3 +119,45 @@ func TestIMENotToldWhenNothingChanged(t *testing.T) {
 		t.Errorf("a rebuild with no change sent %d extra IME updates", ti.setTextCalls-n)
 	}
 }
+
+// Focus must raise the keyboard during the focus callback itself, not on the
+// build that follows it.
+//
+// A mobile browser only opens the soft keyboard when an element is focused
+// inside a user gesture. gophics dispatches the pointer event, marks state
+// dirty and builds on the next animation frame — by which time the activation
+// has expired, so focusing the hidden input opens nothing. The symptom is the
+// one that matters: on a phone the field takes focus, the caret blinks, and no
+// keyboard ever appears.
+//
+// So this asserts *when*, not just whether. Show has to have happened by the
+// time the focus notification returns, before any rebuild.
+func TestFocusRaisesTheKeyboardBeforeTheNextBuild(t *testing.T) {
+	ti := &fakeTextInput{}
+	o := newOwner()
+	o.textInput = ti
+
+	o.SetRoot(TextField{Value: "hi"})
+	o.FlushBuilds()
+
+	// The focused field's handler is what the app calls on a focus change, and
+	// it calls it synchronously from inside the pointer event.
+	g := o.KeyboardTarget
+	if g == nil || g.OnFocus == nil {
+		t.Fatal("the field did not take focus, so there is nothing to test")
+	}
+
+	g.OnFocus(false) // blur
+	before := ti.shown
+	g.OnFocus(true) // and focus again, the way a tap does
+
+	// Deliberately no FlushBuilds between the callback and the assertion: that
+	// gap is the bug. Raising the keyboard from the build instead happens on
+	// the next animation frame, after the user gesture has expired, and a
+	// mobile browser then declines to open the keyboard at all — a caret
+	// blinking in a field that cannot be typed into.
+	if ti.shown <= before {
+		t.Error("the focus callback did not raise the keyboard; it would be " +
+			"raised on the next frame instead, outside the user gesture")
+	}
+}

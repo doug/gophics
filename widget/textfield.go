@@ -689,6 +689,23 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				// Outside taps are already handled by the menu's own scrim, and
 				// a fresh press in the field closes it there.
 				s.activity() // caret solid on focus, then blinks
+				// Raise the keyboard here, not from the build below, because
+				// this runs inside the pointer event that moved focus — and a
+				// mobile browser only opens the soft keyboard when the element
+				// is focused during a user gesture. The build happens in the
+				// next animation frame, by which time the activation has
+				// expired: the hidden input is focused, silently, and no
+				// keyboard ever appears. On a phone that is a caret blinking
+				// in a field you cannot type into.
+				// Only latch when there is a capability to latch *for*. The
+				// first build can run before the window is wired, so
+				// TextInput() is nil then; marking the keyboard shown on that
+				// pass would skip the build-time path forever and the field
+				// would never register its handlers at all.
+				if s.imeShown != v && ctx.TextInput() != nil {
+					s.imeShown = v
+					s.softKeyboard(ctx, v, f, onText, onKey, onComposition)
+				}
 				if f.OnFocus != nil {
 					f.OnFocus(v)
 				}
@@ -697,14 +714,17 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		},
 		Child: fieldView{state: s},
 	}
-	// Raise or lower the keyboard from the built state rather than from the
-	// focus *event*, because a field can be focused without one ever firing: a
-	// focusable widget mounted while nothing has focus takes it silently. Doing
-	// this on the transition alone meant the first field on a screen — the
-	// common case on a phone — never got Show, so it never received the
-	// keyboard type, the autocorrect hint, or the OnReplace that autocorrect
-	// needs. TextInputActive still answered yes through its focus fallback,
-	// which is what hid it.
+	// The build-time path remains, for focus gained without a focus *event*: a
+	// focusable widget mounted while nothing has focus takes it silently, and
+	// on that path nothing else would ever call Show — so the field would miss
+	// the keyboard type, the autocorrect hint, and the OnReplace autocorrect
+	// needs.
+	//
+	// It cannot raise a soft keyboard, and is not trying to. There is no user
+	// gesture in progress on that path, and a mobile browser refuses outside
+	// one; what it does is configure the IME so a later gesture finds it ready.
+	// The gesture case is handled in OnFocus above, which is the one that has
+	// to open the keyboard.
 	if s.focused != s.imeShown {
 		s.imeShown = s.focused
 		s.softKeyboard(ctx, s.focused, f, onText, onKey, onComposition)
