@@ -4,10 +4,20 @@ name: Pages
 # pages) and deploy it to GitHub Pages.
 # Enable once under Settings ▸ Pages ▸ Source: "GitHub Actions".
 
+# Every push to main, with no path filter. The demos are Go programs that
+# statically link the framework, so a change anywhere in the module changes what
+# the site serves — widget, app, shell, paint, chart and the vendored substrate
+# all end up inside those .wasm files.
+#
+# The filter that used to be here listed docs/** and examples/**, which reads
+# sensibly and is wrong for exactly that reason: three scroll fixes in widget/,
+# app/ and shell/ shipped to main and the site went on serving demos built from
+# the code before them. Nothing failed — the site was simply, silently, a
+# release behind, which is the worst way for this to be wrong. A deploy takes
+# about 75 seconds and correctness is worth more than that.
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'examples/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
