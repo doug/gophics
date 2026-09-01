@@ -192,7 +192,12 @@ const (
 
 // Pointer is a mouse/touch/stylus event in logical coordinates.
 type Pointer struct {
-	Kind   PointerKind
+	Kind PointerKind
+	// Pos is where the pointer is, and every shell sets it on every Pointer
+	// event including PointerScroll — a scroll is delivered to whatever is
+	// under the pointer, so a scroll without a position has nowhere to go. A
+	// platform whose scroll callback reports only deltas is expected to carry
+	// the last position it saw rather than leave this zero.
 	Pos    geom.Pt
 	Button uint8   // 0=primary, 1=secondary, 2=middle (valid for Down/Up)
 	Scroll geom.Pt // valid for PointerScroll, in logical pixels

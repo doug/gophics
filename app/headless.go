@@ -21,6 +21,12 @@ type Headless struct {
 	size  geom.Size
 	scale float32
 
+	// pointerAt is where the simulated pointer is, so Scroll can say what it
+	// is over. A real shell always knows this; without it a scroll would be
+	// routed from the origin and land on whatever happens to be in the corner.
+	pointerAt    geom.Pt
+	pointerKnown bool
+
 	// gpu holds the lazily-created headless GPU renderer used by RenderGPU
 	// (gophics_gpu build only); typed any so this file stays tag-agnostic.
 	gpu any
@@ -134,8 +140,11 @@ func (h *Headless) Step(dt float64) bool {
 // release at to.
 func (h *Headless) Drag(from, to geom.Pt) {
 	h.layoutForInput()
+	h.at(from)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
+	h.at(to)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
+	h.at(to)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: to})
 }
 
@@ -143,19 +152,46 @@ func (h *Headless) Drag(from, to geom.Pt) {
 // to position the pointer).
 func (h *Headless) Scroll(delta geom.Pt) {
 	h.layoutForInput()
-	h.core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Scroll: delta})
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Pos: h.pointer(), Scroll: delta})
+}
+
+// at records where the simulated pointer now is.
+func (h *Headless) at(p geom.Pt) { h.pointerAt, h.pointerKnown = p, true }
+
+// pointer is where a positionless event should be treated as happening.
+//
+// The centre of the window rather than the origin: a test that scrolls without
+// moving first means "scroll the thing on screen", and the origin is a corner
+// that often belongs to a header or padding. A real pointer is always
+// somewhere, and it is rarely (0, 0).
+func (h *Headless) pointer() geom.Pt {
+	if h.pointerKnown {
+		return h.pointerAt
+	}
+	return geom.Pt{X: h.size.W / 2, Y: h.size.H / 2}
+}
+
+// ScrollAt dispatches a wheel scroll with the pointer over p, the way a shell
+// reports one. Scroll is the same thing at wherever the pointer already is.
+func (h *Headless) ScrollAt(p, delta geom.Pt) {
+	h.layoutForInput()
+	h.at(p)
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerScroll, Pos: p, Scroll: delta})
 }
 
 // Move dispatches a pointer move (hover) to p.
 func (h *Headless) Move(p geom.Pt) {
 	h.layoutForInput()
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p})
 }
 
 // Tap dispatches a press+release at p.
 func (h *Headless) Tap(p geom.Pt) {
 	h.layoutForInput()
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p})
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
@@ -209,7 +245,9 @@ func (h *Headless) KeyMod(code shell.KeyCode, mods shell.Mods) {
 // (for selection dragging; call Release to finish).
 func (h *Headless) DragTo(from, to geom.Pt) {
 	h.layoutForInput()
+	h.at(from)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: from})
+	h.at(to)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: to})
 }
 
@@ -229,16 +267,19 @@ func (h *Headless) TouchDrag(from, to geom.Pt) {
 // TouchPress dispatches a touch-sourced pointer-down at p without releasing.
 func (h *Headless) TouchPress(p geom.Pt) {
 	h.layoutForInput()
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p, Source: shell.SourceTouch})
 }
 
 // TouchMove dispatches a touch-sourced move to p.
 func (h *Headless) TouchMove(p geom.Pt) {
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: p, Source: shell.SourceTouch})
 }
 
 // TouchRelease dispatches a touch-sourced pointer-up at p.
 func (h *Headless) TouchRelease(p geom.Pt) {
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p, Source: shell.SourceTouch})
 }
 
@@ -261,11 +302,13 @@ func (h *Headless) Semantics() []layout.SemNode { return h.core.Semantics() }
 // press-and-hold feedback (pressed highlights, long-press). Pair with Release.
 func (h *Headless) Press(p geom.Pt) {
 	h.layoutForInput()
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p})
 }
 
 // Release dispatches pointer-up at p.
 func (h *Headless) Release(p geom.Pt) {
+	h.at(p)
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 

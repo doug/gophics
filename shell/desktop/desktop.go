@@ -69,8 +69,13 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	})
 
 	es := app.EventSource()
+	// The platform's scroll callback reports deltas and no position, so the
+	// window remembers where the pointer is. Every other Pointer event already
+	// carries one; this keeps scroll from being the single event that does not.
+	var lastPointer geom.Pt
 	es.OnMouseMove(func(x, y float64) {
-		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: float32(x), Y: float32(y)}})
+		lastPointer = geom.Pt{X: float32(x), Y: float32(y)}
+		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: lastPointer})
 	})
 	es.OnMousePress(func(b gpucontext.MouseButton, x, y float64) {
 		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: float32(x), Y: float32(y)}, Button: button(b)})
@@ -84,7 +89,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		// platform delta, so forwarding it raw scrolled the wrong way. Negate
 		// to align, and to honor the OS natural-scroll setting the platform
 		// has already applied to these deltas.
-		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{X: -float32(dx), Y: -float32(dy)}})
+		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Pos: lastPointer, Scroll: geom.Pt{X: -float32(dx), Y: -float32(dy)}})
 	})
 	es.OnKeyPress(func(key gpucontext.Key, mods gpucontext.Modifiers) {
 		h.Event(w, shell.Key{Kind: shell.KeyPress, Code: keyCode(key), Mods: modBits(mods)})

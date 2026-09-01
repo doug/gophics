@@ -140,7 +140,13 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		case 2: // pages
 			sx, sy = w.logical.W, w.logical.H
 		}
-		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Scroll: geom.Pt{
+		// Pos matters: the app routes a scroll to whatever is under the
+		// pointer, and a wheel event carries its own coordinates. Dropping
+		// them left the app falling back to wherever the pointer was last
+		// *moved*, so a wheel with no prior move over the window scrolled
+		// nothing at all — the page that appears under a stationary cursor,
+		// and every scripted interaction.
+		h.Event(w, shell.Pointer{Kind: shell.PointerScroll, Pos: pos(e), Scroll: geom.Pt{
 			X: -float32(e.Get("deltaX").Float()) * sx,
 			Y: -float32(e.Get("deltaY").Float()) * sy,
 		}})

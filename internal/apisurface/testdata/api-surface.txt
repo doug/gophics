@@ -63,6 +63,7 @@ app.Headless.Render method
 app.Headless.Resize method
 app.Headless.Scene method
 app.Headless.Scroll method
+app.Headless.ScrollAt method
 app.Headless.Semantics method
 app.Headless.SetDarkMode method
 app.Headless.SetDebugPaint method
@@ -127,6 +128,7 @@ apptest.App.Resize method
 apptest.App.Role method
 apptest.App.Scene method
 apptest.App.Scroll method
+apptest.App.ScrollAt method
 apptest.App.Semantics method
 apptest.App.SetDarkMode method
 apptest.App.SetDebugPaint method

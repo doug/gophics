@@ -846,7 +846,14 @@ func (c *core) Pointer(e shell.Pointer) {
 		c.hovered, c.hoverScratch = now, c.hovered
 
 	case shell.PointerScroll:
-		for _, h := range c.interactivesAt(c.lastPos) {
+		// Route by where the pointer is *now*. Every shell sets Pos on a
+		// scroll; using the last position a *move* happened to report meant a
+		// wheel that arrived without a preceding move went to whatever was
+		// under the stale position, which is usually nothing. Keeping lastPos
+		// in step also means a drag starting right after a scroll begins from
+		// the right place.
+		c.lastPos = e.Pos
+		for _, h := range c.interactivesAt(e.Pos) {
 			if hd := h.box.GestureHandler(); hd.OnScroll != nil {
 				hd.OnScroll(e.Scroll)
 				return
