@@ -254,9 +254,27 @@ func (e *GlyphMaskEngine) LayoutShapedGlyphs(
 
 // glyphPlacement computes the device-space position (returned in user space as
 // absX/absY) and sub-pixel fraction for one glyph, applying hinting
-// pixel-snapping. Both axes snap to whole device pixels when the glyph is
-// hinted, because a grid-fit outline is only crisp if it is drawn on the grid
-// it was fit to.
+// pixel-snapping to X only.
+//
+// The axes are not symmetric, and treating them as if they were is what made
+// slow scrolling stutter.
+//
+// X varies per glyph — each advance is different — so without snapping,
+// neighbouring glyphs in one word draw from different sub-pixel masks and the
+// weight visibly changes across the word. Snapping buys uniformity, and that is
+// worth a pixel of variation in the gaps.
+//
+// Y is shared: a run sits on one baseline, so every glyph in it has the same
+// fraction and there is no unevenness to remove. Snapping it bought only
+// grid-fit horizontal stems, and charged for them in motion — a list creeping
+// past at a third of a pixel per frame held its text still for three frames and
+// then jumped a whole device pixel, so the text stepped while the rows behind it
+// slid smoothly. That is the jitter at the tail of a flick, and it is why it
+// looked fine while dragging, where a frame moves several pixels and hides it.
+//
+// Static text loses nothing: layout puts baselines on whole numbers, so the
+// fraction is zero anyway and the mask is the same one. Only moving text
+// differs, and there it is the point.
 //
 // X snapping is rounded from each glyph's own exact position, and that detail
 // is the whole point. It has been wrong in both directions:
@@ -287,8 +305,6 @@ func glyphPlacement(absX, absY, deviceScale float64, hinting text.Hinting) (px, 
 	fracX = devX - math.Floor(devX)
 	fracY = devY - math.Floor(devY)
 	if hinting != text.HintingNone {
-		fracY = 0
-		absY = math.Round(devY) / deviceScale
 		fracX = 0
 		absX = math.Round(devX) / deviceScale
 	}

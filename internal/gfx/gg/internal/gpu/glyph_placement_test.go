@@ -10,27 +10,55 @@ import (
 	"github.com/doug/gophics/internal/gfx/gg/text"
 )
 
-// A hinted glyph must land on a whole device pixel. The outline was grid-fit
-// in both axes; drawing it off that grid resamples it into a softer, heavier
-// shape, and because the mask cache quantizes the fraction to quarters,
-// neighbouring glyphs pick up visibly different weights inside one word.
-func TestHintedGlyphsSnapToWholeDevicePixels(t *testing.T) {
+// A hinted glyph must land on a whole device pixel horizontally.
+//
+// X varies per glyph, so without snapping neighbouring glyphs in a word draw
+// from different sub-pixel masks and the weight changes visibly across it.
+func TestHintedGlyphsSnapXToWholeDevicePixels(t *testing.T) {
 	for _, deviceScale := range []float64{1, 2, 3} {
 		for _, absX := range []float64{0, 0.1, 0.33, 0.5, 0.67, 12.49, 12.51, 103.3} {
-			absX, absY, fracX, fracY := glyphPlacement(absX, 40.2, deviceScale, text.HintingFull)
-			if fracX != 0 || fracY != 0 {
-				t.Errorf("scale %.0f x=%.2f: fracX=%v fracY=%v, want 0 for a hinted glyph",
-					deviceScale, absX, fracX, fracY)
+			gotX, _, fracX, _ := glyphPlacement(absX, 40.2, deviceScale, text.HintingFull)
+			if fracX != 0 {
+				t.Errorf("scale %.0f x=%.2f: fracX=%v, want 0", deviceScale, absX, fracX)
 			}
-			for _, v := range []struct {
-				name string
-				dev  float64
-			}{{"x", absX * deviceScale}, {"y", absY * deviceScale}} {
-				if math.Abs(v.dev-math.Round(v.dev)) > 1e-9 {
-					t.Errorf("scale %.0f: device %s = %v, not a whole pixel", deviceScale, v.name, v.dev)
-				}
+			if dev := gotX * deviceScale; math.Abs(dev-math.Round(dev)) > 1e-9 {
+				t.Errorf("scale %.0f: device x = %v, not a whole pixel", deviceScale, dev)
 			}
 		}
+	}
+}
+
+// Y must NOT snap, and this is the difference between smooth scrolling and a
+// stutter.
+//
+// A run shares one baseline, so every glyph in it has the same Y fraction and
+// there is no unevenness for snapping to remove — it bought only grid-fit
+// horizontal stems. What it cost was motion: a list creeping past at a third of
+// a device pixel per frame held its text still for three frames and then jumped
+// a whole pixel, so the text stepped while the rows behind it slid smoothly.
+// That is the jitter at the tail of a flick, and why it looked fine while
+// dragging, where a frame moves several pixels and hides it.
+func TestHintedGlyphsMoveSmoothlyInY(t *testing.T) {
+	const scale = 2.0
+	var lastDev float64 = -1
+	stalled := 0
+	for i := range 24 {
+		y := 40 + float64(i)*0.125 // an eighth of a logical pixel per frame
+		_, absY, _, _ := glyphPlacement(10, y, scale, text.HintingFull)
+		dev := absY * scale
+		if lastDev >= 0 && dev == lastDev {
+			stalled++
+		}
+		if lastDev >= 0 && dev-lastDev > 0.5 {
+			t.Errorf("step %d: device Y jumped %.3f in one frame — Y is being snapped",
+				i, dev-lastDev)
+		}
+		lastDev = dev
+	}
+	// Creeping an eighth of a pixel at 2x moves a quarter device pixel a frame,
+	// so every frame must move. Any stall is the quantization coming back.
+	if stalled > 0 {
+		t.Errorf("%d frames did not move at all — text will step rather than glide", stalled)
 	}
 }
 
