@@ -36,11 +36,12 @@ func TestGeneratedBindPackageCompiles(t *testing.T) {
 }
 
 // An app that carries its own bind package is left alone. health injects a
-// HealthKit provider through Start(storeName) and news presents a native login
-// sheet — neither is expressible by the convention, and generating over them
-// would be worse than not generating at all.
+// HealthKit provider through Start(storeName), and hn selects its scene at
+// build time so a GPU bring-up diagnostic can be run through the real host —
+// neither is expressible by the convention, and generating over them would be
+// worse than not generating at all.
 func TestHandWrittenBindPackageWins(t *testing.T) {
-	for _, app := range []string{"health", "news"} {
+	for _, app := range []string{"health", "hn"} {
 		pkg := "github.com/doug/gophics/examples/" + app
 		got, err := resolveBindPkg(buildOpts{pkg: pkg})
 		if err != nil {
@@ -61,9 +62,9 @@ func TestHandWrittenBindPackageWins(t *testing.T) {
 }
 
 // A bind package named directly on the command line is used as given, which is
-// what keeps `gophics run -p ios ./examples/news/mobile` working.
+// what keeps `gophics run -p ios ./examples/hn/mobile` working.
 func TestNamedBindPackageIsUsedAsGiven(t *testing.T) {
-	pkg := "github.com/doug/gophics/examples/news/mobile"
+	pkg := "github.com/doug/gophics/examples/hn/mobile"
 	got, err := resolveBindPkg(buildOpts{pkg: pkg})
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +117,7 @@ func TestHostDirForAppRootAndBindPackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	news, err := packageDir("github.com/doug/gophics/examples/news")
+	hn, err := packageDir("github.com/doug/gophics/examples/hn")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +127,7 @@ func TestHostDirForAppRootAndBindPackage(t *testing.T) {
 		want string
 	}{
 		{"github.com/doug/gophics/examples/mirror", filepath.Join(root, "ios")},
-		{"github.com/doug/gophics/examples/news/mobile", filepath.Join(news, "ios")},
+		{"github.com/doug/gophics/examples/hn/mobile", filepath.Join(hn, "ios")},
 	}
 	for _, c := range cases {
 		got, err := hostDirFor(buildOpts{pkg: c.pkg, platform: platform{name: "ios"}})

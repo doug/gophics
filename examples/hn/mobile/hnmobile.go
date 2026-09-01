@@ -12,6 +12,8 @@ package hnmobile
 import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/shell/mobile"
+
+	hn "github.com/doug/gophics/examples/hn/ui"
 )
 
 // Start builds the app and returns the bridge the host drives it through.
@@ -20,8 +22,7 @@ import (
 // the error to show — two results because the second is an error, which is the
 // one shape gomobile allows.
 func Start() (*mobile.Bridge, error) {
-	root, cfg := scene()
-	h, err := app.NewHandler(root, cfg)
+	h, err := app.NewHandler(hn.Root(), hn.Config())
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@ device/emulator — in one command from the repo root:
 
 ```sh
 gophics run -p android ./examples/hn/mobile
-gophics run -p android -tags gophics_verify ./examples/hn/mobile  # GPU bring-up scene
+gophics run -p android -host . ./examples/gpucheck/mobile  # GPU bring-up scene
 gophics build -p android ./examples/hn/mobile                       # just the .aar
 ```
 

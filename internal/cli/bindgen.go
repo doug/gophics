@@ -76,7 +76,7 @@ type bindData struct {
 //
 //   - The package named on the command line is already a bind package (it is
 //     not package main). Used as given — this is how `gophics run -p ios
-//     ./examples/news/mobile` keeps working, and how an app with genuinely
+//     ./examples/hn/mobile` keeps working, and how an app with genuinely
 //     app-specific host glue opts out.
 //   - The app has a mobile/ directory next to it. Same thing, found by
 //     convention rather than named.

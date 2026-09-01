@@ -20,7 +20,7 @@ command (needs `xcodegen`: `brew install xcodegen`). From the repo root:
 
 ```sh
 gophics run -p ios ./examples/hn/mobile
-gophics run -p ios -tags gophics_verify ./examples/hn/mobile  # GPU bring-up scene
+gophics run -p ios -host . ./examples/gpucheck/mobile      # GPU bring-up scene
 gophics build -p ios ./examples/hn/mobile                       # just the xcframework
 ```
 

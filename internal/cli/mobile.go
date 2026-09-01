@@ -121,7 +121,7 @@ func runMobile(o buildOpts) error {
 // the ios/ or android/ belonging to the app.
 //
 // Which directory that is depends on what was named on the command line. A bind
-// package (./examples/news/mobile) has the host as its *sibling*; an app root
+// package (./examples/hn/mobile) has the host as its *sibling*; an app root
 // (./examples/mirror), which is what a mobile build normally names now that the
 // bind package is generated, has the host *inside* it. Getting this wrong picks
 // up the directory one level too high — examples/ios rather than
