@@ -40,6 +40,11 @@ type TextField struct {
 	// widget holds it — for a field that appears in response to an action,
 	// such as edit-in-place. See Interactive.Autofocus.
 	Autofocus bool
+	// ConsumesTab reports whether something built around this field wants Tab
+	// rather than focus traversal — an autocomplete with a suggestion
+	// highlighted, say. Nil means no. A multiline field claims Tab for
+	// indentation regardless.
+	ConsumesTab func() bool
 	// OnKeyPreview sees each key before the field acts on it and returns true
 	// to consume it. It exists because keyboard events reach exactly one
 	// widget — the focused one, with no bubbling — so a control built *around*
@@ -612,6 +617,11 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	view := Interactive{
 		Autofocus: f.Autofocus,
 		Gestures: Gestures{
+			// A multiline field indents with Tab; a single-line one hands it to
+			// focus traversal unless whatever wraps it says otherwise.
+			ConsumesTab: func() bool {
+				return f.Multiline || (f.ConsumesTab != nil && f.ConsumesTab())
+			},
 			OnPress: func(p geom.Pt) {
 				s.activity()
 				s.closeMenu() // a new press replaces whatever the last one raised

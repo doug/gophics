@@ -69,6 +69,11 @@ func (s *autocompleteState) Build(ctx Ctx) Widget {
 		// the field. A wrapper's OnKey never fires while anyone is typing,
 		// which is why Up, Down, Tab and Escape did nothing.
 		OnKeyPreview: s.onKey,
+		// Tab accepts the highlighted suggestion; with nothing highlighted it
+		// belongs to focus traversal, so the field is not a keyboard trap.
+		ConsumesTab: func() bool {
+			return s.open && s.highlight >= 0 && s.highlight < len(s.visible())
+		},
 	}
 
 	rows := []Widget{field}

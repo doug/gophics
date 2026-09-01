@@ -21,6 +21,12 @@ type acRootState struct {
 }
 
 func (s *acRootState) Build(widget.Ctx) widget.Widget {
+	// A second field so focus traversal has somewhere to go: Tab releasing to
+	// the next field is only observable when there is a next field.
+	return widget.Column(s.field(), widget.Sized{H: 10}, widget.TextField{})
+}
+
+func (s *acRootState) field() widget.Widget {
 	return widget.Autocomplete{
 		Value: s.value,
 		Suggest: func(in string) []string {
@@ -113,5 +119,26 @@ func TestAutocompleteTabIsFreeWithNoSuggestions(t *testing.T) {
 	h.Key(shell.KeyTab)
 	if *picked != "" {
 		t.Fatalf("Tab picked %q with no suggestions", *picked)
+	}
+}
+
+// Tab belongs to focus traversal when there is nothing to complete.
+//
+// The autocomplete claims Tab only while a suggestion is highlighted. Claiming
+// it unconditionally would make the field a keyboard trap: no suggestions, and
+// Tab does nothing at all rather than moving to the next field.
+func TestAutocompleteReleasesTabWithNothingHighlighted(t *testing.T) {
+	h, picked := acHarness(t)
+	before := h.core.Owner.KeyboardTarget
+
+	h.Type("zzz") // matches nothing, so no suggestion is highlighted
+	h.Key(shell.KeyTab)
+	h.Render()
+
+	if *picked != "" {
+		t.Errorf("Tab picked %q with nothing highlighted", *picked)
+	}
+	if h.core.Owner.KeyboardTarget == before {
+		t.Error("Tab neither completed nor moved focus — the field is a keyboard trap")
 	}
 }

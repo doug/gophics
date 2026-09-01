@@ -313,6 +313,15 @@ type Gestures struct {
 	// deferred by the double-tap window (to disambiguate); a recognized
 	// double-tap cancels that pending OnTap.
 	OnDoubleTap func()
+	// ConsumesTab reports whether this widget wants Tab for itself rather than
+	// letting it move focus. Nil means no.
+	//
+	// A predicate rather than a flag because the claim is usually conditional:
+	// an autocomplete wants Tab only while a suggestion is highlighted, and
+	// wants traversal the rest of the time. It must be a pure query — it is
+	// asked before the key is delivered, and answering it must not act on the
+	// key.
+	ConsumesTab func() bool
 	// OnScroll receives wheel/trackpad deltas while the pointer is over
 	// this widget.
 	OnScroll func(delta geom.Pt)

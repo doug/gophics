@@ -1676,6 +1676,7 @@ widget.Flexible.Flex field
 widget.GestureTarget type
 widget.GestureTarget.GestureHandler method
 widget.Gestures type
+widget.Gestures.ConsumesTab field
 widget.Gestures.DragAxis field
 widget.Gestures.DragClaims field
 widget.Gestures.DragPriority field
@@ -1797,6 +1798,7 @@ widget.Owner.Links method
 widget.Owner.Locale method
 widget.Owner.Menus method
 widget.Owner.Microphone method
+widget.Owner.MoveFocus method
 widget.Owner.NeedsBuild method
 widget.Owner.Notifier method
 widget.Owner.OnBuildPanic field
@@ -1938,6 +1940,7 @@ widget.Text.Wrap field
 widget.TextField type
 widget.TextField.Autofocus field
 widget.TextField.CaretColor field
+widget.TextField.ConsumesTab field
 widget.TextField.CreateState method
 widget.TextField.Multiline field
 widget.TextField.OnChange field

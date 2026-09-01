@@ -994,6 +994,23 @@ func (c *core) Keyboard(e shell.Event) {
 		in.SetTextCapturing(t != nil && t.OnText != nil)
 	}
 	t := c.Owner.KeyboardTarget
+
+	// Tab moves focus, before the focused widget sees it.
+	//
+	// Ahead of the dispatch because traversal is the app's business, not any
+	// one widget's: a field cannot know what comes after it. A widget that
+	// wants Tab for itself says so with ConsumesTab — a multiline field
+	// indents — and keeps it. With nothing focused Tab still moves, so Tab
+	// into a screen works like Tab within one.
+	if k, ok := e.(shell.Key); ok && k.Code == shell.KeyTab && k.Kind == shell.KeyPress {
+		if t == nil || t.ConsumesTab == nil || !t.ConsumesTab() {
+			if c.Owner.MoveFocus(k.Mods&shell.ModShift == 0) {
+				c.Owner.RebuildAll()
+			}
+			return
+		}
+	}
+
 	if t == nil {
 		return
 	}
