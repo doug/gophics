@@ -71,7 +71,7 @@ func (s *StateBase[W]) SetState(fn func()) {
 // any goroutine, so it is what background work uses to deliver a result:
 //
 //	go func() {
-//	    items, err := api.TopStories(ctx)
+//	    items, err := api.TopStories(lifetime)
 //	    s.PostState(func() { s.feed = feed{items: items, err: err, done: true} })
 //	}()
 //
@@ -206,23 +206,29 @@ func (c Ctx) KeyboardInset() float32 { return c.el.owner.KeyboardInset }
 // goroutine (unlike SetState directly).
 func (c Ctx) Post() func(fn func()) { return c.el.owner.Post }
 
-// Context returns a context cancelled when this widget leaves the tree. Pass it
-// to any work started on the widget's behalf — a fetch, a file read, a database
-// call — so the work stops when the thing that wanted it is gone:
+// Lifetime returns a context cancelled when this widget leaves the tree. Pass
+// it to any work started on the widget's behalf — a fetch, a file read, a
+// database call — so the work stops when the thing that wanted it is gone:
 //
-//	ctx := c.Context()
+//	lifetime := c.Lifetime()
 //	go func() {
-//	    items, err := api.TopStories(ctx)
+//	    items, err := api.TopStories(lifetime)
 //	    s.PostState(func() { ... })
 //	}()
 //
 // It is a lifetime, not a scheduler: it cancels work, it does not deliver it.
-// Results still come back through PostState or Post. Contexts derive down the
+// Results still come back through PostState or Post. Lifetimes derive down the
 // element tree, so removing a subtree cancels everything started inside it.
+//
+// Named for what it is rather than for its type. It returns a
+// context.Context, but "ctx.Context()" said the word twice and neither time
+// usefully, and it invited call sites to bind the result to ctx — shadowing
+// the widget context they were still holding, so one name meant two types in
+// one file.
 //
 // Safe to call only from the UI goroutine (during Init, Build or an event
 // handler); the returned context is then safe to use from any goroutine.
-func (c Ctx) Context() context.Context { return c.el.lifetime() }
+func (c Ctx) Lifetime() context.Context { return c.el.lifetime() }
 
 // AddTicker registers per-frame animation work (see Owner.AddTicker).
 func (c Ctx) AddTicker(t Ticker) { c.el.owner.AddTicker(t) }

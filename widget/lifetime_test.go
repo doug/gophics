@@ -42,7 +42,7 @@ func TestContextCancelledOnUnmount(t *testing.T) {
 		t.Fatal("probe did not mount")
 	}
 
-	ctx := s.el.ctx().Context()
+	ctx := s.el.ctx().Lifetime()
 	if err := ctx.Err(); err != nil {
 		t.Fatalf("a mounted widget's context is already cancelled: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestContextCancelledWhenAncestorRemoved(t *testing.T) {
 	if s == nil {
 		t.Fatal("child probe did not mount")
 	}
-	ctx := s.el.ctx().Context()
+	ctx := s.el.ctx().Lifetime()
 	if err := ctx.Err(); err != nil {
 		t.Fatalf("child context already cancelled while mounted: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestContextAfterUnmountIsAlreadyCancelled(t *testing.T) {
 	o.SetRoot(Sized{W: 1, H: 1})
 
 	// First call on this element happens only now, after it left the tree.
-	if err := el.ctx().Context().Err(); err == nil {
+	if err := el.ctx().Lifetime().Err(); err == nil {
 		t.Error("Context() on an unmounted element returned a live context")
 	}
 }
@@ -192,7 +192,7 @@ func TestChildContextDerivesFromParent(t *testing.T) {
 	if s == nil {
 		t.Fatal("child probe did not mount")
 	}
-	child := s.el.ctx().Context()
+	child := s.el.ctx().Lifetime()
 	if child.Err() != nil {
 		t.Fatal("child context cancelled while mounted")
 	}

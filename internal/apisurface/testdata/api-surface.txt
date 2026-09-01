@@ -1558,7 +1558,6 @@ widget.Ctx.Camera method
 widget.Ctx.CameraPreview method
 widget.Ctx.Clipboard method
 widget.Ctx.Connectivity method
-widget.Ctx.Context method
 widget.Ctx.DarkMode method
 widget.Ctx.FilePicker method
 widget.Ctx.Gamepads method
@@ -1569,6 +1568,7 @@ widget.Ctx.IntlLocale method
 widget.Ctx.Invalidate method
 widget.Ctx.KeyboardInset method
 widget.Ctx.Lifecycle method
+widget.Ctx.Lifetime method
 widget.Ctx.Links method
 widget.Ctx.Locale method
 widget.Ctx.Menus method

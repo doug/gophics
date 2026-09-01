@@ -169,12 +169,12 @@ func (s *feedState) Init(ctx widget.Ctx) {
 // The context comes from the widget, so leaving the page stops the load: the
 // per-item walk below is the expensive part, and without cancellation a feed
 // that is closed a moment after opening keeps fetching every one of them.
-func (s *feedState) fetch(wctx widget.Ctx) {
-	ctx := wctx.Context()
-	api := wctx.MustOf[API]()
+func (s *feedState) fetch(ctx widget.Ctx) {
+	lifetime := ctx.Lifetime()
+	api := ctx.MustOf[API]()
 	n := s.W().N
 	go func() {
-		ids, err := api.TopStories(ctx)
+		ids, err := api.TopStories(lifetime)
 		if err != nil {
 			s.PostState(func() { s.feed, s.refreshing = feed{err: err, done: true}, false })
 			return
@@ -199,8 +199,8 @@ func (s *feedState) fetch(wctx widget.Ctx) {
 				}
 			})
 		}
-		items := fetchItems(ctx, api, ids, func(partial []Item) { show(partial, false) })
-		if ctx.Err() != nil {
+		items := fetchItems(lifetime, api, ids, func(partial []Item) { show(partial, false) })
+		if lifetime.Err() != nil {
 			return // the feed is gone; nothing wants these
 		}
 		show(items, true)
@@ -272,15 +272,15 @@ type threadState struct {
 	loading  bool
 }
 
-func (s *threadState) Init(wctx widget.Ctx) {
+func (s *threadState) Init(ctx widget.Ctx) {
 	s.loading = true
-	ctx := wctx.Context()
-	api := wctx.MustOf[API]()
+	lifetime := ctx.Lifetime()
+	api := ctx.MustOf[API]()
 	story := s.W().Story
 	go func() {
 		// Reported per level, so the top-level comments draw after one round
 		// trip instead of after the last reply in the tree.
-		comments := streamComments(ctx, api, story, 80, func(partial []Comment) {
+		comments := streamComments(lifetime, api, story, 80, func(partial []Comment) {
 			s.PostState(func() {
 				if len(partial) > 0 {
 					s.comments, s.loading = partial, false

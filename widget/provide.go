@@ -1,5 +1,7 @@
 package widget
 
+import "fmt"
+
 // Provide makes a value available to every widget below it in the tree,
 // looked up by type with Of — gophics's InheritedWidget
 // with generics instead of runtime type lookups at the call site:
@@ -45,10 +47,22 @@ func (c Ctx) Of[T any]() (T, bool) {
 
 // MustOf returns the nearest provided T, panicking if absent (for values
 // the app guarantees, like a theme or navigator).
+//
+// The panic names the type, because that is the whole question when it fires
+// and the caller cannot see it from the stack: the failing line reads
+// MustOf[T]() with T resolved at compile time and erased by the time anything
+// goes wrong. "No Provide in scope" without saying for what sends you reading
+// the tree to work out which of several injected values is missing.
+//
+// Whether a value is in scope depends on the shape of the tree at runtime, so
+// this cannot be a compile error — nothing in a widget's type records what its
+// ancestors provide. Use Of where the widget can do something sensible without
+// the value; MustOf is for the ones an app genuinely guarantees.
 func (c Ctx) MustOf[T any]() T {
 	v, ok := c.Of[T]()
 	if !ok {
-		panic("widget: no Provide for requested type in scope")
+		var zero T
+		panic(fmt.Sprintf("widget: no Provide[%T] above this widget", zero))
 	}
 	return v
 }
