@@ -38,6 +38,31 @@ type Config struct {
 	// conventional; empty falls back to the executable's name.
 	AppID string
 	Size  geom.Size // initial logical window size
+	// Provide makes values available to every widget in the app, found with
+	// ctx.Of / ctx.MustOf by type, without the tree nesting a Provide for
+	// each one:
+	//
+	//	app.Run(root{}, app.Config{Provide: []any{api, store}})
+	//	...
+	//	api := ctx.MustOf[API]()
+	//
+	// This is where an app-lifetime value belongs — an API client, a
+	// database handle, a clock — the things built once at startup that never
+	// vary by where you are in the tree. Values that are *derived*, like a
+	// theme recomputed each build to follow the system's dark mode, belong in
+	// the tree as a Provide, because they change and the subtree below them
+	// has to rebuild when they do.
+	//
+	// Implemented by wrapping the root, so there is one lookup and one rule:
+	// nearest ancestor wins. A Provide inside the tree therefore overrides
+	// one from here for its own subtree, with nothing new to learn.
+	//
+	// Keyed by each value's dynamic type, which is what Provide[T] already
+	// does — a *httpAPI here answers Of[API] for any interface it satisfies.
+	// Two values satisfying the same interface is ambiguous for the same
+	// reason it is in the tree; later entries sit nearer the app, so a later
+	// one wins.
+	Provide []any
 	// EdgeToEdge stops the runner from insetting the root for the notch, the
 	// status bar and the home indicator.
 	//
@@ -138,6 +163,7 @@ type core struct {
 	background     paint.Color
 	backgroundDark paint.Color
 	edgeToEdge     bool
+	provide        []any
 	root           widget.Widget
 	size           geom.Size
 	debugPaint     bool
@@ -330,6 +356,7 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 		background:     cfg.Background,
 		backgroundDark: cfg.BackgroundDark,
 		edgeToEdge:     cfg.EdgeToEdge,
+		provide:        cfg.Provide,
 		root:           root,
 		size:           cfg.Size,
 		cur:            &scene.List{},
@@ -413,6 +440,12 @@ func (c *core) mount() {
 	var root widget.Widget = c.root
 	if !c.edgeToEdge {
 		root = widget.SafeArea{Child: root}
+	}
+	// Config.Provide, innermost last: a later entry sits nearer the app, so it
+	// wins over an earlier one of the same type, matching the tree's
+	// nearest-ancestor rule.
+	for i := len(c.provide) - 1; i >= 0; i-- {
+		root = widget.RootProvide{Value: c.provide[i], Child: root}
 	}
 	c.Owner.SetRoot(widget.OverlayHost{Child: widget.DragHost{Child: root}})
 }

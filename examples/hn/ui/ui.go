@@ -31,7 +31,6 @@ var commentStyle = spanStyle{
 
 // HN is the root widget: the Navigator over the feed.
 type HN struct {
-	API      API
 	PageSize int // stories to load (0 → 60)
 }
 
@@ -47,16 +46,18 @@ func (h HN) Build(ctx widget.Ctx) widget.Widget {
 	// tree, so every page below reads colors with theme.Of(ctx) and the whole
 	// app follows light/dark automatically.
 	th := theme.Auto(ctx)
-	// Provide the API down the tree instead of threading it through every page.
-	// Pages then carry only data (which story), so they're plain serializable
-	// values — which is what lets `gophics dev` restore your navigation on a
-	// hot-restart (see threadPage's registration below).
+	// Only the theme is provided here. It is derived — recomputed each build so
+	// the app follows the system's dark mode — so it belongs in the tree, where
+	// changing it rebuilds the subtree that reads it. The API is the opposite:
+	// built once at startup, identical everywhere, and provided app-wide from
+	// Config.
+	//
+	// Either way the pages carry only data (which story), so they stay plain
+	// serializable values — which is what lets `gophics dev` restore your
+	// navigation on a hot restart (see threadPage's registration below).
 	return widget.Provide[theme.Theme]{
 		Value: th,
-		Child: widget.Provide[API]{
-			Value: h.API,
-			Child: widget.Fill{Color: th.Bg, Child: widget.Navigator{Home: feedPage{N: h.pageSize()}}},
-		},
+		Child: widget.Fill{Color: th.Bg, Child: widget.Navigator{Home: feedPage{N: h.pageSize()}}},
 	}
 }
 
@@ -354,7 +355,7 @@ func commentRow(th theme.Theme, c Comment, openURL func(string)) widget.Widget {
 }
 
 // Root returns the HN app widget over the live API.
-func Root() widget.Widget { return HN{API: newLiveAPI()} }
+func Root() widget.Widget { return HN{} }
 
 // Background returns the app background color.
 func Background() paint.Color { return colBg }

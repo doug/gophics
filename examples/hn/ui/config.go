@@ -18,5 +18,9 @@ func Config() app.Config {
 		Background:   Background(),
 		Font:         goregular.TTF,
 		FontFamilies: map[string][]byte{"bold": gobold.TTF},
+		// The API is built once and never varies by position in the tree, so
+		// it is provided to the whole app here rather than nested around it.
+		// A test swaps in a fake by overriding this field.
+		Provide: []any{newLiveAPI()},
 	}
 }

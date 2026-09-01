@@ -26,6 +26,24 @@ func (p Provide[T]) provided() any { return p.Value }
 
 type provider interface{ provided() any }
 
+// RootProvide makes one value available to a whole app, without the app's own
+// tree having to nest a Provide for it. app.Config.Provide builds these around
+// the root; see that field for why an app-lifetime value belongs there rather
+// than in the tree.
+//
+// It is not generic, and does not need to be: lookup asserts on the value's
+// dynamic type, so a *httpAPI stored here answers Of[API] for every interface
+// it implements — exactly as Provide[T] already behaves, where T constrains
+// what may be stored and not what the value is found as.
+type RootProvide struct {
+	Value any
+	Child Widget
+}
+
+func (p RootProvide) Build(Ctx) Widget { return p.Child }
+
+func (p RootProvide) provided() any { return p.Value }
+
 // Of returns the nearest provided value of type T above this context,
 // reporting whether one exists.
 //

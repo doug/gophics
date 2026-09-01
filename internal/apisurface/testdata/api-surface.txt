@@ -30,6 +30,7 @@ app.Config.EdgeToEdge field
 app.Config.Font field
 app.Config.FontFamilies field
 app.Config.GraphicsLog field
+app.Config.Provide field
 app.Config.Renderer field
 app.Config.ScaleToFit field
 app.Config.Size field
@@ -1855,6 +1856,10 @@ widget.Rich.OnLink field
 widget.Rich.Size field
 widget.Rich.Spans field
 widget.Right const
+widget.RootProvide type
+widget.RootProvide.Build method
+widget.RootProvide.Child field
+widget.RootProvide.Value field
 widget.Row func
 widget.SafeArea type
 widget.SafeArea.Child field

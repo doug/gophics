@@ -53,8 +53,11 @@ func harness(t *testing.T) (*app.Headless, *feedState) {
 	var st *feedState
 	stateHook = func(s *feedState) { st = s }
 	defer func() { stateHook = nil }()
-	h, err := app.NewHeadless(HN{API: fakeAPI{stories: 500, commentsPer: 5}, PageSize: 500},
-		app.Config{Size: geom.Size{W: 480, H: 720}, Background: colBg, Font: goregular.TTF}, 2)
+	h, err := app.NewHeadless(HN{PageSize: 500},
+		app.Config{
+			Size: geom.Size{W: 480, H: 720}, Background: colBg, Font: goregular.TTF,
+			Provide: []any{fakeAPI{stories: 500, commentsPer: 5}},
+		}, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
