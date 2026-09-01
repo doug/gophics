@@ -323,8 +323,8 @@ type scrollState struct {
 	vp     *viewportRef
 
 	fling     flinger
+	dragVel   dragSampler
 	velocity  float32 // px/s along the main axis (drag direction)
-	lastDrag  time.Time
 	endArmed  bool
 	glide     *anim.Controller
 	glideFrom float32
@@ -427,8 +427,10 @@ func (s *scrollState) Init(ctx Ctx) {
 	s.ctx = ctx
 	s.vp = &viewportRef{}
 	s.fling.s = s
+	s.dragVel.s = s
 	s.endArmed = true
 	ctx.AddTicker(&s.fling)
+	ctx.AddTicker(&s.dragVel)
 	s.glide = &anim.Controller{Curve: anim.EaseInOut, OnChange: func() {
 		s.SetState(func() { s.offset = geom.LerpFloat(s.glideFrom, s.glideTo, s.glide.Value()) })
 		s.reportOffset()
@@ -452,6 +454,7 @@ func (s *scrollState) Init(ctx Ctx) {
 
 func (s *scrollState) Dispose() {
 	s.ctx.RemoveTicker(&s.fling)
+	s.ctx.RemoveTicker(&s.dragVel)
 	s.ctx.RemoveTicker(s.glide)
 	s.ctx.RemoveTicker(s.snap)
 	s.ctx.RemoveTicker(&s.spin)
@@ -689,6 +692,56 @@ func (s *scrollState) contentDelta(dm float32) bool {
 	return s.scrollBy(-dm)
 }
 
+// dragSampler turns finger movement into a release velocity, once per frame.
+//
+// It exists because the two halves of a fling used to read different clocks.
+// Velocity was measured between pointer events with time.Now(), while the
+// fling that consumes it integrates against the frame clock — so the number
+// handed over was in units the thing receiving it did not share.
+//
+// That mattered three ways. Pointer events arrive in bursts and can be
+// coalesced, so wall-clock gaps between them are erratic; the old code guarded
+// with `dt > 0.001 && dt < 0.1` and *discarded* every sample outside it, which
+// on a fast flick delivering several moves inside a millisecond threw away
+// exactly the samples that carried the speed. A held-still finger kept its last
+// velocity, because with no events there was nothing to decay it — so stopping
+// dead and lifting still flung. And nothing could be tested: synthetic events
+// happen microseconds apart, every sample failed the guard, and a scripted
+// flick produced no fling at all.
+//
+// Accumulating movement and dividing by the frame's own dt fixes all three. A
+// frame with no movement contributes a zero sample and decays the estimate,
+// which is what a finger coming to rest should do.
+type dragSampler struct {
+	s      *scrollState
+	accum  float32 // movement since the last frame
+	active bool
+}
+
+func (d *dragSampler) begin()              { d.accum, d.active = 0, true }
+func (d *dragSampler) moved(delta float32) { d.accum += delta }
+func (d *dragSampler) end()                { d.active = false }
+
+// velocityTau is how quickly the estimate follows the finger, in seconds.
+//
+// Expressed as a time constant rather than a per-sample weight because a
+// per-sample weight is a different filter at every refresh rate: 0.3 a frame
+// converges in half the wall time on a 120Hz display as on a 60Hz one, so the
+// same flick would fling differently on two phones. 40ms is short enough to
+// catch a quick flick and long enough to ignore a single jittery sample.
+const velocityTau = 0.04
+
+func (d *dragSampler) Tick(dt float64) bool {
+	if !d.active || dt <= 0 {
+		return false
+	}
+	inst := d.accum / float32(dt)
+	d.accum = 0
+	a := float32(1 - math.Exp(-dt/velocityTau))
+	d.s.velocity += (inst - d.s.velocity) * a
+	return true
+}
+
 // flinger decelerates the scroll after release: exponential friction, handing
 // off to an elastic bounce when it runs into an edge with speed to spare.
 type flinger struct {
@@ -888,20 +941,18 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				if s.overscroll != 0 && !s.refreshing {
 					s.overRaw = inverseRubberBand(s.overscroll, s.mainExtent())
 				}
-				s.velocity, s.lastDrag = 0, time.Now()
+				s.velocity = 0
+				s.dragVel.begin()
 			},
 			OnDrag: func(_, d geom.Pt) {
 				delta := s.mainDelta(d)
 				s.dragMain(delta)
-				now := time.Now()
-				dt := now.Sub(s.lastDrag).Seconds()
-				s.lastDrag = now
-				if dt > 0.001 && dt < 0.1 {
-					inst := delta / float32(dt)
-					s.velocity = s.velocity*0.7 + inst*0.3
-				}
+				// Only accumulate. How fast that is depends on how much time
+				// passed, and the frame clock is what knows.
+				s.dragVel.moved(delta)
 			},
 			OnRelease: func() {
+				s.dragVel.end()
 				s.releaseOverscroll()
 				// Only fling from inside the content; a released overscroll is
 				// already handled by its spring-back.

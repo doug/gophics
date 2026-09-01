@@ -2,7 +2,6 @@ package app
 
 import (
 	"testing"
-	"time"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/internal/layoutbox"
@@ -203,13 +202,15 @@ func TestFlingDeceleration(t *testing.T) {
 	h.Render()
 	vp := findViewport(h.core.Owner.RootBox())
 
-	// Drag upward with real timing so velocity tracking sees speed.
+	// Drag upward, a frame at a time. Velocity comes from the frame clock, so
+	// what makes this a fast flick is the distance covered per *frame* — no
+	// sleeping, and no dependence on how quickly the test machine runs.
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 50, Y: 90}})
 	y := float32(90)
 	for range 5 {
-		time.Sleep(8 * time.Millisecond)
 		y -= 12
 		h.core.Pointer(shell.Pointer{Kind: shell.PointerMove, Pos: geom.Pt{X: 50, Y: y}})
+		h.Step(0.016)
 	}
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: 50, Y: y}})
 	h.Render()
