@@ -51,6 +51,13 @@ func glyphMaskTestFont(t *testing.T, size float64) text.Face {
 // integer deviceScale. The real-world trigger is FRACTIONAL deviceScale — e.g.
 // a Linux desktop at 125%/150% reports Xft.dpi/96 = 1.25 or 1.5 — where the
 // user-space fraction leaves every quad off-grid.
+//
+// The matrix passed here is Scale(deviceScale) rather than the identity,
+// because that is what the engine is actually given: gg's totalMatrix folds the
+// HiDPI deviceMatrix in, so an untransformed widget arrives with A=E=scale.
+// Passing the identity alongside deviceScale=1.25 describes a call production
+// never makes, and it stopped meaning anything once the glyph strike began
+// following the whole transform instead of only deviceScale.
 func TestGlyphMaskDeviceGridAlignment(t *testing.T) {
 	face := glyphMaskTestFont(t, 16)
 
@@ -67,7 +74,7 @@ func TestGlyphMaskDeviceGridAlignment(t *testing.T) {
 		engine := NewGlyphMaskEngine()
 		batch, err := engine.LayoutShapedGlyphs(
 			face, glyphs, originX, 40, gg.RGBA{A: 1},
-			gg.Identity(), deviceScale, false,
+			gg.Scale(deviceScale, deviceScale), deviceScale, false,
 		)
 		if err != nil {
 			t.Fatalf("deviceScale=%g: LayoutShapedGlyphs: %v", deviceScale, err)

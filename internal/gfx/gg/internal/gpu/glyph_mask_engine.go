@@ -119,7 +119,7 @@ func (e *GlyphMaskEngine) LayoutText(
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	fontSize := face.Size() * deviceScale
+	fontSize := face.Size() * effectiveGlyphScale(matrix, deviceScale)
 	if fontSize <= 0 {
 		fontSize = face.Size()
 	}
@@ -177,7 +177,7 @@ func (e *GlyphMaskEngine) LayoutTextAliased(
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	fontSize := face.Size() * deviceScale
+	fontSize := face.Size() * effectiveGlyphScale(matrix, deviceScale)
 	if fontSize <= 0 {
 		fontSize = face.Size()
 	}
@@ -232,7 +232,7 @@ func (e *GlyphMaskEngine) LayoutShapedGlyphs(
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	fontSize := face.Size() * deviceScale
+	fontSize := face.Size() * effectiveGlyphScale(matrix, deviceScale)
 	if fontSize <= 0 {
 		fontSize = face.Size()
 	}
@@ -325,10 +325,14 @@ func (e *GlyphMaskEngine) layoutGlyphs(
 	// ADR-054: compute variation hash for cache key differentiation.
 	varHash := text.VariationHash(variations)
 
+	// The scale the glyph is actually drawn at, which is the whole transform
+	// and not only the HiDPI part. See effectiveGlyphScale.
+	effScale := effectiveGlyphScale(matrix, deviceScale)
+
 	for i := range glyphs {
 		glyph := glyphs[i]
 		// Device-space placement and sub-pixel fraction for this glyph.
-		absX, absY, fracX, fracY := glyphPlacement(x+glyph.X, y+glyph.Y, deviceScale, hinting)
+		absX, absY, fracX, fracY := glyphPlacement(x+glyph.X, y+glyph.Y, effScale, hinting)
 
 		// Size bucket quantization (Skia pattern): under atlas pressure,
 		// rasterize at a coarse bucket size and scale quads to actual size.
@@ -374,7 +378,7 @@ func (e *GlyphMaskEngine) layoutGlyphs(
 		// then scale by bucketScale to match the actual display size.
 		// In normal mode bucketScale=1.0 (no-op). In bucketed mode
 		// bucketScale = actualSize/bucketSize (Skia strikeToSourceScale).
-		scale := bucketScale / deviceScale
+		scale := bucketScale / effScale
 
 		// For LCD glyphs, the atlas region.Width is 3x the logical pixel width.
 		// The screen quad width must use the logical width (region.Width / 3).
@@ -711,6 +715,37 @@ func (e *GlyphMaskEngine) rasterizeLCDGlyph(
 // hinting is auto-enabled. Above this size, outlines are smooth enough that
 // grid-fitting provides no visual benefit and can introduce distortion.
 const glyphMaskHintingMaxSize = 48.0
+
+// effectiveGlyphScale is the device-pixels-per-em factor a glyph is drawn at.
+//
+// It is the whole transform, not just deviceScale. totalMatrix already folds
+// the HiDPI matrix in, so for an untransformed widget this returns exactly
+// deviceScale and nothing changes; under a Transform it also picks up the
+// user scale.
+//
+// Reading only deviceScale was a bug with a visible symptom: a widget scaled
+// up by a Transform had its glyphs rasterized at the untransformed size and
+// then stretched by the GPU, so text in a zoomed subtree went soft while
+// everything around it stayed sharp. The mask has to be built at the size it
+// will be displayed at, and the quads then divide by the same factor so the
+// transform scales them back to exactly that.
+//
+// The average of the two column norms, so a rotation (norms 1 and 1) asks for
+// no change while a uniform scale asks for the scale. Falls back to
+// deviceScale for a degenerate matrix rather than producing a zero-size mask.
+func effectiveGlyphScale(m gg.Matrix, deviceScale float64) float64 {
+	sx := math.Hypot(m.A, m.D)
+	sy := math.Hypot(m.B, m.E)
+	s := (sx + sy) / 2
+	if s <= 0 || math.IsNaN(s) || math.IsInf(s, 0) {
+		return deviceScale
+	}
+	// Bounded so an extreme zoom cannot ask the atlas for an enormous strike;
+	// past this the mask is scaled up as before, which at that size is not
+	// visible anyway.
+	const maxGlyphDeviceScale = 16
+	return min(s, deviceScale*maxGlyphDeviceScale)
+}
 
 // selectGlyphMaskHinting returns the hinting mode for glyph mask rendering.
 // Hinting is enabled for small text (≤48px) when the CTM is axis-aligned
