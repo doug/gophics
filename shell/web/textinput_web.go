@@ -4,6 +4,14 @@
 // gophics draws its own editor, so to raise the mobile soft keyboard we focus a
 // hidden <input> and forward its input/composition/edit-key events. The input is
 // a commit funnel: each `input` event yields committed text and is cleared.
+//
+// One element, created once and reused. Recreating it per field looked tidier
+// and broke moving between fields on Chrome for Android: focus moves as blur
+// (old field) then focus (new field), so the element was removed from the DOM
+// and a fresh one inserted and focused inside a single gesture — and a browser
+// will not raise the keyboard for an element that was not there when the
+// gesture began. The keyboard went down on the first field and never came back
+// up for the second.
 
 package web
 
@@ -16,23 +24,29 @@ import (
 func (w *window) TextInput() shell.TextInput { return &webTextInput{doc: w.doc} }
 
 type webTextInput struct {
-	doc    js.Value
-	input  js.Value
-	funcs  []js.Func
-	active bool
+	doc   js.Value
+	input js.Value
+	funcs []js.Func
+	// h is the handler the *current* field registered. The DOM listeners are
+	// attached once and read it, so switching fields swaps a pointer rather
+	// than rebuilding the element.
+	h shell.TextInputHandler
+	// blurTimer defers the blur so that a Hide immediately followed by a Show
+	// — which is exactly how focus moves between two fields — never actually
+	// blurs. Without the defer the keyboard visibly drops and comes back, and
+	// on Chrome for Android often just drops.
+	blurTimer js.Value
+	active    bool
 }
 
-func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandler) {
-	t.Hide()
-
+// ensure creates the hidden input on first use and wires its listeners once.
+func (t *webTextInput) ensure() {
+	if !t.input.IsUndefined() && t.input.Truthy() {
+		return
+	}
 	in := t.doc.Call("createElement", "input")
 	in.Set("type", "text")
-	in.Set("inputmode", inputMode(opts.Type))
-	if !opts.Autocorrect {
-		in.Set("autocorrect", "off")
-		in.Set("autocapitalize", "off")
-		in.Set("spellcheck", false)
-	}
+
 	// Invisible but focusable — display:none and visibility:hidden cannot take
 	// focus, so this is opacity instead.
 	//
@@ -52,58 +66,95 @@ func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandle
 		in.Get("style").Set(k, v)
 	}
 	t.doc.Get("body").Call("appendChild", in)
-	t.input, t.active = in, true
 
 	onInput := js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		if v := in.Get("value").String(); v != "" {
-			if h.OnText != nil {
-				h.OnText(v)
+			if t.h.OnText != nil {
+				t.h.OnText(v)
 			}
 			in.Set("value", "")
 		}
 		return nil
 	})
 	onComp := js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if h.OnComposing != nil && len(args) > 0 {
-			h.OnComposing(args[0].Get("data").String())
+		if t.h.OnComposing != nil && len(args) > 0 {
+			t.h.OnComposing(args[0].Get("data").String())
 		}
 		return nil
 	})
 	onKey := js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if h.OnEditKey == nil || len(args) == 0 {
+		if t.h.OnEditKey == nil || len(args) == 0 {
 			return nil
 		}
 		switch args[0].Get("key").String() {
 		case "Backspace":
-			h.OnEditKey(shell.EditBackspace)
+			t.h.OnEditKey(shell.EditBackspace)
 		case "Enter":
-			h.OnEditKey(shell.EditEnter)
+			t.h.OnEditKey(shell.EditEnter)
 		case "ArrowLeft":
-			h.OnEditKey(shell.EditLeft)
+			t.h.OnEditKey(shell.EditLeft)
 		case "ArrowRight":
-			h.OnEditKey(shell.EditRight)
+			t.h.OnEditKey(shell.EditRight)
 		}
 		return nil
 	})
 	in.Call("addEventListener", "input", onInput)
 	in.Call("addEventListener", "compositionupdate", onComp)
 	in.Call("addEventListener", "keydown", onKey)
-	t.funcs = []js.Func{onInput, onComp, onKey}
-	in.Call("focus") // raises the mobile soft keyboard
+
+	t.input, t.funcs = in, []js.Func{onInput, onComp, onKey}
+}
+
+func (t *webTextInput) cancelBlur() {
+	if t.blurTimer.Truthy() {
+		js.Global().Call("clearTimeout", t.blurTimer)
+		t.blurTimer = js.Undefined()
+	}
+}
+
+func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandler) {
+	t.ensure()
+	t.cancelBlur() // a Hide from the field being left must not take this one down
+	t.h, t.active = h, true
+
+	in := t.input
+	in.Set("inputmode", inputMode(opts.Type))
+	if opts.Autocorrect {
+		in.Call("removeAttribute", "autocorrect")
+		in.Call("removeAttribute", "autocapitalize")
+		in.Set("spellcheck", true)
+	} else {
+		in.Set("autocorrect", "off")
+		in.Set("autocapitalize", "off")
+		in.Set("spellcheck", false)
+	}
+	in.Set("value", "")
+
+	// Focusing an already-focused element is a no-op, which is what keeps the
+	// keyboard steady when moving between fields.
+	if !t.doc.Get("activeElement").Equal(in) {
+		in.Call("focus") // raises the mobile soft keyboard
+	}
 }
 
 func (t *webTextInput) Hide() {
 	if !t.active {
 		return
 	}
-	t.input.Call("blur")
-	if p := t.input.Get("parentNode"); !p.IsNull() {
-		p.Call("removeChild", t.input)
-	}
-	for _, f := range t.funcs {
-		f.Release()
-	}
-	t.funcs, t.active = nil, false
+	t.active, t.h = false, shell.TextInputHandler{}
+
+	// Deferred: focus moving between two fields arrives as Hide then Show in
+	// the same turn, and blurring in between is what drops the keyboard. A Show
+	// cancels this; a real dismissal lets it run.
+	t.cancelBlur()
+	cb := js.FuncOf(func(js.Value, []js.Value) any {
+		t.blurTimer = js.Undefined()
+		if !t.active && t.input.Truthy() {
+			t.input.Call("blur")
+		}
+		return nil
+	})
+	t.blurTimer = js.Global().Call("setTimeout", cb, 0)
 }
 
 // SetText is a no-op on web: the hidden input is a commit funnel (input events

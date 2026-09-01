@@ -1526,21 +1526,34 @@ func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 		return
 	}
 	owner := ctx.el.owner
+
+	// Both autofocus rules are one-shot at mount, and the shot is spent here
+	// whether or not it is taken.
+	//
+	// Marking it only on success was a bug with a specific shape: the *second*
+	// field on a screen finds focus already held by the first, declines, and
+	// stays unspent — so the moment anything released focus, it grabbed it.
+	// Releasing focus lasted one frame, and on a phone the keyboard came
+	// straight back up because a field nobody had touched re-took it.
+	firstUpdate := !ib.autofocused
+	ib.autofocused = true
+
 	// &ib.Gestures is stable across rebuilds — the struct is overwritten in
 	// place above — so this compares identity, not contents.
 	if owner.KeyboardTarget == &ib.Gestures {
-		ib.autofocused = true // already ours; nothing to claim
+		return // already ours
+	}
+	switch {
+	case iw.Autofocus && firstUpdate:
+		// Explicitly asked for: takes focus from whatever holds it.
+	case owner.KeyboardTarget == nil && firstUpdate:
+		// "A focusable widget mounted while nothing has focus takes it."
+	default:
 		return
 	}
-	// A focusable widget mounted while nothing has focus takes it. Autofocus
-	// additionally takes focus away from whatever holds it, latched so it
-	// happens on mount rather than on every rebuild.
-	if owner.KeyboardTarget != nil && !(iw.Autofocus && !ib.autofocused) {
-		return
-	}
+
 	old := owner.KeyboardTarget
 	owner.KeyboardTarget = &ib.Gestures
-	ib.autofocused = true
 	if old != nil && old.OnFocus != nil {
 		old.OnFocus(false)
 	}

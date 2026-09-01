@@ -940,8 +940,19 @@ func (c *core) firePressEndExcept(skip widget.GestureTarget) {
 	c.pressBoxes = kept
 }
 
-// focusFrom moves keyboard focus to the topmost focusable hit, if any.
-// A press on nothing focusable leaves focus where it is.
+// focusFrom moves keyboard focus to the topmost focusable hit.
+//
+// A press that hits nothing focusable releases a *text* target, and keeps any
+// other. That asymmetry is deliberate. On a phone the soft keyboard is raised
+// by a focused field and dismissed by it losing focus, so a rule that never
+// released focus left no way to put the keyboard away at all: it covered half
+// the screen until the app was closed. Tapping outside a field to dismiss is
+// also what both the web and the platforms do.
+//
+// It is narrowed to targets that capture text (OnText) so that a widget which
+// only reads keys — the edit menu, a key-driven canvas — keeps focus when the
+// user presses elsewhere. Nothing about those involves a keyboard that needs
+// dismissing.
 func (c *core) focusFrom(hits []hitInteractive) {
 	for _, hit := range hits {
 		h := hit.box.GestureHandler()
@@ -960,6 +971,14 @@ func (c *core) focusFrom(hits []hitInteractive) {
 			h.OnFocus(true)
 		}
 		return
+	}
+
+	// Nothing focusable under the press.
+	if old := c.Owner.KeyboardTarget; old != nil && old.OnText != nil {
+		c.Owner.KeyboardTarget = nil
+		if old.OnFocus != nil {
+			old.OnFocus(false)
+		}
 	}
 }
 
