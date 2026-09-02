@@ -70,11 +70,12 @@ var desktopExempt = map[string]string{
 	"Haptic": "NSHapticFeedbackManager can buzz a trackpad; Linux and Windows " +
 		"desktops have nothing comparable, so apps must treat haptics as " +
 		"optional anyway — nil until a consumer justifies the objc bridge work",
-	"Locale": "not yet: readable from $LANG/$LC_ALL everywhere and NSLocale on " +
-		"macOS; intl has no way to pick a language on desktop until this lands",
-	"Notifier": "not yet: UNUserNotificationCenter on macOS and " +
-		"org.freedesktop.Notifications over D-Bus on Linux both fit the " +
-		"zero-CGo patterns already in-tree",
+	"Locale": "by design, per the contract in shell/locale.go: desktop has the " +
+		"environment variables, so Locale stays nil and intl.Auto reads them " +
+		"directly. The recorded caveat: a Finder-launched app gets almost no " +
+		"environment, so a German Mac can read as en-US there — if that bites, " +
+		"the fix is NSLocale through the objc bridge, and this entry is where " +
+		"that decision gets reopened",
 	"Permissions": "desktop OSes ask per resource at first use (camera, mic) " +
 		"through their own prompts; there is no app-driven permission API to wrap",
 	"Photos": "no desktop OS has an app-facing photo-library abstraction; " +
@@ -84,10 +85,6 @@ var desktopExempt = map[string]string{
 		"with delegate callbacks — real objc work — and Linux/Windows desktops " +
 		"have no share-sheet concept at all, so apps need a fallback anyway; " +
 		"not yet",
-	"SecureStorage": "not yet: the macOS keychain is reachable through the " +
-		"security(1) CLI with the same subprocess pattern the Linux file " +
-		"chooser already uses, and libsecret's secret-tool covers Linux where " +
-		"installed",
 	"TextInput": "this capability raises and lowers a soft keyboard; desktop " +
 		"keyboards are hardware and text arrives through window key events, so " +
 		"there is nothing to raise — by design, not omission",
@@ -132,14 +129,11 @@ var terminalExempt = map[string]string{
 		"and would make a polite TUI",
 	"Links": "not yet: open/xdg-open works from a local terminal; ambiguous over " +
 		"SSH, which is the design question to answer first",
-	"Locale":      "not yet: $LANG is right there; lands with the desktop version",
-	"Menus":       "no menu bar",
-	"Notifier":    "not yet: OSC 9 exists but emulator support is patchy",
-	"Permissions": "nothing here prompts",
-	"Photos":      "no photo library",
-	"Preferences": "not yet: the desktop JSON-file store has no window " +
-		"dependency and ports almost verbatim; a TUI that cannot remember " +
-		"anything between runs is a real limitation",
+	"Locale":        "not yet: $LANG is right there; lands with the desktop version",
+	"Menus":         "no menu bar",
+	"Notifier":      "not yet: OSC 9 exists but emulator support is patchy",
+	"Permissions":   "nothing here prompts",
+	"Photos":        "no photo library",
 	"SecureStorage": "not yet: same stores as desktop once desktop has them",
 	"Share":         "no share sheet",
 	"Socket":        "not yet: nothing terminal-specific blocks it; no consumer",

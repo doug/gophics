@@ -21,6 +21,8 @@ import (
 	"os"
 	"strconv"
 	"sync"
+
+	"github.com/doug/gophics/internal/prefs"
 	"sync/atomic"
 	"time"
 
@@ -124,7 +126,7 @@ func contentScaleFor(pw int) float32 {
 // logical pixels = physical / scale, where scale defaults to 1 and can be
 // overridden with GOPHICS_TERM_SCALE.
 func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
-	ts := &termState{out: tty, imageID: 1, done: make(chan struct{})}
+	ts := &termState{out: tty, appID: cfg.AppID, imageID: 1, done: make(chan struct{})}
 	// Default to inline base64 transfer: temp-file transfer (t=t) is not honored
 	// by every terminal (e.g. Ghostty renders nothing). Opt in with
 	// GOPHICS_TERM_TMPFILE=1 on terminals that support it (kitty).
@@ -210,11 +212,14 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 // repaint flag, and the last transmitted frame (for diffing). dirty is set from
 // any goroutine via Invalidate; done is closed once.
 type termState struct {
-	out     io.Writer
-	scale   float32 // content scale: logical = physical/scale; pointer coords /scale
-	imageID int
-	dir     string // temp-file transfer dir; "" → inline base64
-	full    bool   // GOPHICS_TERM_FULLFRAME: always send whole frames
+	out       io.Writer
+	appID     string // for the per-app preferences directory
+	prefsOnce sync.Once
+	prefs     *prefs.Store
+	scale     float32 // content scale: logical = physical/scale; pointer coords /scale
+	imageID   int
+	dir       string // temp-file transfer dir; "" → inline base64
+	full      bool   // GOPHICS_TERM_FULLFRAME: always send whole frames
 
 	dirty atomic.Bool
 

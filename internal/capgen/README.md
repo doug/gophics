@@ -189,11 +189,11 @@ does.
 | `Locale` | — | yes | yes | — |
 | `Menus` | yes | — | — | — |
 | `Microphone` | yes | yes | yes | yes |
-| `Notifier` | — | yes | yes | — |
+| `Notifier` | yes | yes | yes | — |
 | `Permissions` | — | yes | — | — |
 | `Photos` | — | — | yes | — |
-| `Preferences` | yes | yes | yes | — |
-| `SecureStorage` | — | yes | yes | — |
+| `Preferences` | yes | yes | yes | yes |
+| `SecureStorage` | yes | yes | yes | — |
 | `Share` | — | yes | yes | — |
 | `Socket` | yes | yes | yes | — |
 | `Speakers` | yes | yes | yes | yes |

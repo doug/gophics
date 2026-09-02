@@ -4,6 +4,8 @@ package desktop
 
 import (
 	"path/filepath"
+
+	"github.com/doug/gophics/internal/prefs"
 	"strings"
 	"testing"
 )
@@ -17,8 +19,8 @@ func TestAppDirName(t *testing.T) {
 		"a b/c":             "a-bc",
 	}
 	for in, want := range cases {
-		if got := appDirName(in); got != want {
-			t.Errorf("appDirName(%q) = %q, want %q", in, got, want)
+		if got := prefs.AppDirName(in); got != want {
+			t.Errorf("prefs.AppDirName(%q) = %q, want %q", in, got, want)
 		}
 	}
 
@@ -30,15 +32,15 @@ func TestAppDirName(t *testing.T) {
 		"", ".", "..", "../..", "/", "/etc/passwd", `..\..\windows`,
 		"...", "  ", "///", "a/../../b", "\x00nul",
 	} {
-		got := appDirName(in)
+		got := prefs.AppDirName(in)
 		if got == "" || got == "." || got == ".." {
-			t.Errorf("appDirName(%q) = %q, want a usable name", in, got)
+			t.Errorf("prefs.AppDirName(%q) = %q, want a usable name", in, got)
 		}
 		if filepath.Base(got) != got || filepath.IsAbs(got) {
-			t.Errorf("appDirName(%q) = %q, want a single relative path element", in, got)
+			t.Errorf("prefs.AppDirName(%q) = %q, want a single relative path element", in, got)
 		}
 		if strings.ContainsAny(got, `/\`) {
-			t.Errorf("appDirName(%q) = %q, contains a path separator", in, got)
+			t.Errorf("prefs.AppDirName(%q) = %q, contains a path separator", in, got)
 		}
 	}
 }
