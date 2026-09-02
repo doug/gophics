@@ -23,6 +23,9 @@ type webFilePicker struct{ doc js.Value }
 // so on cancel `done` simply isn't called (callers must treat that as "no
 // change") — matching how the camera capture path behaves.
 func (p *webFilePicker) Open(opts shell.OpenOptions, done func([]shell.PickedFile, error)) {
+	if done == nil {
+		return // result-only: a picker nobody receives is a no-op
+	}
 	input := p.doc.Call("createElement", "input")
 	input.Set("type", "file")
 	if len(opts.Accept) > 0 {

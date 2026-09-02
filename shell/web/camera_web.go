@@ -45,9 +45,17 @@ func (w *window) Camera() shell.Camera {
 type webCamera struct{ doc js.Value }
 
 // Authorize is a no-op for the file/camera input path (no permission needed).
-func (c *webCamera) Authorize(cb func(shell.Permission)) { cb(shell.PermissionGranted) }
+func (c *webCamera) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return
+	}
+	cb(shell.PermissionGranted)
+}
 
 func (c *webCamera) Capture(opts shell.CaptureOptions, done func(image.Image, error)) {
+	if done == nil {
+		return // result-only: a capture nobody receives is a no-op
+	}
 	input := c.doc.Call("createElement", "input")
 	input.Set("type", "file")
 	input.Set("accept", "image/*")

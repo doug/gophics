@@ -65,25 +65,6 @@ func withFolderStore(mode string, fn func(store js.Value, fail func(error)), onE
 	req.Set("onerror", failure)
 }
 
-// request delivers one IDBRequest's outcome, releasing its handlers once.
-func onRequest(req js.Value, done func(js.Value, error)) {
-	var success, failure js.Func
-	release := func() { success.Release(); failure.Release() }
-
-	success = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		release()
-		done(req.Get("result"), nil)
-		return nil
-	})
-	failure = js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		release()
-		done(js.Value{}, errors.New("web: indexedDB request failed"))
-		return nil
-	})
-	req.Set("onsuccess", success)
-	req.Set("onerror", failure)
-}
-
 // idbPut stores handle under key.
 func idbPut(key string, handle js.Value, done func(error)) {
 	withFolderStore("readwrite", func(store js.Value, fail func(error)) {

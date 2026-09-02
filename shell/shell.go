@@ -22,6 +22,18 @@
 // platform Window implements when it can provide it; callers reach
 // capabilities through the widget layer, which returns nil where the running
 // platform has no support.
+//
+// Capability callbacks follow one nil rule, on every platform: a method whose
+// only purpose is to deliver a result (Open, Capture, Authorize) is a no-op
+// when its callback is nil, because doing the work with nobody to receive it
+// is at best waste and at worst a leaked resource — a Record with no Recorder
+// handle is a live microphone nothing can stop. A method that performs a side
+// effect (Save, Share, Write, a recorder's Stop) proceeds regardless and
+// skips only the report, because "fire and forget" is a legitimate way to
+// call it. The rule lives here because it used to live nowhere: each backend
+// answered for itself, and a nil callback was a no-op on one platform and a
+// panic on another — the exact platform divergence this layer exists to
+// prevent.
 package shell
 
 import (

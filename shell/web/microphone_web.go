@@ -91,6 +91,9 @@ func mediaDevices() js.Value {
 type webPreview struct{ doc js.Value }
 
 func (p *webPreview) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return
+	}
 	requestStream(map[string]any{"video": true}, func(stream js.Value, err error) {
 		if err != nil {
 			cb(shell.PermissionDenied)
@@ -102,6 +105,9 @@ func (p *webPreview) Authorize(cb func(shell.Permission)) {
 }
 
 func (p *webPreview) Start(opts shell.PreviewOptions, done func(shell.Frames, error)) {
+	if done == nil {
+		return // result-only: the Frames handle is the whole point
+	}
 	video := map[string]any{}
 	if opts.Facing == shell.FacingFront {
 		video["facingMode"] = "user"
@@ -216,6 +222,9 @@ func (f *webFrames) Stop() {
 type webMicrophone struct{}
 
 func (m *webMicrophone) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return
+	}
 	requestStream(map[string]any{"audio": true}, func(stream js.Value, err error) {
 		if err != nil {
 			cb(shell.PermissionDenied)
@@ -227,6 +236,9 @@ func (m *webMicrophone) Authorize(cb func(shell.Permission)) {
 }
 
 func (m *webMicrophone) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+	if done == nil {
+		return // result-only: recording without the Recorder handle leaks a live mic
+	}
 	promise := mediaDevices().Call("getUserMedia", map[string]any{"audio": true})
 	go func() {
 		stream, err := await(promise)
@@ -240,6 +252,9 @@ func (m *webMicrophone) Record(_ shell.RecordOptions, done func(shell.Recorder, 
 }
 
 func (m *webMicrophone) Listen(done func(shell.Monitor, error)) {
+	if done == nil {
+		return // result-only: the Monitor handle is the whole point
+	}
 	requestStream(map[string]any{"audio": true}, func(stream js.Value, err error) {
 		if err != nil {
 			done(nil, err)
@@ -489,9 +504,16 @@ func (r *webRecorder) Level() float32 {
 
 func (r *webRecorder) Elapsed() time.Duration { return time.Since(r.start) }
 
+// Stop is a side effect first: the recording ends and the mic is released
+// whether or not anyone wants the clip, so a nil done skips only the report.
 func (r *webRecorder) Stop(done func(shell.Clip, error)) {
+	report := func(c shell.Clip, err error) {
+		if done != nil {
+			done(c, err)
+		}
+	}
 	if r.stopped {
-		done(shell.Clip{}, errors.New("already stopped"))
+		report(shell.Clip{}, errors.New("already stopped"))
 		return
 	}
 	samples, rate, envelope := r.samples, r.sampleRate, r.envelope
@@ -500,7 +522,7 @@ func (r *webRecorder) Stop(done func(shell.Clip, error)) {
 	if rate > 0 {
 		dur = time.Duration(len(samples)) * time.Second / time.Duration(rate)
 	}
-	done(shell.Clip{
+	report(shell.Clip{
 		Data:     wav.Encode(samples, rate),
 		Mime:     "audio/wav",
 		Duration: dur,
@@ -621,36 +643,4 @@ func bytesToJS(b []byte) js.Value {
 	u8 := js.Global().Get("Uint8Array").New(len(b))
 	js.CopyBytesToJS(u8, b)
 	return u8
-}
-
-// await blocks the calling goroutine until the JS promise settles. Safe on
-// wasm's single thread; must be called off the event-loop goroutine.
-func await(p js.Value) (js.Value, error) {
-	type result struct {
-		v   js.Value
-		err error
-	}
-	ch := make(chan result, 1)
-	var then, catch js.Func
-	then = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		var v js.Value
-		if len(args) > 0 {
-			v = args[0]
-		}
-		ch <- result{v: v}
-		return nil
-	})
-	catch = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		msg := "promise rejected"
-		if len(args) > 0 && args[0].Truthy() {
-			msg = args[0].Call("toString").String()
-		}
-		ch <- result{err: errors.New(msg)}
-		return nil
-	})
-	p.Call("then", then).Call("catch", catch)
-	r := <-ch
-	then.Release()
-	catch.Release()
-	return r.v, r.err
 }

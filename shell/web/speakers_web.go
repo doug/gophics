@@ -35,12 +35,16 @@ func (a *webSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
 		buf, err := await(ctx.Call("decodeAudioData", u8.Get("buffer")))
 		if err != nil {
 			ctx.Call("close")
-			done(nil, err)
+			if done != nil {
+				done(nil, err)
+			}
 			return
 		}
 		p := &webPlayback{ctx: ctx, buffer: buf,
 			duration: time.Duration(buf.Get("duration").Float() * float64(time.Second))}
 		p.startFrom(0)
-		done(p, nil)
+		if done != nil {
+			done(p, nil)
+		}
 	}()
 }
