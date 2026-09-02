@@ -48,3 +48,8 @@ func (unixFolderPicker) Open(done func(shell.Folder, error)) {
 // zenityDirArgs selects a directory. --directory only constrains what can be
 // picked; --file-selection is still the mode.
 func zenityDirArgs() []string { return []string{"--file-selection", "--directory"} }
+
+// Restore reopens a remembered path; see restoreFolder in folder.go.
+func (unixFolderPicker) Restore(token string, done func(shell.Folder, error)) {
+	restoreFolder(token, done)
+}

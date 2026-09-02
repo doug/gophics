@@ -774,6 +774,8 @@ shell.EditEnter const
 shell.EditKey type
 shell.EditLeft const
 shell.EditRight const
+shell.ErrFolderPermission var
+shell.ErrFolderPermission.Error method
 shell.Event type
 shell.Facing type
 shell.FacingBack const
@@ -790,6 +792,7 @@ shell.Folder.List method
 shell.Folder.Name method
 shell.Folder.Read method
 shell.Folder.Remove method
+shell.Folder.Token method
 shell.Folder.Write method
 shell.FolderEntry type
 shell.FolderEntry.Name field
@@ -799,6 +802,7 @@ shell.FolderListOptions.Accept field
 shell.FolderListOptions.Accepts method
 shell.FolderPicker type
 shell.FolderPicker.Open method
+shell.FolderPicker.Restore method
 shell.FolderPickerWindow type
 shell.FolderPickerWindow.FolderPicker method
 shell.Frame type

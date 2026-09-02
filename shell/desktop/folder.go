@@ -25,6 +25,35 @@ type osFolder struct{ path string }
 // than its last element.
 func (f osFolder) Name() string { return filepath.Base(f.path) }
 
+// Token is the path. Desktop has no permission to lose and no handle to keep
+// alive, so the path is the whole of what a later Restore needs — and unlike
+// the web token it stays meaningful if a human ever reads the preference file.
+func (f osFolder) Token() string { return f.path }
+
+// restoreFolder reopens a remembered path.
+//
+// A folder the user has since deleted, renamed, or unmounted reports nothing
+// rather than an error: shell.FolderPicker.Restore treats a stale token as "the
+// folder is gone", which is the ordinary case here — an external drive that is
+// not plugged in this morning is not a failure to report.
+func restoreFolder(token string, done func(shell.Folder, error)) {
+	if done == nil {
+		return
+	}
+	if token == "" {
+		done(nil, nil)
+		return
+	}
+	go func() {
+		info, err := os.Stat(token)
+		if err != nil || !info.IsDir() {
+			done(nil, nil)
+			return
+		}
+		done(osFolder{path: token}, nil)
+	}()
+}
+
 // Every method runs its I/O on a goroutine and reports through the callback.
 // Disk work is fast but not bounded — a vault on a network mount can stall for
 // seconds — and the caller is the UI goroutine. The generated PostedFolder

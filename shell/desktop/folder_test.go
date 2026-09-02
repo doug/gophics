@@ -184,3 +184,53 @@ func TestFolderNameIsTheDirectoryName(t *testing.T) {
 		t.Errorf("Name() = %q, want the last path element", got)
 	}
 }
+
+// A token round-trips: the folder a user picked is the folder they get back.
+func TestFolderTokenRestores(t *testing.T) {
+	f := tempFolder(t)
+	if err := syncErr(t, func(d func(error)) { f.Write("note.md", []byte("hi"), d) }); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := await1(t, func(d func(shell.Folder, error)) { restoreFolder(f.Token(), d) })
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if got == nil {
+		t.Fatal("restoring a folder that exists returned nothing")
+	}
+	if got.Name() != f.Name() {
+		t.Errorf("restored %q, want %q", got.Name(), f.Name())
+	}
+	b, err := await1(t, func(d func([]byte, error)) { got.Read("note.md", d) })
+	if err != nil || string(b) != "hi" {
+		t.Errorf("restored folder read %q, %v; want the file that was there", b, err)
+	}
+}
+
+// A folder that has moved, been deleted, or sits on an unplugged drive reports
+// nothing rather than an error — shell.FolderPicker.Restore treats a stale
+// token as "gone", and an absent external disk is an ordinary Tuesday.
+func TestRestoreMissingFolderIsNotAnError(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "no-such-vault")
+	got, err := await1(t, func(d func(shell.Folder, error)) { restoreFolder(gone, d) })
+	if err != nil {
+		t.Errorf("restoring a missing folder reported %v, want nil", err)
+	}
+	if got != nil {
+		t.Error("restoring a missing folder returned a folder")
+	}
+}
+
+// A token naming a file, not a directory, is equally "gone" — restoring it must
+// not hand back something whose List would fail on every call.
+func TestRestoreRejectsANonDirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := await1(t, func(d func(shell.Folder, error)) { restoreFolder(file, d) })
+	if err != nil || got != nil {
+		t.Errorf("restoring a file gave (%v, %v), want (nil, nil)", got, err)
+	}
+}

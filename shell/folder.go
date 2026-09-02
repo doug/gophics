@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -54,7 +55,24 @@ type FolderPicker interface {
 	// an implementation must invoke the picker before doing anything that
 	// yields.
 	Open(done func(Folder, error))
+
+	// Restore reopens the folder a previous Folder.Token identified, so an app
+	// can come back to the same vault instead of asking again every launch.
+	// An unknown or stale token reports a nil Folder and a nil error — the
+	// folder is simply gone, which is not a failure worth an error path.
+	//
+	// It may report ErrFolderPermission, and a caller that ignores that will
+	// look broken. A browser does not carry a grant across sessions: the handle
+	// survives, the permission does not, and re-asking needs a user gesture the
+	// way the first ask did. So calling Restore at startup can legitimately
+	// fail this way, and the fix is to show something the user can tap and call
+	// Restore again from it.
+	Restore(token string, done func(Folder, error))
 }
+
+// ErrFolderPermission means the folder is still known but the user has to
+// re-grant access, and only a user gesture can ask.
+var ErrFolderPermission = errors.New("shell: folder needs permission again")
 
 // FolderEntry is one file in a folder. Directories are not reported: a
 // capability that promised recursion would have to promise it on web too, where
@@ -106,14 +124,20 @@ func (o FolderListOptions) Accepts(name string) bool {
 // containing a separator or ".." is rejected, so a folder grants access to
 // itself and not to the disk around it.
 //
-// A Folder does not survive a restart. Reopening one without asking again is
-// possible in principle — a filesystem path on desktop, an IndexedDB-persisted
-// handle on web — but the two have different permission stories, and guessing
-// at one would be worse than making the app ask.
+// A Folder itself does not survive a restart, but Token does: store it and
+// hand it to FolderPicker.Restore next launch.
 type Folder interface {
 	// Name is the folder's display name, for showing the user which folder is
 	// open. It is not a path and is not unique.
 	Name() string
+	// Token identifies this folder for a later Restore. Store it somewhere that
+	// outlives the process — Preferences is the obvious place.
+	//
+	// It is opaque and platform-shaped: a filesystem path on desktop, a key
+	// into the browser's handle store on web. Do not show it to the user or
+	// parse it; Name is the one meant for display. A token from one platform
+	// means nothing on another, so do not sync it between them.
+	Token() string
 	// List reports the files directly in the folder, sorted by name.
 	List(opts FolderListOptions, done func([]FolderEntry, error))
 	// Read returns one file's contents.

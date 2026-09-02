@@ -50,9 +50,15 @@ func (Workspace) CreateState() widget.State { return &workspaceState{} }
 // stateHook lets tests observe the mounted workspace state.
 var stateHook func(*workspaceState)
 
-func (s *workspaceState) Init(widget.Ctx) {
+func (s *workspaceState) Init(ctx widget.Ctx) {
 	if stateHook != nil {
 		stateHook(s)
+	}
+	// Desktop opens a local folder at launch and has nothing to restore. In a
+	// browser there is no local folder, so this is the only way back to the
+	// vault the user picked last time.
+	if !s.W().Vault.HasStore() {
+		restoreFolder(ctx.FolderPicker(), ctx.Preferences(), s)
 	}
 }
 
@@ -71,6 +77,12 @@ type workspaceState struct {
 	newName       string // name being typed for a new note
 	confirmDelete bool   // delete is armed (second click confirms)
 	storeErr      string // last folder-open error (web), shown in the sidebar
+	// reopen is set when the remembered folder is still there but the browser
+	// has dropped the permission, which only a user gesture can restore. It
+	// turns the prompt into "reopen the one you had" rather than "find it
+	// again", which is the difference between a vault the app remembers and
+	// one it merely used to know about.
+	reopen bool
 }
 
 func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
@@ -157,10 +169,20 @@ func (s *workspaceState) folderPrompt(ctx widget.Ctx, th theme.Theme) widget.Wid
 		widget.Padding{Insets: geom.Insets{Left: 16, Right: 12, Top: 14, Bottom: 10},
 			Child: widget.Text{S: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}},
 		widget.Padding{Insets: geom.InsetsSymmetric(12, 4),
-			Child: s.button(th, "Open folder…", func() { openFolder(ctx, s) })},
+			Child: s.button(th, "Open folder…", func() { openFolder(ctx.FolderPicker(), ctx.Preferences(), s) })},
 		widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
 			Child: widget.Text{S: "Pick a folder of .md files to read and edit them locally.",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true}},
+	}
+	// The folder from last session is still remembered but the browser has
+	// dropped the grant. Re-asking needs a gesture, so it goes behind a button.
+	if s.reopen {
+		items = append(items,
+			widget.Padding{Insets: geom.InsetsSymmetric(12, 4),
+				Child: s.button(th, "Reopen last folder", func() { restoreFolder(ctx.FolderPicker(), ctx.Preferences(), s) })},
+			widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
+				Child: widget.Text{S: "Your browser needs permission again to reopen it.",
+					Size: th.Type.Caption, Color: th.Muted, Wrap: true}})
 	}
 	if s.storeErr != "" {
 		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(16, 6),

@@ -55,3 +55,8 @@ func (p macFolderPicker) open(done func(shell.Folder, error)) {
 	}
 	done(osFolder{path: path}, nil)
 }
+
+// Restore reopens a remembered path; see restoreFolder in folder.go.
+func (p macFolderPicker) Restore(token string, done func(shell.Folder, error)) {
+	restoreFolder(token, done)
+}

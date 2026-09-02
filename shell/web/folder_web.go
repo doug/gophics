@@ -54,14 +54,109 @@ func (webFolderPicker) Open(done func(shell.Folder, error)) {
 			done(nil, err)
 			return
 		}
-		done(&webFolder{dir: handle}, nil)
+		// Store the handle before handing the folder over, so the token the
+		// caller reads is one Restore can actually resolve. A failed store is
+		// not a failed open: the folder works, it just will not come back on
+		// its own next launch, and refusing the folder over that would be
+		// worse than the app asking again.
+		token := newFolderToken()
+		idbPut(token, handle, func(err error) {
+			if err != nil {
+				token = ""
+			}
+			done(&webFolder{dir: handle, token: token}, nil)
+		})
 	})
 }
 
+// Restore reopens a folder from a token stored in a previous session.
+func (webFolderPicker) Restore(token string, done func(shell.Folder, error)) {
+	if done == nil {
+		return
+	}
+	if token == "" {
+		done(nil, nil)
+		return
+	}
+	idbGet(token, func(handle js.Value, err error) {
+		if err != nil {
+			done(nil, err)
+			return
+		}
+		if !handle.Truthy() {
+			done(nil, nil) // nothing stored under that token any more
+			return
+		}
+		// The handle outlives the session; the permission does not. Chrome
+		// hands back a handle in state "prompt" after a restart, and only a
+		// user gesture may re-ask — which is why this reports
+		// ErrFolderPermission instead of silently failing, so the app can put
+		// the retry behind something tappable.
+		ensurePermission(handle, func(ok bool, err error) {
+			switch {
+			case err != nil:
+				done(nil, err)
+			case !ok:
+				done(nil, shell.ErrFolderPermission)
+			default:
+				done(&webFolder{dir: handle, token: token}, nil)
+			}
+		})
+	})
+}
+
+// ensurePermission reports whether the app may read and write handle, asking
+// the user if the grant has lapsed.
+func ensurePermission(handle js.Value, done func(bool, error)) {
+	opts := map[string]any{"mode": "readwrite"}
+	if handle.Get("queryPermission").IsUndefined() {
+		done(true, nil) // no permissions API here; the handle is all there is
+		return
+	}
+	onSettled(handle.Call("queryPermission", opts), func(v js.Value, err error) {
+		if err != nil {
+			done(false, err)
+			return
+		}
+		if v.String() == "granted" {
+			done(true, nil)
+			return
+		}
+		onSettled(handle.Call("requestPermission", opts), func(v js.Value, err error) {
+			if err != nil {
+				// Asking outside a user gesture rejects rather than returning
+				// "prompt", and that is the same situation for the caller.
+				done(false, nil)
+				return
+			}
+			done(v.String() == "granted", nil)
+		})
+	})
+}
+
+// newFolderToken mints a key for one stored handle. Random rather than
+// sequential so a token from a previous install cannot collide with a
+// different folder in this one.
+func newFolderToken() string {
+	if c := js.Global().Get("crypto"); c.Truthy() && !c.Get("randomUUID").IsUndefined() {
+		return c.Call("randomUUID").String()
+	}
+	return fmt.Sprintf("folder-%d", js.Global().Get("Date").Call("now").Int())
+}
+
 // webFolder is a FileSystemDirectoryHandle.
-type webFolder struct{ dir js.Value }
+type webFolder struct {
+	dir   js.Value
+	token string
+}
 
 func (f *webFolder) Name() string { return f.dir.Get("name").String() }
+
+// Token is the IndexedDB key the handle was stored under, not anything the user
+// would recognise — shell.Folder.Token documents it as opaque, and here it has
+// to be: a directory handle is not expressible as a string, so the string is a
+// receipt for one the browser is holding.
+func (f *webFolder) Token() string { return f.token }
 
 // List walks the directory's async iterator one entry at a time, because that
 // is the only way it is offered: values() yields a promise per step. The walk

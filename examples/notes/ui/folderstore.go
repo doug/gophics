@@ -1,11 +1,16 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/doug/gophics/shell"
-	"github.com/doug/gophics/widget"
 )
+
+// prefFolderToken is where the open folder's token is remembered between
+// sessions. The token itself is opaque and platform-shaped — a path on desktop,
+// a handle key in the browser — so this only ever stores and returns it.
+const prefFolderToken = "notes.folder"
 
 // folderStore persists notes in a shell.Folder — a directory the user picked.
 //
@@ -60,8 +65,7 @@ func (s *folderStore) report(err error) {
 // button's handler rather than running at startup: a browser opens a directory
 // chooser only during a user gesture. The capability spends that gesture
 // synchronously inside Open, so nothing here has to be careful about it.
-func openFolder(ctx widget.Ctx, s *workspaceState) {
-	picker := ctx.FolderPicker()
+func openFolder(picker shell.FolderPicker, prefs shell.Preferences, s *workspaceState) {
 	if picker == nil {
 		s.SetState(func() {
 			s.storeErr = "This browser can't open a folder — try Chrome or Edge."
@@ -77,8 +81,54 @@ func openFolder(ctx widget.Ctx, s *workspaceState) {
 			// not leave a message behind.
 		default:
 			loadFolder(s, f)
+			remember(prefs, f)
 		}
 	})
+}
+
+// restoreFolder reopens the folder from the last session, if there is one.
+//
+// Called at mount, and again from the reopen button. Both matter: the first
+// covers the case where the browser still has the grant, and the second is the
+// only way to get it back when it has lapsed, because re-asking requires a user
+// gesture and mounting is not one.
+func restoreFolder(picker shell.FolderPicker, prefs shell.Preferences, s *workspaceState) {
+	if picker == nil || prefs == nil {
+		return
+	}
+	token, ok := prefs.Get(prefFolderToken)
+	if !ok || token == "" {
+		return
+	}
+	picker.Restore(token, func(f shell.Folder, err error) {
+		switch {
+		case errors.Is(err, shell.ErrFolderPermission):
+			// Still there, still ours, just not granted right now.
+			s.SetState(func() { s.reopen = true })
+		case err != nil:
+			s.SetState(func() { s.storeErr = "Could not reopen the last folder." })
+		case f == nil:
+			// Moved, deleted, or an unplugged drive. Forget it rather than
+			// offering to reopen something that is not there.
+			_ = prefs.Delete(prefFolderToken)
+			s.SetState(func() { s.reopen = false })
+		default:
+			s.SetState(func() { s.reopen = false })
+			loadFolder(s, f)
+		}
+	})
+}
+
+// remember stores the folder's token so the next session can reopen it.
+// Failing to remember is not worth telling the user about: the folder is open
+// and working, and the cost is being asked again next time.
+func remember(prefs shell.Preferences, f shell.Folder) {
+	if prefs == nil || f == nil {
+		return
+	}
+	if token := f.Token(); token != "" {
+		_ = prefs.Set(prefFolderToken, token)
+	}
 }
 
 // loadFolder reads every .md file in f and adopts it as the vault.

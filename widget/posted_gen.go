@@ -259,6 +259,10 @@ func (p postedFolder) Name() string {
 	return p.inner.Name()
 }
 
+func (p postedFolder) Token() string {
+	return p.inner.Token()
+}
+
 func (p postedFolder) List(a0 shell.FolderListOptions, a1 func([]shell.FolderEntry, error)) {
 	f1 := a1
 	var w1 func([]shell.FolderEntry, error)
@@ -319,6 +323,15 @@ func (p postedFolderPicker) Open(a0 func(shell.Folder, error)) {
 		w0 = func(c0 shell.Folder, c1 error) { p.post(func() { f0(postedFolderOf(c0, p.post), c1) }) }
 	}
 	p.inner.Open(w0)
+}
+
+func (p postedFolderPicker) Restore(a0 string, a1 func(shell.Folder, error)) {
+	f1 := a1
+	var w1 func(shell.Folder, error)
+	if f1 != nil {
+		w1 = func(c0 shell.Folder, c1 error) { p.post(func() { f1(postedFolderOf(c0, p.post), c1) }) }
+	}
+	p.inner.Restore(a0, w1)
 }
 
 // postedGeolocation wraps inner so every callback it (or anything it hands out)

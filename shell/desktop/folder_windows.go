@@ -51,3 +51,8 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPa
 		done(osFolder{path: path}, nil)
 	}()
 }
+
+// Restore reopens a remembered path; see restoreFolder in folder.go.
+func (winFolderPicker) Restore(token string, done func(shell.Folder, error)) {
+	restoreFolder(token, done)
+}

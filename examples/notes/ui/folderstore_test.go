@@ -28,7 +28,8 @@ func newFakeFolder(files map[string][]byte) *fakeFolder {
 	return &fakeFolder{name: "vault", files: files, readErr: map[string]error{}}
 }
 
-func (f *fakeFolder) Name() string { return f.name }
+func (f *fakeFolder) Name() string  { return f.name }
+func (f *fakeFolder) Token() string { return "token:" + f.name }
 
 func (f *fakeFolder) List(opts shell.FolderListOptions, done func([]shell.FolderEntry, error)) {
 	if f.listErr != nil {
@@ -211,5 +212,132 @@ func TestNoteNameStripsExtension(t *testing.T) {
 		if got := noteName(file); got != want {
 			t.Errorf("noteName(%q) = %q, want %q", file, got, want)
 		}
+	}
+}
+
+// fakePrefs is shell.Preferences over a map — enough to check what the app
+// remembers between sessions.
+type fakePrefs struct{ m map[string]string }
+
+func newFakePrefs() *fakePrefs { return &fakePrefs{m: map[string]string{}} }
+
+func (p *fakePrefs) Get(k string) (string, bool) { v, ok := p.m[k]; return v, ok }
+func (p *fakePrefs) Set(k, v string) error       { p.m[k] = v; return nil }
+func (p *fakePrefs) Delete(k string) error       { delete(p.m, k); return nil }
+func (p *fakePrefs) Keys() []string {
+	ks := make([]string, 0, len(p.m))
+	for k := range p.m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+// fakePicker is shell.FolderPicker over a map of tokens, with a per-token
+// outcome so a test can stage "granted", "needs permission", and "gone".
+type fakePicker struct {
+	folders map[string]shell.Folder
+	errs    map[string]error
+	opened  shell.Folder
+	openErr error
+	asked   int // Restore calls, to check the retry actually re-asks
+}
+
+func (p *fakePicker) Open(done func(shell.Folder, error)) { done(p.opened, p.openErr) }
+
+func (p *fakePicker) Restore(token string, done func(shell.Folder, error)) {
+	p.asked++
+	if err := p.errs[token]; err != nil {
+		done(nil, err)
+		return
+	}
+	done(p.folders[token], nil) // nil for an unknown token: gone, not an error
+}
+
+// A folder that is still granted comes back on its own, with no prompt.
+func TestRestoreReopensRememberedFolder(t *testing.T) {
+	_, st := mountNotes(t, t.TempDir())
+	f := newFakeFolder(map[string][]byte{"Kept.md": []byte("# Kept")})
+	p := &fakePicker{folders: map[string]shell.Folder{"token:vault": f}}
+	prefs := newFakePrefs()
+	_ = prefs.Set(prefFolderToken, "token:vault")
+
+	restoreFolder(p, prefs, st)
+
+	v := st.W().Vault
+	if len(v.Notes) != 1 || v.Notes[0].Name != "Kept" {
+		t.Fatalf("restored vault holds %v, want the remembered folder's note", v.Notes)
+	}
+	if st.reopen {
+		t.Error("a folder that restored cleanly still asked to be reopened")
+	}
+}
+
+// A lapsed grant is not a dead end: the app offers a button, and pressing it
+// asks again. Without the reopen state the user sees a bare "Open folder…" and
+// has to find the vault themselves, which is the whole thing this avoids.
+func TestRestoreOffersReopenWhenPermissionLapsed(t *testing.T) {
+	_, st := mountNotes(t, t.TempDir())
+	p := &fakePicker{errs: map[string]error{"token:vault": shell.ErrFolderPermission}}
+	prefs := newFakePrefs()
+	_ = prefs.Set(prefFolderToken, "token:vault")
+
+	restoreFolder(p, prefs, st)
+	if !st.reopen {
+		t.Fatal("a lapsed permission left no way to reopen the folder")
+	}
+	if _, ok := prefs.Get(prefFolderToken); !ok {
+		t.Error("the token was forgotten; a lapsed grant means ask again, not give up")
+	}
+
+	restoreFolder(p, prefs, st) // what the reopen button does
+	if p.asked != 2 {
+		t.Errorf("Restore was called %d times, want a second ask from the retry", p.asked)
+	}
+}
+
+// A vault that has moved or gone is forgotten, so the app stops offering to
+// reopen something that is not there.
+func TestRestoreForgetsAMissingFolder(t *testing.T) {
+	_, st := mountNotes(t, t.TempDir())
+	p := &fakePicker{} // no folder under any token
+	prefs := newFakePrefs()
+	_ = prefs.Set(prefFolderToken, "token:gone")
+
+	restoreFolder(p, prefs, st)
+
+	if _, ok := prefs.Get(prefFolderToken); ok {
+		t.Error("a folder that is gone is still remembered")
+	}
+	if st.reopen {
+		t.Error("offered to reopen a folder that no longer exists")
+	}
+}
+
+// Nothing remembered means nothing happens — no error, no prompt, no call.
+func TestRestoreWithNoRememberedFolderIsQuiet(t *testing.T) {
+	_, st := mountNotes(t, t.TempDir())
+	p := &fakePicker{}
+
+	restoreFolder(p, newFakePrefs(), st)
+
+	if p.asked != 0 {
+		t.Errorf("Restore was called %d times with nothing remembered", p.asked)
+	}
+	if st.storeErr != "" || st.reopen {
+		t.Errorf("a first run reported storeErr=%q reopen=%v, want silence", st.storeErr, st.reopen)
+	}
+}
+
+// remember stores the token the picker will be given back next launch.
+func TestRememberStoresTheToken(t *testing.T) {
+	prefs := newFakePrefs()
+	f := newFakeFolder(nil)
+
+	remember(prefs, f)
+
+	got, ok := prefs.Get(prefFolderToken)
+	if !ok || got != f.Token() {
+		t.Errorf("remembered %q (present=%v), want %q", got, ok, f.Token())
 	}
 }
