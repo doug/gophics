@@ -373,7 +373,7 @@ func action(th theme.Theme, title string, have bool, btn string, onTap func(), r
 	)}
 	if have && result != "" {
 		kids = append(kids, widget.Sized{H: 6},
-			widget.Text{S: result, Size: th.Type.Label, Color: th.Muted, Wrap: true})
+			widget.Text{Value: result, Size: th.Type.Label, Color: th.Muted, Wrap: true})
 	}
 	c := widget.Column(kids...)
 	c.CrossAlign = layout.CrossStretch
@@ -413,9 +413,9 @@ func leftText(w widget.Widget) widget.Widget {
 
 func statusText(th theme.Theme, have bool, value string) widget.Widget {
 	if !have {
-		return leftText(widget.Text{S: "— unsupported here", Size: th.Type.Body, Color: th.Muted})
+		return leftText(widget.Text{Value: "— unsupported here", Size: th.Type.Body, Color: th.Muted})
 	}
-	return leftText(widget.Text{S: value, Size: th.Type.Body, Color: th.Text, Wrap: true})
+	return leftText(widget.Text{Value: value, Size: th.Type.Body, Color: th.Text, Wrap: true})
 }
 
 func (s *state) setAction(msg string) { s.SetState(func() { s.lastAction = msg }) }

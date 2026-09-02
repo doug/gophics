@@ -129,7 +129,7 @@ func (cb Checkbox) Build(ctx widget.Ctx) widget.Widget {
 	}}
 	var child widget.Widget = box
 	if cb.Label != "" {
-		row := widget.Row(box, widget.Sized{W: 8}, widget.Text{S: cb.Label, Size: 14, Color: th.Text})
+		row := widget.Row(box, widget.Sized{W: 8}, widget.Text{Value: cb.Label, Size: 14, Color: th.Text})
 		child = row
 	}
 	checked := cb.Checked
@@ -227,7 +227,7 @@ func (rd Radio) Build(ctx widget.Ctx) widget.Widget {
 	}}
 	var child widget.Widget = dot
 	if rd.Label != "" {
-		child = widget.Row(dot, widget.Sized{W: 8}, widget.Text{S: rd.Label, Size: 14, Color: th.Text})
+		child = widget.Row(dot, widget.Sized{W: 8}, widget.Text{Value: rd.Label, Size: 14, Color: th.Text})
 	}
 	return widget.Interactive{
 		Sem: &layout.SemInfo{

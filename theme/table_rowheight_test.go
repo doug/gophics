@@ -55,10 +55,10 @@ func tableRowSpan(t *testing.T, rowHeight float32, cell func(row, col int) widge
 func TestRowHeightIsExactWhateverTheCellHolds(t *testing.T) {
 	const rowHeight = 56
 	oneLine := func(row, col int) widget.Widget {
-		return widget.Semantics{Label: label(row), Child: widget.Text{S: "single"}}
+		return widget.Semantics{Label: label(row), Child: widget.Text{Value: "single"}}
 	}
 	twoLine := func(row, col int) widget.Widget {
-		c := widget.Column(widget.Text{S: "label"}, widget.Text{S: "caption"})
+		c := widget.Column(widget.Text{Value: "label"}, widget.Text{Value: "caption"})
 		return widget.Semantics{Label: label(row), Child: c}
 	}
 

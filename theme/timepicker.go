@@ -50,7 +50,7 @@ func (s *timePickerState) step(hour bool, delta int) {
 
 func (s *timePickerState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	colon := widget.Text{S: ":", Font: FontBold, Size: th.Type.Display, Color: th.Muted}
+	colon := widget.Text{Value: ":", Font: FontBold, Size: th.Type.Display, Color: th.Muted}
 	return widget.Row(
 		s.column(th, true, s.hour),
 		widget.Padding{Insets: geom.InsetsSymmetric(6, 0), Child: colon},
@@ -60,7 +60,7 @@ func (s *timePickerState) Build(ctx widget.Ctx) widget.Widget {
 
 // column is one stepper: up chevron, value, down chevron.
 func (s *timePickerState) column(th Theme, hour bool, val int) widget.Widget {
-	value := widget.Text{S: fmt.Sprintf("%02d", val), Font: FontBold, Size: th.Type.Display, Color: th.Text}
+	value := widget.Text{Value: fmt.Sprintf("%02d", val), Font: FontBold, Size: th.Type.Display, Color: th.Text}
 	c := widget.Column(
 		vArrow(th, true, func() { s.step(hour, +1) }),
 		widget.Sized{H: 4},

@@ -328,7 +328,7 @@ func (e BuildError) Build(Ctx) Widget {
 	return Decorated{
 		Color: paint.Color{R: 0.75, G: 0.15, B: 0.15, A: 1}, Radius: 4,
 		Child: Padding{All: 8, Child: Text{
-			S: "build failed: " + e.Message, Size: 12, Wrap: true,
+			Value: "build failed: " + e.Message, Size: 12, Wrap: true,
 			Color: paint.RGB(1, 1, 1),
 		}},
 	}

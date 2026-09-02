@@ -9,7 +9,7 @@ import (
 // Text displays text: single-line by default, word-wrapped when Wrap is
 // set, with optional decorations.
 type Text struct {
-	S         string
+	Value     string
 	Font      string  // named font family ("" = default; e.g. "bold")
 	Size      float32 // 0 → 14
 	Color     paint.Color
@@ -32,7 +32,7 @@ func (t Text) size() float32 {
 func (t Text) createBox(ctx Ctx) layout.Box { return &layoutbox.TextBox{Painter: ctx.Painter()} }
 func (t Text) updateBox(ctx Ctx, b layout.Box) {
 	tb := b.(*layoutbox.TextBox)
-	tb.Text, tb.Font, tb.TextSize, tb.Color = t.S, t.Font, t.size(), t.Color
+	tb.Text, tb.Font, tb.TextSize, tb.Color = t.Value, t.Font, t.size(), t.Color
 	tb.Wrap, tb.Strike, tb.Underline = t.Wrap, t.Strike, t.Underline
 	tb.MaxLines, tb.Ellipsis = t.MaxLines, t.Ellipsis
 	// Inside a SelectionArea, register as a selectable fragment.

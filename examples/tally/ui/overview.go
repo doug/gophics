@@ -22,7 +22,7 @@ import (
 func (s *state) overviewView(th theme.Theme) widget.Widget {
 	if len(s.netWorth) == 0 {
 		return widget.Padding{All: 24, Child: widget.Text{
-			S: "This ledger has no dated transactions to chart.", Color: th.Muted, Wrap: true,
+			Value: "This ledger has no dated transactions to chart.", Color: th.Muted, Wrap: true,
 		}}
 	}
 
@@ -94,18 +94,18 @@ func (s *state) summaryRow(th theme.Theme, latest decimal.Decimal, wide bool) wi
 	// instead: the balance is the headline, the change qualifies it, the period
 	// is a footnote.
 	col := widget.Column(
-		widget.Text{S: "Net worth", Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "Net worth", Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{H: 2},
-		widget.Text{S: worth, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text,
+		widget.Text{Value: worth, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text,
 			Ellipsis: true, MaxLines: 1},
 		widget.Sized{H: 4},
 		widget.Row(
-			widget.Text{S: delta, Font: theme.FontBold, Size: th.Type.Body,
+			widget.Text{Value: delta, Font: theme.FontBold, Size: th.Type.Body,
 				Color: changeColor(th, change)},
 			widget.Sized{W: 8},
-			widget.Text{S: "·", Size: th.Type.Body, Color: th.Border},
+			widget.Text{Value: "·", Size: th.Type.Body, Color: th.Border},
 			widget.Sized{W: 8},
-			widget.Text{S: period, Size: th.Type.Label, Color: th.Muted,
+			widget.Text{Value: period, Size: th.Type.Label, Color: th.Muted,
 				Ellipsis: true, MaxLines: 1},
 		),
 	)
@@ -115,9 +115,9 @@ func (s *state) summaryRow(th theme.Theme, latest decimal.Decimal, wide bool) wi
 
 func stat(th theme.Theme, label, value string, col paint.Color) widget.Widget {
 	c := widget.Column(
-		widget.Text{S: label, Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: label, Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{H: 3},
-		widget.Text{S: value, Font: theme.FontBold, Size: th.Type.Title, Color: col},
+		widget.Text{Value: value, Font: theme.FontBold, Size: th.Type.Title, Color: col},
 	)
 	c.CrossAlign = layout.CrossStart
 	return c
@@ -132,7 +132,7 @@ func (s *state) unpricedNote(th theme.Theme) widget.Widget {
 	return widget.Padding{
 		Insets: geom.Insets{Top: 6},
 		Child: widget.Text{
-			S: "Not included: " + strings.Join(s.unpriced, ", ") +
+			Value: "Not included: " + strings.Join(s.unpriced, ", ") +
 				" — held, but the ledger has no price for them in " + s.baseCurrency + ".",
 			Size: th.Type.Caption, Color: th.Muted, Wrap: true,
 		},
@@ -140,7 +140,7 @@ func (s *state) unpricedNote(th theme.Theme) widget.Widget {
 }
 
 func sectionLabel(th theme.Theme, s string) widget.Widget {
-	return widget.Text{S: s, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text}
+	return widget.Text{Value: s, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text}
 }
 
 // netWorthChart plots the cumulative balance as a filled area — one shape whose
@@ -185,7 +185,7 @@ func (s *state) flowChart(th theme.Theme) widget.Widget {
 // numbers into a comparison you can read at a glance.
 func (s *state) categoryTable(th theme.Theme) widget.Widget {
 	if len(s.categories) == 0 {
-		return widget.Text{S: "No expenses recorded.", Size: th.Type.Body, Color: th.Muted}
+		return widget.Text{Value: "No expenses recorded.", Size: th.Type.Body, Color: th.Muted}
 	}
 	max := s.categories[0].Total
 	total := decimal.Zero
@@ -207,12 +207,12 @@ func (s *state) categoryTable(th theme.Theme) widget.Widget {
 				cat := s.categories[r]
 				switch c {
 				case 0:
-					return widget.Text{S: shortCategory(cat.Name), Size: th.Type.Body, Color: th.Text,
+					return widget.Text{Value: shortCategory(cat.Name), Size: th.Type.Body, Color: th.Text,
 						Ellipsis: true, MaxLines: 1}
 				case 1:
 					return shareBar(th, ratio(cat.Total, max))
 				default:
-					return widget.Text{S: fmtMoney(cat.Total), Font: "mono", Size: th.Type.Body, Color: th.Text}
+					return widget.Text{Value: fmtMoney(cat.Total), Font: "mono", Size: th.Type.Body, Color: th.Text}
 				}
 			},
 		},

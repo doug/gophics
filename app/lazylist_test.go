@@ -19,7 +19,7 @@ func lazyHarness(t *testing.T, count int) (*Headless, *map[int]int) {
 		EstimatedExtent: 30,
 		Build: func(i int) widget.Widget {
 			built[i]++
-			return widget.Text{S: fmt.Sprintf("item %d", i)}
+			return widget.Text{Value: fmt.Sprintf("item %d", i)}
 		},
 	}
 	h, err := NewHeadless(list, Config{Size: geom.Size{W: 200, H: 300}, Font: goregular.TTF}, 1)

@@ -102,7 +102,7 @@ func (s *autocompleteState) visible() []string {
 }
 
 func (s *autocompleteState) row(i int, sug string) Widget {
-	content := Widget(Text{S: sug})
+	content := Widget(Text{Value: sug})
 	if f := s.W().Row; f != nil {
 		content = f(sug, i == s.highlight)
 	}

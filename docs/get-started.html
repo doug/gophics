@@ -84,10 +84,10 @@ go run ./examples/hn       # a HackerNews client: feed → comments, scroll, lin
 	th := theme.<span class="t-fn">Light</span>()
 	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
 		Child: widget.<span class="t-fn">Center</span>(widget.<span class="t-fn">Column</span>(
-			widget.Text{S: <span class="t-str">&#34;TAPS&#34;</span>, Size: th.Type.Caption, Color: th.Muted},
+			widget.Text{Value: <span class="t-str">&#34;TAPS&#34;</span>, Size: th.Type.Caption, Color: th.Muted},
 			widget.Sized{H: <span class="t-num">4</span>},
 			widget.Text{
-				S:     fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%d&#34;</span>, s.n),
+				Value: fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%d&#34;</span>, s.n),
 				Size:  th.Type.Display,
 				Font:  theme.FontBold,
 				Color: th.Text,

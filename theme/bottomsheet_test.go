@@ -32,7 +32,7 @@ func (s *sheetState) open(ctx widget.Ctx) {
 	s.dismiss = theme.ShowBottomSheet(ctx, widget.Column(
 		theme.Title("Sheet Title"),
 		widget.Sized{H: 8},
-		widget.Text{S: "Sheet body row", Size: 14},
+		widget.Text{Value: "Sheet body row", Size: 14},
 	))
 }
 

@@ -8,13 +8,13 @@ import (
 
 func sampleTree() []TreeNode {
 	return []TreeNode{
-		{ID: "src", Child: Text{S: "src"}, Children: []TreeNode{
-			{ID: "main", Child: Text{S: "main.go"}},
-			{ID: "lib", Child: Text{S: "lib"}, Children: []TreeNode{
-				{ID: "deep", Child: Text{S: "deep.go"}},
+		{ID: "src", Child: Text{Value: "src"}, Children: []TreeNode{
+			{ID: "main", Child: Text{Value: "main.go"}},
+			{ID: "lib", Child: Text{Value: "lib"}, Children: []TreeNode{
+				{ID: "deep", Child: Text{Value: "deep.go"}},
 			}},
 		}},
-		{ID: "readme", Child: Text{S: "README"}},
+		{ID: "readme", Child: Text{Value: "README"}},
 	}
 }
 

@@ -23,7 +23,7 @@ func semLabelsHas(h *Headless, substr string) bool {
 func tallColumn() widget.Widget {
 	var kids []widget.Widget
 	for range 40 {
-		kids = append(kids, widget.Text{S: "LINE", Size: 14})
+		kids = append(kids, widget.Text{Value: "LINE", Size: 14})
 	}
 	return widget.Column(kids...)
 }
@@ -55,7 +55,7 @@ func mountFlex(t *testing.T, root widget.Widget) *Headless {
 // Expand inside an outer Row's Expand) is the one the notes app hit.
 func TestFlexNestedExpandScroll(t *testing.T) {
 	scroll := widget.Scroll{Child: tallColumn()}
-	side := widget.Sized{W: 200, Child: widget.Text{S: "SIDE"}}
+	side := widget.Sized{W: 200, Child: widget.Text{Value: "SIDE"}}
 
 	t.Run("top-level row", func(t *testing.T) {
 		h := mountFlex(t, rowStretch(widget.Expand(scroll), side))
@@ -66,8 +66,8 @@ func TestFlexNestedExpandScroll(t *testing.T) {
 
 	t.Run("nested like notes", func(t *testing.T) {
 		inner := rowStretch(widget.Expand(widget.Scroll{Child: tallColumn()}), side)
-		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{S: "BAR"}}, widget.Expand(inner))
-		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{S: "NAV"}}, widget.Expand(pane))
+		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{Value: "BAR"}}, widget.Expand(inner))
+		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{Value: "NAV"}}, widget.Expand(pane))
 		h := mountFlex(t, root)
 		if !semLabelsHas(h, "LINE") {
 			t.Errorf("scroll content missing when nested")
@@ -79,8 +79,8 @@ func TestFlexNestedExpandScroll(t *testing.T) {
 	t.Run("nested, scroll in the side too", func(t *testing.T) {
 		scrollSide := widget.Sized{W: 200, Child: widget.Scroll{Child: tallColumn()}}
 		inner := rowStretch(widget.Expand(widget.Scroll{Child: tallColumn()}), scrollSide)
-		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{S: "BAR"}}, widget.Expand(inner))
-		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{S: "NAV"}}, widget.Expand(pane))
+		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{Value: "BAR"}}, widget.Expand(inner))
+		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{Value: "NAV"}}, widget.Expand(pane))
 		h := mountFlex(t, root)
 		if !semLabelsHas(h, "LINE") {
 			t.Errorf("scroll content missing with a scroll in the side")
@@ -88,11 +88,11 @@ func TestFlexNestedExpandScroll(t *testing.T) {
 	})
 
 	t.Run("nested, with divider like notes", func(t *testing.T) {
-		div := widget.Sized{W: 1, Child: widget.Text{S: "DIV"}}
+		div := widget.Sized{W: 1, Child: widget.Text{Value: "DIV"}}
 		scrollSide := widget.Sized{W: 200, Child: widget.Scroll{Child: tallColumn()}}
 		inner := rowStretch(widget.Expand(widget.Scroll{Child: tallColumn()}), div, scrollSide)
-		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{S: "BAR"}}, widget.Expand(inner))
-		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{S: "NAV"}}, widget.Expand(pane))
+		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{Value: "BAR"}}, widget.Expand(inner))
+		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{Value: "NAV"}}, widget.Expand(pane))
 		h := mountFlex(t, root)
 		if !semLabelsHas(h, "LINE") {
 			t.Errorf("scroll content missing with divider + scroll side")
@@ -105,12 +105,12 @@ func TestFlexNestedExpandScroll(t *testing.T) {
 		body := widget.LayoutBuilder{Build: func(cs layout.Constraints) widget.Widget {
 			return rowStretch(
 				widget.Expand(widget.Scroll{Child: tallColumn()}),
-				widget.Sized{W: 1, Child: widget.Text{S: "DIV"}},
-				widget.Sized{W: 200, Child: widget.Text{S: "SIDE"}},
+				widget.Sized{W: 1, Child: widget.Text{Value: "DIV"}},
+				widget.Sized{W: 200, Child: widget.Text{Value: "SIDE"}},
 			)
 		}}
-		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{S: "BAR"}}, widget.Expand(body))
-		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{S: "NAV"}}, widget.Expand(pane))
+		pane := colStretch(widget.Sized{H: 40, Child: widget.Text{Value: "BAR"}}, widget.Expand(body))
+		root := rowStretch(widget.Sized{W: 240, Child: widget.Text{Value: "NAV"}}, widget.Expand(pane))
 		h := mountFlex(t, root) // one Render — LayoutBuilder now settles same-frame
 		if !semLabelsHas(h, "LINE") {
 			t.Errorf("scroll content missing after one frame (LayoutBuilder should settle in-frame)")

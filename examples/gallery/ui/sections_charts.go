@@ -79,9 +79,9 @@ func (chartsSection) Build(ctx widget.Ctx) widget.Widget {
 // chartCard frames one chart with a heading and a fixed-height plot area.
 func chartCard(th theme.Theme, title, subtitle string, height float32, c chart.Chart) widget.Widget {
 	head := widget.Column(
-		widget.Text{S: title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Text{Value: title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
 		widget.Sized{H: 2},
-		widget.Text{S: subtitle, Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: subtitle, Size: th.Type.Caption, Color: th.Muted},
 	)
 	head.CrossAlign = layout.CrossStart
 	body := widget.Column(

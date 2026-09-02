@@ -129,7 +129,7 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 	// centred. Matching the Canvas height gives both the same axis.
 	labelLayer := widget.Sized{H: dropdownHeight, Child: widget.Padding{
 		Insets: geom.Insets{Left: labelInset, Right: 34},
-		Child:  widget.Align{X: 0, Y: 0.5, Child: widget.Text{S: label, Size: th.Type.Body, Color: labelColor, MaxLines: 1, Ellipsis: true}},
+		Child:  widget.Align{X: 0, Y: 0.5, Child: widget.Text{Value: label, Size: th.Type.Body, Color: labelColor, MaxLines: 1, Ellipsis: true}},
 	}}
 
 	return widget.Interactive{
@@ -187,7 +187,7 @@ func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, border paint.Col
 			trailing = check{color: th.Primary}
 		}
 		row := widget.Widget(widget.Row(
-			widget.Text{S: opt, Size: th.Type.Body, Color: textColor},
+			widget.Text{Value: opt, Size: th.Type.Body, Color: textColor},
 			widget.Spacer(),
 			widget.Sized{W: 10},
 			trailing,

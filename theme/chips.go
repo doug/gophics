@@ -43,7 +43,7 @@ func (ch Chip) Build(ctx widget.Ctx) widget.Widget {
 		Color: fill, Radius: 999, BorderColor: border, BorderWidth: 1,
 		Child: widget.Padding{
 			Insets: geom.Insets{Left: 10, Right: 10, Top: 5, Bottom: 5},
-			Child:  widget.Text{S: ch.Label, Size: th.Type.Label, Color: text, MaxLines: 1},
+			Child:  widget.Text{Value: ch.Label, Size: th.Type.Label, Color: text, MaxLines: 1},
 		},
 	}
 	if ch.OnTap == nil {
@@ -114,7 +114,7 @@ func (b Badge) Build(ctx widget.Ctx) widget.Widget {
 			Child: widget.Padding{
 				Insets: geom.Insets{Left: 5, Right: 5, Top: 1, Bottom: 1},
 				Child: widget.Sized{H: 16, Child: widget.Center(
-					widget.Text{S: text, Size: th.Type.Caption, Color: th.OnPrimary, MaxLines: 1})},
+					widget.Text{Value: text, Size: th.Type.Caption, Color: th.OnPrimary, MaxLines: 1})},
 			},
 		},
 	}
@@ -152,7 +152,7 @@ func (a Avatar) Build(ctx widget.Ctx) widget.Widget {
 		child = a.Image
 	} else {
 		child = widget.Center(widget.Text{
-			S: initials(a.Name), Size: d * 0.36, Font: FontBold, Color: th.OnPrimary, MaxLines: 1,
+			Value: initials(a.Name), Size: d * 0.36, Font: FontBold, Color: th.OnPrimary, MaxLines: 1,
 		})
 	}
 	return widget.Semantics{

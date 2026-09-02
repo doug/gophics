@@ -71,13 +71,13 @@ func (s *uiState) Build(ctx widget.Ctx) widget.Widget {
 	dim := paint.RGB(0.62, 0.66, 0.76)
 
 	rows := []widget.Widget{
-		widget.Text{S: "Overlay", Size: 20, Color: fg},
+		widget.Text{Value: "Overlay", Size: 20, Color: fg},
 		widget.Sized{H: 4},
-		widget.Text{S: "a gophics UI over a live game", Size: 12, Color: dim, Wrap: true},
+		widget.Text{Value: "a gophics UI over a live game", Size: 12, Color: dim, Wrap: true},
 		widget.Sized{H: 16},
 
 		// A live readout: proof the overlay is reading host state each frame.
-		widget.Text{S: fmt.Sprintf("t = %.1fs", m.Elapsed()), Size: 13, Color: dim},
+		widget.Text{Value: fmt.Sprintf("t = %.1fs", m.Elapsed()), Size: 13, Color: dim},
 		widget.Sized{H: 12},
 
 		button(pauseLabel(m), m.TogglePause),
@@ -89,7 +89,7 @@ func (s *uiState) Build(ctx widget.Ctx) widget.Widget {
 
 		// A text field, because it is the affordance most likely to be broken
 		// by an incomplete host: it needs keys, committed text, and focus.
-		widget.Text{S: "note", Size: 12, Color: dim},
+		widget.Text{Value: "note", Size: 12, Color: dim},
 		widget.Sized{H: 4},
 		widget.Decorated{
 			Color: paint.Color{R: 1, G: 1, B: 1, A: 0.08}, Radius: 6,
@@ -117,7 +117,7 @@ func button(label string, onTap func()) widget.Widget {
 			Color: paint.Color{R: 1, G: 1, B: 1, A: 0.12}, Radius: 6,
 			Child: widget.Padding{
 				Insets: geom.InsetsSymmetric(12, 9),
-				Child:  widget.Center(widget.Text{S: label, Size: 13, Color: paint.RGB(0.92, 0.94, 0.98)}),
+				Child:  widget.Center(widget.Text{Value: label, Size: 13, Color: paint.RGB(0.92, 0.94, 0.98)}),
 			},
 		},
 	}

@@ -120,10 +120,10 @@ func (s *workspaceState) sidebar(ctx widget.Ctx, th theme.Theme, v *Vault) widge
 		return s.folderPrompt(ctx, th)
 	}
 	head := widget.Row(
-		widget.Expand(widget.Text{S: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
+		widget.Expand(widget.Text{Value: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
 		widget.Interactive{
 			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.creating = true; s.newName = "" }) }},
-			Child:    widget.Text{S: "+ New", Size: th.Type.Label, Color: th.Primary},
+			Child:    widget.Text{Value: "+ New", Size: th.Type.Label, Color: th.Primary},
 		},
 	)
 	head.CrossAlign = layout.CrossCenter
@@ -154,7 +154,7 @@ func (s *workspaceState) sidebar(ctx widget.Ctx, th theme.Theme, v *Vault) widge
 			OnTap:      func() { s.open(n.Path) },
 			Background: bg,
 			Pad:        geom.InsetsSymmetric(16, 9),
-			Child:      widget.Text{S: n.Name, Size: th.Type.Body, Color: th.Text},
+			Child:      widget.Text{Value: n.Name, Size: th.Type.Body, Color: th.Text},
 		})
 	}
 	col := widget.Column(items...)
@@ -167,11 +167,11 @@ func (s *workspaceState) sidebar(ctx widget.Ctx, th theme.Theme, v *Vault) widge
 func (s *workspaceState) folderPrompt(ctx widget.Ctx, th theme.Theme) widget.Widget {
 	items := []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Left: 16, Right: 12, Top: 14, Bottom: 10},
-			Child: widget.Text{S: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}},
+			Child: widget.Text{Value: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}},
 		widget.Padding{Insets: geom.InsetsSymmetric(12, 4),
 			Child: s.button(th, "Open folder…", func() { openFolder(ctx.FolderPicker(), ctx.Preferences(), s) })},
 		widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
-			Child: widget.Text{S: "Pick a folder of .md files to read and edit them locally.",
+			Child: widget.Text{Value: "Pick a folder of .md files to read and edit them locally.",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true}},
 	}
 	// The folder from last session is still remembered but the browser has
@@ -181,12 +181,12 @@ func (s *workspaceState) folderPrompt(ctx widget.Ctx, th theme.Theme) widget.Wid
 			widget.Padding{Insets: geom.InsetsSymmetric(12, 4),
 				Child: s.button(th, "Reopen last folder", func() { restoreFolder(ctx.FolderPicker(), ctx.Preferences(), s) })},
 			widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
-				Child: widget.Text{S: "Your browser needs permission again to reopen it.",
+				Child: widget.Text{Value: "Your browser needs permission again to reopen it.",
 					Size: th.Type.Caption, Color: th.Muted, Wrap: true}})
 	}
 	if s.storeErr != "" {
 		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
-			Child: widget.Text{S: s.storeErr, Size: th.Type.Caption, Color: th.Danger, Wrap: true}})
+			Child: widget.Text{Value: s.storeErr, Size: th.Type.Caption, Color: th.Danger, Wrap: true}})
 	}
 	col := widget.Column(items...)
 	col.CrossAlign = layout.CrossStart
@@ -200,7 +200,7 @@ func (s *workspaceState) pane(ctx widget.Ctx, th theme.Theme, v *Vault) widget.W
 		if !v.HasStore() {
 			msg = "Open a folder to start"
 		}
-		return widget.Fill{Color: th.Surface, Child: widget.Center(widget.Text{S: msg, Color: th.Muted})}
+		return widget.Fill{Color: th.Surface, Child: widget.Center(widget.Text{Value: msg, Color: th.Muted})}
 	}
 
 	var action, body widget.Widget
@@ -216,7 +216,7 @@ func (s *workspaceState) pane(ctx widget.Ctx, th theme.Theme, v *Vault) widget.W
 	}
 
 	bar := widget.Row(
-		widget.Expand(widget.Text{S: note.Name, Font: "bold", Size: th.Type.Heading, Color: th.Text}),
+		widget.Expand(widget.Text{Value: note.Name, Font: "bold", Size: th.Type.Heading, Color: th.Text}),
 		action,
 	)
 	bar.CrossAlign = layout.CrossCenter
@@ -282,12 +282,12 @@ func (s *workspaceState) backlinks(th theme.Theme, v *Vault, note Note) []widget
 	}
 	out := []widget.Widget{
 		block(widget.Padding{Insets: geom.Insets{Top: 12, Bottom: 8}, Child: widget.Sized{H: 1, Child: widget.Decorated{Color: th.Border}}}),
-		block(widget.Text{S: "Linked references", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
+		block(widget.Text{Value: "Linked references", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
 	}
 	for _, n := range refs {
 		out = append(out, block(widget.Interactive{
 			Gestures: widget.Gestures{OnTap: func() { s.open(n.Path) }},
-			Child:    widget.Text{S: "← " + n.Name, Size: th.Type.Body, Color: th.Primary},
+			Child:    widget.Text{Value: "← " + n.Name, Size: th.Type.Body, Color: th.Primary},
 		}))
 	}
 	return out
@@ -298,17 +298,17 @@ func (s *workspaceState) backlinks(th theme.Theme, v *Vault, note Note) []widget
 func outlinePanel(th theme.Theme, note Note) widget.Widget {
 	items := []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Left: 14, Right: 14, Top: 16, Bottom: 8},
-			Child: widget.Text{S: "OUTLINE", Font: "bold", Size: th.Type.Label, Color: th.Muted}},
+			Child: widget.Text{Value: "OUTLINE", Font: "bold", Size: th.Type.Label, Color: th.Muted}},
 	}
 	hs := extractHeadings(note.Body)
 	if len(hs) == 0 {
 		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(14, 4),
-			Child: widget.Text{S: "No headings", Size: th.Type.Label, Color: th.Muted}})
+			Child: widget.Text{Value: "No headings", Size: th.Type.Label, Color: th.Muted}})
 	}
 	for _, h := range hs {
 		items = append(items, widget.Padding{
 			Insets: geom.Insets{Left: 14 + float32(h.Level-1)*12, Right: 12, Top: 3, Bottom: 3},
-			Child:  widget.Text{S: h.Text, Size: th.Type.Label, Color: th.Text, Wrap: true},
+			Child:  widget.Text{Value: h.Text, Size: th.Type.Label, Color: th.Text, Wrap: true},
 		})
 	}
 	col := widget.Column(items...)
@@ -372,7 +372,7 @@ func (s *workspaceState) button(th theme.Theme, label string, onTap func()) widg
 		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Decorated{Color: th.Primary, Radius: 7, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(16, 8),
-			Child:  widget.Text{S: label, Size: th.Type.Label, Color: th.OnPrimary},
+			Child:  widget.Text{Value: label, Size: th.Type.Label, Color: th.OnPrimary},
 		}},
 	}
 }
@@ -383,18 +383,18 @@ func (s *workspaceState) deleteControl(th theme.Theme, v *Vault) widget.Widget {
 	if !s.confirmDelete {
 		return widget.Interactive{
 			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.confirmDelete = true }) }},
-			Child:    widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Delete", Size: th.Type.Label, Color: th.Muted}},
+			Child:    widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{Value: "Delete", Size: th.Type.Label, Color: th.Muted}},
 		}
 	}
 	cancel := widget.Interactive{
 		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.confirmDelete = false }) }},
-		Child:    widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{S: "Cancel", Size: th.Type.Label, Color: th.Muted}},
+		Child:    widget.Padding{Insets: geom.InsetsSymmetric(10, 8), Child: widget.Text{Value: "Cancel", Size: th.Type.Label, Color: th.Muted}},
 	}
 	confirm := widget.Interactive{
 		Gestures: widget.Gestures{OnTap: func() { s.deleteNote(v) }},
 		Child: widget.Decorated{Color: th.Danger, Radius: 7, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(14, 8),
-			Child:  widget.Text{S: "Delete?", Size: th.Type.Label, Color: th.OnPrimary},
+			Child:  widget.Text{Value: "Delete?", Size: th.Type.Label, Color: th.OnPrimary},
 		}},
 	}
 	r := widget.Row(cancel, widget.Sized{W: 4}, confirm)

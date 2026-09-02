@@ -183,7 +183,7 @@ func (s *state) screen(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget 
 	switch {
 	case s.err != nil:
 		body = widget.Padding{All: 24, Child: widget.Text{
-			S: "Couldn't open the ledger: " + s.err.Error(), Color: th.Danger, Wrap: true,
+			Value: "Couldn't open the ledger: " + s.err.Error(), Color: th.Danger, Wrap: true,
 		}}
 	case s.account != "":
 		body = s.registerView(th)
@@ -207,7 +207,7 @@ func (s *state) formHeader(th theme.Theme) widget.Widget {
 	bar := widget.Padding{
 		Insets: geom.Insets{Left: 16, Right: 16, Top: 12, Bottom: 10},
 		Child: widget.Row(
-			widget.Text{S: "New transaction", Font: theme.FontBold,
+			widget.Text{Value: "New transaction", Font: theme.FontBold,
 				Size: th.Type.Heading, Color: th.Text},
 			widget.Expand(widget.Sized{W: 8}),
 			theme.Button{Label: "Cancel", OnTap: func() { s.SetState(func() { s.form.open = false }) }},
@@ -241,7 +241,7 @@ func (s *state) appendNode(th theme.Theme, n *bean.Node, out *[]widget.Widget) {
 		name = lastSegment(string(n.Account))
 	}
 
-	nameText := widget.Text{S: name, Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
+	nameText := widget.Text{Value: name, Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 	if isRoot {
 		nameText.Font, nameText.Size = theme.FontBold, th.Type.Heading
 	}
@@ -286,10 +286,10 @@ func (s *state) amountText(th theme.Theme, n *bean.Node) widget.Widget {
 	}
 	switch len(held) {
 	case 0:
-		return widget.Text{S: "—", Font: "mono", Size: th.Type.Body, Color: th.Muted}
+		return widget.Text{Value: "—", Font: "mono", Size: th.Type.Body, Color: th.Muted}
 	case 1:
 		cur := held[0]
-		return widget.Text{S: fmtMoney(n.Balance.Get(cur)) + " " + cur,
+		return widget.Text{Value: fmtMoney(n.Balance.Get(cur)) + " " + cur,
 			Font: "mono", Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 	}
 
@@ -300,7 +300,7 @@ func (s *state) amountText(th theme.Theme, n *bean.Node) widget.Widget {
 		// Some commodity had no price; the overview names which ones.
 		col = th.Muted
 	}
-	return widget.Text{S: label, Font: "mono", Size: th.Type.Body, Color: col,
+	return widget.Text{Value: label, Font: "mono", Size: th.Type.Body, Color: col,
 		Ellipsis: true, MaxLines: 1}
 }
 
@@ -341,15 +341,15 @@ func (s *state) registerView(th theme.Theme) widget.Widget {
 				}
 				switch kind {
 				case 0:
-					return widget.Text{S: fmtDate(e.Date), Font: "mono", Size: th.Type.Body, Color: th.Muted}
+					return widget.Text{Value: fmtDate(e.Date), Font: "mono", Size: th.Type.Body, Color: th.Muted}
 				case 1:
-					return widget.Text{S: describe(e), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
+					return widget.Text{Value: describe(e), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 				case 2:
-					return widget.Text{S: e.Other, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
+					return widget.Text{Value: e.Other, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
 				case 3:
-					return widget.Text{S: fmtMoney(e.Amount), Font: "mono", Size: th.Type.Body, Color: amountColor(th, e.Amount)}
+					return widget.Text{Value: fmtMoney(e.Amount), Font: "mono", Size: th.Type.Body, Color: amountColor(th, e.Amount)}
 				default:
-					return widget.Text{S: fmtMoney(e.Balance), Font: "mono", Size: th.Type.Body, Color: th.Text}
+					return widget.Text{Value: fmtMoney(e.Balance), Font: "mono", Size: th.Type.Body, Color: th.Text}
 				}
 			},
 		}
@@ -369,10 +369,10 @@ func (s *state) registerView(th theme.Theme) widget.Widget {
 		title := widget.Row(
 			theme.Button{Label: "‹ Balances", OnTap: s.back},
 			widget.Sized{W: 12},
-			widget.Expand(widget.Text{S: shortAccount(s.account, wide), Font: theme.FontBold,
+			widget.Expand(widget.Text{Value: shortAccount(s.account, wide), Font: theme.FontBold,
 				Size: th.Type.Heading, Color: th.Text, Ellipsis: true, MaxLines: 1}),
 			widget.Sized{W: 8},
-			widget.Text{S: s.currency, Size: th.Type.Label, Color: th.Muted},
+			widget.Text{Value: s.currency, Size: th.Type.Label, Color: th.Muted},
 		)
 		var content widget.Widget
 		if wide {
@@ -394,7 +394,7 @@ func (s *state) registerView(th theme.Theme) widget.Widget {
 	footer := widget.Padding{
 		Insets: geom.Insets{Left: 16, Right: 16, Top: 8, Bottom: 14},
 		Child: widget.Text{
-			S:     pluralize(len(rows), "transaction") + total(rows, s.currency),
+			Value: pluralize(len(rows), "transaction") + total(rows, s.currency),
 			Size:  th.Type.Caption,
 			Color: th.Muted,
 		},
@@ -434,7 +434,7 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget 
 		name = s.book.Path
 	}
 	row := []widget.Widget{
-		widget.Text{S: "Tally", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
+		widget.Text{Value: "Tally", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
 		widget.Sized{W: 20},
 		s.tab(th, "Overview", viewOverview),
 		widget.Sized{W: 4},
@@ -467,7 +467,7 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget 
 		}
 		if cs.Max.W > 720 {
 			cols = append(cols,
-				widget.Text{S: name, Size: th.Type.Label, Color: th.Muted, Ellipsis: true, MaxLines: 1})
+				widget.Text{Value: name, Size: th.Type.Label, Color: th.Muted, Ellipsis: true, MaxLines: 1})
 		}
 		return widget.Padding{
 			Insets: geom.Insets{Left: 16, Right: 16, Top: 12, Bottom: 10},
@@ -498,7 +498,7 @@ func (s *state) tab(th theme.Theme, label string, v view) widget.Widget {
 		OnTap:  func() { s.SetState(func() { s.view, s.account, s.entries = v, "", nil }) },
 		Child: widget.Padding{
 			Insets: geom.Insets{Left: 10, Right: 10, Top: 5, Bottom: 5},
-			Child:  widget.Text{S: label, Font: font, Size: th.Type.Body, Color: col},
+			Child:  widget.Text{Value: label, Font: font, Size: th.Type.Body, Color: col},
 		},
 	}
 }

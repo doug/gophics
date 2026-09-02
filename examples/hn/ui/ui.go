@@ -69,13 +69,13 @@ func init() {
 
 func header(th theme.Theme, title string, lead widget.Widget) widget.Widget {
 	if lead == nil {
-		lead = widget.Text{S: "Y", Size: th.Type.Heading, Color: th.OnPrimary}
+		lead = widget.Text{Value: "Y", Size: th.Type.Heading, Color: th.OnPrimary}
 	}
 	return widget.Padding{Insets: geom.InsetsSymmetric(12, 10),
 		Child: widget.Row(
 			lead,
 			widget.Sized{W: 10},
-			widget.Expand(widget.Text{S: title, Font: "bold", Size: th.Type.Heading, Color: th.OnPrimary}),
+			widget.Expand(widget.Text{Value: title, Font: "bold", Size: th.Type.Heading, Color: th.OnPrimary}),
 		),
 	}
 }
@@ -86,7 +86,7 @@ func backButton(ctx widget.Ctx) widget.Widget {
 	return widget.Interactive{
 		Gestures: widget.Gestures{OnTap: nav.Pop},
 		Child: widget.Padding{Insets: geom.InsetsSymmetric(6, 4),
-			Child: widget.Text{S: "‹ Back", Size: th.Type.Body, Color: th.OnPrimary}},
+			Child: widget.Text{Value: "‹ Back", Size: th.Type.Body, Color: th.OnPrimary}},
 	}
 }
 
@@ -213,9 +213,9 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	var body widget.Widget
 	switch f := s.feed; {
 	case !f.done:
-		body = widget.Center(widget.Text{S: "loading…", Size: th.Type.Body, Color: th.Muted})
+		body = widget.Center(widget.Text{Value: "loading…", Size: th.Type.Body, Color: th.Muted})
 	case f.err != nil:
-		body = widget.Center(widget.Text{S: f.err.Error(), Wrap: true, Size: th.Type.Body, Color: th.Muted})
+		body = widget.Center(widget.Text{Value: f.err.Error(), Wrap: true, Size: th.Type.Body, Color: th.Muted})
 	default:
 		nav := ctx.MustOf[widget.Nav]()
 		body = widget.LazyList{
@@ -239,13 +239,13 @@ func (s *feedState) storyRow(th theme.Theme, nav widget.Nav, i int) widget.Widge
 		meta = d + " · " + meta
 	}
 	title := widget.Column(
-		widget.Text{S: st.Title, Font: "bold", Size: th.Type.Heading, Color: th.Text, Wrap: true},
+		widget.Text{Value: st.Title, Font: "bold", Size: th.Type.Heading, Color: th.Text, Wrap: true},
 		widget.Sized{H: 4},
-		widget.Text{S: meta, Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: meta, Size: th.Type.Caption, Color: th.Muted},
 	)
 	title.CrossAlign = layout.CrossStart
 	row := widget.Row(
-		widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d.", i+1), Size: th.Type.Label, Color: th.Muted}},
+		widget.Sized{W: 34, Child: widget.Text{Value: fmt.Sprintf("%d.", i+1), Size: th.Type.Label, Color: th.Muted}},
 		widget.Expand(title),
 	)
 	row.CrossAlign = layout.CrossStart
@@ -297,7 +297,7 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 	st := s.W().Story
 	var body widget.Widget
 	if s.loading {
-		body = widget.Center(widget.Text{S: "loading comments…", Size: th.Type.Body, Color: th.Muted})
+		body = widget.Center(widget.Text{Value: "loading comments…", Size: th.Type.Body, Color: th.Muted})
 	} else {
 		n := len(s.comments)
 		openURL := func(u string) { _ = ctx.OpenURL(u) }
@@ -322,9 +322,9 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 func storyHeaderCell(th theme.Theme, st Item, openURL func(string)) widget.Widget {
 	meta := fmt.Sprintf("%d points by %s · %d comments", st.Score, st.By, st.Descendants)
 	kids := []widget.Widget{
-		widget.Text{S: st.Title, Font: "bold", Size: th.Type.Heading, Color: th.Text, Wrap: true},
+		widget.Text{Value: st.Title, Font: "bold", Size: th.Type.Heading, Color: th.Text, Wrap: true},
 		widget.Sized{H: 6},
-		widget.Text{S: meta, Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: meta, Size: th.Type.Caption, Color: th.Muted},
 	}
 	if st.URL != "" {
 		kids = append(kids, widget.Sized{H: 6}, widget.Rich{
@@ -342,7 +342,7 @@ func storyHeaderCell(th theme.Theme, st Item, openURL func(string)) widget.Widge
 func commentRow(th theme.Theme, c Comment, openURL func(string)) widget.Widget {
 	style := spanStyle{Text: th.Text, Link: th.Primary, Emph: th.Muted}
 	body := widget.Column(
-		widget.Text{S: c.By, Size: th.Type.Label, Color: th.Primary},
+		widget.Text{Value: c.By, Size: th.Type.Label, Color: th.Primary},
 		widget.Sized{H: 4},
 		widget.Rich{Spans: parseSpans(c.Text, style), Size: th.Type.Body, OnLink: openURL},
 	)

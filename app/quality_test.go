@@ -61,7 +61,7 @@ func TestKeyboardFocusClearedOnUnmount(t *testing.T) {
 type nilFlexApp struct{}
 
 func (nilFlexApp) Build(widget.Ctx) widget.Widget {
-	return widget.Row(widget.Expand(nil), widget.Text{S: "x", Size: 12})
+	return widget.Row(widget.Expand(nil), widget.Text{Value: "x", Size: 12})
 }
 
 func TestFlexFlexibleNilChild(t *testing.T) {

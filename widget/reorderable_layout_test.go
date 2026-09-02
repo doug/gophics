@@ -28,7 +28,7 @@ func TestReorderableRowsFillTheWidth(t *testing.T) {
 			return widget.Sized{H: 40, Child: widget.Semantics{
 				Role:  layout.RoleListItem,
 				Label: labels[i],
-				Child: widget.Text{S: labels[i]},
+				Child: widget.Text{Value: labels[i]},
 			}}
 		},
 	}, apptest.WithConfig(app.Config{

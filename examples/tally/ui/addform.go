@@ -167,7 +167,7 @@ func (s *state) addPanel(th theme.Theme, fullScreen bool) widget.Widget {
 // labelled stacks a caption above a control.
 func labelled(th theme.Theme, name string, child widget.Widget) widget.Widget {
 	c := widget.Column(
-		widget.Text{S: name, Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: name, Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{H: 4},
 		child,
 	)
@@ -188,13 +188,13 @@ func (s *state) formStatus(th theme.Theme) widget.Widget {
 	f := &s.form
 	switch {
 	case f.err != "":
-		return widget.Text{S: f.err, Size: th.Type.Label, Color: th.Danger, Wrap: true}
+		return widget.Text{Value: f.err, Size: th.Type.Label, Color: th.Danger, Wrap: true}
 	case f.result != "" && len(f.warnings) > 0:
 		c := widget.Column(
-			widget.Text{S: f.result, Size: th.Type.Label, Color: th.Success},
+			widget.Text{Value: f.result, Size: th.Type.Label, Color: th.Success},
 			widget.Sized{H: 3},
 			widget.Text{
-				S: pluralize(len(f.warnings), "balance check") + " no longer match after this entry — " +
+				Value: pluralize(len(f.warnings), "balance check") + " no longer match after this entry — " +
 					"the amounts they assert were recorded before it existed.",
 				Size: th.Type.Caption, Color: th.Warning, Wrap: true,
 			},
@@ -202,7 +202,7 @@ func (s *state) formStatus(th theme.Theme) widget.Widget {
 		c.CrossAlign = layout.CrossStart
 		return c
 	case f.result != "":
-		return widget.Text{S: f.result, Size: th.Type.Label, Color: th.Success}
+		return widget.Text{Value: f.result, Size: th.Type.Label, Color: th.Success}
 	}
 	return widget.Sized{}
 }
@@ -219,7 +219,7 @@ func accountPicker(th theme.Theme, name, selected string, accounts []string, set
 		}
 	}
 	c := widget.Column(
-		widget.Text{S: name, Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: name, Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{H: 4},
 		theme.Dropdown{
 			Options: accounts, Selected: idx, Placeholder: "Choose an account",

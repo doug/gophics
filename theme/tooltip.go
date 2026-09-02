@@ -70,7 +70,7 @@ func (s *tooltipState) show() {
 		Child: widget.Padding{
 			Insets: geom.Insets{Left: 8, Right: 8, Top: 4, Bottom: 4},
 			Child: widget.Text{
-				S: s.W().Message, Size: th.Type.Caption, Color: th.Text, MaxLines: 2,
+				Value: s.W().Message, Size: th.Type.Caption, Color: th.Text, MaxLines: 2,
 			},
 		},
 	}

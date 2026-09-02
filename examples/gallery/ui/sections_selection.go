@@ -63,7 +63,7 @@ func (s *selectionState) Build(ctx widget.Ctx) widget.Widget {
 			OnChange:    func(i int) { s.SetState(func() { s.fruit = i }) },
 		},
 		widget.Sized{H: 8},
-		widget.Text{S: "Selected: " + fruitEcho, Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "Selected: " + fruitEcho, Size: th.Type.Label, Color: th.Muted},
 
 		groupLabel("Segmented"),
 		theme.Segmented{
@@ -72,7 +72,7 @@ func (s *selectionState) Build(ctx widget.Ctx) widget.Widget {
 			OnChange: func(i int) { s.SetState(func() { s.density = i }) },
 		},
 		widget.Sized{H: 8},
-		widget.Text{S: "Density: " + densityNames[s.density], Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "Density: " + densityNames[s.density], Size: th.Type.Label, Color: th.Muted},
 
 		groupLabel("Tabs"),
 		theme.Tabs{
@@ -141,7 +141,7 @@ func (s *pickersState) Build(ctx widget.Ctx) widget.Widget {
 			theme.Button{Label: "Pick a date", Primary: true, OnTap: func() { s.showDate(ctx) }},
 		}},
 		widget.Sized{H: 12},
-		theme.Card{Child: widget.Text{S: "Date: " + dateEcho, Size: th.Type.Body, Color: th.Text}},
+		theme.Card{Child: widget.Text{Value: "Date: " + dateEcho, Size: th.Type.Body, Color: th.Text}},
 
 		groupLabel("Time"),
 		theme.Body("Opens an hour/minute stepper in a dialog; every step reports the new time."),
@@ -150,6 +150,6 @@ func (s *pickersState) Build(ctx widget.Ctx) widget.Widget {
 			theme.Button{Label: "Pick a time", OnTap: func() { s.showTime(ctx) }},
 		}},
 		widget.Sized{H: 12},
-		theme.Card{Child: widget.Text{S: "Time: " + timeEcho, Size: th.Type.Body, Color: th.Text}},
+		theme.Card{Child: widget.Text{Value: "Time: " + timeEcho, Size: th.Type.Body, Color: th.Text}},
 	)
 }

@@ -473,9 +473,9 @@ func (s *lum) panel(ctx widget.Ctx, th theme.Theme) widget.Widget {
 		Axis:       layout.Vertical,
 		CrossAlign: layout.CrossStretch,
 		Children: []widget.Widget{
-			widget.Text{S: "Luminaria", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
+			widget.Text{Value: "Luminaria", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
 			widget.Sized{H: 4},
-			widget.Text{S: "Tap a cell to cycle it: node, turn right, turn left, empty. Drag to paint.",
+			widget.Text{Value: "Tap a cell to cycle it: node, turn right, turn left, empty. Drag to paint.",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true},
 			widget.Sized{H: 16},
 
@@ -517,7 +517,7 @@ func (s *lum) panel(ctx widget.Ctx, th theme.Theme) widget.Widget {
 				widget.Expand(theme.Button{Label: "Reseed", OnTap: func() { s.SetState(s.seed) }}),
 			),
 			widget.Sized{H: 12},
-			widget.Text{S: "Space play · A crawler · C clear · R reseed",
+			widget.Text{Value: "Space play · A crawler · C clear · R reseed",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true},
 		},
 	}
@@ -527,7 +527,7 @@ func (s *lum) panel(ctx widget.Ctx, th theme.Theme) widget.Widget {
 func (s *lum) group(th theme.Theme, label string) widget.Widget {
 	return widget.Padding{Insets: geom.Insets{Top: 18, Bottom: 6},
 		Child: widget.Align{X: 0, Y: 0.5,
-			Child: widget.Text{S: label, Size: th.Type.Label, Color: th.Muted}}}
+			Child: widget.Text{Value: label, Size: th.Type.Label, Color: th.Muted}}}
 }
 
 // slider is a labelled slider with its value echoed on the right — the shape
@@ -538,8 +538,8 @@ func (s *lum) slider(th theme.Theme, label, value string, v float32, set func(fl
 		CrossAlign: layout.CrossStretch,
 		Children: []widget.Widget{
 			widget.Padding{Insets: geom.Insets{Top: 18, Bottom: 6}, Child: widget.Row(
-				widget.Expand(widget.Text{S: label, Size: th.Type.Label, Color: th.Muted}),
-				widget.Text{S: value, Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary},
+				widget.Expand(widget.Text{Value: label, Size: th.Type.Label, Color: th.Muted}),
+				widget.Text{Value: value, Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary},
 			)},
 			theme.Slider{Value: v, Label: label, OnChange: func(x float32) { s.SetState(func() { set(x) }) }},
 		},

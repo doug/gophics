@@ -30,9 +30,9 @@ func (s *dialogsState) showDialog(ctx widget.Ctx) {
 	th := theme.Of(ctx)
 	var dismiss func()
 	content := widget.Column(
-		widget.Text{S: "Delete file?", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Text{Value: "Delete file?", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
 		widget.Sized{H: 8},
-		widget.Text{S: "This can't be undone.", Size: th.Type.Body, Color: th.Muted, Wrap: true},
+		widget.Text{Value: "This can't be undone.", Size: th.Type.Body, Color: th.Muted, Wrap: true},
 		widget.Sized{H: 18},
 		widget.Row(
 			widget.Spacer(),
@@ -57,9 +57,9 @@ func (s *dialogsState) showSheet(ctx widget.Ctx) {
 	th := theme.Of(ctx)
 	var dismiss func()
 	content := widget.Column(
-		widget.Text{S: "Share to…", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Text{Value: "Share to…", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
 		widget.Sized{H: 8},
-		widget.Text{S: "A rounded surface that slides up from the bottom edge — drag it down or tap the scrim to dismiss.",
+		widget.Text{Value: "A rounded surface that slides up from the bottom edge — drag it down or tap the scrim to dismiss.",
 			Size: th.Type.Body, Color: th.Muted, Wrap: true},
 		widget.Sized{H: 18},
 		theme.Button{Label: "Done", Primary: true, OnTap: func() { dismiss(); s.set("Sheet closed") }},
@@ -105,7 +105,7 @@ func (s *dialogsState) Build(ctx widget.Ctx) widget.Widget {
 
 		widget.Sized{H: 16},
 		theme.Card{Child: widget.Text{
-			S:     "Last action: " + orDash(s.result),
+			Value: "Last action: " + orDash(s.result),
 			Size:  th.Type.Body,
 			Color: th.Text,
 		}},
@@ -125,7 +125,7 @@ func (layoutSection) Build(ctx widget.Ctx) widget.Widget {
 	for i := range gridCells {
 		gridCells[i] = widget.Sized{H: 54, Child: widget.Decorated{
 			Color: th.ChartAt(i), Radius: th.Radius,
-			Child: widget.Center(widget.Text{S: string(rune('1' + i)), Font: theme.FontBold, Size: th.Type.Body, Color: th.OnPrimary}),
+			Child: widget.Center(widget.Text{Value: string(rune('1' + i)), Font: theme.FontBold, Size: th.Type.Body, Color: th.OnPrimary}),
 		}}
 	}
 	grid := widget.Grid{Columns: 3, Spacing: 8, Children: gridCells}
@@ -143,7 +143,7 @@ func (layoutSection) Build(ctx widget.Ctx) widget.Widget {
 		widget.Sized{H: 110, Child: widget.Decorated{Color: th.SurfaceHover, Radius: th.Radius, Child: widget.Fill{}}},
 		widget.Sized{H: 110, Child: widget.Center(widget.Decorated{Color: th.Primary, Radius: 24,
 			Child: widget.Padding{Insets: geom.InsetsSymmetric(16, 10),
-				Child: widget.Text{S: "centered", Font: theme.FontBold, Size: th.Type.Body, Color: th.OnPrimary}}})},
+				Child: widget.Text{Value: "centered", Font: theme.FontBold, Size: th.Type.Body, Color: th.OnPrimary}}})},
 		widget.Sized{H: 110, Child: widget.Align{X: 1, Y: 0, Child: widget.Padding{All: 8,
 			Child: chip(th, "top-right")}}},
 	}}
@@ -170,7 +170,7 @@ func (layoutSection) Build(ctx widget.Ctx) widget.Widget {
 func chip(th theme.Theme, s string) widget.Widget {
 	return widget.Decorated{Color: th.Surface, Radius: 20, BorderColor: th.Border, BorderWidth: 1,
 		Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 7),
-			Child: widget.Text{S: s, Size: th.Type.Label, Color: th.Text}}}
+			Child: widget.Text{Value: s, Size: th.Type.Label, Color: th.Text}}}
 }
 
 // --- Animations --------------------------------------------------------------
@@ -243,5 +243,5 @@ func (s *animationsState) Build(ctx widget.Ctx) widget.Widget {
 // animTile is a small labeled square used by the animation demos.
 func animTile(th theme.Theme, col paint.Color, label string) widget.Widget {
 	return widget.Decorated{Color: col, Radius: th.Radius, Child: widget.Sized{W: 96, H: 96,
-		Child: widget.Center(widget.Text{S: label, Font: theme.FontBold, Size: th.Type.Label, Color: th.OnPrimary})}}
+		Child: widget.Center(widget.Text{Value: label, Font: theme.FontBold, Size: th.Type.Label, Color: th.OnPrimary})}}
 }

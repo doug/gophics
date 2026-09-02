@@ -26,7 +26,7 @@ func TestGPUShapeAfterTextCoversIt(t *testing.T) {
 	body := widget.Stack{Children: []widget.Widget{
 		widget.Fill{Color: paint.RGB(1, 1, 1)},
 		widget.Padding{All: 10, Child: widget.Text{
-			S: "HIDDEN", Size: 30, Color: paint.RGB(0.85, 0, 0),
+			Value: "HIDDEN", Size: 30, Color: paint.RGB(0.85, 0, 0),
 		}},
 		widget.Fill{Color: paint.RGB(0, 0.35, 0.15)}, // covers everything
 	}}

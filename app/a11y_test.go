@@ -14,9 +14,9 @@ type a11yApp struct{ activated *int }
 func (a a11yApp) Build(widget.Ctx) widget.Widget {
 	act := a.activated
 	return widget.Padding{All: 10, Child: widget.Column(
-		widget.Text{S: "Inbox"},
+		widget.Text{Value: "Inbox"},
 		widget.Interactive{Gestures: widget.Gestures{OnTap: func() { *act++ }},
-			Child: widget.Padding{All: 6, Child: widget.Text{S: "Compose"}}},
+			Child: widget.Padding{All: 6, Child: widget.Text{Value: "Compose"}}},
 	)}
 }
 

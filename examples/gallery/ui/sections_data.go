@@ -36,12 +36,12 @@ func (s *treeState2) Build(ctx widget.Ctx) widget.Widget {
 
 	leaf := func(id, name string) widget.TreeNode {
 		return widget.TreeNode{ID: id, Child: widget.Text{
-			S: name, Size: th.Type.Body, Color: th.Text,
+			Value: name, Size: th.Type.Body, Color: th.Text,
 		}}
 	}
 	branch := func(id, name string, kids ...widget.TreeNode) widget.TreeNode {
 		return widget.TreeNode{ID: id, Children: kids, Child: widget.Text{
-			S: name, Font: theme.FontBold, Size: th.Type.Body, Color: th.Text,
+			Value: name, Font: theme.FontBold, Size: th.Type.Body, Color: th.Text,
 		}}
 	}
 
@@ -79,7 +79,7 @@ func (s *treeState2) Build(ctx widget.Ctx) widget.Widget {
 			},
 		}},
 		widget.Sized{H: 8},
-		widget.Text{S: status, Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: status, Size: th.Type.Caption, Color: th.Muted},
 	)
 }
 
@@ -134,7 +134,7 @@ func (s *autocompleteDemo) Build(ctx widget.Ctx) widget.Widget {
 				Color: bg,
 				Child: widget.Padding{
 					Insets: geom.Insets{Top: 7, Bottom: 7, Left: 10, Right: 10},
-					Child:  widget.Text{S: item, Size: th.Type.Body, Color: th.Text},
+					Child:  widget.Text{Value: item, Size: th.Type.Body, Color: th.Text},
 				},
 			}
 		},
@@ -156,7 +156,7 @@ func (s *autocompleteDemo) Build(ctx widget.Ctx) widget.Widget {
 		},
 		widget.Sized{H: 10},
 		widget.Text{
-			S:     "Picked: " + orDash(s.picked),
+			Value: "Picked: " + orDash(s.picked),
 			Size:  th.Type.Caption,
 			Color: th.Muted,
 		},
@@ -208,9 +208,9 @@ func (s *reorderDemo) Build(ctx widget.Ctx) widget.Widget {
 					Child: theme.Card{Pad: 8, Child: widget.Align{
 						X: 0, Y: 0.5, Directional: true,
 						Child: widget.Row(
-							widget.Text{S: "=", Font: theme.FontBold, Size: th.Type.Body, Color: th.Muted},
+							widget.Text{Value: "=", Font: theme.FontBold, Size: th.Type.Body, Color: th.Muted},
 							widget.Sized{W: 10},
-							widget.Text{S: s.items[i], Size: th.Type.Body, Color: th.Text},
+							widget.Text{Value: s.items[i], Size: th.Type.Body, Color: th.Text},
 						),
 					}},
 				}}
@@ -226,7 +226,7 @@ func (s *reorderDemo) Build(ctx widget.Ctx) widget.Widget {
 		}},
 		widget.Sized{H: 6},
 		widget.Text{
-			S:     fmt.Sprintf("%d reorders · %s", s.moves, strings.Join(s.items, " → ")),
+			Value: fmt.Sprintf("%d reorders · %s", s.moves, strings.Join(s.items, " → ")),
 			Size:  th.Type.Caption,
 			Color: th.Muted,
 			Wrap:  true,
@@ -279,7 +279,7 @@ func (s *dragDropDemo) chip(th theme.Theme, item string) widget.Widget {
 		Radius: 8,
 		Child: widget.Padding{
 			Insets: geom.Insets{Top: 6, Bottom: 6, Left: 10, Right: 10},
-			Child:  widget.Text{S: item, Size: th.Type.Body, Color: th.Text},
+			Child:  widget.Text{Value: item, Size: th.Type.Body, Color: th.Text},
 		},
 	}
 	return widget.Padding{
@@ -301,7 +301,7 @@ func (s *dragDropDemo) bin(th theme.Theme, title string, items []string, toDone 
 	}
 	var body widget.Widget = widget.Wrap{Spacing: 6, RunSpacing: 6, Children: chips}
 	if len(items) == 0 {
-		body = widget.Text{S: "empty", Size: th.Type.Caption, Color: th.Muted}
+		body = widget.Text{Value: "empty", Size: th.Type.Caption, Color: th.Muted}
 	}
 
 	return widget.DropTarget{
@@ -330,7 +330,7 @@ func (s *dragDropDemo) bin(th theme.Theme, title string, items []string, toDone 
 				Child: widget.Padding{
 					Insets: geom.Insets{Top: 10, Bottom: 10, Left: 10, Right: 10},
 					Child: widget.Column(
-						widget.Text{S: title, Font: theme.FontBold, Size: th.Type.Label, Color: th.Muted},
+						widget.Text{Value: title, Font: theme.FontBold, Size: th.Type.Label, Color: th.Muted},
 						widget.Sized{H: 8},
 						body,
 					),
@@ -351,7 +351,7 @@ func (s *dragDropDemo) Build(ctx widget.Ctx) widget.Widget {
 		)},
 		widget.Sized{H: 8},
 		widget.Text{
-			S:     "A bin refuses a chip it already holds — the border only lights for a drop it will take.",
+			Value: "A bin refuses a chip it already holds — the border only lights for a drop it will take.",
 			Size:  th.Type.Caption,
 			Color: th.Muted,
 			Wrap:  true,
@@ -395,7 +395,7 @@ func (s *richTextDemo) Build(ctx widget.Ctx) widget.Widget {
 		}},
 		widget.Sized{H: 10},
 		widget.Text{
-			S:     "Link tapped: " + orDash(s.tapped),
+			Value: "Link tapped: " + orDash(s.tapped),
 			Size:  th.Type.Caption,
 			Color: th.Muted,
 		},
@@ -456,7 +456,7 @@ func (s *transformDemo) Build(ctx widget.Ctx) widget.Widget {
 		),
 		widget.Sized{H: 8},
 		widget.Text{
-			S:     "Hit testing follows the transform — the button still takes taps where it is drawn.",
+			Value: "Hit testing follows the transform — the button still takes taps where it is drawn.",
 			Size:  th.Type.Caption,
 			Color: th.Muted,
 			Wrap:  true,
@@ -498,15 +498,15 @@ func (s *rtlDemo) Build(ctx widget.Ctx) widget.Widget {
 		Insets: geom.Insets{Top: 12, Bottom: 12, Left: 12, Right: 12},
 		Child: widget.Column(
 			widget.Row(
-				widget.Text{S: "<", Font: theme.FontBold, Size: th.Type.Body, Color: th.Primary},
+				widget.Text{Value: "<", Font: theme.FontBold, Size: th.Type.Body, Color: th.Primary},
 				widget.Sized{W: 8},
-				widget.Text{S: "Leading", Font: theme.FontBold, Size: th.Type.Body, Color: th.Text},
+				widget.Text{Value: "Leading", Font: theme.FontBold, Size: th.Type.Body, Color: th.Text},
 				widget.Spacer(),
-				widget.Text{S: "Trailing", Size: th.Type.Body, Color: th.Muted},
+				widget.Text{Value: "Trailing", Size: th.Type.Body, Color: th.Muted},
 			),
 			widget.Sized{H: 8},
 			widget.Text{
-				S:     "Padding, row order and alignment all mirror; the glyphs do not.",
+				Value: "Padding, row order and alignment all mirror; the glyphs do not.",
 				Size:  th.Type.Caption,
 				Color: th.Muted,
 				Wrap:  true,
@@ -525,7 +525,7 @@ func (s *rtlDemo) Build(ctx widget.Ctx) widget.Widget {
 				OnChange: func(v bool) { s.SetState(func() { s.rtl = v }) },
 			},
 			widget.Sized{W: 10},
-			widget.Text{S: "Right to left", Size: th.Type.Body, Color: th.Text},
+			widget.Text{Value: "Right to left", Size: th.Type.Body, Color: th.Text},
 		),
 	)
 }

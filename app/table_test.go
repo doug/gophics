@@ -57,17 +57,17 @@ func (s *tableTestState) Build(ctx widget.Ctx) widget.Widget {
 			s.cellCalls++
 			switch c {
 			case 0:
-				return widget.Text{S: fmt.Sprintf("2026-01-%02d", r%28+1), Font: "mono", Size: th.Type.Body, Color: th.Text}
+				return widget.Text{Value: fmt.Sprintf("2026-01-%02d", r%28+1), Font: "mono", Size: th.Type.Body, Color: th.Text}
 			case 1:
-				return widget.Text{S: fmt.Sprintf("Payee number %d", r), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
+				return widget.Text{Value: fmt.Sprintf("Payee number %d", r), Size: th.Type.Body, Color: th.Text, Ellipsis: true, MaxLines: 1}
 			case 2:
 				acct := "Expenses:Food:Groceries"
 				if s.longText {
 					acct = "Assets:US:Vanguard:Cash, Income:US:Hoogle:Salary, Expenses:Taxes:US:Medicare, Expenses:Taxes:US:SocSec, Expenses:Taxes:US:Federal"
 				}
-				return widget.Text{S: acct, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
+				return widget.Text{Value: acct, Size: th.Type.Body, Color: th.Muted, Ellipsis: true, MaxLines: 1}
 			default:
-				return widget.Text{S: fmt.Sprintf("%.2f", float64(r%1000)+0.5), Font: "mono", Size: th.Type.Body, Color: th.Text}
+				return widget.Text{Value: fmt.Sprintf("%.2f", float64(r%1000)+0.5), Font: "mono", Size: th.Type.Body, Color: th.Text}
 			}
 		},
 		Selectable: s.selectable,

@@ -272,7 +272,7 @@ func (t themedText) Build(ctx widget.Ctx) widget.Widget {
 	if bold {
 		font = FontBold
 	}
-	return widget.Text{S: t.S, Font: font, Size: size, Color: col, Wrap: t.Wrap}
+	return widget.Text{Value: t.S, Font: font, Size: size, Color: col, Wrap: t.Wrap}
 }
 
 // Card wraps content in a themed surface.
@@ -379,7 +379,7 @@ func (s *buttonState) Build(ctx widget.Ctx) widget.Widget {
 			Color: bg, Radius: th.Radius, BorderColor: border, BorderWidth: 1,
 			Child: widget.Padding{
 				Insets: geom.InsetsSymmetric(14, 8),
-				Child:  widget.Text{S: b.Label, Font: FontBold, Size: 14, Color: fg},
+				Child:  widget.Text{Value: b.Label, Font: FontBold, Size: 14, Color: fg},
 			},
 		},
 	}

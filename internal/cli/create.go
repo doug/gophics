@@ -316,7 +316,7 @@ type counterState struct {
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 	nav := ctx.MustOf[widget.Nav]()
 	return screen("{{.Name}}", widget.Column(
-		widget.Text{S: fmt.Sprintf("Count: %d", s.Count), Size: 28, Color: colText},
+		widget.Text{Value: fmt.Sprintf("Count: %d", s.Count), Size: 28, Color: colText},
 		widget.Sized{H: 16},
 		button("Increment", func() { s.SetState(func() { s.Count++ }) }),
 		widget.Sized{H: 8},
@@ -332,7 +332,7 @@ type detailPage struct{ Count int }
 func (p detailPage) Build(ctx widget.Ctx) widget.Widget {
 	nav := ctx.MustOf[widget.Nav]()
 	return screen("Detail", widget.Column(
-		widget.Text{S: fmt.Sprintf("Opened at count %d", p.Count), Size: 22, Color: colText},
+		widget.Text{Value: fmt.Sprintf("Opened at count %d", p.Count), Size: 22, Color: colText},
 		widget.Sized{H: 16},
 		button("Back", nav.Pop),
 	))
@@ -343,13 +343,13 @@ func button(label string, onTap func()) widget.Widget {
 		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Decorated{Color: colAccent, Radius: 8,
 			Child: widget.Padding{Insets: geom.InsetsSymmetric(16, 10),
-				Child: widget.Text{S: label, Size: 15, Color: colOnAcc}}},
+				Child: widget.Text{Value: label, Size: 15, Color: colOnAcc}}},
 	}
 }
 
 func screen(title string, body widget.Widget) widget.Widget {
 	col := widget.Column(
-		widget.Text{S: title, Font: "bold", Size: 15, Color: colText},
+		widget.Text{Value: title, Font: "bold", Size: 15, Color: colText},
 		widget.Sized{H: 24},
 		body,
 	)

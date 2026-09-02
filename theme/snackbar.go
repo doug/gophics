@@ -154,7 +154,7 @@ func (s *snackbarState) Build(ctx widget.Ctx) widget.Widget {
 	bg, fg := th.Text, th.Bg
 
 	row := []widget.Widget{
-		widget.Text{S: w.message, Size: th.Type.Body, Color: fg},
+		widget.Text{Value: w.message, Size: th.Type.Body, Color: fg},
 	}
 	if w.cfg.actionLabel != "" {
 		row = append(row,
@@ -167,7 +167,7 @@ func (s *snackbarState) Build(ctx widget.Ctx) widget.Widget {
 					}
 					s.close()
 				}},
-				Child: widget.Text{S: w.cfg.actionLabel, Font: FontBold,
+				Child: widget.Text{Value: w.cfg.actionLabel, Font: FontBold,
 					Size: th.Type.Label, Color: th.Primary},
 			},
 		)

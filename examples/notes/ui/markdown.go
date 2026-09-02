@@ -199,7 +199,7 @@ func codeBlock(code string, sty mdStyle) widget.Widget {
 
 func bulletItem(text string, sty mdStyle, onLink func(string)) widget.Widget {
 	row := widget.Row(
-		widget.Sized{W: 18, Child: widget.Text{S: "•", Size: sty.Size, Color: sty.Meta}},
+		widget.Sized{W: 18, Child: widget.Text{Value: "•", Size: sty.Size, Color: sty.Meta}},
 		widget.Expand(widget.Rich{Spans: inlineSpans(text, seg{color: sty.Text}, sty), Size: sty.Size, OnLink: onLink}),
 	)
 	row.CrossAlign = layout.CrossStart

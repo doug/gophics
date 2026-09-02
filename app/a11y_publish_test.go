@@ -36,7 +36,7 @@ func (a labelApp) Build(widget.Ctx) widget.Widget {
 	tapped := a.tapped
 	return widget.Padding{All: 8, Child: widget.Interactive{
 		Gestures: widget.Gestures{OnTap: func() { *tapped++ }},
-		Child:    widget.Text{S: *a.label},
+		Child:    widget.Text{Value: *a.label},
 	}}
 }
 
@@ -254,9 +254,9 @@ func TestPublishA11yCarriesExpandedState(t *testing.T) {
 	h, err := NewHeadless(widget.Tree{
 		Nodes: []widget.TreeNode{{
 			ID:    "root",
-			Child: widget.Text{S: "Root"},
+			Child: widget.Text{Value: "Root"},
 			Children: []widget.TreeNode{
-				{ID: "child", Child: widget.Text{S: "Child"}},
+				{ID: "child", Child: widget.Text{Value: "Child"}},
 			},
 		}},
 		InitiallyExpanded: []string{"root"},

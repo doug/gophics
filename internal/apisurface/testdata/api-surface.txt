@@ -1984,10 +1984,10 @@ widget.Text.Color field
 widget.Text.Ellipsis field
 widget.Text.Font field
 widget.Text.MaxLines field
-widget.Text.S field
 widget.Text.Size field
 widget.Text.Strike field
 widget.Text.Underline field
+widget.Text.Value field
 widget.Text.Wrap field
 widget.TextField type
 widget.TextField.Autofocus field

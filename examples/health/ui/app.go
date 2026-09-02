@@ -163,16 +163,16 @@ func (s *healthState) onboarding(th theme.Theme) widget.Widget {
 		Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.connected = true }) }},
 		Child: widget.Decorated{Color: th.Primary, Radius: 14, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(28, 14),
-			Child:  widget.Text{S: "Connect " + s.p.Name(), Size: 16, Color: th.OnPrimary},
+			Child:  widget.Text{Value: "Connect " + s.p.Name(), Size: 16, Color: th.OnPrimary},
 		}},
 	}
 	return widget.Align{X: 0.5, Y: 0.5, Child: widget.Padding{
 		All: 32,
 		Child: widget.Flex{CrossAlign: layout.CrossCenter, Children: []widget.Widget{
-			widget.Text{S: "♥", Size: 72, Color: th.Primary},
-			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{S: "Health", Size: 34, Color: th.Text}},
+			widget.Text{Value: "♥", Size: 72, Color: th.Primary},
+			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{Value: "Health", Size: 34, Color: th.Text}},
 			widget.Padding{Insets: geom.Insets{Top: 6, Bottom: 26}, Child: widget.Text{
-				S: "Connect your data to see it live.", Size: 15, Color: th.Muted}},
+				Value: "Connect your data to see it live.", Size: 15, Color: th.Muted}},
 			connect,
 		}},
 	}}
@@ -202,8 +202,8 @@ func header(th theme.Theme, p Provider) widget.Widget {
 	return widget.Padding{
 		Insets: geom.Insets{Bottom: 18},
 		Child: widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
-			widget.Text{S: "Health", Size: 32, Color: th.Text},
-			widget.Text{S: p.Name(), Size: 14, Color: th.Muted},
+			widget.Text{Value: "Health", Size: 32, Color: th.Text},
+			widget.Text{Value: p.Name(), Size: 14, Color: th.Muted},
 		}},
 	}
 }
@@ -215,13 +215,13 @@ func card(th theme.Theme, p Provider, sp spec, onTap func()) widget.Widget {
 	accent := th.ChartAt(sp.accentIdx)
 
 	title := widget.Row(
-		widget.Text{S: sp.label, Size: 14, Color: accent},
+		widget.Text{Value: sp.label, Size: 14, Color: accent},
 		widget.Spacer(),
-		widget.Text{S: sp.caption, Size: 12, Color: th.Muted},
+		widget.Text{Value: sp.caption, Size: 12, Color: th.Muted},
 	)
 	value := widget.Row(
-		widget.Text{S: sp.fmtVal(val.V), Size: 34, Color: th.Text},
-		widget.Padding{Insets: geom.Insets{Left: 5, Top: 12}, Child: widget.Text{S: sp.unit, Size: 14, Color: th.Muted}},
+		widget.Text{Value: sp.fmtVal(val.V), Size: 34, Color: th.Text},
+		widget.Padding{Insets: geom.Insets{Left: 5, Top: 12}, Child: widget.Text{Value: sp.unit, Size: 14, Color: th.Muted}},
 	)
 	chart := widget.Expand(widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
 		sp.draw(c, size, series, accent)

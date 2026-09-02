@@ -87,9 +87,9 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 			Background: widget.Fill{Color: th.Danger, Child: widget.Padding{
 				Insets: geom.Insets{Left: 16, Right: 16},
 				Child: widget.Row(
-					widget.Text{S: "delete", Size: th.Type.Label, Color: th.OnPrimary},
+					widget.Text{Value: "delete", Size: th.Type.Label, Color: th.OnPrimary},
 					widget.Expand(widget.Sized{}),
-					widget.Text{S: "delete", Size: th.Type.Label, Color: th.OnPrimary},
+					widget.Text{Value: "delete", Size: th.Type.Label, Color: th.OnPrimary},
 				),
 			}},
 			Child: todoRow{
@@ -113,7 +113,7 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 
 	footer := fmt.Sprintf("%d left · click toggles · double-click edits · hover shows delete", left)
 	col := widget.Column(
-		widget.Text{S: "gophics · todo", Size: th.Type.Body, Color: th.Muted},
+		widget.Text{Value: "gophics · todo", Size: th.Type.Body, Color: th.Muted},
 		widget.Sized{H: 16},
 		theme.Field{
 			Value:       s.input,
@@ -124,7 +124,7 @@ func (s *todoState) Build(ctx widget.Ctx) widget.Widget {
 		widget.Sized{H: 12},
 		widget.Expand(widget.Scroll{Child: list}),
 		widget.Sized{H: 12},
-		widget.Text{S: footer, Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: footer, Size: th.Type.Caption, Color: th.Muted},
 	)
 	col.CrossAlign = layout.CrossStretch
 	// A tap that reaches the page background ends an open edit. gophics leaves
@@ -197,7 +197,7 @@ func (s *rowState) Build(ctx widget.Ctx) widget.Widget {
 		}
 	}
 
-	text := widget.Text{S: r.Item.text, Color: th.Text}
+	text := widget.Text{Value: r.Item.text, Color: th.Text}
 	if r.Item.done {
 		text.Color, text.Strike = th.Muted, true
 	}
@@ -218,7 +218,7 @@ func (s *rowState) Build(ctx widget.Ctx) widget.Widget {
 	if s.hovered {
 		del = widget.Interactive{
 			Gestures: widget.Gestures{OnTap: r.OnDelete},
-			Child:    widget.Text{S: "×", Size: 16, Color: th.Danger},
+			Child:    widget.Text{Value: "×", Size: 16, Color: th.Danger},
 		}
 	}
 	return widget.Interactive{

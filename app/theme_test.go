@@ -81,7 +81,7 @@ type panickyHost struct{}
 
 func (panickyHost) Build(widget.Ctx) widget.Widget {
 	return widget.Column(
-		widget.Text{S: "healthy sibling"},
+		widget.Text{Value: "healthy sibling"},
 		panicky{},
 	)
 }

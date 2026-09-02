@@ -50,10 +50,10 @@ func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Light()
 	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
 		Child: widget.Center(widget.Column(
-			widget.Text{S: "TAPS", Size: th.Type.Caption, Color: th.Muted},
+			widget.Text{Value: "TAPS", Size: th.Type.Caption, Color: th.Muted},
 			widget.Sized{H: 4},
 			widget.Text{
-				S:     fmt.Sprintf("%d", s.n),
+				Value: fmt.Sprintf("%d", s.n),
 				Size:  th.Type.Display,
 				Font:  theme.FontBold,
 				Color: th.Text,

@@ -323,9 +323,9 @@ func (m *mirror) idle(th theme.Theme) widget.Widget {
 		label = "Asking permission…"
 	}
 	kids := []widget.Widget{
-		widget.Text{S: "Mirror", Font: theme.FontBold, Size: th.Type.Display, Color: th.Text},
+		widget.Text{Value: "Mirror", Font: theme.FontBold, Size: th.Type.Display, Color: th.Text},
 		widget.Sized{H: 8},
-		widget.Text{S: "Your camera, warped by your voice. Nothing leaves the device, " +
+		widget.Text{Value: "Your camera, warped by your voice. Nothing leaves the device, " +
 			"and nothing is recorded — the frames are read, drawn, and dropped.",
 			Size: th.Type.Body, Color: th.Muted, Wrap: true},
 		widget.Sized{H: 20},
@@ -344,8 +344,8 @@ func (m *mirror) idle(th theme.Theme) widget.Widget {
 		// promises nothing.
 		kids = append([]widget.Widget{closedLens(th), widget.Sized{H: 22}}, kids...)
 		kids = append(kids, widget.Text{
-			S:    "This platform has no camera and microphone available to the app yet, so there is nothing to mirror.",
-			Size: th.Type.Body, Color: th.Muted, Wrap: true,
+			Value: "This platform has no camera and microphone available to the app yet, so there is nothing to mirror.",
+			Size:  th.Type.Body, Color: th.Muted, Wrap: true,
 		})
 		return widget.Center(widget.Sized{W: 420, Child: widget.Padding{All: 24,
 			Child: widget.Flex{Axis: layout.Vertical, CrossAlign: layout.CrossStart, Children: kids}}})
@@ -353,7 +353,7 @@ func (m *mirror) idle(th theme.Theme) widget.Widget {
 	kids = append(kids, theme.Button{Label: label, Primary: true, OnTap: m.start})
 	if m.err != "" {
 		kids = append(kids, widget.Sized{H: 14},
-			widget.Text{S: m.err, Size: th.Type.Label, Color: th.Danger, Wrap: true})
+			widget.Text{Value: m.err, Size: th.Type.Label, Color: th.Danger, Wrap: true})
 	}
 	return widget.Center(widget.Sized{W: 420, Child: widget.Padding{All: 24,
 		Child: widget.Flex{Axis: layout.Vertical, CrossAlign: layout.CrossStart, Children: kids}}})
@@ -402,7 +402,7 @@ func (m *mirror) controls(th theme.Theme) widget.Widget {
 			Axis:       layout.Vertical,
 			CrossAlign: layout.CrossStretch,
 			Children: []widget.Widget{
-				widget.Text{S: "Effect", Size: th.Type.Caption, Color: th.Muted},
+				widget.Text{Value: "Effect", Size: th.Type.Caption, Color: th.Muted},
 				widget.Sized{H: 4},
 				theme.Slider{Value: m.amount, Label: "Effect amount",
 					OnChange: func(v float32) { m.SetState(func() { m.amount = v }) }},
@@ -412,7 +412,7 @@ func (m *mirror) controls(th theme.Theme) widget.Widget {
 		theme.Checkbox{Checked: m.mirrored, Label: "Mirror",
 			OnChange: func(v bool) { m.SetState(func() { m.mirrored = v }) }},
 		widget.Expand(widget.Align{X: 1, Y: 0.5,
-			Child: widget.Text{S: status, Font: "mono", Size: th.Type.Caption, Color: th.Muted}}),
+			Child: widget.Text{Value: status, Font: "mono", Size: th.Type.Caption, Color: th.Muted}}),
 		widget.Sized{W: 14},
 		theme.Button{Label: "Stop", OnTap: func() { m.SetState(m.stop) }},
 	)

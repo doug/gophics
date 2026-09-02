@@ -85,7 +85,7 @@ func (s *datePickerState) Build(ctx widget.Ctx) widget.Widget {
 	header := widget.Sized{H: dpHeaderH, Child: widget.Row(
 		arrowButton(th, true, func() { s.shift(-1) }),
 		widget.Spacer(),
-		widget.Text{S: title, Font: FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Text{Value: title, Font: FontBold, Size: th.Type.Heading, Color: th.Text},
 		widget.Spacer(),
 		arrowButton(th, false, func() { s.shift(1) }),
 	)}
@@ -94,7 +94,7 @@ func (s *datePickerState) Build(ctx widget.Ctx) widget.Widget {
 	weekCells := make([]widget.Widget, 7)
 	for i, w := range weekdayInitials {
 		weekCells[i] = widget.Sized{H: dpWeekH, Child: widget.Center(
-			widget.Text{S: w, Size: th.Type.Caption, Color: th.Muted},
+			widget.Text{Value: w, Size: th.Type.Caption, Color: th.Muted},
 		)}
 	}
 
@@ -135,7 +135,7 @@ func (s *datePickerState) dayCell(th Theme, day int, sel, isToday bool) widget.W
 	}
 	disc := widget.Sized{W: dpDisc, H: dpDisc, Child: widget.Decorated{
 		Color: fill, Radius: dpDisc / 2, BorderColor: border, BorderWidth: bw,
-		Child: widget.Center(widget.Text{S: strconv.Itoa(day), Size: th.Type.Label, Color: txt}),
+		Child: widget.Center(widget.Text{Value: strconv.Itoa(day), Size: th.Type.Label, Color: txt}),
 	}}
 	return widget.Sized{H: dpCellH, Child: widget.Center(Tappable{
 		Child:  disc,

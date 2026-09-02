@@ -14,10 +14,10 @@ import (
 
 func a11yTree() []widget.TreeNode {
 	return []widget.TreeNode{
-		{ID: "src", Child: widget.Text{S: "src"}, Children: []widget.TreeNode{
-			{ID: "main", Child: widget.Text{S: "main.go"}},
+		{ID: "src", Child: widget.Text{Value: "src"}, Children: []widget.TreeNode{
+			{ID: "main", Child: widget.Text{Value: "main.go"}},
 		}},
-		{ID: "readme", Child: widget.Text{S: "README"}},
+		{ID: "readme", Child: widget.Text{Value: "README"}},
 	}
 }
 

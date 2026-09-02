@@ -240,18 +240,18 @@ type uiScreen struct{}
 func (uiScreen) Build(ctx widget.Ctx) widget.Widget {
 	rows := make([]widget.Widget, 0, 24)
 	rows = append(rows,
-		widget.Text{S: "Settings", Font: "bold", Size: 22},
+		widget.Text{Value: "Settings", Font: "bold", Size: 22},
 		widget.Sized{H: 12},
 	)
 	for i := range 6 {
 		rows = append(rows,
 			theme.Card{Child: widget.Column(
-				widget.Text{S: []string{
+				widget.Text{Value: []string{
 					"Appearance", "Notifications", "Privacy",
 					"Storage", "Accounts", "About",
 				}[i], Font: "bold", Size: 15},
 				widget.Sized{H: 4},
-				widget.Text{S: "Configure how this section behaves.", Size: 12},
+				widget.Text{Value: "Configure how this section behaves.", Size: 12},
 				widget.Sized{H: 8},
 				theme.Divider{},
 				widget.Sized{H: 8},

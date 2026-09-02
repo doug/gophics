@@ -17,7 +17,7 @@ type inspApp struct{}
 
 func (inspApp) Build(widget.Ctx) widget.Widget {
 	return widget.Padding{All: 10, Child: widget.Column(
-		widget.Text{S: "Header"},
+		widget.Text{Value: "Header"},
 		widget.Interactive{Gestures: widget.Gestures{OnTap: func() {}},
 			Child: widget.Decorated{Color: paint.RGB(0.2, 0.2, 0.2), Child: widget.Sized{W: 80, H: 30}}},
 	)}

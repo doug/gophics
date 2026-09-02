@@ -44,7 +44,7 @@ var (
 	_ = widget.Scroll{}
 	_ = widget.LazyList{}
 	_ = widget.WithKey{}
-	_ = widget.Text{S: "", Size: 0, Color: paint.Color{}, Wrap: false}
+	_ = widget.Text{Value: "", Size: 0, Color: paint.Color{}, Wrap: false}
 	_ = widget.Interactive{}
 	_ = widget.Gestures{OnTap: nil, OnEnter: nil, OnExit: nil, OnPress: nil, OnDrag: nil}
 	_ = widget.Canvas{W: 0, H: 0, Clip: false, Draw: nil}

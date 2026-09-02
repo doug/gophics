@@ -25,7 +25,7 @@ func TestTappablePressHighlight(t *testing.T) {
 			Background: base,
 			OnTap:      func() {},
 			Pad:        geom.InsetsSymmetric(12, 12),
-			Child:      widget.Text{S: "Row", Size: 14, Color: paint.RGB(0, 0, 0)},
+			Child:      widget.Text{Value: "Row", Size: 14, Color: paint.RGB(0, 0, 0)},
 		})},
 	}
 	h, err := app.NewHeadless(root, app.Config{Size: geom.Size{W: 120, H: 60}, Font: goregular.TTF}, 1)

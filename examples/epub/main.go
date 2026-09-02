@@ -114,18 +114,18 @@ func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	nav := ctx.MustOf[widget.Nav]()
 	kids := []widget.Widget{
-		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{S: book.Title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text, Wrap: true}},
-		widget.Padding{Insets: geom.Insets{Bottom: 20}, Child: widget.Text{S: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
+		widget.Padding{Insets: geom.Insets{Top: 56, Bottom: 8}, Child: widget.Text{Value: book.Title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text, Wrap: true}},
+		widget.Padding{Insets: geom.Insets{Bottom: 20}, Child: widget.Text{Value: "by " + book.Author, Size: th.Type.Body, Color: th.Muted}},
 	}
 	// Only offer "Open EPUB…" where the platform actually has a file picker.
 	if fp := ctx.FilePicker(); fp != nil {
 		kids = append(kids, widget.Row(theme.Button{Label: "Open EPUB…", OnTap: func() { s.open(fp) }}, widget.Spacer()))
 	}
 	if s.loadErr {
-		kids = append(kids, widget.Padding{Insets: geom.Insets{Top: 8}, Child: widget.Text{S: "Couldn't read that file as an EPUB.", Size: th.Type.Label, Color: th.Muted}})
+		kids = append(kids, widget.Padding{Insets: geom.Insets{Top: 8}, Child: widget.Text{Value: "Couldn't read that file as an EPUB.", Size: th.Type.Label, Color: th.Muted}})
 	}
 	kids = append(kids,
-		widget.Padding{Insets: geom.Insets{Top: 32, Bottom: 0}, Child: widget.Text{S: "CONTENTS", Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary}},
+		widget.Padding{Insets: geom.Insets{Top: 32, Bottom: 0}, Child: widget.Text{Value: "CONTENTS", Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary}},
 		widget.Padding{Insets: geom.Insets{Top: 8}, Child: divider(th)},
 	)
 	for i, ch := range book.Chapters {
@@ -142,8 +142,8 @@ func tocRow(th theme.Theme, n int, title string, onTap func()) widget.Widget {
 	return widget.Interactive{Gestures: widget.Gestures{OnTap: onTap}, Child: widget.Padding{
 		Insets: geom.InsetsSymmetric(2, 15),
 		Child: widget.Row(
-			widget.Sized{W: 34, Child: widget.Text{S: fmt.Sprintf("%d", n), Size: th.Type.Body, Color: th.Primary}},
-			widget.Expand(widget.Text{S: title, Size: th.Type.Heading, Color: th.Text, Wrap: true}),
+			widget.Sized{W: 34, Child: widget.Text{Value: fmt.Sprintf("%d", n), Size: th.Type.Body, Color: th.Primary}},
+			widget.Expand(widget.Text{Value: title, Size: th.Type.Heading, Color: th.Text, Wrap: true}),
 		),
 	}}
 }
@@ -174,17 +174,17 @@ func (s *readerState) Build(ctx widget.Ctx) widget.Widget {
 	ch := book.Chapters[s.idx]
 
 	top := widget.Padding{Insets: geom.InsetsSymmetric(20, 14), Child: widget.Row(
-		widget.Interactive{Gestures: widget.Gestures{OnTap: nav.Pop}, Child: widget.Text{S: "‹  Contents", Size: th.Type.Body, Color: th.Primary}},
+		widget.Interactive{Gestures: widget.Gestures{OnTap: nav.Pop}, Child: widget.Text{Value: "‹  Contents", Size: th.Type.Body, Color: th.Primary}},
 		widget.Spacer(),
-		widget.Text{S: fmt.Sprintf("%d / %d", s.idx+1, len(book.Chapters)), Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: fmt.Sprintf("%d / %d", s.idx+1, len(book.Chapters)), Size: th.Type.Label, Color: th.Muted},
 	)}
 
 	var body []widget.Widget
 	for _, b := range ch.Blocks {
 		if b.Heading {
-			body = append(body, widget.Padding{Insets: geom.Insets{Top: 10, Bottom: 14}, Child: widget.Text{S: b.Text, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true}})
+			body = append(body, widget.Padding{Insets: geom.Insets{Top: 10, Bottom: 14}, Child: widget.Text{Value: b.Text, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true}})
 		} else {
-			body = append(body, widget.Padding{Insets: geom.Insets{Bottom: 18}, Child: widget.Text{S: b.Text, Size: th.Type.Body, Color: th.Text, Wrap: true}})
+			body = append(body, widget.Padding{Insets: geom.Insets{Bottom: 18}, Child: widget.Text{Value: b.Text, Size: th.Type.Body, Color: th.Text, Wrap: true}})
 		}
 	}
 	// Key the scroll on the chapter so moving to another chapter starts at the top.
@@ -209,7 +209,7 @@ func navBtn(th theme.Theme, label string, enabled bool, onTap func()) widget.Wid
 	if enabled {
 		col = th.Primary
 	}
-	t := widget.Text{S: label, Size: th.Type.Body, Color: col}
+	t := widget.Text{Value: label, Size: th.Type.Body, Color: col}
 	if !enabled {
 		return t
 	}

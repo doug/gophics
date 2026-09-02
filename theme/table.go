@@ -152,14 +152,14 @@ func (t Table) rowTap(i int) func() {
 // headerCell renders a muted column label, with a quiet sort arrow when the
 // table is sorted on this column.
 func (t Table) headerCell(th Theme, c int) widget.Widget {
-	title := widget.Text{S: t.Columns[c].Title, Size: th.Type.Label, Color: th.Muted}
+	title := widget.Text{Value: t.Columns[c].Title, Size: th.Type.Label, Color: th.Muted}
 	var content widget.Widget = title
 	if t.Sortable && t.SortCol == c {
 		arrow := "▲"
 		if t.SortDesc {
 			arrow = "▼"
 		}
-		content = widget.Row(title, widget.Sized{W: 4}, widget.Text{S: arrow, Size: th.Type.Caption, Color: th.Muted})
+		content = widget.Row(title, widget.Sized{W: 4}, widget.Text{Value: arrow, Size: th.Type.Caption, Color: th.Muted})
 	}
 	if !t.Sortable {
 		return content

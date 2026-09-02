@@ -65,14 +65,14 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 
 	back := widget.Interactive{
 		Gestures: widget.Gestures{OnTap: nav.Pop},
-		Child:    widget.Text{S: "‹  Back", Size: 15, Color: accent},
+		Child:    widget.Text{Value: "‹  Back", Size: 15, Color: accent},
 	}
 	head := widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Bottom: 16}, Child: back},
-		widget.Text{S: sp.label, Size: 15, Color: accent},
+		widget.Text{Value: sp.label, Size: 15, Color: accent},
 		widget.Row(
-			widget.Text{S: sp.fmtVal(val.V), Size: 40, Color: th.Text},
-			widget.Padding{Insets: geom.Insets{Left: 6, Top: 16}, Child: widget.Text{S: sp.unit, Size: 15, Color: th.Muted}},
+			widget.Text{Value: sp.fmtVal(val.V), Size: 40, Color: th.Text},
+			widget.Padding{Insets: geom.Insets{Left: 6, Top: 16}, Child: widget.Text{Value: sp.unit, Size: 15, Color: th.Muted}},
 		),
 	}}
 
@@ -121,7 +121,7 @@ func chip(th theme.Theme, label string, selected bool, accent paint.Color, onTap
 		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Padding{Insets: geom.Insets{Right: 8}, Child: widget.Decorated{
 			Color: bgc, Radius: 10,
-			Child: widget.Padding{Insets: geom.InsetsSymmetric(14, 7), Child: widget.Text{S: label, Size: 13, Color: fg}},
+			Child: widget.Padding{Insets: geom.InsetsSymmetric(14, 7), Child: widget.Text{Value: label, Size: 13, Color: fg}},
 		}},
 	}
 }
@@ -129,8 +129,8 @@ func chip(th theme.Theme, label string, selected bool, accent paint.Color, onTap
 // statBlock is one equal-width Min/Avg/Max cell.
 func statBlock(th theme.Theme, label, value string) widget.Widget {
 	return widget.Expand(widget.Flex{CrossAlign: layout.CrossStart, Children: []widget.Widget{
-		widget.Text{S: value, Size: 22, Color: th.Text},
-		widget.Text{S: label, Size: 12, Color: th.Muted},
+		widget.Text{Value: value, Size: 22, Color: th.Text},
+		widget.Text{Value: label, Size: 12, Color: th.Muted},
 	}})
 }
 

@@ -65,7 +65,7 @@ func (s *segmentedState) Build(ctx widget.Ctx) widget.Widget {
 			col, font = th.OnPrimary, FontBold
 		}
 		cells[i] = widget.Expand(widget.Sized{H: segH, Child: widget.Center(
-			widget.Text{S: label, Font: font, Size: th.Type.Label, Color: col},
+			widget.Text{Value: label, Font: font, Size: th.Type.Label, Color: col},
 		)})
 	}
 	labels := widget.Row(cells...)

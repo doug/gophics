@@ -18,14 +18,14 @@ func (semApp) Build(widget.Ctx) widget.Widget {
 		return widget.Interactive{
 			Gestures: widget.Gestures{OnTap: func() {}},
 			Child: widget.Decorated{Color: paint.RGB(0.2, 0.2, 0.2), Radius: 4,
-				Child: widget.Padding{All: 6, Child: widget.Text{S: label}}},
+				Child: widget.Padding{All: 6, Child: widget.Text{Value: label}}},
 		}
 	}
 	return widget.Column(
-		widget.Text{S: "title"},
+		widget.Text{Value: "title"},
 		button("Save"),
 		button("Cancel"),
-		widget.Semantics{Hidden: true, Child: widget.Text{S: "decorative"}},
+		widget.Semantics{Hidden: true, Child: widget.Text{Value: "decorative"}},
 		widget.Semantics{Label: "custom group", Child: widget.Sized{W: 10, H: 10}},
 	)
 }

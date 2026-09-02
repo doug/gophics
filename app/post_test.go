@@ -31,7 +31,7 @@ func (s *asyncState) Init(ctx widget.Ctx) {
 }
 
 func (s *asyncState) Build(widget.Ctx) widget.Widget {
-	return widget.Text{S: s.loaded}
+	return widget.Text{Value: s.loaded}
 }
 
 func TestPostDeliversToUIGoroutine(t *testing.T) {

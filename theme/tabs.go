@@ -68,7 +68,7 @@ func (s *tabsState) Build(ctx widget.Ctx) widget.Widget {
 			col, font = th.Primary, FontBold
 		}
 		cells[i] = widget.Expand(widget.Sized{H: tabH, Child: widget.Center(
-			widget.Text{S: label, Font: font, Size: th.Type.Label, Color: col},
+			widget.Text{Value: label, Font: font, Size: th.Type.Label, Color: col},
 		)})
 	}
 	labels := widget.Row(cells...)

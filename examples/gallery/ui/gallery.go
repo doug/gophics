@@ -318,15 +318,15 @@ func themeSwitcher(ctx widget.Ctx) widget.Widget {
 // sectionCard is one tappable catalog entry.
 func sectionCard(th theme.Theme, sec section, onTap func()) widget.Widget {
 	info := widget.Column(
-		widget.Text{S: sec.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+		widget.Text{Value: sec.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
 		widget.Sized{H: 3},
-		widget.Text{S: sec.subtitle, Size: th.Type.Label, Color: th.Muted, MaxLines: 1, Ellipsis: true},
+		widget.Text{Value: sec.subtitle, Size: th.Type.Label, Color: th.Muted, MaxLines: 1, Ellipsis: true},
 	)
 	info.CrossAlign = layout.CrossStart
 	row := widget.Row(
 		widget.Expand(info),
 		widget.Sized{W: 8},
-		widget.Text{S: "›", Size: th.Type.Title, Color: th.Muted},
+		widget.Text{Value: "›", Size: th.Type.Title, Color: th.Muted},
 	)
 	return theme.Tappable{
 		Background: th.Surface,

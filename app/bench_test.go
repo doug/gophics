@@ -50,7 +50,7 @@ func (s *benchState) Build(ctx widget.Ctx) widget.Widget {
 		}
 		rows[i] = widget.Decorated{Color: col, Radius: 6,
 			Child: widget.Padding{All: 4,
-				Child: widget.Text{S: "list row with some text", Color: paint.RGB(0.9, 0.9, 0.9)}}}
+				Child: widget.Text{Value: "list row with some text", Color: paint.RGB(0.9, 0.9, 0.9)}}}
 	}
 	c := widget.Column(rows...)
 	return widget.Padding{All: 10, Child: c}

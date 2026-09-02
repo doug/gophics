@@ -338,7 +338,7 @@ func chip(label string, onTap func()) widget.Widget {
 		Gestures: widget.Gestures{OnTap: onTap},
 		Child: widget.Decorated{Color: colBack2, Radius: 8, Child: widget.Padding{
 			Insets: geom.InsetsSymmetric(14, 7),
-			Child:  widget.Text{S: label, Size: 14, Color: colFace},
+			Child:  widget.Text{Value: label, Size: 14, Color: colFace},
 		}},
 	}
 }

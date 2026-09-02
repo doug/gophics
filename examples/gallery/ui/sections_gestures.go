@@ -70,7 +70,7 @@ func (s *refreshState) Build(ctx widget.Ctx) widget.Widget {
 		theme.Body("Drag down from the top of the list to refresh it."),
 		widget.Sized{H: 4},
 		widget.Text{
-			S:     refreshedLabel(s.count),
+			Value: refreshedLabel(s.count),
 			Size:  th.Type.Label,
 			Color: th.Muted,
 		},
@@ -133,7 +133,7 @@ func (s *dismissState) Build(ctx widget.Ctx) widget.Widget {
 		theme.Body("Swipe a row sideways to remove it."),
 		widget.Sized{H: 4},
 		widget.Text{
-			S:     fmt.Sprintf("Removed %d of 5", s.removed),
+			Value: fmt.Sprintf("Removed %d of 5", s.removed),
 			Size:  th.Type.Label,
 			Color: th.Muted,
 		},

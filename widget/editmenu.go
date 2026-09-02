@@ -96,7 +96,7 @@ func ShowEditMenu(ctx Ctx, at geom.Pt, actions []EditAction) (dismiss func()) {
 			Child: Padding{
 				Insets: geom.InsetsSymmetric(editMenuPadX, 0),
 				Child: Center(Text{
-					S: a.Label, Size: editMenuTextSize, Color: fg,
+					Value: a.Label, Size: editMenuTextSize, Color: fg,
 				}),
 			},
 		})

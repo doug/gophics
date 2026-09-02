@@ -26,8 +26,8 @@ type selAreaState struct {
 
 func (s *selAreaState) Build(widget.Ctx) widget.Widget {
 	col := widget.Column(
-		widget.Text{S: s.a, Size: 14},
-		widget.Text{S: s.b, Size: 14},
+		widget.Text{Value: s.a, Size: 14},
+		widget.Text{Value: s.b, Size: 14},
 	)
 	col.CrossAlign = layout.CrossStart
 	return widget.SelectionArea{Child: col}
@@ -76,7 +76,7 @@ func (s *listSelState) Build(widget.Ctx) widget.Widget {
 	return widget.SelectionArea{Child: widget.LazyList{
 		Count:           len(s.items),
 		EstimatedExtent: 20,
-		Build:           func(i int) widget.Widget { return widget.Text{S: s.items[i], Size: 14} },
+		Build:           func(i int) widget.Widget { return widget.Text{Value: s.items[i], Size: 14} },
 	}}
 }
 
@@ -113,7 +113,7 @@ type nestedSelState struct {
 
 func (s *nestedSelState) Build(widget.Ctx) widget.Widget {
 	return widget.Padding{All: 40, Child: widget.SelectionArea{
-		Child: widget.Text{S: s.text, Size: 14},
+		Child: widget.Text{Value: s.text, Size: 14},
 	}}
 }
 
@@ -222,7 +222,7 @@ type scrollSelApp struct{ ctrl *widget.ScrollController }
 func (a scrollSelApp) Build(widget.Ctx) widget.Widget {
 	rows := make([]widget.Widget, 30)
 	for i := range rows {
-		rows[i] = widget.Sized{H: 20, Child: widget.Text{S: "alpha beta gamma", Size: 14}}
+		rows[i] = widget.Sized{H: 20, Child: widget.Text{Value: "alpha beta gamma", Size: 14}}
 	}
 	return widget.SelectionArea{Child: widget.Scroll{
 		Controller: a.ctrl,

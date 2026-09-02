@@ -24,7 +24,7 @@ import (
 func TestGPUTextInkMatchesCPU(t *testing.T) {
 	h, err := NewHeadless(
 		widget.Fill{Color: paint.RGB(1, 1, 1), Child: widget.Padding{All: 10,
-			Child: widget.Text{S: "Grouped opacity", Size: 18, Color: paint.RGB(0, 0, 0)}}},
+			Child: widget.Text{Value: "Grouped opacity", Size: 18, Color: paint.RGB(0, 0, 0)}}},
 		Config{Size: geom.Size{W: 200, H: 60}, Background: paint.RGB(1, 1, 1),
 			Font: goregular.TTF}, 1)
 	if err != nil {

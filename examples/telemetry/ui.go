@@ -159,13 +159,13 @@ func (s *dash) header(th theme.Theme) widget.Widget {
 			Axis:       layout.Vertical,
 			CrossAlign: layout.CrossStart,
 			Children: []widget.Widget{
-				widget.Text{S: "Fleet", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
+				widget.Text{Value: "Fleet", Font: theme.FontBold, Size: th.Type.Title, Color: th.Text},
 				widget.Sized{H: 2},
-				widget.Text{S: sub, Size: th.Type.Caption, Color: th.Muted},
+				widget.Text{Value: sub, Size: th.Type.Caption, Color: th.Muted},
 			},
 		}),
 		s.loadButtons(),
-		widget.Text{S: "Live", Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "Live", Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{W: 8},
 		theme.Switch{On: s.live, Label: "Live tail",
 			OnChange: func(v bool) { s.SetState(func() { s.live = v; s.dirty = v }) }},
@@ -216,9 +216,9 @@ func tile(th theme.Theme, label, value string, tone paint.Color) widget.Widget {
 		Axis:       layout.Vertical,
 		CrossAlign: layout.CrossStart,
 		Children: []widget.Widget{
-			widget.Text{S: label, Size: th.Type.Caption, Color: th.Muted},
+			widget.Text{Value: label, Size: th.Type.Caption, Color: th.Muted},
 			widget.Sized{H: 3},
-			widget.Text{S: value, Font: "mono", Size: th.Type.Heading, Color: tone},
+			widget.Text{Value: value, Font: "mono", Size: th.Type.Heading, Color: tone},
 		},
 	}}
 }
@@ -244,7 +244,7 @@ func chartCard(th theme.Theme, title string, c widget.Widget) widget.Widget {
 		Axis:       layout.Vertical,
 		CrossAlign: layout.CrossStretch,
 		Children: []widget.Widget{
-			widget.Text{S: title, Size: th.Type.Label, Color: th.Muted},
+			widget.Text{Value: title, Size: th.Type.Label, Color: th.Muted},
 			widget.Sized{H: 8},
 			widget.Expand(c),
 		},
@@ -456,7 +456,7 @@ func (s *dash) cell(th theme.Theme, row, col int) widget.Widget {
 	}
 	sp := s.res.Rows[s.res.View[row]]
 	mono := func(txt string, c paint.Color) widget.Widget {
-		return widget.Text{S: txt, Font: "mono", Size: th.Type.Label, Color: c}
+		return widget.Text{Value: txt, Font: "mono", Size: th.Type.Label, Color: c}
 	}
 	switch col {
 	case colTime:
@@ -464,9 +464,9 @@ func (s *dash) cell(th theme.Theme, row, col int) widget.Widget {
 	case colAge:
 		return mono(fmtAge(s.store.Now()-sp.At), th.Muted)
 	case colService:
-		return widget.Text{S: svcDict.Name(sp.Svc), Size: th.Type.Label, Color: th.Text, Ellipsis: true, MaxLines: 1}
+		return widget.Text{Value: svcDict.Name(sp.Svc), Size: th.Type.Label, Color: th.Text, Ellipsis: true, MaxLines: 1}
 	case colRoute:
-		return widget.Text{S: routeDict.Name(sp.Route), Size: th.Type.Label, Color: th.Text, Ellipsis: true, MaxLines: 1}
+		return widget.Text{Value: routeDict.Name(sp.Route), Size: th.Type.Label, Color: th.Text, Ellipsis: true, MaxLines: 1}
 	case colHost:
 		return mono(hostDict.Name(sp.Host), th.Muted)
 	case colTrace:
@@ -497,7 +497,7 @@ func (s *dash) detail(th theme.Theme) widget.Widget {
 		sp.Code, fmtDur(sp.Dur), fmtBytes(sp.Bytes))
 	return widget.Padding{Insets: geom.Insets{Top: 10},
 		Child: widget.Align{X: 0, Y: 0.5,
-			Child: widget.Text{S: line, Font: "mono", Size: th.Type.Caption,
+			Child: widget.Text{Value: line, Font: "mono", Size: th.Type.Caption,
 				Color: th.Text, Ellipsis: true, MaxLines: 1}}}
 }
 

@@ -37,13 +37,13 @@ func (t ListTile) Build(ctx widget.Ctx) widget.Widget {
 		pad = 8
 	}
 
-	title := widget.Text{S: t.Title, Size: th.Type.Body, Color: th.Text, MaxLines: 1, Ellipsis: true}
+	title := widget.Text{Value: t.Title, Size: th.Type.Body, Color: th.Text, MaxLines: 1, Ellipsis: true}
 	var text widget.Widget = title
 	if t.Subtitle != "" {
 		text = widget.Column(
 			title,
 			widget.Sized{H: 2},
-			widget.Text{S: t.Subtitle, Size: th.Type.Caption, Color: th.Muted, MaxLines: 1, Ellipsis: true},
+			widget.Text{Value: t.Subtitle, Size: th.Type.Caption, Color: th.Muted, MaxLines: 1, Ellipsis: true},
 		)
 	}
 

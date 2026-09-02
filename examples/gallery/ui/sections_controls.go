@@ -48,7 +48,7 @@ func (s *buttonsState) Build(ctx widget.Ctx) widget.Widget {
 		)},
 		widget.Sized{H: 16},
 		theme.Card{Child: widget.Text{
-			S:     fmt.Sprintf("Taps: %d       last: %s", s.taps, orDash(s.last)),
+			Value: fmt.Sprintf("Taps: %d       last: %s", s.taps, orDash(s.last)),
 			Size:  th.Type.Body,
 			Color: th.Text,
 		}},
@@ -57,16 +57,16 @@ func (s *buttonsState) Build(ctx widget.Ctx) widget.Widget {
 
 func tapRow(th theme.Theme, title, sub string, onTap func()) widget.Widget {
 	label := widget.Column(
-		widget.Text{S: title, Font: theme.FontBold, Size: th.Type.Body, Color: th.Text},
+		widget.Text{Value: title, Font: theme.FontBold, Size: th.Type.Body, Color: th.Text},
 	)
 	label.CrossAlign = layout.CrossStart
 	if sub != "" {
 		label.Children = append(label.Children,
 			widget.Sized{H: 2},
-			widget.Text{S: sub, Size: th.Type.Caption, Color: th.Muted},
+			widget.Text{Value: sub, Size: th.Type.Caption, Color: th.Muted},
 		)
 	}
-	row := widget.Row(widget.Expand(label), widget.Text{S: "›", Size: th.Type.Title, Color: th.Muted})
+	row := widget.Row(widget.Expand(label), widget.Text{Value: "›", Size: th.Type.Title, Color: th.Muted})
 	return theme.Tappable{
 		Background: th.Surface,
 		Pad:        geom.InsetsSymmetric(14, 12),
@@ -114,9 +114,9 @@ func (s *formState) Build(ctx widget.Ctx) widget.Widget {
 	var switchState widget.Widget = theme.Body("Notifications are off.")
 	if s.notify {
 		switchState = theme.Card{Child: widget.Row(
-			widget.Text{S: "🔔", Size: th.Type.Heading},
+			widget.Text{Value: "🔔", Size: th.Type.Heading},
 			widget.Sized{W: 8},
-			widget.Text{S: "You'll be notified.", Size: th.Type.Body, Color: th.Text},
+			widget.Text{Value: "You'll be notified.", Size: th.Type.Body, Color: th.Text},
 		)}
 	}
 
@@ -162,17 +162,17 @@ func (s *formState) Build(ctx widget.Ctx) widget.Widget {
 		groupLabel("Checkbox"),
 		leftColumn(checks...),
 		widget.Sized{H: 8},
-		widget.Text{S: "Chosen: " + orDash(chosen(s.toppings[:], toppingNames)), Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "Chosen: " + orDash(chosen(s.toppings[:], toppingNames)), Size: th.Type.Label, Color: th.Muted},
 
 		groupLabel("Radio group"),
 		leftColumn(radios...),
 		widget.Sized{H: 8},
-		widget.Text{S: "Plan: " + planNames[s.plan], Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "Plan: " + planNames[s.plan], Size: th.Type.Label, Color: th.Muted},
 
 		groupLabel("Slider"),
 		widget.Row(
 			widget.Expand(theme.Body("Volume")),
-			widget.Text{S: fmt.Sprintf("%d%%", int(s.volume*100+0.5)), Font: theme.FontBold, Size: th.Type.Body, Color: th.Primary},
+			widget.Text{Value: fmt.Sprintf("%d%%", int(s.volume*100+0.5)), Font: theme.FontBold, Size: th.Type.Body, Color: th.Primary},
 		),
 		widget.Sized{H: 4},
 		theme.Slider{Value: s.volume, OnChange: func(v float32) { s.SetState(func() { s.volume = v }) }},
@@ -218,11 +218,11 @@ func (s *textInputState) Build(ctx widget.Ctx) widget.Widget {
 		},
 		widget.Sized{H: 10},
 		widget.Row(
-			widget.Text{S: "Hello, ", Size: th.Type.Body, Color: th.Muted},
-			widget.Text{S: echo, Font: theme.FontBold, Size: th.Type.Body, Color: th.Text},
+			widget.Text{Value: "Hello, ", Size: th.Type.Body, Color: th.Muted},
+			widget.Text{Value: echo, Font: theme.FontBold, Size: th.Type.Body, Color: th.Text},
 		),
 		widget.Sized{H: 4},
-		widget.Text{S: fmt.Sprintf("%d characters", len([]rune(s.name))), Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: fmt.Sprintf("%d characters", len([]rune(s.name))), Size: th.Type.Caption, Color: th.Muted},
 
 		groupLabel("Multiline"),
 		theme.Field{
@@ -244,8 +244,8 @@ func (typographySection) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	row := func(name string, px float32, sample widget.Widget) widget.Widget {
 		meta := widget.Column(
-			widget.Text{S: name, Font: theme.FontBold, Size: th.Type.Label, Color: th.Text},
-			widget.Text{S: fmt.Sprintf("%gpx", px), Size: th.Type.Caption, Color: th.Muted},
+			widget.Text{Value: name, Font: theme.FontBold, Size: th.Type.Label, Color: th.Text},
+			widget.Text{Value: fmt.Sprintf("%gpx", px), Size: th.Type.Caption, Color: th.Muted},
 		)
 		meta.CrossAlign = layout.CrossStart
 		r := widget.Row(widget.Sized{W: 92, Child: meta}, widget.Expand(sample))
@@ -300,10 +300,10 @@ func (s *cardsState) Build(ctx widget.Ctx) widget.Widget {
 			Color:  th.Primary,
 			Radius: th.Radius,
 			Child: widget.Padding{All: 16, Child: widget.Column(
-				widget.Text{S: "Grouped opacity", Font: theme.FontBold, Size: th.Type.Heading, Color: th.OnPrimary},
+				widget.Text{Value: "Grouped opacity", Font: theme.FontBold, Size: th.Type.Heading, Color: th.OnPrimary},
 				widget.Sized{H: 6},
 				widget.Text{
-					S:     "The whole panel fades as one group, not shape by shape.",
+					Value: "The whole panel fades as one group, not shape by shape.",
 					Size:  th.Type.Body,
 					Color: th.OnPrimary,
 				},
@@ -314,7 +314,7 @@ func (s *cardsState) Build(ctx widget.Ctx) widget.Widget {
 	return sectionColumn(
 		groupLabel("Card"),
 		theme.Card{Child: widget.Column(
-			widget.Text{S: "A themed surface", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
+			widget.Text{Value: "A themed surface", Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text},
 			widget.Sized{H: 6},
 			theme.Body("Card supplies the surface fill, corner radius, and — under a glass theme — the backdrop blur."),
 		)},
@@ -322,10 +322,10 @@ func (s *cardsState) Build(ctx widget.Ctx) widget.Widget {
 		groupLabel("Decorated"),
 		widget.Row(
 			widget.Expand(widget.Decorated{Color: th.Surface, Radius: th.Radius,
-				Child: widget.Padding{All: 16, Child: widget.Center(widget.Text{S: "Filled", Size: th.Type.Body, Color: th.Text})}}),
+				Child: widget.Padding{All: 16, Child: widget.Center(widget.Text{Value: "Filled", Size: th.Type.Body, Color: th.Text})}}),
 			widget.Sized{W: 12},
 			widget.Expand(widget.Decorated{Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1.5,
-				Child: widget.Padding{All: 16, Child: widget.Center(widget.Text{S: "Bordered", Size: th.Type.Body, Color: th.Text})}}),
+				Child: widget.Padding{All: 16, Child: widget.Center(widget.Text{Value: "Bordered", Size: th.Type.Body, Color: th.Text})}}),
 		),
 
 		groupLabel("Opacity"),

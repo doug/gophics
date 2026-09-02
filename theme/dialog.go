@@ -58,7 +58,7 @@ func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()
 			}},
 			Child: widget.Padding{
 				Insets: geom.InsetsSymmetric(14, 10),
-				Child:  widget.Row(widget.Text{S: it.Label, Size: 14, Color: th.Text}, widget.Spacer()),
+				Child:  widget.Row(widget.Text{Value: it.Label, Size: 14, Color: th.Text}, widget.Spacer()),
 			},
 		}
 	}

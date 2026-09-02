@@ -213,9 +213,9 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 
 func cardTile(th theme.Theme, c card) widget.Widget {
 	info := widget.Column(
-		widget.Text{S: c.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text, MaxLines: 1, Ellipsis: true},
+		widget.Text{Value: c.title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text, MaxLines: 1, Ellipsis: true},
 		widget.Sized{H: 4},
-		widget.Text{S: "@" + c.author + " · " + fmt.Sprintf("%d likes", c.likes), Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "@" + c.author + " · " + fmt.Sprintf("%d likes", c.likes), Size: th.Type.Label, Color: th.Muted},
 	)
 	info.CrossAlign = layout.CrossStart
 	row := widget.Row(
@@ -227,7 +227,7 @@ func cardTile(th theme.Theme, c card) widget.Widget {
 }
 
 func dismissPanel(th theme.Theme) widget.Widget {
-	label := widget.Text{S: "remove", Font: theme.FontBold, Size: th.Type.Label, Color: th.OnPrimary}
+	label := widget.Text{Value: "remove", Font: theme.FontBold, Size: th.Type.Label, Color: th.OnPrimary}
 	return widget.Padding{All: 8, Child: widget.Decorated{Color: th.Danger, Radius: th.Radius,
 		Child: widget.Padding{Insets: geom.Insets{Left: 24, Right: 24},
 			Child: widget.Row(label, widget.Spacer(), label)}}}
@@ -272,25 +272,25 @@ func (s *detailState) Build(ctx widget.Ctx) widget.Widget {
 		Child: widget.Row(
 			widget.Sized{W: 30, Child: widget.Center(
 				widget.AnimateFloat(heartSize, 140*time.Millisecond, func(sz float32) widget.Widget {
-					return widget.Text{S: "♥", Size: sz, Color: heartColor}
+					return widget.Text{Value: "♥", Size: sz, Color: heartColor}
 				}))},
 			widget.Sized{W: 8},
-			widget.Text{S: fmt.Sprintf("%d", likeCount), Size: th.Type.Body, Color: th.Text},
+			widget.Text{Value: fmt.Sprintf("%d", likeCount), Size: th.Type.Body, Color: th.Text},
 		),
 	}
 
 	body := widget.Column(
 		theme.Button{Label: "← back", OnTap: func() { nav.Pop() }},
 		widget.Sized{H: 10},
-		widget.Text{S: c.title, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true},
+		widget.Text{Value: c.title, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: true},
 		widget.Sized{H: 4},
-		widget.Text{S: "by @" + c.author, Size: th.Type.Label, Color: th.Muted},
+		widget.Text{Value: "by @" + c.author, Size: th.Type.Label, Color: th.Muted},
 		widget.Sized{H: 14},
 		widget.SelectableText{S: bodyFor(c), Size: th.Type.Body, Color: th.Text, Wrap: true, SelectionColor: th.Selection},
 		widget.Sized{H: 16},
 		like,
 		widget.Sized{H: 18},
-		widget.Text{S: "COMMENTS", Font: theme.FontBold, Size: th.Type.Caption, Color: th.Muted},
+		widget.Text{Value: "COMMENTS", Font: theme.FontBold, Size: th.Type.Caption, Color: th.Muted},
 	)
 	body.CrossAlign = layout.CrossStart
 
@@ -314,7 +314,7 @@ func commentList(th theme.Theme, c card) widget.Widget {
 		Build: func(i int) widget.Widget {
 			return widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 5, Bottom: 5},
 				Child: widget.Decorated{Color: th.Surface, Radius: th.Radius, Child: widget.Padding{All: 12,
-					Child: widget.Text{S: comments[i], Size: th.Type.Body, Color: th.Text, Wrap: true}}}}
+					Child: widget.Text{Value: comments[i], Size: th.Type.Body, Color: th.Text, Wrap: true}}}}
 		},
 	}
 }

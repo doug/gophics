@@ -79,20 +79,20 @@ func (Ledger) Build(ctx widget.Ctx) widget.Widget {
 // header is the page title + subtitle.
 func header(th theme.Theme, title, sub string) widget.Widget {
 	return column(layout.CrossStart,
-		widget.Text{S: title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text},
+		widget.Text{Value: title, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text},
 		widget.Sized{H: 3},
-		widget.Text{S: sub, Size: th.Type.Body, Color: th.Muted},
+		widget.Text{Value: sub, Size: th.Type.Body, Color: th.Muted},
 	)
 }
 
 // card is a titled surface panel of fixed height wrapping a chart (or any body).
 // A non-empty value is shown large under the title.
 func card(th theme.Theme, title, value string, h float32, body widget.Widget) widget.Widget {
-	head := []widget.Widget{widget.Text{S: title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text}}
+	head := []widget.Widget{widget.Text{Value: title, Font: theme.FontBold, Size: th.Type.Heading, Color: th.Text}}
 	if value != "" {
 		head = append(head,
 			widget.Sized{H: 4},
-			widget.Text{S: value, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text})
+			widget.Text{Value: value, Font: theme.FontBold, Size: th.Type.Display, Color: th.Text})
 	}
 	head = append(head, widget.Sized{H: 12}, widget.Expand(body))
 	return widget.Sized{H: h, Child: widget.Decorated{
