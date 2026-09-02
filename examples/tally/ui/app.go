@@ -79,7 +79,22 @@ func (s *state) Init(widget.Ctx) {
 }
 
 // prefKeyLedger is where the path of the last opened ledger is remembered.
-const prefKeyLedger = "ledger.path"
+//
+// The key names the app because the shell's own prefix namespaces the
+// framework, not the app, and every demo on gophics.com shares one origin and
+// therefore one localStorage. The old key was "ledger.path" — which not only
+// skipped the app namespace but happened to name a different example entirely
+// (examples/ledger ships in the web demo set); the only reason that never
+// collided is that tally does not ship there. A remembered path from the old
+// key is dropped by the rename, which costs one re-open.
+//
+// A path, not a shell.Folder token, and that is a considered decision rather
+// than a leftover: a ledger is one file, FolderPicker hands back directories,
+// and tally is desktop/terminal-only where a filesystem path is the stable
+// identity the OS itself offers. If tally ever ships to web this line is the
+// first thing that breaks, and the fix will be a file-handle analog of
+// Folder.Token — not a folder pretending to be a file.
+const prefKeyLedger = "tally.ledger"
 
 // ensureLoaded opens a ledger, upgrading to the remembered one once the shell has
 // wired its capabilities.
