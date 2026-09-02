@@ -91,3 +91,7 @@ internal/gfx/gg/tmp/
 # `go build ./...` inside examples/ssh or examples/embed-ebiten drops one; both
 # reached the index that way, at 19 MB and 27 MB.
 examples/*/gophics-*
+
+# native-twin build output and local recordings (references go in tools/uitrace/trace/testdata)
+/tools/native-twin/macos/twin
+/tools/native-twin/macos/*.json
