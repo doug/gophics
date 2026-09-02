@@ -61,7 +61,7 @@ func (deviceMic) Listen(done func(shell.Monitor, error)) {
 		return
 	}
 	if rate <= 0 {
-		done(nil, errors.New("audio: capture device reported no sample rate"))
+		done(nil, errors.New("devmedia: capture device reported no sample rate"))
 		return
 	}
 	m := &deviceMonitor{cap: cap, an: dsp.New(rate, dsp.DefaultWindow)}
@@ -152,7 +152,7 @@ func (deviceMic) Record(_ shell.RecordOptions, done func(shell.Recorder, error))
 	}
 	if rate <= 0 {
 		cap.Close()
-		done(nil, errors.New("audio: capture device reported no sample rate"))
+		done(nil, errors.New("devmedia: capture device reported no sample rate"))
 		return
 	}
 	r := &deviceRecorder{cap: cap, rate: rate, start: time.Now()}
@@ -243,11 +243,11 @@ func (r *deviceRecorder) Stop(done func(shell.Clip, error)) {
 		return
 	}
 	if !ok {
-		done(shell.Clip{}, errors.New("audio: recording already finished"))
+		done(shell.Clip{}, errors.New("devmedia: recording already finished"))
 		return
 	}
 	if len(pcm) == 0 {
-		done(shell.Clip{}, errors.New("audio: nothing was recorded"))
+		done(shell.Clip{}, errors.New("devmedia: nothing was recorded"))
 		return
 	}
 	done(shell.Clip{

@@ -89,7 +89,7 @@ func chooser() (int, string) {
 }
 
 // ErrNoFileChooser is reported when the session has no usable dialog program.
-var ErrNoFileChooser = errors.New("gophics: no file chooser found (install zenity or kdialog)")
+var ErrNoFileChooser = errors.New("desktop: no file chooser found (install zenity or kdialog)")
 
 // Open runs the chooser and reads back the selected files.
 //

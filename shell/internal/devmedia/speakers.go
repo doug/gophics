@@ -67,7 +67,7 @@ func (deviceSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
 		return
 	}
 	if len(clip.Data) == 0 {
-		done(nil, errors.New("audio: the clip is empty"))
+		done(nil, errors.New("devmedia: the clip is empty"))
 		return
 	}
 	// Decoded up front rather than handed straight to the driver, because Seek
@@ -79,7 +79,7 @@ func (deviceSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
 		return
 	}
 	if rate <= 0 || len(pcm) == 0 {
-		done(nil, errors.New("audio: the clip has no samples"))
+		done(nil, errors.New("devmedia: the clip has no samples"))
 		return
 	}
 	ctx, err := outputContext()

@@ -148,7 +148,7 @@ func (deviceStill) Capture(o shell.CaptureOptions, done func(image.Image, error)
 			return
 		}
 		if time.Now().After(deadline) {
-			done(nil, errors.New("camera: no frame within 5s"))
+			done(nil, errors.New("devmedia: no frame within 5s"))
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

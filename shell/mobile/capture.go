@@ -41,7 +41,7 @@ type captureTarget struct {
 func (t *captureTarget) RenderGPU(replay func(*gg.Context)) {
 	g := t.g
 	if err := g.ggc.Draw(replay); err != nil {
-		t.err = fmt.Errorf("draw: %w", err)
+		t.err = fmt.Errorf("mobile: capture draw: %w", err)
 		return
 	}
 	t.img, t.err = g.renderOffscreen()
@@ -51,7 +51,7 @@ func (t *captureTarget) RenderGPU(replay func(*gg.Context)) {
 func (g *mobileGPU) renderOffscreen() (*image.RGBA, error) {
 	w, h := g.pw, g.ph
 	if w <= 0 || h <= 0 {
-		return nil, errors.New("capture: surface has no size")
+		return nil, errors.New("mobile: capture surface has no size")
 	}
 
 	tex, err := g.device.CreateTexture(&wgpu.TextureDescriptor{
@@ -64,19 +64,19 @@ func (g *mobileGPU) renderOffscreen() (*image.RGBA, error) {
 		Usage:         gputypes.TextureUsageRenderAttachment | gputypes.TextureUsageCopySrc,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("capture: create texture: %w", err)
+		return nil, fmt.Errorf("mobile: capture create texture: %w", err)
 	}
 	defer tex.Release()
 
 	view, err := g.device.CreateTextureView(tex, nil)
 	if err != nil {
-		return nil, fmt.Errorf("capture: create view: %w", err)
+		return nil, fmt.Errorf("mobile: capture create view: %w", err)
 	}
 	defer view.Release()
 
 	if err := g.ggc.RenderDirect(gpucontext.NewTextureView(unsafe.Pointer(view)),
 		uint32(w), uint32(h)); err != nil {
-		return nil, fmt.Errorf("capture: render: %w", err)
+		return nil, fmt.Errorf("mobile: capture render: %w", err)
 	}
 
 	// Rows in a copy destination are aligned; the image is packed, so the two
@@ -94,13 +94,13 @@ func (g *mobileGPU) renderOffscreen() (*image.RGBA, error) {
 		Usage: gputypes.BufferUsageCopyDst | gputypes.BufferUsageMapRead,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("capture: create staging buffer: %w", err)
+		return nil, fmt.Errorf("mobile: capture create staging buffer: %w", err)
 	}
 	defer buf.Release()
 
 	enc, err := g.device.CreateCommandEncoder(nil)
 	if err != nil {
-		return nil, fmt.Errorf("capture: encoder: %w", err)
+		return nil, fmt.Errorf("mobile: capture encoder: %w", err)
 	}
 	enc.CopyTextureToBuffer(tex, buf, []wgpu.BufferTextureCopy{{
 		TextureBase: wgpu.ImageCopyTexture{Texture: tex, MipLevel: 0, Aspect: gputypes.TextureAspectAll},
@@ -111,26 +111,26 @@ func (g *mobileGPU) renderOffscreen() (*image.RGBA, error) {
 	}})
 	cmds, err := enc.Finish()
 	if err != nil {
-		return nil, fmt.Errorf("capture: finish: %w", err)
+		return nil, fmt.Errorf("mobile: capture finish: %w", err)
 	}
 	g.device.Queue().Submit(cmds)
 	g.device.Poll(wgpu.PollWait)
 
 	pending, err := buf.MapAsync(wgpu.MapModeRead, 0, bufSize)
 	if err != nil {
-		return nil, fmt.Errorf("capture: map: %w", err)
+		return nil, fmt.Errorf("mobile: capture map: %w", err)
 	}
 	g.device.Poll(wgpu.PollWait)
 	ready, statusErr := pending.Status()
 	if !ready {
-		return nil, errors.New("capture: staging buffer not ready after poll")
+		return nil, errors.New("mobile: capture staging buffer not ready after poll")
 	}
 	if statusErr != nil {
-		return nil, fmt.Errorf("capture: map status: %w", statusErr)
+		return nil, fmt.Errorf("mobile: capture map status: %w", statusErr)
 	}
 	mapped, err := buf.MappedRange(0, bufSize)
 	if err != nil {
-		return nil, fmt.Errorf("capture: mapped range: %w", err)
+		return nil, fmt.Errorf("mobile: capture mapped range: %w", err)
 	}
 	raw := mapped.Bytes()
 

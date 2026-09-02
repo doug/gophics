@@ -39,7 +39,7 @@ func (s *webStorage) Set(key, value string) (err error) {
 	// a Go panic, so recover it into an error rather than crashing the app.
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("storage: set %q: %v", key, r)
+			err = fmt.Errorf("web: storage set %q: %v", key, r)
 		}
 	}()
 	s.ls.Call("setItem", key, value)

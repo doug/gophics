@@ -31,7 +31,7 @@ func (w *window) FilePicker() shell.FilePicker {
 type winPicker struct{}
 
 // ErrNoFileChooser is reported when no PowerShell host can be found.
-var ErrNoFileChooser = errors.New("gophics: no file chooser found (PowerShell not available)")
+var ErrNoFileChooser = errors.New("desktop: no file chooser found (PowerShell not available)")
 
 func powershellPath() string {
 	for _, bin := range []string{"powershell.exe", "pwsh.exe"} {

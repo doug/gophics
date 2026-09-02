@@ -43,7 +43,7 @@ func (p *webPrefs) Set(key, value string) (err error) {
 	// a Go panic, so recover it into an error rather than crashing the app.
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("prefs: set %q: %v", key, r)
+			err = fmt.Errorf("web: prefs set %q: %v", key, r)
 		}
 	}()
 	p.ls.Call("setItem", prefsPrefix+key, value)
@@ -53,7 +53,7 @@ func (p *webPrefs) Set(key, value string) (err error) {
 func (p *webPrefs) Delete(key string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("prefs: delete %q: %v", key, r)
+			err = fmt.Errorf("web: prefs delete %q: %v", key, r)
 		}
 	}()
 	p.ls.Call("removeItem", prefsPrefix+key)
