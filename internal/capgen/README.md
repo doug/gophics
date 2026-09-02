@@ -180,6 +180,7 @@ does.
 | `CameraPreview` | yes | yes | yes | — |
 | `Connectivity` | yes | yes | yes | — |
 | `FilePicker` | yes | yes | yes | — |
+| `FolderPicker` | yes | yes | — | — |
 | `Gamepads` | yes | yes | — | — |
 | `Geolocation` | — | yes | yes | — |
 | `Haptic` | — | yes | yes | — |

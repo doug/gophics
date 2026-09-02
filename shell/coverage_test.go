@@ -35,6 +35,16 @@ var mobileExempt = map[string]string{
 		"a game could not tell 'no controller is connected' from 'this build " +
 		"cannot see controllers', so it would show a pairing prompt forever. nil " +
 		"is the detectable answer until the host side exists",
+	"FolderPicker": "both platforms have the equivalent — Android's " +
+		"ACTION_OPEN_DOCUMENT_TREE and iOS's UIDocumentPickerViewController in " +
+		"folder mode, each yielding a handle that survives a restart — and " +
+		"gophics does not bridge either yet. This one needs host-side work the " +
+		"desktop and web backends did not: what comes back is a tree URI or a " +
+		"security-scoped bookmark rather than a path, and reading it goes " +
+		"through DocumentFile or NSFileCoordinator instead of ordinary file " +
+		"I/O, so shell/desktop's osFolder does not carry over. nil until then, " +
+		"which is what lets an app hide the open-folder button instead of " +
+		"offering one that fails",
 	"Menus": "a desktop menu bar; mobile apps draw their own menus in the widget tree",
 	"Tray":  "a desktop system tray / menu bar extra; no mobile equivalent exists",
 	"WindowControl": "title, fullscreen and resize belong to a windowing system; " +

@@ -238,6 +238,89 @@ func (p postedFilePicker) Save(a0 shell.SaveOptions, a1 []byte, a2 func(err erro
 	p.inner.Save(a0, a1, w2)
 }
 
+// postedFolder wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func postedFolderOf(inner shell.Folder, post func(func())) shell.Folder {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedFolder{inner, post}
+}
+
+type postedFolder struct {
+	inner shell.Folder
+	post  func(func())
+}
+
+func (p postedFolder) Name() string {
+	return p.inner.Name()
+}
+
+func (p postedFolder) List(a0 shell.FolderListOptions, a1 func([]shell.FolderEntry, error)) {
+	f1 := a1
+	var w1 func([]shell.FolderEntry, error)
+	if f1 != nil {
+		w1 = func(c0 []shell.FolderEntry, c1 error) { p.post(func() { f1(c0, c1) }) }
+	}
+	p.inner.List(a0, w1)
+}
+
+func (p postedFolder) Read(a0 string, a1 func([]byte, error)) {
+	f1 := a1
+	var w1 func([]byte, error)
+	if f1 != nil {
+		w1 = func(c0 []byte, c1 error) { p.post(func() { f1(c0, c1) }) }
+	}
+	p.inner.Read(a0, w1)
+}
+
+func (p postedFolder) Write(a0 string, a1 []byte, a2 func(error)) {
+	f2 := a2
+	var w2 func(error)
+	if f2 != nil {
+		w2 = func(c0 error) { p.post(func() { f2(c0) }) }
+	}
+	p.inner.Write(a0, a1, w2)
+}
+
+func (p postedFolder) Remove(a0 string, a1 func(error)) {
+	f1 := a1
+	var w1 func(error)
+	if f1 != nil {
+		w1 = func(c0 error) { p.post(func() { f1(c0) }) }
+	}
+	p.inner.Remove(a0, w1)
+}
+
+// postedFolderPicker wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func postedFolderPickerOf(inner shell.FolderPicker, post func(func())) shell.FolderPicker {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedFolderPicker{inner, post}
+}
+
+type postedFolderPicker struct {
+	inner shell.FolderPicker
+	post  func(func())
+}
+
+func (p postedFolderPicker) Open(a0 func(shell.Folder, error)) {
+	f0 := a0
+	var w0 func(shell.Folder, error)
+	if f0 != nil {
+		w0 = func(c0 shell.Folder, c1 error) { p.post(func() { f0(postedFolderOf(c0, p.post), c1) }) }
+	}
+	p.inner.Open(w0)
+}
+
 // postedGeolocation wraps inner so every callback it (or anything it hands out)
 // invokes is delivered through post — the app runner passes Owner.Post, making
 // the "callbacks fire on the UI goroutine" contract hold no matter which

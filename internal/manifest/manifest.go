@@ -83,6 +83,14 @@ var capabilityManifestPermissions = map[string]Permission{
 	"FilePicker": {
 		MacEntitlements: []string{"com.apple.security.files.user-selected.read-write"},
 	},
+	// A folder the user chose is a user-selected location, so it needs the same
+	// entitlement and nothing more: the sandbox grants the directory the user
+	// picked, and shell.Folder only ever reaches inside it. There is no
+	// bookmark entitlement here because a Folder deliberately does not survive
+	// a restart — add app-scope bookmarks alongside that feature, not before.
+	"FolderPicker": {
+		MacEntitlements: []string{"com.apple.security.files.user-selected.read-write"},
+	},
 	"Gamepads": {},
 	"Geolocation": {
 		Android: []string{

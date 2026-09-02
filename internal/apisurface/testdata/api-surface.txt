@@ -741,6 +741,7 @@ shell.CapabilitiesChanged type
 shell.CaptureOptions type
 shell.CaptureOptions.Facing field
 shell.CaptureOptions.MaxDim field
+shell.CheckFolderName func
 shell.Clip type
 shell.Clip.Data field
 shell.Clip.Duration field
@@ -784,6 +785,22 @@ shell.FilePickerWindow type
 shell.FilePickerWindow.FilePicker method
 shell.Focus type
 shell.Focus.Focused field
+shell.Folder type
+shell.Folder.List method
+shell.Folder.Name method
+shell.Folder.Read method
+shell.Folder.Remove method
+shell.Folder.Write method
+shell.FolderEntry type
+shell.FolderEntry.Name field
+shell.FolderEntry.Size field
+shell.FolderListOptions type
+shell.FolderListOptions.Accept field
+shell.FolderListOptions.Accepts method
+shell.FolderPicker type
+shell.FolderPicker.Open method
+shell.FolderPickerWindow type
+shell.FolderPickerWindow.FolderPicker method
 shell.Frame type
 shell.Frame.Scale method
 shell.Frame.Size method
@@ -1576,6 +1593,7 @@ widget.Ctx.Clipboard method
 widget.Ctx.Connectivity method
 widget.Ctx.DarkMode method
 widget.Ctx.FilePicker method
+widget.Ctx.FolderPicker method
 widget.Ctx.Gamepads method
 widget.Ctx.Geolocation method
 widget.Ctx.Haptic method
@@ -1803,6 +1821,7 @@ widget.Owner.Connectivity method
 widget.Owner.DarkMode field
 widget.Owner.FilePicker method
 widget.Owner.FlushBuilds method
+widget.Owner.FolderPicker method
 widget.Owner.Gamepads method
 widget.Owner.Geolocation method
 widget.Owner.Haptic method

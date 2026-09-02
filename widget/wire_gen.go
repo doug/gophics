@@ -36,6 +36,9 @@ func (o *Owner) WireCapabilities(w shell.Window) {
 	if x, ok := w.(shell.FilePickerWindow); ok {
 		o.filePicker = postedFilePickerOf(x.FilePicker(), o.Post)
 	}
+	if x, ok := w.(shell.FolderPickerWindow); ok {
+		o.folderPicker = postedFolderPickerOf(x.FolderPicker(), o.Post)
+	}
 	if x, ok := w.(shell.GamepadWindow); ok {
 		o.gamepads = x.Gamepads()
 	}
@@ -128,6 +131,10 @@ func (o *Owner) Connectivity() shell.Connectivity { return o.connectivity }
 // FilePicker returns the platform FilePicker capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.FilePicker().
 func (o *Owner) FilePicker() shell.FilePicker { return o.filePicker }
+
+// FolderPicker returns the platform FolderPicker capability, or nil when the running
+// platform cannot provide it. Widgets read it through Ctx.FolderPicker().
+func (o *Owner) FolderPicker() shell.FolderPicker { return o.folderPicker }
 
 // Gamepads returns the platform Gamepads capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.Gamepads().

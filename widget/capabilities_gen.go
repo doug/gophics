@@ -16,6 +16,7 @@ type Capabilities struct {
 	cameraPreview shell.CameraPreview
 	connectivity  shell.Connectivity
 	filePicker    shell.FilePicker
+	folderPicker  shell.FolderPicker
 	gamepads      shell.Gamepads
 	geolocation   shell.Geolocation
 	haptic        shell.Haptic
@@ -66,6 +67,10 @@ func (c Ctx) Connectivity() shell.Connectivity { return c.el.owner.connectivity 
 // FilePicker returns the platform FilePicker capability (shell.FilePicker), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) FilePicker() shell.FilePicker { return c.el.owner.filePicker }
+
+// FolderPicker returns the platform FolderPicker capability (shell.FolderPicker), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) FolderPicker() shell.FolderPicker { return c.el.owner.folderPicker }
 
 // Gamepads returns the platform Gamepads capability (shell.Gamepads), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

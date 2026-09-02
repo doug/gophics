@@ -41,11 +41,13 @@ var choosers = []struct {
 	bin  string
 	open func(opts shell.OpenOptions) []string
 	save func(opts shell.SaveOptions) []string
+	dir  func() []string // directory chooser, for shell/folder.go
 }{
 	{
 		bin:  "zenity",
 		open: zenityOpenArgs,
 		save: zenitySaveArgs,
+		dir:  zenityDirArgs,
 	},
 	{
 		bin: "kdialog",
@@ -59,10 +61,11 @@ var choosers = []struct {
 		save: func(o shell.SaveOptions) []string {
 			return []string{"--getsavefilename", nonEmpty(o.Name, "."), kdialogFilter(o.Accept)}
 		},
+		dir: func() []string { return []string{"--getexistingdirectory", "."} },
 	},
 	// qarma and matedialog are drop-in zenity forks, so they take its argv.
-	{bin: "qarma", open: zenityOpenArgs, save: zenitySaveArgs},
-	{bin: "matedialog", open: zenityOpenArgs, save: zenitySaveArgs},
+	{bin: "qarma", open: zenityOpenArgs, save: zenitySaveArgs, dir: zenityDirArgs},
+	{bin: "matedialog", open: zenityOpenArgs, save: zenitySaveArgs, dir: zenityDirArgs},
 }
 
 // chooserPath returns the absolute path of the first available chooser, or "".
