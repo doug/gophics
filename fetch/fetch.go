@@ -41,7 +41,22 @@ type Request struct {
 	URL    string            // required
 	Header map[string]string // sent as-is; nil for none
 	Body   []byte            // nil for none
+	// MaxBytes caps the response body; 0 means DefaultMaxBytes. A response
+	// over the cap is an error, not a truncation — a silently cut-off body
+	// parses as corrupt data, which blames the parser for the network's sin.
+	MaxBytes int64
 }
+
+// DefaultMaxBytes bounds a response body when Request.MaxBytes is zero.
+//
+// There is a default because the alternative was discovered the way these
+// things are: Do read the whole body with no limit, so any URL an app could be
+// pointed at was an invitation to allocate the response's Content-Length —
+// and on wasm, where the tab's memory ceiling is low and the process is the
+// page, one 2GB response is a crashed app. 64MB accommodates any plausible
+// JSON payload or image with room to spare; a caller streaming genuinely
+// larger data should set MaxBytes explicitly and mean it.
+const DefaultMaxBytes int64 = 64 << 20
 
 // Response is what came back. Body is read fully before Do returns, because
 // the browser's fetch() hands over a promise rather than a stream this package
@@ -63,7 +78,8 @@ type StatusError struct {
 func (e *StatusError) Error() string { return fmt.Sprintf("fetch %s: HTTP %d", e.URL, e.Status) }
 
 // Get requests url and returns the response body, treating any status outside
-// 2xx as an error (*StatusError).
+// 2xx as an error (*StatusError). The body is bounded by DefaultMaxBytes; use
+// Do with Request.MaxBytes for more.
 //
 // The common case, and the one worth making a one-liner: most callers want the
 // bytes or a reason, and turning a 404 into an empty body with a nil error is

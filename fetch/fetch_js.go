@@ -86,8 +86,21 @@ func Do(ctx context.Context, r Request) (*Response, error) {
 	var status int
 	var header map[string]string
 
+	max := r.MaxBytes
+	if max <= 0 {
+		max = DefaultMaxBytes
+	}
+
 	onBody = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		buf := global.Get("Uint8Array").New(args[0])
+		// The ArrayBuffer already exists by now — fetch() hands bodies over
+		// whole — so this cannot stop the browser allocating it, but it can
+		// stop the copy into Go memory, which on wasm is the allocation that
+		// kills the tab.
+		if n := int64(buf.Get("length").Int()); n > max {
+			done <- outcome{err: fmt.Errorf("fetch %s: response exceeds %d bytes", r.URL, max)}
+			return nil
+		}
 		b := make([]byte, buf.Get("length").Int())
 		js.CopyBytesToGo(b, buf)
 		done <- outcome{resp: &Response{Status: status, Header: header, Body: b}}

@@ -39,9 +39,19 @@ func Do(ctx context.Context, r Request) (*Response, error) {
 	}
 	defer resp.Body.Close()
 
-	b, err := io.ReadAll(resp.Body)
+	max := r.MaxBytes
+	if max <= 0 {
+		max = DefaultMaxBytes
+	}
+	// Read one byte past the cap so "exactly at the limit" and "over it" are
+	// distinguishable; a LimitReader alone truncates silently, and a truncated
+	// body would go on to fail in whatever parses it, far from the cause.
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: reading body: %w", r.URL, err)
+	}
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("fetch %s: response exceeds %d bytes", r.URL, max)
 	}
 	h := make(map[string]string, len(resp.Header))
 	for k := range resp.Header {

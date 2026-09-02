@@ -314,11 +314,13 @@ chart.Time.Map method
 chart.Time.Ticks method
 chart.Values func
 chart.XY func
+fetch.DefaultMaxBytes const
 fetch.Do func
 fetch.Get func
 fetch.Request type
 fetch.Request.Body field
 fetch.Request.Header field
+fetch.Request.MaxBytes field
 fetch.Request.Method field
 fetch.Request.URL field
 fetch.Response type
