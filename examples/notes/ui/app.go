@@ -39,10 +39,7 @@ func mdTheme(th theme.Theme) mdStyle {
 // $NOTES_DIR, else ./examples/notes/vault (when run from the repo root), else
 // ./vault.
 func Root() widget.Widget {
-	// defaultStore is the OS filesystem on desktop (a folder is always open) and
-	// nil on web (the user opens a folder via the sidebar; see openFolder).
-	v, _ := OpenVault(defaultStore())
-	return Workspace{Vault: v}
+	return Workspace{Vault: defaultVault()}
 }
 
 // Workspace is the whole UI: a note list beside a reader/editor pane.
@@ -83,7 +80,7 @@ func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Auto(ctx)
 	v := s.W().Vault
 	children := []widget.Widget{
-		widget.Sized{W: 240, Child: s.sidebar(th, v)},
+		widget.Sized{W: 240, Child: s.sidebar(ctx, th, v)},
 		widget.Sized{W: 1, Child: widget.Decorated{Color: th.Border}},
 		widget.Expand(s.pane(ctx, th, v)),
 	}
@@ -104,11 +101,11 @@ func (s *workspaceState) Build(ctx widget.Ctx) widget.Widget {
 	}
 }
 
-func (s *workspaceState) sidebar(th theme.Theme, v *Vault) widget.Widget {
-	// Web: no folder is open until the user picks one (File System Access needs
-	// a user gesture). Desktop always has a folder, so this never shows there.
+func (s *workspaceState) sidebar(ctx widget.Ctx, th theme.Theme, v *Vault) widget.Widget {
+	// No folder is open until the user picks one — the starting state in a
+	// browser. Desktop finds a local folder at launch, so this never shows there.
 	if !v.HasStore() {
-		return s.folderPrompt(th)
+		return s.folderPrompt(ctx, th)
 	}
 	head := widget.Row(
 		widget.Expand(widget.Text{S: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}),
@@ -153,14 +150,14 @@ func (s *workspaceState) sidebar(th theme.Theme, v *Vault) widget.Widget {
 	return widget.Decorated{Color: th.Bg, Child: widget.Scroll{Child: col}}
 }
 
-// folderPrompt is the web starting state: invite the user to open a folder,
-// which the File System Access API can only do from a click (openFolder).
-func (s *workspaceState) folderPrompt(th theme.Theme) widget.Widget {
+// folderPrompt is the starting state with no folder open: invite the user to
+// pick one. It hangs off a button because the picker needs a user gesture.
+func (s *workspaceState) folderPrompt(ctx widget.Ctx, th theme.Theme) widget.Widget {
 	items := []widget.Widget{
 		widget.Padding{Insets: geom.Insets{Left: 16, Right: 12, Top: 14, Bottom: 10},
 			Child: widget.Text{S: "NOTES", Font: "bold", Size: th.Type.Label, Color: th.Muted}},
 		widget.Padding{Insets: geom.InsetsSymmetric(12, 4),
-			Child: s.button(th, "Open folder…", func() { openFolder(s) })},
+			Child: s.button(th, "Open folder…", func() { openFolder(ctx, s) })},
 		widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
 			Child: widget.Text{S: "Pick a folder of .md files to read and edit them locally.",
 				Size: th.Type.Caption, Color: th.Muted, Wrap: true}},

@@ -13,12 +13,15 @@ type Note struct {
 	Body string // file contents
 }
 
-// store persists a vault's notes. Desktop/terminal use the OS filesystem
-// (store_os.go); web uses the File System Access API against a user-picked
-// folder (store_fsa.go). Everything else about a Vault is pure in-memory logic
-// that works identically on every platform.
+// store persists a vault's notes. A local directory backs it on desktop
+// (store_os.go); a folder the user picked backs it anywhere the FolderPicker
+// capability exists (folderstore.go). Everything else about a Vault is pure
+// in-memory logic that works identically on every platform.
+//
+// Loading is not part of this. Both backings already produce their notes while
+// opening — one reads a directory, the other is handed a folder — so a List
+// method here would have been a second way to do it that only one caller used.
 type store interface {
-	List() ([]Note, error)                 // load every note
 	Write(name, body string) (Note, error) // create or overwrite; returns the note with its Path
 	Remove(n Note) error                   // delete the note's file
 	Label() string                         // folder path/name, for display
@@ -31,20 +34,12 @@ type Vault struct {
 	Notes []Note
 }
 
-// OpenVault loads all notes from s. A nil store yields an empty vault — the web
-// starting state, before the user opens a folder.
-func OpenVault(s store) (*Vault, error) {
-	v := &Vault{store: s}
-	if s == nil {
-		return v, nil
-	}
-	notes, err := s.List()
-	if err != nil {
-		return v, err
-	}
-	v.Notes = notes
+// newVault holds notes that have already been loaded. A nil store yields an
+// empty vault — the starting state before the user opens a folder.
+func newVault(s store, notes []Note) *Vault {
+	v := &Vault{store: s, Notes: notes}
 	sortNotes(v.Notes)
-	return v, nil
+	return v
 }
 
 // HasStore reports whether a backing folder is open — always true on desktop,
