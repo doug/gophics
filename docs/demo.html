@@ -29,11 +29,18 @@
   #err { position: fixed; inset: 0; z-index: 12; display: none; align-items: center; justify-content: center;
          color: #c9cee0; font-size: 14px; text-align: center; padding: 24px; line-height: 1.6; }
   #err a { color: #8aa0ff; }
-  #bar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 20;
+  /* The bar is a real 40px strip, not an overlay. --gophics-top-inset tells the
+     web shell to keep that much clear: it sizes and positions the canvas itself
+     (it has to — see the mobile 100vh note in shell/web/web.go), so page CSS
+     alone cannot make room, and a floating bar collided with whatever the app
+     drew in its own top-left corner. Every demo showed it: "NOTES" over
+     "gallery" in notes, the title over the crumb in todo. */
+  :root { --gophics-top-inset: 40px; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; height: var(--gophics-top-inset);
+         z-index: 20; box-sizing: border-box;
          display: flex; align-items: center; gap: 14px; padding: 0 14px;
-         font-size: 13px; color: #aab; background: linear-gradient(#000c, #0000);
-         opacity: .7; transition: opacity .15s; pointer-events: none; }
-  #bar:hover { opacity: 1; }
+         font-size: 13px; color: #aab; background: #0d0e15;
+         border-bottom: 1px solid #ffffff14; }
   #bar a, #bar .name { pointer-events: auto; }
   #bar a { color: #cdd3e6; text-decoration: none; }
   #bar a:hover { color: #fff; }

@@ -16,6 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"syscall/js"
 
 	"github.com/doug/gophics/geom"
@@ -316,6 +318,17 @@ func (w *window) resize() {
 		}
 	}
 
+	// A host page can reserve a strip along the top for its own chrome. The
+	// canvas is sized and positioned by this function rather than by the
+	// stylesheet — see the note on pinning below — so page CSS alone cannot
+	// make room, and a bar laid over the canvas collides with whatever the app
+	// draws in its top-left corner.
+	insetTop := hostTopInset()
+	if insetTop > lh {
+		insetTop = 0 // a bar taller than the viewport would leave nothing
+	}
+	lh -= insetTop
+
 	// cssW/cssH are the size the canvas occupies on screen. They equal the
 	// logical size unless a design size is being scaled to fit.
 	cssW, cssH := lw, lh
@@ -348,11 +361,42 @@ func (w *window) resize() {
 	style := w.canvas.Get("style")
 	style.Set("width", fmt.Sprintf("%gpx", cssW))
 	style.Set("height", fmt.Sprintf("%gpx", cssH))
-	// Centre the letterbox. Harmless when the canvas fills the viewport.
-	style.Set("margin", fmt.Sprintf("%gpx %gpx", math.Max(0, (lh-cssH)/2), math.Max(0, (lw-cssW)/2)))
+	// Centre the letterbox, below any reserved strip. Harmless when the canvas
+	// fills the viewport and nothing is reserved.
+	mv := math.Max(0, (lh-cssH)/2)
+	mh := math.Max(0, (lw-cssW)/2)
+	style.Set("margin", fmt.Sprintf("%gpx %gpx %gpx %gpx", insetTop+mv, mh, mv, mh))
 	if w.pres != nil {
 		w.pres.onResize()
 	}
+}
+
+// hostTopInset reads --gophics-top-inset off the root element: the height a
+// host page wants kept clear at the top for its own chrome. 0 when unset, which
+// is every page that has not asked for it.
+//
+// A CSS custom property rather than a Config field because the value belongs to
+// the page, not the app — the same binary is embedded by pages that reserve
+// nothing and pages that reserve a header, and only the page knows which. It is
+// read every resize, so a responsive bar that changes height is followed.
+func hostTopInset() float64 {
+	root := js.Global().Get("document").Get("documentElement")
+	if !root.Truthy() {
+		return 0
+	}
+	style := js.Global().Call("getComputedStyle", root)
+	if !style.Truthy() {
+		return 0
+	}
+	v := strings.TrimSpace(style.Call("getPropertyValue", "--gophics-top-inset").String())
+	if v == "" {
+		return 0
+	}
+	px, err := strconv.ParseFloat(strings.TrimSuffix(v, "px"), 64)
+	if err != nil || px <= 0 || math.IsNaN(px) {
+		return 0
+	}
+	return px
 }
 
 func (w *window) Invalidate() {
