@@ -60,6 +60,97 @@ var mobileExempt = map[string]string{
 		"Custom Tabs, which OpenURL already reaches",
 }
 
+// desktopExempt: what desktop deliberately does not get, and why. Entries here
+// are decisions, not backlog — a capability that is merely unbuilt should say
+// "not yet" and name what building it takes.
+var desktopExempt = map[string]string{
+	"Biometric": "TouchID exists on Mac laptops via LocalAuthentication, but no " +
+		"desktop consumer has needed it and Windows Hello / Linux have no common " +
+		"story; not yet, and nil is detectable",
+	"Haptic": "NSHapticFeedbackManager can buzz a trackpad; Linux and Windows " +
+		"desktops have nothing comparable, so apps must treat haptics as " +
+		"optional anyway — nil until a consumer justifies the objc bridge work",
+	"Locale": "not yet: readable from $LANG/$LC_ALL everywhere and NSLocale on " +
+		"macOS; intl has no way to pick a language on desktop until this lands",
+	"Notifier": "not yet: UNUserNotificationCenter on macOS and " +
+		"org.freedesktop.Notifications over D-Bus on Linux both fit the " +
+		"zero-CGo patterns already in-tree",
+	"Permissions": "desktop OSes ask per resource at first use (camera, mic) " +
+		"through their own prompts; there is no app-driven permission API to wrap",
+	"Photos": "no desktop OS has an app-facing photo-library abstraction; " +
+		"saving an image to disk is FilePicker.Save",
+	"Share": "NSSharingServicePicker is real on macOS and cited in capgen's " +
+		"README as the canonical FFI example, but it is a main-thread panel " +
+		"with delegate callbacks — real objc work — and Linux/Windows desktops " +
+		"have no share-sheet concept at all, so apps need a fallback anyway; " +
+		"not yet",
+	"SecureStorage": "not yet: the macOS keychain is reachable through the " +
+		"security(1) CLI with the same subprocess pattern the Linux file " +
+		"chooser already uses, and libsecret's secret-tool covers Linux where " +
+		"installed",
+	"TextInput": "this capability raises and lowers a soft keyboard; desktop " +
+		"keyboards are hardware and text arrives through window key events, so " +
+		"there is nothing to raise — by design, not omission",
+	"WakeLock": "IOPMAssertion / SetThreadExecutionState / D-Bus inhibit all " +
+		"exist; no desktop consumer yet, and a stray assertion that outlives " +
+		"its app drains a laptop, so this waits for a real need",
+	"WebView": "deliberately unbuilt for the same reason as mobile: a native " +
+		"subview composited over the GPU layer is maximum cost for a need " +
+		"OpenURL already covers",
+}
+
+// webExempt: what the browser platform does not get.
+var webExempt = map[string]string{
+	"Biometric": "WebAuthn is credential ceremony, not a fingerprint check — a " +
+		"different model that would deserve its own capability if wanted",
+	"Menus": "a desktop menu bar; a page has no chrome to put one in",
+	"Photos": "no browser API adds to the OS photo library; a download " +
+		"(FilePicker.Save) is what the platform offers",
+	"Tray": "a desktop system tray; no web equivalent exists",
+	"WakeLock": "not yet: navigator.wakeLock is real and small — the screen " +
+		"variant only, which is exactly what the capability promises",
+}
+
+// terminalExempt: the terminal is a character grid on a remote-able TTY; most
+// capabilities are pixel, dialog, or device concepts that the *emulator* owns,
+// not the app. The ones that are honest "not yet" say so.
+var terminalExempt = map[string]string{
+	"Accessibility": "the terminal is already an accessible text surface; the " +
+		"emulator and screen reader own it, not the app",
+	"Battery":       "readable in principle (sysfs, IOKit) but no TUI consumer yet",
+	"Biometric":     "no sensor reachable from a TTY",
+	"Camera":        "not yet: devmedia could capture headless, but no TUI has asked",
+	"CameraPreview": "no pixel surface to preview into",
+	"Connectivity":  "readable in principle; no TUI consumer yet",
+	"FilePicker": "no system dialog to present; a TUI picker is an app-level " +
+		"widget, not a platform capability",
+	"FolderPicker": "same as FilePicker: nothing to present from a TTY",
+	"Gamepads":     "no TUI consumer yet",
+	"Geolocation":  "no location source is part of the TTY contract",
+	"Haptic":       "no hardware",
+	"Lifecycle": "not yet: SIGTSTP/SIGCONT map cleanly onto background/foreground " +
+		"and would make a polite TUI",
+	"Links": "not yet: open/xdg-open works from a local terminal; ambiguous over " +
+		"SSH, which is the design question to answer first",
+	"Locale":      "not yet: $LANG is right there; lands with the desktop version",
+	"Menus":       "no menu bar",
+	"Notifier":    "not yet: OSC 9 exists but emulator support is patchy",
+	"Permissions": "nothing here prompts",
+	"Photos":      "no photo library",
+	"Preferences": "not yet: the desktop JSON-file store has no window " +
+		"dependency and ports almost verbatim; a TUI that cannot remember " +
+		"anything between runs is a real limitation",
+	"SecureStorage": "not yet: same stores as desktop once desktop has them",
+	"Share":         "no share sheet",
+	"Socket":        "not yet: nothing terminal-specific blocks it; no consumer",
+	"TextInput":     "keyboards are hardware here; same reasoning as desktop",
+	"Tray":          "no tray",
+	"WakeLock":      "a TTY does not sleep; the emulator's host might, but that is not ours",
+	"WebView":       "a character grid cannot composite a browser",
+	"WindowControl": "the emulator owns the window; apps at most set the title, " +
+		"which is not this capability's contract",
+}
+
 // capabilityNames reads the <X>Window interfaces the same way capgen does.
 func capabilityNames(t *testing.T) []string {
 	t.Helper()
@@ -107,62 +198,80 @@ func capabilityNames(t *testing.T) []string {
 	return caps
 }
 
-var mobileAccessor = regexp.MustCompile(`(?m)^func \(b \*Bridge\) (\w+)\(\) shell\.\w+`)
+var windowAccessor = regexp.MustCompile(`(?m)^func \(w \*window\) (\w+)\(\) shell\.\w+`)
+var bridgeAccessor = regexp.MustCompile(`(?m)^func \(b \*Bridge\) (\w+)\(\) shell\.\w+`)
 
-func TestEveryCapabilityReachesMobileOrSaysWhyNot(t *testing.T) {
+// platforms is every place a capability can land. One row per platform, one
+// exempt map per row: a capability is implemented there, or its entry says why
+// not, and nothing is allowed to be neither. The mobile row came first (see
+// the story above); the others exist because the same argument does not stop
+// at mobile — desktop was carrying six unrecorded absences, keychain among
+// them, that nobody had ever decided on.
+var platforms = []struct {
+	name     string
+	dir      string
+	accessor *regexp.Regexp
+	exempt   map[string]string
+	minHave  int // scan sanity floor: fewer accessors than this means the regex broke
+}{
+	{"mobile", "mobile", bridgeAccessor, mobileExempt, 10},
+	{"desktop", "desktop", windowAccessor, desktopExempt, 5},
+	{"web", "web", windowAccessor, webExempt, 10},
+	{"terminal", "terminal", windowAccessor, terminalExempt, 1},
+}
+
+func TestEveryCapabilityReachesEveryPlatformOrSaysWhyNot(t *testing.T) {
 	caps := capabilityNames(t)
 	if len(caps) < 20 {
 		t.Fatalf("derived only %d capabilities; the scan is broken and this test "+
 			"would pass without checking anything", len(caps))
 	}
-
-	// What shell/mobile actually publishes.
-	have := map[string]bool{}
-	paths, err := filepath.Glob(filepath.Join("mobile", "*.go"))
-	if err != nil || len(paths) == 0 {
-		t.Fatalf("no Go files under mobile/: %v", err)
-	}
-	for _, p := range paths {
-		if strings.HasSuffix(p, "_test.go") {
-			continue
-		}
-		src, err := os.ReadFile(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, m := range mobileAccessor.FindAllStringSubmatch(string(src), -1) {
-			have[m[1]] = true
-		}
-	}
-	if len(have) < 10 {
-		t.Fatalf("found only %d mobile capability accessors; the scan is broken", len(have))
-	}
-
-	for _, c := range caps {
-		_, exempt := mobileExempt[c]
-		switch {
-		case have[c] && exempt:
-			t.Errorf("capability %q is implemented on mobile but still listed as "+
-				"exempt — remove it from mobileExempt", c)
-		case !have[c] && !exempt:
-			t.Errorf("capability %q has no mobile implementation and no entry in "+
-				"mobileExempt.\n"+
-				"Implement `func (b *Bridge) %s() shell.%s` in shell/mobile, or add "+
-				"an entry saying why the platform does not get it — so \"not on "+
-				"mobile\" is a decision on the record rather than something nobody "+
-				"noticed.", c, c, c)
-		}
-	}
-
-	// And nothing lingers in the exempt list for a capability that no longer
-	// exists, which would quietly excuse a name that means nothing.
 	known := map[string]bool{}
 	for _, c := range caps {
 		known[c] = true
 	}
-	for name := range mobileExempt {
-		if !known[name] {
-			t.Errorf("mobileExempt lists %q, which is not a capability", name)
+
+	for _, plat := range platforms {
+		have := map[string]bool{}
+		paths, err := filepath.Glob(filepath.Join(plat.dir, "*.go"))
+		if err != nil || len(paths) == 0 {
+			t.Fatalf("no Go files under %s/: %v", plat.dir, err)
+		}
+		for _, p := range paths {
+			if strings.HasSuffix(p, "_test.go") {
+				continue
+			}
+			src, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range plat.accessor.FindAllStringSubmatch(string(src), -1) {
+				have[m[1]] = true
+			}
+		}
+		if len(have) < plat.minHave {
+			t.Fatalf("found only %d %s capability accessors; the scan is broken",
+				len(have), plat.name)
+		}
+
+		for _, c := range caps {
+			_, exempt := plat.exempt[c]
+			switch {
+			case have[c] && exempt:
+				t.Errorf("capability %q is implemented on %s but still listed as "+
+					"exempt — remove its entry", c, plat.name)
+			case !have[c] && !exempt:
+				t.Errorf("capability %q has no %s implementation and no exempt "+
+					"entry. Implement it under shell/%s, or add an entry saying why "+
+					"the platform does not get it — so \"not on %s\" is a decision "+
+					"on the record rather than something nobody noticed.",
+					c, plat.name, plat.dir, plat.name)
+			}
+		}
+		for name := range plat.exempt {
+			if !known[name] {
+				t.Errorf("%s exempt list has %q, which is not a capability", plat.name, name)
+			}
 		}
 	}
 }
