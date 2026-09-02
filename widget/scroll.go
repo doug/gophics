@@ -511,6 +511,20 @@ type flinger struct {
 	s      *scrollState
 	v      float32 // px/s (finger space: down/right positive)
 	active bool
+	// fresh marks the tick that shares a frame with the release. That frame
+	// already moved the content by the finger's last delta, so the first
+	// momentum tick must not move it again: doing so integrated one frame's
+	// travel twice, and every release began with a ~1.9× jump — measured by
+	// tools/uitrace as 38px in a frame whose neighbours moved 20 and 17.
+	// Native scroll views start momentum from the release instant and only
+	// integrate forward. The velocity still decays through the skipped tick,
+	// because the time passed.
+	fresh bool
+}
+
+// start begins momentum at v px/s.
+func (f *flinger) start(v float32) {
+	f.v, f.active, f.fresh = v, true, true
 }
 
 const (
@@ -530,6 +544,11 @@ const (
 func (f *flinger) Tick(dt float64) bool {
 	if !f.active {
 		return false
+	}
+	if f.fresh {
+		f.fresh = false
+		f.v *= float32(math.Exp(-flingFriction * dt))
+		return true
 	}
 	if f.s.scrollFinger(f.v*float32(dt)) != 0 {
 		// Hit an edge with velocity left over: bounce instead of dead-stopping.
@@ -720,8 +739,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				// Only fling from inside the content; a released overscroll is
 				// already handled by its spring-back.
 				if s.overscroll == 0 && (s.velocity > flingMinStart || s.velocity < -flingMinStart) {
-					s.fling.v = s.velocity
-					s.fling.active = true
+					s.fling.start(s.velocity)
 					ctx.Invalidate()
 				}
 			},
