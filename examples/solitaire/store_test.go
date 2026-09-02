@@ -1,30 +1,13 @@
 package main
 
 import (
-	"sort"
 	"strings"
 	"testing"
 
+	"github.com/doug/gophics/apptest"
+
 	"github.com/doug/gophics/shell"
 )
-
-// fakePrefs is shell.Preferences over a map — enough to check that the store
-// actually goes through the capability rather than around it.
-type fakePrefs struct{ m map[string]string }
-
-func newFakePrefs() *fakePrefs { return &fakePrefs{m: map[string]string{}} }
-
-func (p *fakePrefs) Get(k string) (string, bool) { v, ok := p.m[k]; return v, ok }
-func (p *fakePrefs) Set(k, v string) error       { p.m[k] = v; return nil }
-func (p *fakePrefs) Delete(k string) error       { delete(p.m, k); return nil }
-func (p *fakePrefs) Keys() []string {
-	ks := make([]string, 0, len(p.m))
-	for k := range p.m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
-}
 
 // The save round-trips through the preference store, under a key that names the
 // app. The gallery serves every demo from one origin, so the shell's own
@@ -32,7 +15,7 @@ func (p *fakePrefs) Keys() []string {
 // "game" would overwrite each other, and the symptom would be a solitaire deal
 // that resumes as something else entirely.
 func TestPrefsStoreRoundTrip(t *testing.T) {
-	p := newFakePrefs()
+	p := apptest.NewPrefs(nil)
 	s := newPrefsStore(p)
 	if _, ok := s.load(); ok {
 		t.Fatal("loaded a save from an empty preference store")

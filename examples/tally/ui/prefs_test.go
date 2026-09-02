@@ -2,39 +2,10 @@ package ui
 
 import (
 	"path/filepath"
-	"sort"
 	"testing"
+
+	"github.com/doug/gophics/apptest"
 )
-
-// fakePrefs is an in-memory shell.Preferences for testing the load logic.
-type fakePrefs struct {
-	m       map[string]string
-	deleted []string
-}
-
-func newFakePrefs(kv map[string]string) *fakePrefs {
-	m := map[string]string{}
-	for k, v := range kv {
-		m[k] = v
-	}
-	return &fakePrefs{m: m}
-}
-
-func (f *fakePrefs) Get(k string) (string, bool) { v, ok := f.m[k]; return v, ok }
-func (f *fakePrefs) Set(k, v string) error       { f.m[k] = v; return nil }
-func (f *fakePrefs) Delete(k string) error {
-	delete(f.m, k)
-	f.deleted = append(f.deleted, k)
-	return nil
-}
-func (f *fakePrefs) Keys() []string {
-	keys := make([]string, 0, len(f.m))
-	for k := range f.m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
 
 // TestLoadFallsBackToDemo covers the first-run path and, importantly, the mount
 // ordering: the widget tree's first Build happens before the shell wires
@@ -58,7 +29,7 @@ func TestLoadFallsBackToDemo(t *testing.T) {
 	// The frame after wiring: Preferences appears and the remembered ledger
 	// replaces the demo.
 	real := filepath.Join("..", "demo", "example.beancount")
-	p := newFakePrefs(map[string]string{prefKeyLedger: real})
+	p := apptest.NewPrefs(map[string]string{prefKeyLedger: real})
 	s.loadWith(p)
 	if !s.prefsChecked {
 		t.Error("preferences were not consulted once available")
@@ -78,7 +49,7 @@ func TestLoadFallsBackToDemo(t *testing.T) {
 // wedge the app or nag every launch — fall back to the demo and forget the path.
 func TestLoadDropsStaleLedgerPath(t *testing.T) {
 	s := &state{selected: -1}
-	p := newFakePrefs(map[string]string{prefKeyLedger: "/nonexistent/gone.beancount"})
+	p := apptest.NewPrefs(map[string]string{prefKeyLedger: "/nonexistent/gone.beancount"})
 
 	s.loadWith(p)
 	if s.err != nil {
@@ -90,8 +61,8 @@ func TestLoadDropsStaleLedgerPath(t *testing.T) {
 	if _, ok := p.Get(prefKeyLedger); ok {
 		t.Error("stale ledger path was not forgotten")
 	}
-	if len(p.deleted) != 1 || p.deleted[0] != prefKeyLedger {
-		t.Errorf("expected the stale key to be deleted, got %v", p.deleted)
+	if len(p.Deleted) != 1 || p.Deleted[0] != prefKeyLedger {
+		t.Errorf("expected the stale key to be deleted, got %v", p.Deleted)
 	}
 }
 
@@ -99,7 +70,7 @@ func TestLoadDropsStaleLedgerPath(t *testing.T) {
 // (Build runs every frame).
 func TestLoadIsIdempotent(t *testing.T) {
 	s := &state{selected: -1}
-	p := newFakePrefs(map[string]string{prefKeyLedger: filepath.Join("..", "demo", "example.beancount")})
+	p := apptest.NewPrefs(map[string]string{prefKeyLedger: filepath.Join("..", "demo", "example.beancount")})
 
 	s.loadWith(p)
 	first := s.book

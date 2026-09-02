@@ -149,6 +149,7 @@ apptest.Exact var
 apptest.Exact.MaxChannelDiff field
 apptest.Exact.MaxDiffPct field
 apptest.New func
+apptest.NewPrefs func
 apptest.Option type
 apptest.Options type
 apptest.Options.Config field
@@ -156,6 +157,12 @@ apptest.Options.Dir field
 apptest.Options.SafeInsets field
 apptest.Options.Scale field
 apptest.Options.Tol field
+apptest.Prefs type
+apptest.Prefs.Delete method
+apptest.Prefs.Deleted field
+apptest.Prefs.Get method
+apptest.Prefs.Keys method
+apptest.Prefs.Set method
 apptest.Scale func
 apptest.Size func
 apptest.Tol func

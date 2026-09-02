@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/doug/gophics/apptest"
 	"github.com/doug/gophics/shell"
 )
 
@@ -215,24 +216,6 @@ func TestNoteNameStripsExtension(t *testing.T) {
 	}
 }
 
-// fakePrefs is shell.Preferences over a map — enough to check what the app
-// remembers between sessions.
-type fakePrefs struct{ m map[string]string }
-
-func newFakePrefs() *fakePrefs { return &fakePrefs{m: map[string]string{}} }
-
-func (p *fakePrefs) Get(k string) (string, bool) { v, ok := p.m[k]; return v, ok }
-func (p *fakePrefs) Set(k, v string) error       { p.m[k] = v; return nil }
-func (p *fakePrefs) Delete(k string) error       { delete(p.m, k); return nil }
-func (p *fakePrefs) Keys() []string {
-	ks := make([]string, 0, len(p.m))
-	for k := range p.m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
-}
-
 // fakePicker is shell.FolderPicker over a map of tokens, with a per-token
 // outcome so a test can stage "granted", "needs permission", and "gone".
 type fakePicker struct {
@@ -259,7 +242,7 @@ func TestRestoreReopensRememberedFolder(t *testing.T) {
 	_, st := mountNotes(t, t.TempDir())
 	f := newFakeFolder(map[string][]byte{"Kept.md": []byte("# Kept")})
 	p := &fakePicker{folders: map[string]shell.Folder{"token:vault": f}}
-	prefs := newFakePrefs()
+	prefs := apptest.NewPrefs(nil)
 	_ = prefs.Set(prefFolderToken, "token:vault")
 
 	restoreFolder(p, prefs, st)
@@ -279,7 +262,7 @@ func TestRestoreReopensRememberedFolder(t *testing.T) {
 func TestRestoreOffersReopenWhenPermissionLapsed(t *testing.T) {
 	_, st := mountNotes(t, t.TempDir())
 	p := &fakePicker{errs: map[string]error{"token:vault": shell.ErrFolderPermission}}
-	prefs := newFakePrefs()
+	prefs := apptest.NewPrefs(nil)
 	_ = prefs.Set(prefFolderToken, "token:vault")
 
 	restoreFolder(p, prefs, st)
@@ -301,7 +284,7 @@ func TestRestoreOffersReopenWhenPermissionLapsed(t *testing.T) {
 func TestRestoreForgetsAMissingFolder(t *testing.T) {
 	_, st := mountNotes(t, t.TempDir())
 	p := &fakePicker{} // no folder under any token
-	prefs := newFakePrefs()
+	prefs := apptest.NewPrefs(nil)
 	_ = prefs.Set(prefFolderToken, "token:gone")
 
 	restoreFolder(p, prefs, st)
@@ -319,7 +302,7 @@ func TestRestoreWithNoRememberedFolderIsQuiet(t *testing.T) {
 	_, st := mountNotes(t, t.TempDir())
 	p := &fakePicker{}
 
-	restoreFolder(p, newFakePrefs(), st)
+	restoreFolder(p, apptest.NewPrefs(nil), st)
 
 	if p.asked != 0 {
 		t.Errorf("Restore was called %d times with nothing remembered", p.asked)
@@ -331,7 +314,7 @@ func TestRestoreWithNoRememberedFolderIsQuiet(t *testing.T) {
 
 // remember stores the token the picker will be given back next launch.
 func TestRememberStoresTheToken(t *testing.T) {
-	prefs := newFakePrefs()
+	prefs := apptest.NewPrefs(nil)
 	f := newFakeFolder(nil)
 
 	remember(prefs, f)
