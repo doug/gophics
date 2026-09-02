@@ -123,7 +123,7 @@ func (f osFolder) Write(name string, data []byte, done func(error)) {
 		report(err)
 		return
 	}
-	go report(writeFolderFile(filepath.Join(f.path, name), data))
+	go report(writeFileAtomic(filepath.Join(f.path, name), data))
 }
 
 // Remove deletes one file. Removing what is not there is not an error, as
@@ -145,45 +145,4 @@ func (f osFolder) Remove(name string, done func(error)) {
 		}
 		report(err)
 	}()
-}
-
-// writeFolderFile writes data to path via a temporary file in the same
-// directory, then renames.
-//
-// Same directory, not the system temp dir, because a rename is only atomic
-// within a filesystem; across one it degrades to a copy, which is the
-// truncation this exists to avoid. The temporary file is removed on any failure
-// so a crashed write does not litter the user's folder.
-//
-// Not the picker's writeAtomic, which is deliberately different: that one is
-// for a one-shot Save and does not fsync, while a vault is written on every
-// keystroke pause and has to survive a power loss. Both share the fallback for
-// a directory that will not take a temporary file — a FUSE mount, say — because
-// a note that cannot be saved at all is worse than one saved non-atomically.
-func writeFolderFile(path string, data []byte) error {
-	dir, base := filepath.Split(path)
-	tmp, err := os.CreateTemp(dir, "."+base+".tmp")
-	if err != nil {
-		return os.WriteFile(path, data, 0o644)
-	}
-	name := tmp.Name()
-	fail := func(err error) error { tmp.Close(); os.Remove(name); return err }
-
-	if _, err := tmp.Write(data); err != nil {
-		return fail(err)
-	}
-	// Sync before rename: the rename can otherwise be durable while the bytes
-	// are not, leaving a file that exists and is empty after a power loss.
-	if err := tmp.Sync(); err != nil {
-		return fail(err)
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := os.Rename(name, path); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
 }

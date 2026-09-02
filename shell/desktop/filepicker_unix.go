@@ -144,7 +144,7 @@ func (unixPicker) Save(opts shell.SaveOptions, data []byte, done func(error)) {
 		name := strings.TrimSpace(out)
 		// Writing through a temp file in the same directory keeps a failed or
 		// truncated write from destroying whatever the user picked.
-		report(done, writeAtomic(name, data))
+		report(done, writeFileAtomic(name, data))
 	}()
 }
 
@@ -264,30 +264,4 @@ func nonEmpty(v, fallback string) string {
 		return fallback
 	}
 	return v
-}
-
-// writeAtomic writes data to name via a sibling temp file and a rename.
-func writeAtomic(name string, data []byte) error {
-	dir := filepath.Dir(name)
-	f, err := os.CreateTemp(dir, ".gophics-*")
-	if err != nil {
-		// A directory that won't take a temp file (a FUSE mount, say) is still
-		// worth trying directly rather than failing the save outright.
-		return os.WriteFile(name, data, 0o644)
-	}
-	tmp := f.Name()
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, name); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
 }

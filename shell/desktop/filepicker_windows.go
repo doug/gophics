@@ -102,7 +102,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }
 			reportWin(done, nil) // cancelled
 			return
 		}
-		reportWin(done, writeAtomicWin(name, data))
+		reportWin(done, writeFileAtomic(name, data))
 	}()
 }
 
@@ -168,31 +168,4 @@ func boolLit(b bool) string {
 		return "true"
 	}
 	return "false"
-}
-
-// writeAtomicWin writes via a sibling temp file and a rename. Windows will not
-// rename onto an existing file, so the destination is removed first — the user
-// already confirmed the overwrite in the dialog.
-func writeAtomicWin(name string, data []byte) error {
-	dir := filepath.Dir(name)
-	f, err := os.CreateTemp(dir, ".gophics-*")
-	if err != nil {
-		return os.WriteFile(name, data, 0o644)
-	}
-	tmp := f.Name()
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	os.Remove(name)
-	if err := os.Rename(tmp, name); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
 }

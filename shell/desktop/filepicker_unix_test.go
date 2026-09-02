@@ -93,7 +93,7 @@ func TestWriteAtomicReplacesWholeFile(t *testing.T) {
 	if err := os.WriteFile(name, []byte("old contents, longer than the new"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeAtomic(name, []byte("new")); err != nil {
+	if err := writeFileAtomic(name, []byte("new")); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(name)

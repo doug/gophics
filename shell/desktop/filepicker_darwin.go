@@ -109,7 +109,7 @@ func (p macPicker) save(opts shell.SaveOptions, data []byte, done func(error)) {
 		report(errors.New("desktop: save panel returned no path"))
 		return
 	}
-	report(os.WriteFile(path, data, 0o644))
+	report(writeFileAtomic(path, data))
 }
 
 // newPanel loads AppKit and constructs the named panel class.
