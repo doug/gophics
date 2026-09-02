@@ -107,6 +107,24 @@ jobs:
       - name: example tests (headless integration)
         run: go test -count=1 -timeout 20m ./examples/...
 
+  test-js:
+    # The js/wasm halves of the tree used to execute for the first time in a
+    # user's browser. Node supplies whatwg fetch(), AbortController and data:
+    # URLs, so everything short of a DOM runs for real; scripts/test-js.sh
+    # documents which packages run here and why the rest cannot.
+    name: test js/wasm (node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: js tests under node
+        run: ./scripts/test-js.sh
+
   test-substrate:
     name: test (substrate)
     runs-on: macos-latest
