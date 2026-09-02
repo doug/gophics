@@ -12,6 +12,7 @@ import (
 	"github.com/doug/gophics/examples/solitaire/klondike"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -22,7 +23,7 @@ func TestScreenshot(t *testing.T) {
 	if out == "" {
 		t.Skip("set SOLITAIRE_SHOT=<path>")
 	}
-	makeStore = func() store { return &memStore{} }
+	makeStore = func(shell.Preferences) store { return &memStore{} }
 	size := geom.Size{W: 1000, H: 760}
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }
@@ -58,7 +59,7 @@ func TestCascadeShot(t *testing.T) {
 	if prefix == "" {
 		t.Skip("set SOLITAIRE_CASCADE=<path-prefix>")
 	}
-	makeStore = func() store { return &memStore{} }
+	makeStore = func(shell.Preferences) store { return &memStore{} }
 	size := geom.Size{W: 1000, H: 760}
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }

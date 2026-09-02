@@ -86,7 +86,7 @@ type launchItem struct {
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.deal = s.W().Seed
-	s.store = makeStore()
+	s.store = makeStore(ctx.Preferences())
 	g, resumed := s.loadOrNew()
 	s.g = g
 	s.won = s.g.Won()

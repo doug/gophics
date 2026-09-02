@@ -9,6 +9,7 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/examples/solitaire/klondike"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
 )
 
 var testSize = geom.Size{W: 800, H: 600}
@@ -21,7 +22,7 @@ func (m *memStore) load() ([]byte, bool) { return m.data, m.data != nil }
 
 func mount(t *testing.T, seed int64) (*app.Headless, *gameState) {
 	t.Helper()
-	makeStore = func() store { return &memStore{} } // fresh slot → deterministic new deal
+	makeStore = func(shell.Preferences) store { return &memStore{} } // fresh slot → deterministic new deal
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }
 	defer func() { stateHook = nil }()
@@ -192,8 +193,8 @@ func TestSnapBackSettles(t *testing.T) {
 
 func TestPersistResume(t *testing.T) {
 	shared := &memStore{}
-	makeStore = func() store { return shared }
-	t.Cleanup(func() { makeStore = platformStore })
+	makeStore = func(shell.Preferences) store { return shared }
+	t.Cleanup(func() { makeStore = newPrefsStore })
 
 	cfg := app.Config{Size: testSize, Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}
 
@@ -267,7 +268,7 @@ func TestWinCascade(t *testing.T) {
 }
 
 func TestDealAnimates(t *testing.T) {
-	makeStore = func() store { return &memStore{} }
+	makeStore = func(shell.Preferences) store { return &memStore{} }
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }
 	cfg := app.Config{Size: testSize, Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}
