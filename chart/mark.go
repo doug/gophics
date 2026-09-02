@@ -1,7 +1,6 @@
 package chart
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/doug/gophics/geom"
@@ -44,10 +43,12 @@ func Pairs(pairs []Pair) []Datum {
 // Each label becomes a band; X is the band index; the value may be any int/uint/
 // float type. It is prototyping sugar — the variadic ...any means the compiler
 // cannot check the arguments; use Pairs for the typed, compile-time-checked
-// path. A trailing odd argument is ignored with a logged warning; a non-string
-// label or non-numeric value still panics (a programming error in a
-// literal-args helper, like a bad fmt verb, surfaced immediately rather than
-// silently dropped).
+// path. Malformed input — a trailing odd argument, a non-string label, a
+// non-numeric value — skips the bad pair with a logged warning. Not a panic,
+// because chart data is data: it arrives from files and networks at run time,
+// and a chart's failure mode for a bad datum should be a visibly shorter chart
+// and a log line, not a crashed app. This is the same rule paint.Marks applies
+// to a malformed batch, for the same reason.
 func Values(pairs ...any) []Datum {
 	if len(pairs)%2 != 0 {
 		log.Printf("chart.Values: odd argument count (want label, value pairs); ignoring trailing %T", pairs[len(pairs)-1])
@@ -57,11 +58,13 @@ func Values(pairs ...any) []Datum {
 	for i := 0; i < len(pairs); i += 2 {
 		label, ok := pairs[i].(string)
 		if !ok {
-			panic(fmt.Sprintf("chart.Values: argument %d is not a string label: %T", i, pairs[i]))
+			log.Printf("chart.Values: argument %d is not a string label: %T; skipping the pair", i, pairs[i])
+			continue
 		}
 		y, ok := toFloat(pairs[i+1])
 		if !ok {
-			panic(fmt.Sprintf("chart.Values: value for %q is not numeric: %T", label, pairs[i+1]))
+			log.Printf("chart.Values: value for %q is not numeric: %T; skipping the pair", label, pairs[i+1])
+			continue
 		}
 		out = append(out, Datum{X: float64(len(out)), Y: y, Label: label})
 	}
