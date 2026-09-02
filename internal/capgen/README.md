@@ -6,6 +6,14 @@ This document describes the pattern that lets us keep **Go-only interfaces** as
 the single source of truth while still shipping native integration, without CGo,
 and without hand-maintaining boilerplate across three packages.
 
+**Not everything platform-shaped is a capability.** ClipboardRead/Write and
+OpenURL are methods on the base `shell.Window` interface instead: they are
+mandatory on every shell (the compiler enforces presence, which is stronger
+than the coverage gate) and synchronous (so the generated Posted wrappers would
+have nothing to wrap). The test for "should this be a capability" is: could a
+real platform legitimately lack it, and does it call back? Two yeses make a
+capability; two noes make a Window method.
+
 ## The three layers
 
 A capability is defined once, in pure Go, and flows through three layers:

@@ -45,6 +45,16 @@ type Owner struct {
 	// (pre-M4 focus model; see Gestures).
 	KeyboardTarget *Gestures
 	// Clipboard is the platform clipboard, set by the app runner.
+	//
+	// A field rather than a generated capability, on purpose. Capabilities are
+	// optional integrations a platform may lack, gated by nil and the coverage
+	// test; ClipboardRead/Write are methods on the base shell.Window contract,
+	// mandatory on every shell, and the compiler enforces that more strongly
+	// than any test could. They are also synchronous, so the Posted wrapper
+	// machinery — the other thing capabilities buy — has nothing to wrap. The
+	// same reasoning covers OpenURL below, whose inbound counterpart (Links)
+	// is a capability precisely because launch URLs genuinely do not exist on
+	// every platform.
 	Clipboard Clipboard
 	// Post schedules fn onto the UI goroutine (set by the app runner).
 	// The only safe way to touch widget state from other goroutines.
