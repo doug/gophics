@@ -480,11 +480,72 @@ type dragSampler struct {
 	s      *scrollState
 	accum  float32 // movement since the last frame
 	active bool
+	// hist is the last few frames' (dt, movement), newest last, for the
+	// release estimate. Six frames is 50ms at 120Hz and 100ms at 60Hz — more
+	// than the window ever reads.
+	hist [6]frameSample
+	n    int
 }
 
-func (d *dragSampler) begin()              { d.accum, d.active = 0, true }
+type frameSample struct {
+	dt   float32
+	move float32
+}
+
+// record keeps one frame's movement in the history ring.
+func (d *dragSampler) record(dt, move float32) {
+	if d.n < len(d.hist) {
+		d.hist[d.n] = frameSample{dt, move}
+		d.n++
+		return
+	}
+	copy(d.hist[:], d.hist[1:])
+	d.hist[len(d.hist)-1] = frameSample{dt, move}
+}
+
+// releaseVelocity is the speed the fling starts from: total movement over the
+// last velocityWindow seconds of frames, divided by their span.
+//
+// Measured, not designed. An EMA — the previous estimator — weights the
+// finger's final samples most, and a finger slows in its last frame or two
+// before it lifts, so the hand-off ran low: 16% under UIKit's on a recorded
+// iPhone flick at the best time constant, 50% under on a Mac. Both platforms
+// start momentum from the speed *before* that slowdown — the iOS recording's
+// momentum began at the mean of the two frames preceding its 84px and 2px
+// tail; Android's began at the finger's steady speed with no under-read at
+// all. A trailing window of a few frames is that number. Swept through the
+// real replay against both recordings: +6% on the iOS start, −2% on both
+// platforms' momentum distance, where the EMA was −14% and −5%.
+//
+// The window is time, not frames, so it averages four frames at 120Hz and two
+// at 60Hz and the same flick flings the same on both. The release frame's own
+// partial movement is never ticked (see flinger.fresh), which is what keeps
+// the lift-off sample out without a filter for it.
+func (d *dragSampler) releaseVelocity() float32 {
+	if d.n == 0 {
+		return d.s.velocity
+	}
+	frames := d.hist[:d.n]
+	var move, span float32
+	for i := len(frames) - 1; i >= 0 && span < float32(velocityWindow); i-- {
+		move += frames[i].move
+		span += frames[i].dt
+	}
+	if span <= 0 {
+		return d.s.velocity
+	}
+	return move / span
+}
+
+func (d *dragSampler) begin()              { d.accum, d.active, d.n = 0, true, 0 }
 func (d *dragSampler) moved(delta float32) { d.accum += delta }
-func (d *dragSampler) end()                { d.active = false }
+
+// end stops sampling and replaces the running estimate with the release
+// estimate, which is what the fling reads.
+func (d *dragSampler) end() {
+	d.active = false
+	d.s.velocity = d.releaseVelocity()
+}
 
 // velocityTau is how quickly the estimate follows the finger, in seconds.
 //
@@ -493,26 +554,24 @@ func (d *dragSampler) end()                { d.active = false }
 // converges in half the wall time on a 120Hz display as on a 60Hz one, so the
 // same flick would fling differently on two phones.
 //
-// 20ms, measured. It was 40ms — "short enough to catch a quick flick" — until
-// the harness (tools/uitrace) replayed a recorded iPhone flick through this
-// code and found the fling starting 16% slower than UIKit's from the same
-// finger, and so travelling 23% shorter; a recorded Mac flick showed the same
-// under-read at 50%. A finger phase is 80–130ms, and a 40ms EMA has not
-// converged by the time it ends. Sweeping the real estimator through the real
-// replay put 20–25ms at −6% on the start and −14% on distance, inside the
-// harness's bands, with everything shorter getting jittery again. The residual
-// is UIKit's own trick — its start is almost exactly the mean of the last two
-// moving frames, ignoring the slowdown of the hand leaving the glass — which
-// an EMA cannot express and a device recording would have to justify.
-//
-// A var so tests can sweep it (see export_test.go); nothing else writes it.
+// This is the running estimate while the finger is down; the value the fling
+// starts from is dragSampler.releaseVelocity, a trailing window, which
+// replaced the EMA for that job after the harness measured it handing off
+// 16% low on iOS. 20ms keeps the running estimate close to the finger without
+// getting jittery. A var so tests can sweep it (see export_test.go).
 var velocityTau = 0.020
+
+// velocityWindow is how much trailing movement the release estimate averages
+// over, in seconds. See dragSampler.releaseVelocity. A var so the harness can
+// sweep it (export_test.go).
+var velocityWindow = 0.032
 
 func (d *dragSampler) Tick(dt float64) bool {
 	if !d.active || dt <= 0 {
 		return false
 	}
 	inst := d.accum / float32(dt)
+	d.record(float32(dt), d.accum)
 	d.accum = 0
 	a := float32(1 - math.Exp(-dt/velocityTau))
 	d.s.velocity += (inst - d.s.velocity) * a
