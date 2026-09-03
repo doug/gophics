@@ -490,9 +490,22 @@ func (d *dragSampler) end()                { d.active = false }
 // Expressed as a time constant rather than a per-sample weight because a
 // per-sample weight is a different filter at every refresh rate: 0.3 a frame
 // converges in half the wall time on a 120Hz display as on a 60Hz one, so the
-// same flick would fling differently on two phones. 40ms is short enough to
-// catch a quick flick and long enough to ignore a single jittery sample.
-const velocityTau = 0.04
+// same flick would fling differently on two phones.
+//
+// 20ms, measured. It was 40ms — "short enough to catch a quick flick" — until
+// the harness (tools/uitrace) replayed a recorded iPhone flick through this
+// code and found the fling starting 16% slower than UIKit's from the same
+// finger, and so travelling 23% shorter; a recorded Mac flick showed the same
+// under-read at 50%. A finger phase is 80–130ms, and a 40ms EMA has not
+// converged by the time it ends. Sweeping the real estimator through the real
+// replay put 20–25ms at −6% on the start and −14% on distance, inside the
+// harness's bands, with everything shorter getting jittery again. The residual
+// is UIKit's own trick — its start is almost exactly the mean of the last two
+// moving frames, ignoring the slowdown of the hand leaving the glass — which
+// an EMA cannot express and a device recording would have to justify.
+//
+// A var so tests can sweep it (see export_test.go); nothing else writes it.
+var velocityTau = 0.020
 
 func (d *dragSampler) Tick(dt float64) bool {
 	if !d.active || dt <= 0 {
