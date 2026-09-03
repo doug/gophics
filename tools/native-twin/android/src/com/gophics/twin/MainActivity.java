@@ -56,6 +56,18 @@ public class MainActivity extends Activity {
         }
         sv.addView(col);
         setContentView(sv);
+        // The platform's gesture thresholds, read rather than quoted: these are
+        // what gophics's own constants are compared against. In dp and ms.
+        android.view.ViewConfiguration vc = android.view.ViewConfiguration.get(this);
+        Log.i(TAG, "VIEWCONFIG touchSlop=" + vc.getScaledTouchSlop() / density
+            + " pagingTouchSlop=" + vc.getScaledPagingTouchSlop() / density
+            + " doubleTapSlop=" + vc.getScaledDoubleTapSlop() / density
+            + " longPressMs=" + android.view.ViewConfiguration.getLongPressTimeout()
+            + " tapTimeoutMs=" + android.view.ViewConfiguration.getTapTimeout()
+            + " doubleTapMs=" + android.view.ViewConfiguration.getDoubleTapTimeout()
+            + " minFling=" + vc.getScaledMinimumFlingVelocity() / density
+            + " maxFling=" + vc.getScaledMaximumFlingVelocity() / density
+            + " scrollFriction=" + android.view.ViewConfiguration.getScrollFriction());
         Log.i(TAG, "twin ready — flick upward once (adb shell input swipe works)");
     }
 

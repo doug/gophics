@@ -45,6 +45,12 @@ func (h *shellHandler) wireWindow(w shell.Window) {
 			h.core.Owner.ScrollPhysics = p.ScrollPhysics()
 		}
 	}
+	// Likewise the gesture thresholds — a zero Config takes the shell's.
+	if h.core.Owner.Gestures == (shell.GestureTuning{}) {
+		if p, ok := w.(shell.GestureTuningProvider); ok {
+			h.core.Owner.Gestures = p.GestureTuning()
+		}
+	}
 	if h.wired == w {
 		return
 	}

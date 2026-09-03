@@ -145,6 +145,24 @@ pins one for an app that wants a single identity everywhere. macOS keeps
 passing the OS's own momentum through. `-physics android` replays a recording
 under the spline, and the Android twin's recording makes that reference bind.
 
+### Gesture thresholds
+
+Read from the platforms rather than quoted — Android's from `ViewConfiguration`
+on the emulator (the Android twin logs it at launch), iOS's from the UIKit
+headers, the Mac's from the live system:
+
+|                   | Android (measured) | iOS (documented) | macOS (live)     | gophics before |
+|-------------------|--------------------|------------------|------------------|----------------|
+| touch slop        | 8 dp               | 10 pt            | —                | 10             |
+| long press        | 400 ms             | 500 ms           | —                | 500 ms         |
+| double tap        | 300 ms             | (not published)  | 500 ms, user-set | 300 ms         |
+| min fling         | 50 dp/s            | —                | —                | 80 px/s        |
+
+`shell.GestureTuning` now carries these per platform, and the Mac reads its
+double-click interval from `NSEvent` — it is a system setting, and a user who
+slowed it down did so on purpose. Android's 400ms long press against iOS's
+500ms is the one a thumb notices.
+
 ## Where the constants actually come from
 
 The comment on `flingFriction` cites NSScrollView, but 0.998 per millisecond is

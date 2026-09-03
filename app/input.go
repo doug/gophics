@@ -25,7 +25,7 @@ func (c *core) longPressPending() bool {
 func (c *core) TickGestures(dt float64) {
 	if c.longPress != nil && !c.moved && !c.longFired {
 		c.pressHeld += dt
-		if c.pressHeld >= longPressSeconds {
+		if c.pressHeld >= c.longPressSeconds() {
 			c.longFired = true
 			c.pressed = nil // long-press consumes the gesture; no tap
 			if h := c.longPress.GestureHandler(); h.OnLongPress != nil {
@@ -35,7 +35,7 @@ func (c *core) TickGestures(dt float64) {
 	}
 	if c.pendingTap != nil {
 		c.tapElapsed += dt
-		if c.tapElapsed >= doubleTapWindow {
+		if c.tapElapsed >= c.doubleTapWindow() {
 			tap := c.pendingTap
 			c.pendingTap = nil
 			if h := tap.GestureHandler(); h.OnTap != nil {

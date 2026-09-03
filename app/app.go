@@ -115,7 +115,11 @@ type Config struct {
 	// and a user's reference for "native" is the device in their hand. Set it
 	// for an app that deliberately wants one identity everywhere — a game.
 	ScrollPhysics shell.ScrollPhysics
-	Renderer      RendererMode
+	// Gestures overrides the platform's tap, long-press and double-tap
+	// thresholds. Leave it zero to take the platform's — including a Mac's
+	// live double-click setting.
+	Gestures shell.GestureTuning
+	Renderer RendererMode
 	// GraphicsLog receives diagnostics from the rendering stack: adapter and
 	// surface selection, shader and pipeline compilation, atlas uploads, and
 	// every fallback taken when something is unsupported. Nil, the default,
@@ -228,41 +232,37 @@ type core struct {
 	a11y *a11yTree
 }
 
-// doubleTapWindow is how long a deferred single-tap waits for a second tap.
-const doubleTapWindow = 0.30
-
 // tapSlop is the movement that cancels a pending tap or long-press, in logical
 // px, for a pointer that holds still — a mouse or a pen.
 const tapSlop = 4
 
-// touchTapSlop is the same for a finger, which does not.
-//
-// One threshold used to govern both. Four px is right for a mouse and far too
-// tight for a finger: a finger rolls a few points through any deliberate tap
-// and drifts further through a half-second hold, so taps went unnoticed and
-// long-presses were cancelled before they could fire. The symptoms do not look
-// related — rows that ignore being tapped, and text selection that never
-// starts, since its entry point on touch *is* a long press — which is what
-// made it hard to see as one cause.
-//
-// Ten points is about what the platforms allow: UIKit's long-press
-// allowableMovement defaults to 10, and Android's touch slop is around 8dp.
-const touchTapSlop = 10
-
 // slop is the movement this gesture is allowed before it stops being a tap.
+//
+// A finger's allowance comes from the platform's GestureTuning: 10 on iOS,
+// 8 on Android, measured. One threshold used to govern both pointer kinds —
+// four px is right for a mouse and far too tight for a finger, which rolls a
+// few points through any deliberate tap and drifts further through a
+// half-second hold, so taps went unnoticed and long-presses were cancelled
+// before they could fire. The symptoms did not look related — rows that
+// ignore being tapped, and text selection that never starts, since its entry
+// point on touch is a long press — which is what made it hard to see as one
+// cause.
 func (c *core) slop() float32 {
 	if c.downTouch {
-		return touchTapSlop
+		return c.Owner.Gestures.Resolved().TouchSlop
 	}
 	return tapSlop
 }
 
+// longPressSeconds is how long a still press is held before OnLongPress fires.
+func (c *core) longPressSeconds() float64 { return c.Owner.Gestures.Resolved().LongPress }
+
+// doubleTapWindow is how long a deferred single tap waits for a second one.
+func (c *core) doubleTapWindow() float64 { return c.Owner.Gestures.Resolved().DoubleTap }
+
 // debugNoDamage forces a full-surface repaint every frame (GOPHICS_NO_DAMAGE),
 // bypassing damage culling — a diagnostic to isolate damage-tracking bugs.
 var debugNoDamage = os.Getenv("GOPHICS_NO_DAMAGE") != ""
-
-// longPressSeconds is how long a still press must be held to fire OnLongPress.
-const longPressSeconds = 0.5
 
 // newCore builds a runtime for the given root widget.
 func newCore(root widget.Widget, cfg Config) (*core, error) {
@@ -292,6 +292,7 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 	}
 	c.Owner.Post = c.Post
 	c.Owner.ScrollPhysics = cfg.ScrollPhysics
+	c.Owner.Gestures = cfg.Gestures
 	c.debugPaint = cfg.Debug
 	c.transparent = cfg.Transparent
 	applyGraphicsLog(cfg.GraphicsLog)

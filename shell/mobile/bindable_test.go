@@ -116,7 +116,7 @@ var goSideOnly = map[string]bool{
 	"Biometric": true, "Locale": true,
 	// Not a capability, but the same shape of thing: the runner reads it,
 	// the host never does, and a struct result is unbindable regardless.
-	"ScrollPhysics": true,
+	"ScrollPhysics": true, "GestureTuning": true,
 }
 
 type bridgeMethod struct {

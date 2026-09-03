@@ -105,7 +105,7 @@ func TestPendingTapFlushedOnNewTap(t *testing.T) {
 	if b.tap != 0 {
 		t.Fatalf("B.OnTap fired before its double-tap window: got %d", b.tap)
 	}
-	h.Step(doubleTapWindow + 0.1) // window expires → B's deferred tap fires
+	h.Step(shell.GestureTuning{}.Resolved().DoubleTap + 0.1) // window expires → B's deferred tap fires
 	if b.tap != 1 {
 		t.Fatalf("B.OnTap not fired after the window: got %d, want 1", b.tap)
 	}

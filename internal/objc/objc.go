@@ -261,6 +261,15 @@ func (o ID) SendUInt(sel string, args ...Arg) uint64 {
 // The out buffer is deliberately wider than a float32: libffi writes small
 // return values through an ffi_arg-sized slot, so handing it a bare 4-byte
 // destination invites a write past it on ABIs that pad.
+// SendDouble sends a message whose return is a double (an NSTimeInterval, a
+// CGFloat on 64-bit). SendFloat reads the register as a float32 and would
+// misread one.
+func (o ID) SendDouble(sel string, args ...Arg) float64 {
+	var out float64
+	_ = send(o, Sel(sel), types.DoubleTypeDescriptor, unsafe.Pointer(&out), args...)
+	return out
+}
+
 func (o ID) SendFloat(sel string, args ...Arg) float32 {
 	var out struct {
 		v float32

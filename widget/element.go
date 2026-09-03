@@ -69,6 +69,10 @@ type Owner struct {
 	// the shell (or from Config, which wins). Zero means iOS's curve; see
 	// shell.ScrollPhysics for why there is more than one.
 	ScrollPhysics shell.ScrollPhysics
+	// Gestures is the platform's tap/long-press/double-tap thresholds, set
+	// by the app runner from the shell (or from Config, which wins). Zero
+	// means UIKit's documented values.
+	Gestures shell.GestureTuning
 	// ReduceMotion reflects the platform "reduce motion" accessibility
 	// preference (set by the app runner; default false). Non-essential
 	// animations — like the text caret blink — should go solid when set.

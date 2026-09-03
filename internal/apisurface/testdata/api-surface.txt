@@ -29,6 +29,7 @@ app.Config.Debug field
 app.Config.EdgeToEdge field
 app.Config.Font field
 app.Config.FontFamilies field
+app.Config.Gestures field
 app.Config.GraphicsLog field
 app.Config.Provide field
 app.Config.Renderer field
@@ -719,6 +720,7 @@ shell.Accessibility.Announce method
 shell.Accessibility.SetTree method
 shell.AccessibilityWindow type
 shell.AccessibilityWindow.Accessibility method
+shell.AndroidGestureTuning func
 shell.AndroidScrollPhysics func
 shell.AppState type
 shell.AppState.String method
@@ -841,6 +843,13 @@ shell.Geolocation.Current method
 shell.Geolocation.Watch method
 shell.GeolocationWindow type
 shell.GeolocationWindow.Geolocation method
+shell.GestureTuning type
+shell.GestureTuning.DoubleTap field
+shell.GestureTuning.LongPress field
+shell.GestureTuning.Resolved method
+shell.GestureTuning.TouchSlop field
+shell.GestureTuningProvider type
+shell.GestureTuningProvider.GestureTuning method
 shell.Handler type
 shell.Handler.Event method
 shell.Handler.Frame method
@@ -856,6 +865,7 @@ shell.HapticSuccess const
 shell.HapticWarning const
 shell.HapticWindow type
 shell.HapticWindow.Haptic method
+shell.IOSGestureTuning func
 shell.IOSScrollPhysics func
 shell.Insets type
 shell.Insets.Insets field
@@ -1895,6 +1905,7 @@ widget.Owner.FlushBuilds method
 widget.Owner.FolderPicker method
 widget.Owner.Gamepads method
 widget.Owner.Geolocation method
+widget.Owner.Gestures field
 widget.Owner.Haptic method
 widget.Owner.Input field
 widget.Owner.KeyboardInset field

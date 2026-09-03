@@ -240,8 +240,8 @@ func TestSelectionAreaTouchLongPressSelects(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
-	touchDown(h, geom.Pt{X: 10, Y: 6}) // on "alpha"
-	h.Step(longPressSeconds + 0.05)    // hold → long-press fires, selects the word
+	touchDown(h, geom.Pt{X: 10, Y: 6})                        // on "alpha"
+	h.Step(shell.GestureTuning{}.Resolved().LongPress + 0.05) // hold → long-press fires, selects the word
 	h.Render()
 	h.KeyMod(shell.KeyC, shell.ModSuper)
 	if got := clip(h); got != "alpha" {
