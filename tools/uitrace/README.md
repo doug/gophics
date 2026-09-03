@@ -66,16 +66,21 @@ validating itself before it is pointed at anything native.
 |-------------------|------------|------------|
 | decay τ           | 0.186 s (R² 0.954) | 0.498 s (R² 0.999) |
 | settle time       | 0.79 s     | 2.28 s     |
-| release velocity  | 3765 px/s  | 2975 px/s  |
+| fling start       | ~3800 px/s (measured) | 1927 px/s (fit, matches measured) |
 | momentum distance | 1005 px    | 941 px     |
 
-Same finger input. gophics's fling decays 2.7× slower than a Mac trackpad
-flick and travels almost the same distance, because its release-velocity
-estimate reads 21% low and the long tail makes up the ground — the content
-lands in the same place and takes three times as long to get there. That is
-the "very slow end of the flick" a user feels before anyone can name it. Apple's
-curve is also not a clean exponential: R² 0.95–0.96 on two gestures, τ 0.178 and
-0.186, with the decay accelerating as it slows.
+Same finger input. gophics's fling starts at half Apple's speed and decays at a
+third the rate, and the two errors cancel into almost the same travel — the
+content lands in the same place and takes three times as long to get there.
+That is the "very slow end of the flick" a user feels before anyone can name
+it. The half-speed start is the velocity estimator: an EMA with a 40ms time
+constant over a four-event, 84ms finger phase has not converged, and macOS
+evidently uses something closer to the last instantaneous velocity.
+
+Apple's curve is also not a single exponential: R² 0.95–0.96 on two gestures,
+τ 0.178 and 0.186, decaying faster late than early — which is why an
+exponential fit's intercept (5984) overshoots the measured start, and why the
+table reports the measured value for macOS.
 
 A macOS recording is the closest reference available without a device, and
 it is informational: gophics's fling runs on touch platforms, and the iOS twin

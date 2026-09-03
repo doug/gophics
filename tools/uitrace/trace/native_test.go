@@ -73,10 +73,12 @@ func TestNativeRecordingsAgreeWithGophics(t *testing.T) {
 			// leaves room for the velocity estimator to differ from the OS's
 			// while still catching a fling that is plainly shorter or longer.
 			check("momentum distance", mg.MomentumDist, mn.MomentumDist, 0.15, "px")
-			// The release velocity gophics estimates from the same finger
-			// events. The first recording read 21% under macOS's, which is
-			// how a slower decay still lands at the same distance.
-			check("release velocity", mg.ReleaseV, mn.ReleaseV, 0.15, "px/s")
+			// The velocity the fling actually starts from, as the fit's
+			// intercept — not the finite difference at release, which straddles
+			// the finger's last frame. gophics's estimator read half of
+			// macOS's on the first recording, which is how a 2.7× slower decay
+			// still lands at the same distance.
+			check("fling start (fit v0)", mg.FitV0, mn.FitV0, 0.15, "px/s")
 			// And the native curve must actually be exponential for τ to mean
 			// anything; a low R² here is a finding about the platform, not a
 			// failure of gophics.

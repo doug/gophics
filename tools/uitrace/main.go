@@ -147,6 +147,7 @@ func runCompare(args []string) {
 	}
 	fmt.Printf("%-18s %10s %10s  %9s\n", "", a.Source, b.Source, "delta")
 	row("release velocity", ma.ReleaseV, mb.ReleaseV, "px/s")
+	row("fling start (fit)", ma.FitV0, mb.FitV0, "px/s")
 	row("peak velocity", ma.PeakV, mb.PeakV, "px/s")
 	row("decay tau", ma.Tau, mb.Tau, "s")
 	row("fit R²", ma.TauR2, mb.TauR2, "")

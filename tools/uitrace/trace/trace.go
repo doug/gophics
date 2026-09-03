@@ -137,6 +137,12 @@ type Metrics struct {
 	// documented 0.998/ms this is 0.5s; gophics's flingFriction of 2.0 is the
 	// same number by construction.
 	Tau float64
+	// FitV0 is the momentum's initial velocity from the same fit — the
+	// exponential's intercept at release. It is the number to compare across
+	// implementations: ReleaseV is a finite difference straddling the finger's
+	// last frame and the fling's first, and reads gophics 50% high, because the
+	// finger frame is faster than the fling it hands off to.
+	FitV0 float64
 	// TauR2 is the fit's coefficient of determination — how exponential the
 	// decay actually was. A native curve that is not a clean exponential will
 	// show here before it shows anywhere else.
@@ -216,6 +222,7 @@ func (t *Trace) Compute() Metrics {
 			// R² of the fit.
 			mean := sy / kf
 			intercept := (sy - slope*sx) / kf
+			m.FitV0 = math.Exp(intercept)
 			var ssTot, ssRes float64
 			for i := rel; i < end; i++ {
 				if math.Abs(v[i]) < 1 {
@@ -237,13 +244,14 @@ func (t *Trace) Compute() Metrics {
 // String is the metrics as a short report.
 func (m Metrics) String() string {
 	return fmt.Sprintf(
-		"release velocity  %8.1f px/s\n"+
+		"release velocity  %8.1f px/s  (finite difference at release)\n"+
+			"fling start       %8.1f px/s  (fit intercept)\n"+
 			"peak velocity     %8.1f px/s\n"+
 			"decay tau         %8.3f s   (R² %.3f)\n"+
 			"settle time       %8.3f s\n"+
 			"momentum distance %8.1f px\n"+
 			"total distance    %8.1f px",
-		m.ReleaseV, m.PeakV, m.Tau, m.TauR2, m.SettleT, m.MomentumDist, m.TotalDist)
+		m.ReleaseV, m.FitV0, m.PeakV, m.Tau, m.TauR2, m.SettleT, m.MomentumDist, m.TotalDist)
 }
 
 // SyntheticFlick builds the finger phase of an idealized flick: the finger
