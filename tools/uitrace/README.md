@@ -87,6 +87,33 @@ it is informational: gophics's fling runs on touch platforms, and the iOS twin
 is the reference that binds. Whether a touch fling should feel like a trackpad
 flick is a product decision the numbers now make possible to have.
 
+### The iOS recording (iOS 26.5 Simulator, iPhone 17 Pro, one upward flick)
+
+The reference that binds — gophics's fling runs on touch platforms. Same
+finger input:
+
+|                   | iOS UIKit  | gophics, 40ms EMA | gophics, 20ms EMA |
+|-------------------|------------|-------------------|-------------------|
+| decay τ           | 0.518 s    | 0.502 s           | 0.502 s           |
+| settle time       | 2.77 s     | 2.78 s            | 2.78 s            |
+| fling start (fit) | 6061 px/s  | 5063 (−16%)       | 5700 (−6%)        |
+| momentum distance | 3348 px    | 2563 (−23%)       | 2880 (−14%)       |
+
+**The decay constant is right on its home platform.** UIKit's documented
+0.998/ms is real: τ 0.518 measured against 0.502 declared, settle times within
+20ms. What was wrong was the hand-off: the velocity estimator, a 40ms EMA,
+had not converged by the end of a 130ms finger phase and started the fling
+16% slow, so it travelled 23% short. Sweeping the real estimator through the
+real replay put 20–25ms inside the harness's bands; `velocityTau` is now 20ms.
+
+The residual is UIKit's own trick. The recording shows the finger slowing
+before it lifts (138 → 84 → 2 px per frame), two still frames, then momentum
+starting at 6,600 px/s — almost exactly the mean of the last two *moving*
+frames. UIKit ignores the slowdown of a hand leaving the glass; an EMA cannot,
+and that is the next refinement if a device recording asks for it. iOS is not
+a perfectly clean exponential either (R² 0.943), mostly from that two-frame
+hold at release.
+
 ## Where the constants actually come from
 
 The comment on `flingFriction` cites NSScrollView, but 0.998 per millisecond is
@@ -102,6 +129,8 @@ real flick follows.
 2. **macOS AppKit twin** (`tools/native-twin/macos`) — a Swift `NSScrollView`
    that logs finger-phase deltas and per-frame offsets to the contract above;
    recorded traces become testdata; a Go test compares curves with tolerance.
-3. **iOS** via the simulator, same contract.
+3. **iOS twin** (`tools/native-twin/ios`) — a UIKit `UIScrollView` in the
+   Simulator, same contract, printed through `simctl launch --console`. Done;
+   its recording is the binding reference.
 4. **Other dimensions** — gesture thresholds (tap slop, long-press,
    drag-start), then text selection behavior.
