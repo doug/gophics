@@ -1553,6 +1553,7 @@ tools/uitrace/trace.DefaultScene.RowH field
 tools/uitrace/trace.DefaultScene.Rows field
 tools/uitrace/trace.DefaultScene.Viewport field
 tools/uitrace/trace.Metrics type
+tools/uitrace/trace.Metrics.FitV0 field
 tools/uitrace/trace.Metrics.MomentumDist field
 tools/uitrace/trace.Metrics.PeakV field
 tools/uitrace/trace.Metrics.ReleaseV field
