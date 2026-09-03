@@ -98,3 +98,5 @@ examples/*/gophics-*
 /tools/native-twin/ios/twin.app
 /tools/native-twin/ios/*.json
 /tools/native-twin/ios/twin.log
+/tools/native-twin/android/build/
+/tools/native-twin/android/*.json

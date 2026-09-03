@@ -114,6 +114,25 @@ and that is the next refinement if a device recording asks for it. iOS is not
 a perfectly clean exponential either (R² 0.943), mostly from that two-frame
 hold at release.
 
+### The Android recording (Android 14 emulator, `adb shell input swipe`, 100ms)
+
+Same swipe, replayed under `-physics android` — the reproduced OverScroller
+model against the real one:
+
+|                   | Android OverScroller | gophics (spline) |
+|-------------------|----------------------|------------------|
+| settle time       | 1.45 s               | 1.38 s (−5%)     |
+| momentum distance | 1846 dp              | 1753 dp (−5%)    |
+| peak velocity     | 3983 dp/s            | 3950 dp/s        |
+| exponential fit   | τ 0.35, R² 0.92      | τ 0.35, R² 0.95  |
+
+The model binds on first contact: the platform's published arithmetic,
+reproduced rather than approximated, lands within 5% on the two things a thumb
+notices, and both curves refuse an exponential fit to the same degree. The
+residual is the velocity estimator again — Android starts momentum at the
+finger's actual speed with no under-read at all. This one needed no human:
+the swipe is injected, so the reference is reproducible.
+
 ### Platform physics
 
 The twins settled it: an iPhone decays exponentially at τ ≈ 0.5s, a Mac
@@ -124,8 +143,7 @@ their hand, so `shell.ScrollPhysics` carries the curve: the mobile bridge picks
 it from `GOOS`, the web shell from the user agent, and `app.Config.ScrollPhysics`
 pins one for an app that wants a single identity everywhere. macOS keeps
 passing the OS's own momentum through. `-physics android` replays a recording
-under the spline; an Android twin (an emulator, the same contract) is what
-would make that reference bind.
+under the spline, and the Android twin's recording makes that reference bind.
 
 ## Where the constants actually come from
 
@@ -145,5 +163,8 @@ real flick follows.
 3. **iOS twin** (`tools/native-twin/ios`) — a UIKit `UIScrollView` in the
    Simulator, same contract, printed through `simctl launch --console`. Done;
    its recording is the binding reference.
-4. **Other dimensions** — gesture thresholds (tap slop, long-press,
+4. **Android twin** (`tools/native-twin/android`) — a `ScrollView` on the
+   emulator, built with four SDK tools and no Gradle, flicked by
+   `adb shell input swipe`. Done; binds.
+5. **Other dimensions** — gesture thresholds (tap slop, long-press,
    drag-start), then text selection behavior.

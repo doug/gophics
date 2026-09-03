@@ -3,7 +3,10 @@ package trace
 import (
 	"math"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/doug/gophics/shell"
 )
 
 // Every native recording under testdata/ is replayed through gophics and the
@@ -27,7 +30,14 @@ func TestNativeRecordingsAgreeWithGophics(t *testing.T) {
 			if native.Source == "gophics" {
 				t.Skip("a gophics trace is not a reference")
 			}
-			ours, err := Replay(native.Input, ReplayOptions{Hz: native.Hz})
+			// Each recording is replayed under the physics gophics would use on
+			// that platform — the point is whether gophics matches the device
+			// in hand, not whether every device matches iOS.
+			physics := shell.IOSScrollPhysics()
+			if strings.HasPrefix(native.Source, "android") {
+				physics = shell.AndroidScrollPhysics()
+			}
+			ours, err := Replay(native.Input, ReplayOptions{Hz: native.Hz, Physics: physics})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -65,20 +75,28 @@ func TestNativeRecordingsAgreeWithGophics(t *testing.T) {
 				}
 			}
 
-			// The decay is the thing. A 10% band on τ is roughly the difference
-			// between a flick that feels the same and one that feels "a bit
-			// heavy"; tighten it once the recordings say it can be.
-			check("decay tau", mg.Tau, mn.Tau, 0.10, "s")
-			// Momentum distance is τ and release velocity together; a 15% band
-			// leaves room for the velocity estimator to differ from the OS's
-			// while still catching a fling that is plainly shorter or longer.
-			check("momentum distance", mg.MomentumDist, mn.MomentumDist, 0.15, "px")
-			// The velocity the fling actually starts from, as the fit's
-			// intercept — not the finite difference at release, which straddles
-			// the finger's last frame. gophics's estimator read half of
-			// macOS's on the first recording, which is how a 2.7× slower decay
-			// still lands at the same distance.
-			check("fling start (fit v0)", mg.FitV0, mn.FitV0, 0.15, "px/s")
+			if physics.Model == shell.FlingSpline {
+				// The spline has no τ — it is not an exponential, and its fit
+				// intercept means nothing — so it is judged on what a thumb
+				// notices: how far the content went and when it stopped.
+				check("momentum distance", mg.MomentumDist, mn.MomentumDist, 0.15, "px")
+				check("settle time", mg.SettleT, mn.SettleT, 0.20, "s")
+			} else {
+				// The decay is the thing. A 10% band on τ is roughly the
+				// difference between a flick that feels the same and one that
+				// feels "a bit heavy"; tighten it once the recordings say it can be.
+				check("decay tau", mg.Tau, mn.Tau, 0.10, "s")
+				// Momentum distance is τ and release velocity together; a 15%
+				// band leaves room for the velocity estimator to differ from the
+				// OS's while still catching a fling that is plainly shorter or longer.
+				check("momentum distance", mg.MomentumDist, mn.MomentumDist, 0.15, "px")
+				// The velocity the fling actually starts from, as the fit's
+				// intercept — not the finite difference at release, which
+				// straddles the finger's last frame. gophics's estimator read
+				// half of macOS's on the first recording, which is how a 2.7×
+				// slower decay still lands at the same distance.
+				check("fling start (fit v0)", mg.FitV0, mn.FitV0, 0.15, "px/s")
+			}
 			// And the native curve must actually be exponential for τ to mean
 			// anything; a low R² here is a finding about the platform, not a
 			// failure of gophics.
