@@ -114,6 +114,9 @@ var goSideOnly = map[string]bool{
 	"TextInput": true, "Accessibility": true, "Preferences": true, "Connectivity": true, "Share": true, "Notifier": true, "SecureStorage": true,
 	"FilePicker": true, "WakeLock": true, "Photos": true,
 	"Biometric": true, "Locale": true,
+	// Not a capability, but the same shape of thing: the runner reads it,
+	// the host never does, and a struct result is unbindable regardless.
+	"ScrollPhysics": true,
 }
 
 type bridgeMethod struct {

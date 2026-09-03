@@ -9,6 +9,7 @@ import (
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -38,6 +39,8 @@ type ReplayOptions struct {
 	MaxT float64
 	// Scene overrides DefaultScene when Rows > 0.
 	Scene Scene
+	// Physics pins the fling curve; zero takes the default (iOS's).
+	Physics shell.ScrollPhysics
 }
 
 // Replay drives the finger phase in input through app.Headless at opts.Hz and
@@ -69,8 +72,9 @@ func Replay(input []Sample, opts ReplayOptions) (*Trace, error) {
 
 	ctrl := &widget.ScrollController{}
 	h, err := app.NewHeadless(list{ctrl: ctrl, scene: sc}, app.Config{
-		Size: sc.Viewport,
-		Font: goregular.TTF,
+		Size:          sc.Viewport,
+		Font:          goregular.TTF,
+		ScrollPhysics: opts.Physics,
 	}, scale)
 	if err != nil {
 		return nil, err

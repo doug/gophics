@@ -2,7 +2,7 @@
 // scroll view did with it: a trace, a CSV, metrics, and optionally the frames
 // and a video.
 //
-//	uitrace fling   [-v0 -2400] [-dur 0.1] [-hz 120] [-out out] [-frames] [-video]
+//	uitrace fling   [-v0 -2400] [-dur 0.1] [-hz 120] [-physics ios|android] [-out out] [-frames] [-video]
 //	uitrace replay  [-hz 120] [-out out] [-frames] [-video] trace.json
 //	uitrace compare a.json b.json
 //
@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/tools/uitrace/trace"
 )
 
@@ -50,10 +51,11 @@ func usage() {
 }
 
 type outputs struct {
-	dir    string
-	frames bool
-	video  bool
-	hz     float64
+	dir     string
+	frames  bool
+	video   bool
+	hz      float64
+	physics string
 }
 
 func outputFlags(fs *flag.FlagSet) *outputs {
@@ -62,6 +64,7 @@ func outputFlags(fs *flag.FlagSet) *outputs {
 	fs.BoolVar(&o.frames, "frames", false, "write every frame as PNG")
 	fs.BoolVar(&o.video, "video", false, "assemble the frames into a video (implies -frames)")
 	fs.Float64Var(&o.hz, "hz", 120, "frame rate to step at")
+	fs.StringVar(&o.physics, "physics", "ios", "fling curve to replay under: ios or android")
 	return o
 }
 
@@ -108,10 +111,19 @@ func run(input []trace.Sample, o *outputs, note string) {
 			writePNG(filepath.Join(framesDir, fmt.Sprintf("%05d.png", i)), c)
 		}
 	}
+	switch o.physics {
+	case "ios", "":
+		opts.Physics = shell.IOSScrollPhysics()
+	case "android":
+		opts.Physics = shell.AndroidScrollPhysics()
+	default:
+		fatal(fmt.Errorf("unknown -physics %q (ios or android)", o.physics))
+	}
 	tr, err := trace.Replay(input, opts)
 	if err != nil {
 		fatal(err)
 	}
+	tr.Source = "gophics/" + o.physics
 	tr.Notes = note
 
 	writeFile(filepath.Join(o.dir, "trace.json"), tr.Write)

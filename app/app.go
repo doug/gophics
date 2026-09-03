@@ -110,7 +110,12 @@ type Config struct {
 	// Renderer selects the rasterization backend: Auto (default) prefers the
 	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
 	// rasterizer. The GOPHICS_RENDERER env var overrides this at startup.
-	Renderer RendererMode
+	// ScrollPhysics overrides the platform's touch-fling curve. Leave it zero
+	// to take the platform's: an iPhone decays one way, an Android another,
+	// and a user's reference for "native" is the device in their hand. Set it
+	// for an app that deliberately wants one identity everywhere — a game.
+	ScrollPhysics shell.ScrollPhysics
+	Renderer      RendererMode
 	// GraphicsLog receives diagnostics from the rendering stack: adapter and
 	// surface selection, shader and pipeline compilation, atlas uploads, and
 	// every fallback taken when something is unsupported. Nil, the default,
@@ -286,6 +291,7 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 		posted:         make(chan func(), 128),
 	}
 	c.Owner.Post = c.Post
+	c.Owner.ScrollPhysics = cfg.ScrollPhysics
 	c.debugPaint = cfg.Debug
 	c.transparent = cfg.Transparent
 	applyGraphicsLog(cfg.GraphicsLog)

@@ -33,6 +33,7 @@ app.Config.GraphicsLog field
 app.Config.Provide field
 app.Config.Renderer field
 app.Config.ScaleToFit field
+app.Config.ScrollPhysics field
 app.Config.Size field
 app.Config.Title field
 app.Config.Transparent field
@@ -718,6 +719,7 @@ shell.Accessibility.Announce method
 shell.Accessibility.SetTree method
 shell.AccessibilityWindow type
 shell.AccessibilityWindow.Accessibility method
+shell.AndroidScrollPhysics func
 shell.AppState type
 shell.AppState.String method
 shell.Battery type
@@ -794,6 +796,10 @@ shell.FilePicker.Open method
 shell.FilePicker.Save method
 shell.FilePickerWindow type
 shell.FilePickerWindow.FilePicker method
+shell.FlingExponential const
+shell.FlingModel type
+shell.FlingPlatform const
+shell.FlingSpline const
 shell.Focus type
 shell.Focus.Focused field
 shell.Folder type
@@ -850,6 +856,7 @@ shell.HapticSuccess const
 shell.HapticWarning const
 shell.HapticWindow type
 shell.HapticWindow.Haptic method
+shell.IOSScrollPhysics func
 shell.Insets type
 shell.Insets.Insets field
 shell.Key type
@@ -1047,6 +1054,13 @@ shell.RoleZoom const
 shell.SaveOptions type
 shell.SaveOptions.Accept field
 shell.SaveOptions.Name field
+shell.ScrollPhysics type
+shell.ScrollPhysics.Friction field
+shell.ScrollPhysics.Model field
+shell.ScrollPhysics.Resolved method
+shell.ScrollPhysics.Tau field
+shell.ScrollPhysicsProvider type
+shell.ScrollPhysicsProvider.ScrollPhysics method
 shell.SecureStorage type
 shell.SecureStorage.Delete method
 shell.SecureStorage.Get method
@@ -1569,6 +1583,7 @@ tools/uitrace/trace.ReplayOptions type
 tools/uitrace/trace.ReplayOptions.Frames field
 tools/uitrace/trace.ReplayOptions.Hz field
 tools/uitrace/trace.ReplayOptions.MaxT field
+tools/uitrace/trace.ReplayOptions.Physics field
 tools/uitrace/trace.ReplayOptions.Scale field
 tools/uitrace/trace.ReplayOptions.Scene field
 tools/uitrace/trace.RestSpeed const
@@ -1907,6 +1922,7 @@ widget.Owner.RequestFrameThreadSafe method
 widget.Owner.RestoreState method
 widget.Owner.RootBox method
 widget.Owner.SafeInsets field
+widget.Owner.ScrollPhysics field
 widget.Owner.SecureStorage method
 widget.Owner.SetRoot method
 widget.Owner.Share method

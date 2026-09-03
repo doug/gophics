@@ -13,6 +13,7 @@ import (
 	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 )
 
 // renderWidget is the internal bridge from widgets to layout boxes.
@@ -64,6 +65,10 @@ type Owner struct {
 	// DarkMode reflects the platform color-scheme preference (kept fresh by
 	// the app runner; a change rebuilds the whole tree).
 	DarkMode bool
+	// ScrollPhysics is the platform's fling curve, set by the app runner from
+	// the shell (or from Config, which wins). Zero means iOS's curve; see
+	// shell.ScrollPhysics for why there is more than one.
+	ScrollPhysics shell.ScrollPhysics
 	// ReduceMotion reflects the platform "reduce motion" accessibility
 	// preference (set by the app runner; default false). Non-essential
 	// animations — like the text caret blink — should go solid when set.

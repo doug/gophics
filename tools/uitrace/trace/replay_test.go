@@ -3,6 +3,8 @@ package trace
 import (
 	"math"
 	"testing"
+
+	"github.com/doug/gophics/shell"
 )
 
 // The harness's first number: gophics's own fling decays with the time
@@ -83,4 +85,35 @@ func TestMetricsOnSyntheticExponential(t *testing.T) {
 	if m.TauR2 < 0.999 {
 		t.Errorf("R² %.4f on a pure exponential", m.TauR2)
 	}
+}
+
+// Under Android's physics the same flick is a different curve: it ends on a
+// known clock instead of tailing off, and its travel is the platform's
+// formula applied to the velocity the finger handed over.
+func TestReplayUnderAndroidPhysics(t *testing.T) {
+	input := SyntheticFlick(-2400, 0.1, 120)
+	tr, err := Replay(input, ReplayOptions{Hz: 120, Physics: shell.AndroidScrollPhysics()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := tr.Compute()
+	if m.MomentumDist <= 0 {
+		t.Fatal("no momentum under the spline model")
+	}
+	// The spline stops dead at its duration rather than decaying under the
+	// rest threshold, so it settles well inside the exponential's 2.3s.
+	if m.SettleT > 1.6 {
+		t.Errorf("settled in %.2fs; Android's curve for this flick ends near 1.2s", m.SettleT)
+	}
+	// And it is not an exponential — the fit should say so.
+	if m.TauR2 > 0.98 {
+		t.Errorf("R² %.3f: the spline fit an exponential too well to be one", m.TauR2)
+	}
+	// Offsets never go backwards.
+	for i := 1; i < len(tr.Offset); i++ {
+		if tr.Offset[i].V < tr.Offset[i-1].V-1e-6 {
+			t.Fatalf("offset reversed at t=%.3f", tr.Offset[i].T)
+		}
+	}
+	t.Logf("\n%s", m)
 }

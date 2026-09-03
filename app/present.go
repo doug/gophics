@@ -39,6 +39,12 @@ func (h *shellHandler) wireMedia(w shell.Window) {
 // This is easy to get wrong and silent when you do: the capability is simply
 // absent forever, with no error and nothing in the logs.
 func (h *shellHandler) wireWindow(w shell.Window) {
+	// The platform's fling curve, unless the app pinned one in Config.
+	if h.core.Owner.ScrollPhysics.Model == shell.FlingPlatform {
+		if p, ok := w.(shell.ScrollPhysicsProvider); ok {
+			h.core.Owner.ScrollPhysics = p.ScrollPhysics()
+		}
+	}
 	if h.wired == w {
 		return
 	}

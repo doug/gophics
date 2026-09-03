@@ -17,7 +17,7 @@ itself), settle time, momentum distance — and `uitrace compare` prints two
 traces side by side.
 
 ```
-uitrace fling   [-v0 -2400] [-dur 0.1] [-hz 120] [-out out] [-frames] [-video]
+uitrace fling   [-v0 -2400] [-dur 0.1] [-hz 120] [-physics ios|android] [-out out] [-frames] [-video]
 uitrace replay  [-hz 120] [-out out] [-frames] [-video] trace.json
 uitrace compare a.json b.json
 ```
@@ -113,6 +113,19 @@ frames. UIKit ignores the slowdown of a hand leaving the glass; an EMA cannot,
 and that is the next refinement if a device recording asks for it. iOS is not
 a perfectly clean exponential either (R² 0.943), mostly from that two-frame
 hold at release.
+
+### Platform physics
+
+The twins settled it: an iPhone decays exponentially at τ ≈ 0.5s, a Mac
+trackpad at τ ≈ 0.19s and not quite exponentially, and Android's `OverScroller`
+is a third model — a position spline whose duration and distance grow with the
+log of the release velocity. A user's reference for "native" is the device in
+their hand, so `shell.ScrollPhysics` carries the curve: the mobile bridge picks
+it from `GOOS`, the web shell from the user agent, and `app.Config.ScrollPhysics`
+pins one for an app that wants a single identity everywhere. macOS keeps
+passing the OS's own momentum through. `-physics android` replays a recording
+under the spline; an Android twin (an emulator, the same contract) is what
+would make that reference bind.
 
 ## Where the constants actually come from
 

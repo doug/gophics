@@ -9,6 +9,7 @@ import (
 	"github.com/doug/gophics/internal/layoutbox"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 )
 
 // Scroll makes its child scrollable along Axis (default vertical) via
@@ -524,6 +525,14 @@ type flinger struct {
 	s      *scrollState
 	v      float32 // px/s (finger space: down/right positive)
 	active bool
+	// physics is the resolved platform curve, captured at start.
+	physics shell.ScrollPhysics
+	// The spline model is position-driven rather than velocity-driven: it
+	// knows its whole duration and distance at release and reads position off
+	// a table. t is elapsed time, moved is how far it has already applied,
+	// and dir carries the sign the table does not.
+	t, dur, dist, moved float64
+	dir                 float32
 	// fresh marks the tick that shares a frame with the release. That frame
 	// already moved the content by the finger's last delta, so the first
 	// momentum tick must not move it again: doing so integrated one frame's
@@ -535,18 +544,31 @@ type flinger struct {
 	fresh bool
 }
 
-// start begins momentum at v px/s.
+// start begins momentum at v px/s under the owner's platform physics.
 func (f *flinger) start(v float32) {
 	f.v, f.active, f.fresh = v, true, true
+	f.physics = f.s.ctx.el.owner.ScrollPhysics.Resolved()
+	if f.physics.Model == shell.FlingSpline {
+		f.dir = 1
+		if v < 0 {
+			f.dir = -1
+		}
+		f.dur, f.dist = splineFling(float64(v), f.physics.Friction)
+		f.t, f.moved = 0, 0
+	}
+}
+
+// decay applies dt of exponential slowdown.
+func (f *flinger) decay(dt float64) {
+	f.v *= float32(math.Exp(-dt / f.physics.Tau))
 }
 
 const (
-	// flingFriction is the per-second exponential velocity decay. macOS's
-	// "normal" NSScrollView deceleration rate is ~0.998 per millisecond, i.e.
-	// v(t) = v0·0.998^(1000t) = v0·e^(−2.0t): friction ≈ −1000·ln(0.998) ≈ 2.0.
-	flingFriction = 2.0 // 1/s decay rate — tuned to NSScrollView; feel-test
-	flingMinStart = 80  // px/s needed to start a fling
-	flingMinSpeed = 20  // px/s considered at rest
+	// The decay itself lives in shell.ScrollPhysics now — τ 0.5s for the
+	// exponential (UIKit's 0.998/ms, measured at 0.518 on an iOS 26
+	// Simulator), Android's spline for the rest — chosen by the platform.
+	flingMinStart = 80 // px/s needed to start a fling
+	flingMinSpeed = 20 // px/s considered at rest
 
 	// Rubber-band + bounce tuning (see rubberBand / overspring).
 	rubberC       = 0.55 // elastic resistance factor (macOS ≈ 0.55)
@@ -560,8 +582,13 @@ func (f *flinger) Tick(dt float64) bool {
 	}
 	if f.fresh {
 		f.fresh = false
-		f.v *= float32(math.Exp(-flingFriction * dt))
+		if f.physics.Model == shell.FlingExponential {
+			f.decay(dt)
+		}
 		return true
+	}
+	if f.physics.Model == shell.FlingSpline {
+		return f.tickSpline(dt)
 	}
 	if f.s.scrollFinger(f.v*float32(dt)) != 0 {
 		// Hit an edge with velocity left over: bounce instead of dead-stopping.
@@ -569,8 +596,31 @@ func (f *flinger) Tick(dt float64) bool {
 		f.s.startSpringBack(f.v)
 		return false
 	}
-	f.v *= float32(math.Exp(-flingFriction * dt))
+	f.decay(dt)
 	if f.v < flingMinSpeed && f.v > -flingMinSpeed {
+		f.active = false
+	}
+	return f.active
+}
+
+// tickSpline advances Android's position-driven fling by dt.
+func (f *flinger) tickSpline(dt float64) bool {
+	f.t += dt
+	if f.dur <= 0 {
+		f.active = false
+		return false
+	}
+	target := splineAt(f.t/f.dur) * f.dist
+	step := target - f.moved
+	f.moved = target
+	// The instantaneous velocity, for a bounce if this step hits an edge.
+	f.v = float32(step/dt) * f.dir
+	if f.s.scrollFinger(float32(step)*f.dir) != 0 {
+		f.active = false
+		f.s.startSpringBack(f.v)
+		return false
+	}
+	if f.t >= f.dur {
 		f.active = false
 	}
 	return f.active
