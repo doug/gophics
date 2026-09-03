@@ -3,7 +3,7 @@
 // and a video.
 //
 //	uitrace fling   [-v0 -2400] [-dur 0.1] [-hz 120] [-out out] [-frames] [-video]
-//	uitrace replay  trace.json  [-hz 120] [-out out] [-frames] [-video]
+//	uitrace replay  [-hz 120] [-out out] [-frames] [-video] trace.json
 //	uitrace compare a.json b.json
 //
 // fling drives a synthetic flick; replay drives the finger phase recorded in a

@@ -18,7 +18,7 @@ traces side by side.
 
 ```
 uitrace fling   [-v0 -2400] [-dur 0.1] [-hz 120] [-out out] [-frames] [-video]
-uitrace replay  trace.json  [-hz 120] [-out out] [-frames] [-video]
+uitrace replay  [-hz 120] [-out out] [-frames] [-video] trace.json
 uitrace compare a.json b.json
 ```
 
@@ -59,6 +59,28 @@ landed in the same frame, a ~1.9× kick at every release. Fixed in
 It also confirmed that gophics's fling decays with τ = 0.499s at R² = 1.000 —
 exactly what `flingFriction = 2.0` declares — which is the measurement chain
 validating itself before it is pointed at anything native.
+
+### The first native recording (macOS 26.6, trackpad, one upward flick)
+
+|                   | macOS      | gophics    |
+|-------------------|------------|------------|
+| decay τ           | 0.186 s (R² 0.954) | 0.498 s (R² 0.999) |
+| settle time       | 0.79 s     | 2.28 s     |
+| release velocity  | 3765 px/s  | 2975 px/s  |
+| momentum distance | 1005 px    | 941 px     |
+
+Same finger input. gophics's fling decays 2.7× slower than a Mac trackpad
+flick and travels almost the same distance, because its release-velocity
+estimate reads 21% low and the long tail makes up the ground — the content
+lands in the same place and takes three times as long to get there. That is
+the "very slow end of the flick" a user feels before anyone can name it. Apple's
+curve is also not a clean exponential: R² 0.95–0.96 on two gestures, τ 0.178 and
+0.186, with the decay accelerating as it slows.
+
+A macOS recording is the closest reference available without a device, and
+it is informational: gophics's fling runs on touch platforms, and the iOS twin
+is the reference that binds. Whether a touch fling should feel like a trackpad
+flick is a product decision the numbers now make possible to have.
 
 ## Where the constants actually come from
 

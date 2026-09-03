@@ -72,6 +72,11 @@ final class Recorder {
 
     func wheel(_ e: NSEvent) {
         let ph = e.phase, mph = e.momentumPhase
+        // One gesture per file. Once the finger has lifted, a second gesture is
+        // a second recording's business: ignoring it here is what stopped a
+        // reflexive "flick it back" from overwriting the release time and
+        // appending a second finger phase to the first one's momentum.
+        if released { return }
         if t0 == nil {
             // Only a real gesture starts a recording; a lone wheel tick is not one.
             guard ph.contains(.began) else { return }
@@ -112,7 +117,11 @@ final class Recorder {
             quiet = (y == lastY) ? quiet + 1 : 0
             // Momentum reported ended, or nothing has moved for a while — a
             // flick with no momentum never reports .ended.
-            if (momentumEnded && quiet >= 6) || quiet >= 60 { finish() }
+            // Momentum reported ended and the view is still; or nothing has
+            // moved for a second — a flick with no momentum never reports
+            // .ended. The still-frame count is short on purpose: the file
+            // should be written before a human has time to touch the pad again.
+            if (momentumEnded && quiet >= 3) || quiet >= 60 { finish() }
         }
         lastY = y
     }
