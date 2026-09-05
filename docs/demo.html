@@ -83,6 +83,11 @@
     const bare = params.has("bare");
     if (bare) {
       bar.style.display = "none";
+      // And give the strip back. The web shell reserves --gophics-top-inset
+      // for the bar on every resize, so hiding the bar alone left an empty
+      // 40px header above an embedded demo, and the home hero's counter sat
+      // shifted down under nothing.
+      document.documentElement.style.setProperty("--gophics-top-inset", "0px");
       // No loader either. An embedding page shows its own placeholder until
       // this frame is ready, so a spinner here would only ever be glimpsed
       // through the cross-fade — which is exactly the flash it is meant to
