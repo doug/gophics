@@ -49,6 +49,13 @@ const (
 type TextInputOptions struct {
 	Type        TextInputType
 	Autocorrect bool // enable autocorrect/predictive text
+	// Secure marks the field as holding a secret (a password, a PIN). The
+	// platform then presents its password keyboard: no predictive bar, no
+	// autocorrect, nothing learned into the user dictionary, and no keyboard
+	// preview of the typed key on Android. The field already draws bullets in
+	// place of the text; this hint is what stops the *keyboard* from echoing
+	// or remembering it, which no amount of drawing can do.
+	Secure bool
 }
 
 // TextInputHandler receives editing events from the platform IME.

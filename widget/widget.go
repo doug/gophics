@@ -319,6 +319,15 @@ type Gestures struct {
 	// deferred by the double-tap window (to disambiguate); a recognized
 	// double-tap cancels that pending OnTap.
 	OnDoubleTap func()
+	// OnTripleTap fires on a third tap within the double-tap window of a
+	// double tap — a text field selects the line. Only meaningful alongside
+	// OnDoubleTap.
+	OnTripleTap func()
+	// OnSecondaryTap fires on a press of the secondary (right) button, with
+	// the position in the widget's own space. It is not a press: there is no
+	// drag, release or tap behind it, and it does not move focus. A text
+	// field opens its edit menu from it.
+	OnSecondaryTap func(pos geom.Pt)
 	// ConsumesTab reports whether this widget wants Tab for itself rather than
 	// letting it move focus. Nil means no.
 	//

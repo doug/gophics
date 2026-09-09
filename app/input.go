@@ -33,6 +33,12 @@ func (c *core) TickGestures(dt float64) {
 			}
 		}
 	}
+	if c.doubled != nil {
+		c.doubledElapsed += dt
+		if c.doubledElapsed >= c.doubleTapWindow() {
+			c.doubled = nil
+		}
+	}
 	if c.pendingTap != nil {
 		c.tapElapsed += dt
 		if c.tapElapsed >= c.doubleTapWindow() {
@@ -64,8 +70,18 @@ func (c *core) fireTap(box widget.GestureTarget, pos geom.Pt) {
 	if c.pendingTap == box && near(pos, c.pendingTapPos, doubleTapSlop) {
 		c.pendingTap = nil // second tap in window and place: it's a double
 		h.OnDoubleTap()
+		if h.OnTripleTap != nil {
+			// Keep watching: a third tap in the window makes a triple.
+			c.doubled, c.doubledPos, c.doubledElapsed = box, pos, 0
+		}
 		return
 	}
+	if c.doubled == box && near(pos, c.doubledPos, doubleTapSlop) && c.doubledElapsed < c.doubleTapWindow() {
+		c.doubled = nil
+		h.OnTripleTap()
+		return
+	}
+	c.doubled = nil
 	// A new first-tap that isn't completing the pending one as a double (a
 	// different box, or the same box too far away): flush the still-pending tap's
 	// OnTap now so it isn't silently dropped when we overwrite it below.
@@ -228,6 +244,18 @@ func (c *core) Pointer(e shell.Pointer) {
 		}
 
 	case shell.PointerDown:
+		if e.Button == 1 {
+			// The secondary button is its own gesture, not a press: no drag,
+			// no release, no tap, no focus change. The deepest widget that
+			// wants it gets it, in its own coordinates.
+			for _, h := range c.interactivesAt(e.Pos) {
+				if hd := h.box.GestureHandler(); hd.OnSecondaryTap != nil {
+					hd.OnSecondaryTap(h.local)
+					break
+				}
+			}
+			return
+		}
 		if e.Button != 0 {
 			return
 		}

@@ -226,7 +226,11 @@ type core struct {
 	pressHeld      float64 // seconds the current press has been held, unmoved
 	longFired      bool
 	pendingTap     widget.GestureTarget // deferred single-tap awaiting a possible double
-	pendingTapPos  geom.Pt              // where the deferred tap landed (double must be nearby)
+	// doubled is the box that just took a double tap, watched for a third.
+	doubled        widget.GestureTarget
+	doubledPos     geom.Pt
+	doubledElapsed float64
+	pendingTapPos  geom.Pt // where the deferred tap landed (double must be nearby)
 	tapElapsed     float64
 
 	a11y *a11yTree

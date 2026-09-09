@@ -139,6 +139,15 @@ func (b *InteractiveBox) Semantics() layout.SemInfo {
 		// treating them as inputs put a full-screen "textfield" over the HN
 		// feed on Android whose label was every headline concatenated — one
 		// stop that reads the entire list and no way past it.
+		// The child knows more than the wrapper: a text field reports its
+		// value (bullets, for a password), placeholder as label, focus, and
+		// whether it is disabled. Without this every field read as an
+		// unlabeled, empty text field.
+		if p, ok := b.Child.(interface{ Semantics() layout.SemInfo }); ok {
+			if info := p.Semantics(); info.Role == layout.RoleTextField {
+				return info
+			}
+		}
 		return layout.SemInfo{Role: layout.RoleTextField}
 	case b.Gestures.OnTap != nil:
 		return layout.SemInfo{Role: layout.RoleButton, OnActivate: b.Gestures.OnTap}

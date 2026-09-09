@@ -117,6 +117,18 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	listen(canvas, "pointermove", func(e js.Value) {
 		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: pos(e), Source: src(e)})
 	})
+	// DOM buttons are 0 left, 1 middle, 2 right; the shell contract is
+	// 0 primary, 1 secondary, 2 middle. Passing the DOM value through had
+	// right-clicks arriving as "middle" and vice versa.
+	button := func(e js.Value) uint8 {
+		switch e.Get("button").Int() {
+		case 2:
+			return 1
+		case 1:
+			return 2
+		}
+		return 0
+	}
 	listen(canvas, "pointerdown", func(e js.Value) {
 		refreshRect()
 		// Capture the pointer so drags keep delivering move/up even if the
@@ -124,10 +136,10 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		if id := e.Get("pointerId"); !id.IsUndefined() {
 			canvas.Call("setPointerCapture", id)
 		}
-		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: pos(e), Button: uint8(e.Get("button").Int()), Source: src(e)})
+		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: pos(e), Button: button(e), Source: src(e)})
 	})
 	listen(canvas, "pointerup", func(e js.Value) {
-		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: pos(e), Button: uint8(e.Get("button").Int()), Source: src(e)})
+		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: pos(e), Button: button(e), Source: src(e)})
 	})
 	listen(canvas, "wheel", func(e js.Value) {
 		e.Call("preventDefault")
@@ -225,18 +237,76 @@ func keyCode(key string, mods shell.Mods) shell.KeyCode {
 	case "End":
 		return shell.KeyEnd
 	}
-	// Letter keys only as command shortcuts; plain letters are text input.
-	if mods.Command() {
-		switch key {
-		case "a", "A":
-			return shell.KeyA
-		case "c", "C":
-			return shell.KeyC
-		case "v", "V":
-			return shell.KeyV
-		case "x", "X":
-			return shell.KeyX
+	// Letter keys only with a modifier held — Cmd/Ctrl for commands, Alt for
+	// word movement, Ctrl for the Emacs bindings on a Mac; a plain letter is
+	// text input and arrives through the input event instead.
+	if mods&(shell.ModCtrl|shell.ModSuper|shell.ModAlt) != 0 && len(key) == 1 {
+		c := key[0]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
 		}
+		if c >= 'A' && c <= 'Z' {
+			return letterKey(c)
+		}
+	}
+	return shell.KeyUnknown
+}
+
+// letterKey maps an ASCII uppercase letter to its KeyCode.
+func letterKey(c byte) shell.KeyCode {
+	switch c {
+	case 'A':
+		return shell.KeyA
+	case 'B':
+		return shell.KeyB
+	case 'C':
+		return shell.KeyC
+	case 'D':
+		return shell.KeyD
+	case 'E':
+		return shell.KeyE
+	case 'F':
+		return shell.KeyF
+	case 'G':
+		return shell.KeyG
+	case 'H':
+		return shell.KeyH
+	case 'I':
+		return shell.KeyI
+	case 'J':
+		return shell.KeyJ
+	case 'K':
+		return shell.KeyK
+	case 'L':
+		return shell.KeyL
+	case 'M':
+		return shell.KeyM
+	case 'N':
+		return shell.KeyN
+	case 'O':
+		return shell.KeyO
+	case 'P':
+		return shell.KeyP
+	case 'Q':
+		return shell.KeyQ
+	case 'R':
+		return shell.KeyR
+	case 'S':
+		return shell.KeyS
+	case 'T':
+		return shell.KeyT
+	case 'U':
+		return shell.KeyU
+	case 'V':
+		return shell.KeyV
+	case 'W':
+		return shell.KeyW
+	case 'X':
+		return shell.KeyX
+	case 'Y':
+		return shell.KeyY
+	case 'Z':
+		return shell.KeyZ
 	}
 	return shell.KeyUnknown
 }

@@ -119,7 +119,20 @@ func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandle
 
 	in := t.input
 	in.Set("inputmode", inputMode(opts.Type))
-	if opts.Autocorrect {
+	in.Set("type", inputType(opts))
+	if opts.Secure {
+		in.Set("autocomplete", "off")
+	}
+	// A password input is how the browser is told not to suggest, autofill
+	// from history, or show the typed key in the keyboard's preview bubble.
+	// The element is invisible, so the type changes nothing on screen; it
+	// changes what the soft keyboard does with the secret.
+	if opts.Secure {
+		in.Set("type", "password")
+	} else {
+		in.Set("type", "text")
+	}
+	if opts.Autocorrect && !opts.Secure {
 		in.Call("removeAttribute", "autocorrect")
 		in.Call("removeAttribute", "autocapitalize")
 		in.Set("spellcheck", true)
@@ -160,6 +173,15 @@ func (t *webTextInput) Hide() {
 // SetText is a no-op on web: the hidden input is a commit funnel (input events
 // replace-and-clear), so surrounding-text context isn't needed for this path.
 func (t *webTextInput) SetText(text string, selStart, selEnd int) {}
+
+// inputType is the <input type>: password for secure entry, so the browser
+// neither suggests nor remembers what is typed; text otherwise.
+func inputType(opts shell.TextInputOptions) string {
+	if opts.Secure {
+		return "password"
+	}
+	return "text"
+}
 
 func inputMode(t shell.TextInputType) string {
 	switch t {

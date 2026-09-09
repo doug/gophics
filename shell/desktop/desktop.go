@@ -177,6 +177,36 @@ func keyCode(k gpucontext.Key) shell.KeyCode {
 		return shell.KeyR
 	case gpucontext.KeyF:
 		return shell.KeyF
+	case gpucontext.KeyB:
+		return shell.KeyB
+	case gpucontext.KeyG:
+		return shell.KeyG
+	case gpucontext.KeyH:
+		return shell.KeyH
+	case gpucontext.KeyI:
+		return shell.KeyI
+	case gpucontext.KeyJ:
+		return shell.KeyJ
+	case gpucontext.KeyK:
+		return shell.KeyK
+	case gpucontext.KeyL:
+		return shell.KeyL
+	case gpucontext.KeyM:
+		return shell.KeyM
+	case gpucontext.KeyN:
+		return shell.KeyN
+	case gpucontext.KeyO:
+		return shell.KeyO
+	case gpucontext.KeyP:
+		return shell.KeyP
+	case gpucontext.KeyT:
+		return shell.KeyT
+	case gpucontext.KeyU:
+		return shell.KeyU
+	case gpucontext.KeyY:
+		return shell.KeyY
+	case gpucontext.KeyZ:
+		return shell.KeyZ
 	case gpucontext.KeyLeftShift, gpucontext.KeyRightShift:
 		return shell.KeyShift
 	case gpucontext.KeyLeftControl, gpucontext.KeyRightControl:

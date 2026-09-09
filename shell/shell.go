@@ -275,6 +275,23 @@ const (
 	KeyQ
 	KeyR
 	KeyF
+	// The rest of the alphabet, for editing bindings: Emacs Ctrl+B/N/P/H/K on
+	// Apple keyboards, Ctrl+Y redo elsewhere, Cmd/Ctrl+Z undo everywhere.
+	KeyB
+	KeyG
+	KeyH
+	KeyI
+	KeyJ
+	KeyK
+	KeyL
+	KeyM
+	KeyN
+	KeyO
+	KeyP
+	KeyT
+	KeyU
+	KeyY
+	KeyZ
 	KeyShift
 	KeyCtrl
 	Key0

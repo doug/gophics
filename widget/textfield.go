@@ -24,7 +24,17 @@ import (
 // IME composition is handled: preedit text is spliced in at the caret and
 // underlined until the input method commits it.
 //
-// Known limits: LTR caret geometry, single line.
+// Known limits: LTR caret geometry.
+//
+// It behaves like the platform's own field. The editing keys follow the
+// conventions under the user's hands — Cmd/Alt and the Emacs bindings on
+// Apple keyboards, Ctrl and Home/End on a PC's (shell.GestureTuning.MacKeys);
+// word and line movement and deletion, undo that groups a typed run the way
+// native undo does, shift-click and triple-click selection, a right-click
+// edit menu, and on touch the long-press menu with selection handles. Obscure
+// makes it a password field on every platform at once: bullets on screen,
+// nothing on the clipboard, secure entry from the soft keyboard. ReadOnly,
+// Disabled, MaxLength and Keyboard are the remaining knobs a native field has.
 type TextField struct {
 	Value       string
 	Placeholder string
@@ -57,6 +67,59 @@ type TextField struct {
 	PlaceholderColor paint.Color
 	CaretColor       paint.Color
 	SelectionColor   paint.Color
+
+	// Obscure masks the content as a password field does: every character
+	// draws as a bullet, the selection cannot be copied or cut, word
+	// movement treats the whole value as one word (a mask should not reveal
+	// where the words are), and the platform keyboard is asked for secure
+	// entry with autocorrect and suggestions off.
+	Obscure bool
+	// ReadOnly allows the caret, selection and copying but no edits, and does
+	// not raise a soft keyboard — a field for reading, as on every platform.
+	ReadOnly bool
+	// Disabled makes the field inert: not focusable, not editable, drawn
+	// dimmed, and reported disabled to assistive technology.
+	Disabled bool
+	// MaxLength caps the content in runes (0 is unlimited). Typing, pasting
+	// and IME commits that would exceed it are truncated to fit, which is
+	// how native fields with a limit behave.
+	MaxLength int
+	// Keyboard hints the soft keyboard layout on platforms that have one.
+	Keyboard shell.TextInputType
+	// NoAutocorrect turns the platform's autocorrect and predictive text off.
+	// The zero value keeps them on, which is the platform default for a
+	// plain text field.
+	NoAutocorrect bool
+}
+
+// shown is the text as rendered: the content, or a bullet per rune when
+// obscured. Every shaping site goes through this so the caret, hit-testing,
+// selection and painting agree on the same string.
+func (s *textFieldState) shown() string {
+	if s.W().Obscure {
+		return strings.Repeat("\u2022", len([]rune(s.ed.Text())))
+	}
+	return s.ed.Text()
+}
+
+// editable reports whether edits are accepted at all.
+func (f TextField) editable() bool { return !f.ReadOnly && !f.Disabled }
+
+// fit trims an insertion so the content stays within MaxLength.
+func (s *textFieldState) fit(t string) string {
+	max := s.W().MaxLength
+	if max <= 0 {
+		return t
+	}
+	a, b := s.ed.Selection()
+	room := max - (s.ed.Len() - (b - a))
+	if room <= 0 {
+		return ""
+	}
+	if r := []rune(t); len(r) > room {
+		return string(r[:room])
+	}
+	return t
 }
 
 func (f TextField) size() float32 {
@@ -149,9 +212,9 @@ type textFieldState struct {
 // in at the caret, plus the preedit's rune range for styling.
 func (s *textFieldState) display() (str string, preStart, preEnd int) {
 	if s.preedit == "" {
-		return s.ed.Text(), 0, 0
+		return s.shown(), 0, 0
 	}
-	runes := []rune(s.ed.Text())
+	runes := []rune(s.shown())
 	caret := s.ed.Caret()
 	pre := []rune(s.preedit)
 	out := make([]rune, 0, len(runes)+len(pre))
@@ -252,7 +315,7 @@ func (s *textFieldState) caretVisible() bool {
 }
 
 func (s *textFieldState) line(ctx Ctx) text.Line {
-	return ctx.Painter().ShapeIn("", s.ed.Text(), s.W().size())
+	return ctx.Painter().ShapeIn("", s.shown(), s.W().size())
 }
 
 // paraLines returns the wrapped lines of the current content at the last
@@ -262,7 +325,7 @@ func (s *textFieldState) paraLines(ctx Ctx) []text.Line {
 	if w <= 0 {
 		w = 1e9
 	}
-	return ctx.Painter().ParagraphIn("", s.ed.Text(), s.W().size(), w)
+	return ctx.Painter().ParagraphIn("", s.shown(), s.W().size(), w)
 }
 
 // lineOf returns the index of the wrapped line containing rune index idx.
@@ -322,13 +385,13 @@ const (
 func (s *textFieldState) caretPt(pr *paint.Painter, idx int) geom.Pt {
 	f := s.W()
 	if !f.Multiline {
-		return geom.Pt{X: pr.ShapeIn("", s.ed.Text(), f.size()).CaretX(idx) - s.scrollX, Y: 0}
+		return geom.Pt{X: pr.ShapeIn("", s.shown(), f.size()).CaretX(idx) - s.scrollX, Y: 0}
 	}
 	w := s.lastWidth
 	if w <= 0 {
 		w = 1e9
 	}
-	lines := pr.ParagraphIn("", s.ed.Text(), f.size(), w)
+	lines := pr.ParagraphIn("", s.shown(), f.size(), w)
 	if len(lines) == 0 {
 		return geom.Pt{}
 	}
@@ -412,8 +475,8 @@ func (s *textFieldState) handleAtPt(pr *paint.Painter, p geom.Pt) int {
 }
 
 func (s *textFieldState) copySelection(ctx Ctx) {
-	if !s.ed.HasSelection() {
-		return
+	if !s.ed.HasSelection() || s.W().Obscure {
+		return // a password field never hands its content to the clipboard
 	}
 	if cb := ctx.Clipboard(); cb != nil {
 		_ = cb.ClipboardWrite(s.ed.SelectedText())
@@ -443,10 +506,11 @@ func (s *textFieldState) pasteClipboard(ctx Ctx) {
 	} else {
 		t = sanitize(t)
 	}
-	if t == "" {
+	t = s.fit(t)
+	if t == "" || !s.W().editable() {
 		return
 	}
-	s.ed.Insert(t)
+	s.ed.Replace(t) // a paste is its own undo step, never merged with typing
 	s.revealPending = true
 	s.change(ctx)
 }
@@ -518,70 +582,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		}
 		s.activity()           // keep the caret solid while interacting
 		s.revealPending = true // a key press moves or edits the caret: keep it visible
-		shift := k.Mods&shell.ModShift != 0
-		switch k.Code {
-		case shell.KeyLeft:
-			s.ed.Move(-1, shift)
-			s.SetState(nil)
-		case shell.KeyRight:
-			s.ed.Move(1, shift)
-			s.SetState(nil)
-		case shell.KeyUp:
-			if f.Multiline {
-				s.moveVertical(ctx, -1, shift)
-			}
-		case shell.KeyDown:
-			if f.Multiline {
-				s.moveVertical(ctx, 1, shift)
-			}
-		case shell.KeyHome:
-			s.ed.Home(shift)
-			s.SetState(nil)
-		case shell.KeyEnd:
-			s.ed.End(shift)
-			s.SetState(nil)
-		case shell.KeyBackspace:
-			s.ed.DeleteBackward()
-			s.change(ctx)
-		case shell.KeyDelete:
-			s.ed.DeleteForward()
-			s.change(ctx)
-		case shell.KeyTab:
-			// Multiline fields indent; single-line Tab is reserved for focus
-			// traversal (not yet implemented), so it's a no-op there.
-			if f.Multiline {
-				s.ed.Insert("\t")
-				s.change(ctx)
-			}
-		case shell.KeyEnter:
-			if f.Multiline && !k.Mods.Command() {
-				s.ed.Insert("\n")
-				s.change(ctx)
-				return
-			}
-			if f.OnSubmit != nil {
-				f.OnSubmit(s.ed.Text())
-			}
-		case shell.KeyEscape:
-			s.ed.MoveTo(s.ed.Caret(), false) // collapse selection
-			s.SetState(nil)
-		case shell.KeyA:
-			if k.Mods.Command() {
-				s.selectAll()
-			}
-		case shell.KeyC:
-			if k.Mods.Command() {
-				s.copySelection(ctx)
-			}
-		case shell.KeyX:
-			if k.Mods.Command() {
-				s.cutSelection(ctx)
-			}
-		case shell.KeyV:
-			if k.Mods.Command() {
-				s.pasteClipboard(ctx)
-			}
-		}
+		s.keyPress(ctx, f, k)
 	}
 
 	onText := func(t string) {
@@ -590,7 +591,8 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		} else {
 			t = sanitize(t)
 		}
-		if t != "" {
+		t = s.fit(t)
+		if t != "" && f.editable() {
 			s.ed.Insert(t)
 			s.revealPending = true // typing moves the caret: keep it visible
 			s.change(ctx)
@@ -639,8 +641,31 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				}
 				s.dragHandle = -1
 				s.handles = false // a plain press ends the touch selection
-				s.ed.MoveTo(s.indexAtPt(ctx, p), false)
+				// Shift-click extends the selection from the anchor, as every
+				// desktop field does; a plain click places the caret.
+				extend := ctx.Input().Mods()&shell.ModShift != 0
+				s.ed.MoveTo(s.indexAtPt(ctx, p), extend)
 				s.SetState(nil)
+			},
+			OnTripleTap: func() {
+				// Third click: the line (multiline) or the whole value.
+				s.activity()
+				s.ed.SelectLineAt(s.ed.Caret())
+				s.SetState(nil)
+			},
+			OnSecondaryTap: func(p geom.Pt) {
+				// Right-click: select the word under the pointer when nothing
+				// is selected, then the edit menu — Cocoa's and Windows'
+				// behavior both.
+				s.activity()
+				s.closeMenu()
+				if !s.ed.HasSelection() {
+					s.ed.SelectWordAt(s.indexAtPt(ctx, p))
+				}
+				s.SetState(nil)
+				if acts := editActionsFor(ctx, s.editOps(ctx)); len(acts) > 0 {
+					s.dismissMenu = ShowEditMenu(ctx, ctx.Input().Pointer(), acts)
+				}
 			},
 			OnLongPress: func() {
 				// The touch idiom for reaching an editor's actions. A press on
@@ -758,7 +783,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 func (s *textFieldState) softKeyboard(
 	ctx Ctx,
 	focused bool,
-	_ TextField,
+	f TextField,
 	onText func(string),
 	onKey func(shell.Key),
 	onComposition func(shell.Composition),
@@ -775,7 +800,14 @@ func (s *textFieldState) softKeyboard(
 	// TextField exposes no keyboard-type or password hints yet, so ask for the
 	// default layout with autocorrect on. Adding those knobs is a separate
 	// change to its API, not something to infer here.
-	ti.Show(shell.TextInputOptions{Autocorrect: true}, shell.TextInputHandler{
+	if f.ReadOnly || f.Disabled {
+		return // nothing to type into; a native read-only field raises no keyboard
+	}
+	ti.Show(shell.TextInputOptions{
+		Type:        f.Keyboard,
+		Autocorrect: !f.NoAutocorrect && !f.Obscure,
+		Secure:      f.Obscure,
+	}, shell.TextInputHandler{
 		OnText: onText,
 		OnComposing: func(pre string) {
 			onComposition(shell.Composition{Kind: shell.CompositionUpdate, Preedit: pre, Cursor: len([]rune(pre))})
@@ -920,7 +952,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 		return b.size
 	}
 	// Keep the caret visible: adjust scrollX so it lies within the box.
-	caretX := b.painter.ShapeIn("", b.state.ed.Text(), f.size()).CaretX(b.state.ed.Caret())
+	caretX := b.painter.ShapeIn("", b.state.shown(), f.size()).CaretX(b.state.ed.Caret())
 	if caretX-b.state.scrollX > b.size.W-2 {
 		b.state.scrollX = caretX - b.size.W + 2
 	}
@@ -1113,16 +1145,242 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 
 // Semantics reports the field's value and focus for assistive technology.
 func (b *fieldBox) Semantics() layout.SemInfo {
+	f := b.state.W()
 	return layout.SemInfo{
-		Role:    layout.RoleTextField,
-		Label:   b.state.W().Placeholder,
-		Value:   b.state.ed.Text(),
-		Focused: b.state.focused,
+		Role:     layout.RoleTextField,
+		Label:    f.Placeholder,
+		Value:    b.state.shown(), // a screen reader gets bullets for a password too
+		Focused:  b.state.focused,
+		Disabled: f.Disabled,
 	}
 }
 
 func (b *fieldBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if p.X >= 0 && p.Y >= 0 && p.X < b.size.W && p.Y < b.size.H {
 		*hits = append(*hits, layout.Hit{Box: b, Pos: p})
+	}
+}
+
+// keyPress applies one key press under the platform's editing conventions.
+//
+// Two conventions exist and a field has to speak the one under the user's
+// hands. Apple's: Cmd is the command key, Alt moves by word, Cmd+arrow goes
+// to the ends of the line and document, and the Emacs bindings every Cocoa
+// text view honors (Ctrl+A/E to the line ends, Ctrl+K to kill to the end,
+// Ctrl+F/B/D/H for the arrows and deletes). Windows and Linux: Ctrl is both
+// the command key and the word modifier, Home/End go to the line ends,
+// Ctrl+Home/End to the document's, and Ctrl+Y is redo beside Ctrl+Shift+Z.
+// Which one applies is shell.GestureTuning.MacKeys, set by the platform —
+// a Mac browser and an iPad's hardware keyboard are Apple's, an Android
+// keyboard is a PC's.
+func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
+	mac := ctx.el.owner.Gestures.Resolved().MacKeys
+	shift := k.Mods&shell.ModShift != 0
+	var cmd, word, emacs bool
+	if mac {
+		cmd = k.Mods&shell.ModSuper != 0
+		word = k.Mods&shell.ModAlt != 0
+		emacs = k.Mods&shell.ModCtrl != 0 && !cmd
+	} else {
+		// Ctrl, or Super for a headless host that only knows "the command
+		// key": Mods.Command() is what every caller used before there were
+		// two conventions, and a PC keyboard's Win key is not a modifier a
+		// field would otherwise see.
+		cmd = k.Mods.Command()
+		word = k.Mods&shell.ModCtrl != 0
+	}
+	// A password field has no words to move by: its mask must not reveal
+	// where they are, so word movement becomes line movement.
+	if f.Obscure {
+		word = false
+		if mac && k.Mods&shell.ModAlt != 0 {
+			cmd = true
+		}
+	}
+	edit := f.editable()
+	moved := func() { s.SetState(nil) }
+	changed := func() { s.change(ctx) }
+
+	// Emacs bindings first: on a Mac, Ctrl+A is "line start", not "select
+	// all", which is why cmd above is Super alone there.
+	if emacs {
+		switch k.Code {
+		case shell.KeyA:
+			s.ed.LineHome(shift)
+			moved()
+			return
+		case shell.KeyE:
+			s.ed.LineEnd(shift)
+			moved()
+			return
+		case shell.KeyF:
+			s.ed.Move(1, shift)
+			moved()
+			return
+		case shell.KeyB:
+			s.ed.Move(-1, shift)
+			moved()
+			return
+		case shell.KeyN:
+			if f.Multiline {
+				s.moveVertical(ctx, 1, shift)
+			}
+			return
+		case shell.KeyP:
+			if f.Multiline {
+				s.moveVertical(ctx, -1, shift)
+			}
+			return
+		case shell.KeyD:
+			if edit {
+				s.ed.DeleteForward()
+				changed()
+			}
+			return
+		case shell.KeyH:
+			if edit {
+				s.ed.DeleteBackward()
+				changed()
+			}
+			return
+		case shell.KeyK:
+			if edit {
+				s.ed.DeleteToLineEnd()
+				changed()
+			}
+			return
+		}
+	}
+
+	switch k.Code {
+	case shell.KeyLeft, shell.KeyRight:
+		dir := 1
+		if k.Code == shell.KeyLeft {
+			dir = -1
+		}
+		switch {
+		case mac && cmd && dir < 0:
+			s.ed.LineHome(shift)
+		case mac && cmd:
+			s.ed.LineEnd(shift)
+		case word:
+			s.ed.MoveWord(dir, shift)
+		default:
+			s.ed.Move(dir, shift)
+		}
+		moved()
+	case shell.KeyUp, shell.KeyDown:
+		dir := 1
+		if k.Code == shell.KeyUp {
+			dir = -1
+		}
+		switch {
+		case mac && cmd && dir < 0:
+			s.ed.Home(shift) // Cmd+Up: start of the document
+			moved()
+		case mac && cmd:
+			s.ed.End(shift)
+			moved()
+		case f.Multiline:
+			s.moveVertical(ctx, dir, shift)
+		case mac && dir < 0:
+			s.ed.Home(shift) // a single-line Cocoa field: Up is the start
+			moved()
+		case mac:
+			s.ed.End(shift)
+			moved()
+		}
+	case shell.KeyHome:
+		if !mac && cmd {
+			s.ed.Home(shift) // Ctrl+Home: the document
+		} else {
+			s.ed.LineHome(shift)
+		}
+		moved()
+	case shell.KeyEnd:
+		if !mac && cmd {
+			s.ed.End(shift)
+		} else {
+			s.ed.LineEnd(shift)
+		}
+		moved()
+	case shell.KeyBackspace:
+		if !edit {
+			return
+		}
+		switch {
+		case mac && cmd:
+			s.ed.DeleteToLineStart()
+		case word:
+			s.ed.DeleteWordBackward()
+		default:
+			s.ed.DeleteBackward()
+		}
+		changed()
+	case shell.KeyDelete:
+		if !edit {
+			return
+		}
+		if word {
+			s.ed.DeleteWordForward()
+		} else {
+			s.ed.DeleteForward()
+		}
+		changed()
+	case shell.KeyTab:
+		// Multiline fields indent; a single-line Tab is focus traversal.
+		if f.Multiline && edit {
+			if t := s.fit("\t"); t != "" {
+				s.ed.Insert(t)
+				changed()
+			}
+		}
+	case shell.KeyEnter:
+		if f.Multiline && !cmd {
+			if edit {
+				if t := s.fit("\n"); t != "" {
+					s.ed.Insert(t)
+					changed()
+				}
+			}
+			return
+		}
+		if f.OnSubmit != nil {
+			f.OnSubmit(s.ed.Text())
+		}
+	case shell.KeyEscape:
+		s.ed.MoveTo(s.ed.Caret(), false) // collapse selection
+		moved()
+	case shell.KeyA:
+		if cmd {
+			s.selectAll()
+		}
+	case shell.KeyC:
+		if cmd {
+			s.copySelection(ctx)
+		}
+	case shell.KeyX:
+		if cmd && edit {
+			s.cutSelection(ctx)
+		}
+	case shell.KeyV:
+		if cmd {
+			s.pasteClipboard(ctx)
+		}
+	case shell.KeyZ:
+		if !cmd || !edit {
+			return
+		}
+		if shift {
+			if s.ed.Redo() {
+				changed()
+			}
+		} else if s.ed.Undo() {
+			changed()
+		}
+	case shell.KeyY:
+		if cmd && !mac && edit && s.ed.Redo() {
+			changed()
+		}
 	}
 }

@@ -106,6 +106,7 @@ type Bridge struct {
 	tiActive      bool
 	tiType        shell.TextInputType
 	tiAutocorrect bool
+	tiSecure      bool
 	tiText        string
 	tiSelStart    int
 	tiSelEnd      int
@@ -411,13 +412,22 @@ func (b *Bridge) A11yHitTest(xPx, yPx int) int {
 	return -1
 }
 
-// Key delivers a key press by shell.KeyCode value (host maps its codes).
-func (b *Bridge) Key(code int, pressed bool) {
+// Key delivers a key press by shell.KeyCode value (host maps its codes),
+// with no modifiers held. Hardware keyboards want KeyMod.
+func (b *Bridge) Key(code int, pressed bool) { b.KeyMod(code, 0, pressed) }
+
+// KeyMod delivers a key press with modifiers, as a hardware keyboard on an
+// iPad or an Android device produces them. mods is a shell.Mods bitmask:
+// 1 shift, 2 ctrl, 4 alt/option, 8 super (Cmd on an iPad keyboard). The
+// editing bindings — Cmd+Z, Alt+arrow for a word, Ctrl+K on Apple's — need
+// these; a host that maps UIKeyModifierFlags or KeyEvent.getModifiers onto
+// them gets a text field that behaves like the platform's own.
+func (b *Bridge) KeyMod(code, mods int, pressed bool) {
 	kind := shell.KeyRelease
 	if pressed {
 		kind = shell.KeyPress
 	}
-	b.handler.Event(b, shell.Key{Kind: kind, Code: shell.KeyCode(code)})
+	b.handler.Event(b, shell.Key{Kind: kind, Code: shell.KeyCode(code), Mods: shell.Mods(mods)})
 }
 
 // Composition delivers IME preedit state (kind: 0 start, 1 update, 2 end).

@@ -19,10 +19,18 @@ type Editor struct {
 	anchor int // rune index of the selection anchor, always in [0, len(runes)]
 
 	seg segmenter.Segmenter
+
+	// Undo history; see snapshot.
+	undo, redo []editSnapshot
+	lastOp     editOp
+	lastCaret  int // caret after the last typed insert, for coalescing
 }
 
 // SetText replaces the content and clamps the caret/selection.
 func (e *Editor) SetText(s string) {
+	if string(e.runes) != s {
+		e.snapshot(opReplace)
+	}
 	e.runes = []rune(s)
 	e.caret = clampIdx(e.caret, len(e.runes))
 	e.anchor = clampIdx(e.anchor, len(e.runes))
@@ -69,31 +77,26 @@ func (e *Editor) SelectedText() string {
 
 // Insert replaces the selection (or inserts at the caret) with s.
 func (e *Editor) Insert(s string) {
-	start, end := e.Selection()
-	ins := []rune(s)
-	out := make([]rune, 0, len(e.runes)-(end-start)+len(ins))
-	out = append(out, e.runes[:start]...)
-	out = append(out, ins...)
-	out = append(out, e.runes[end:]...)
-	e.runes = out
-	e.caret = start + len(ins)
-	e.anchor = e.caret
+	e.snapshot(opType)
+	e.insertRaw(s)
 }
 
 // DeleteBackward deletes the selection, or the grapheme before the caret.
 func (e *Editor) DeleteBackward() {
+	e.snapshot(opDelete)
 	if !e.HasSelection() {
 		e.anchor = e.prevBoundary(e.caret)
 	}
-	e.Insert("")
+	e.insertRaw("")
 }
 
 // DeleteForward deletes the selection, or the grapheme after the caret.
 func (e *Editor) DeleteForward() {
+	e.snapshot(opDelete)
 	if !e.HasSelection() {
 		e.anchor = e.nextBoundary(e.caret)
 	}
-	e.Insert("")
+	e.insertRaw("")
 }
 
 // Move moves the caret one grapheme left (dir < 0) or right (dir > 0).
@@ -301,3 +304,230 @@ func (l Line) nextCluster(cluster int) int {
 	}
 	return next
 }
+
+// --- Word, line and document movement ---------------------------------------
+//
+// These are what a native field does for Alt/Ctrl+arrow, Home/End and their
+// deleting cousins. Word boundaries follow the convention macOS and GTK share:
+// moving left lands at the start of the previous word, moving right at the end
+// of the next one, skipping the whitespace and punctuation between. Windows
+// moves right to the *start* of the next word; that difference is real, small,
+// and not worth a second code path until someone measures it.
+
+// wordStartBefore is the start of the word ending at or before idx.
+func (e *Editor) wordStartBefore(idx int) int {
+	i := idx
+	for i > 0 && !isWordRune(e.runes[i-1]) {
+		i--
+	}
+	for i > 0 && isWordRune(e.runes[i-1]) {
+		i--
+	}
+	return i
+}
+
+// wordEndAfter is the end of the word starting at or after idx.
+func (e *Editor) wordEndAfter(idx int) int {
+	i, n := idx, len(e.runes)
+	for i < n && !isWordRune(e.runes[i]) {
+		i++
+	}
+	for i < n && isWordRune(e.runes[i]) {
+		i++
+	}
+	return i
+}
+
+// MoveWord moves the caret one word left (dir < 0) or right, extending the
+// selection when extend is set. Without extend, a selection collapses to its
+// edge first, the way Move does.
+func (e *Editor) MoveWord(dir int, extend bool) {
+	if !extend && e.HasSelection() {
+		start, end := e.Selection()
+		if dir < 0 {
+			e.caret = start
+		} else {
+			e.caret = end
+		}
+		e.anchor = e.caret
+		return
+	}
+	if dir < 0 {
+		e.caret = e.wordStartBefore(e.caret)
+	} else {
+		e.caret = e.wordEndAfter(e.caret)
+	}
+	if !extend {
+		e.anchor = e.caret
+	}
+}
+
+// DeleteWordBackward deletes from the caret to the start of the previous word,
+// or the selection if there is one.
+func (e *Editor) DeleteWordBackward() {
+	e.snapshot(opDelete)
+	if !e.HasSelection() {
+		e.anchor = e.wordStartBefore(e.caret)
+	}
+	e.insertRaw("")
+}
+
+// DeleteWordForward deletes from the caret to the end of the next word, or the
+// selection if there is one.
+func (e *Editor) DeleteWordForward() {
+	e.snapshot(opDelete)
+	if !e.HasSelection() {
+		e.anchor = e.wordEndAfter(e.caret)
+	}
+	e.insertRaw("")
+}
+
+// lineStart is the index just after the newline before idx, or 0.
+func (e *Editor) lineStart(idx int) int {
+	i := idx
+	for i > 0 && e.runes[i-1] != '\n' {
+		i--
+	}
+	return i
+}
+
+// lineEnd is the index of the newline at or after idx, or Len.
+func (e *Editor) lineEnd(idx int) int {
+	i, n := idx, len(e.runes)
+	for i < n && e.runes[i] != '\n' {
+		i++
+	}
+	return i
+}
+
+// LineHome moves to the start of the caret's line — Home on a multiline field,
+// Cmd+Left on a Mac, Ctrl+A in Emacs bindings. In single-line text this is
+// the start of the text.
+func (e *Editor) LineHome(extend bool) { e.MoveTo(e.lineStart(e.caret), extend) }
+
+// LineEnd is LineHome's counterpart.
+func (e *Editor) LineEnd(extend bool) { e.MoveTo(e.lineEnd(e.caret), extend) }
+
+// DeleteToLineStart deletes from the caret to the start of its line — Cmd+
+// Backspace on a Mac. A selection is deleted instead.
+func (e *Editor) DeleteToLineStart() {
+	e.snapshot(opDelete)
+	if !e.HasSelection() {
+		e.anchor = e.lineStart(e.caret)
+	}
+	e.insertRaw("")
+}
+
+// DeleteToLineEnd deletes from the caret to the end of its line — Ctrl+K. On
+// an empty remainder it deletes the newline itself, as Emacs does, so
+// repeated Ctrl+K eats lines.
+func (e *Editor) DeleteToLineEnd() {
+	e.snapshot(opDelete)
+	if !e.HasSelection() {
+		end := e.lineEnd(e.caret)
+		if end == e.caret && end < len(e.runes) {
+			end++ // the newline
+		}
+		e.anchor = end
+	}
+	e.insertRaw("")
+}
+
+// SelectLineAt selects the whole line containing idx — a triple click.
+func (e *Editor) SelectLineAt(idx int) {
+	idx = clampIdx(idx, len(e.runes))
+	e.anchor = e.lineStart(idx)
+	e.caret = e.lineEnd(idx)
+}
+
+// --- Undo ---------------------------------------------------------------------
+//
+// A native field groups consecutive typing into one undo step and separates it
+// from a deletion or a paste, so Cmd+Z takes back "the word you just typed",
+// not one character or the whole session. The model here: every mutation is
+// classed as typing, deletion, or a replacement (paste, autocorrect, SetText
+// from outside); a snapshot is pushed before a mutation whenever its class
+// differs from the previous one, or the caret moved in between. Typing after
+// typing coalesces; anything else is a boundary.
+
+type editOp uint8
+
+const (
+	opNone editOp = iota
+	opType
+	opDelete
+	opReplace
+)
+
+type editSnapshot struct {
+	runes         []rune
+	caret, anchor int
+}
+
+// snapshot records the state before a mutation of class op, unless it
+// coalesces with the previous one.
+func (e *Editor) snapshot(op editOp) {
+	if op == e.lastOp && op == opType && e.caret == e.lastCaret {
+		e.lastCaret = e.caret // still contiguous; updated after the insert below
+		return
+	}
+	e.undo = append(e.undo, editSnapshot{append([]rune(nil), e.runes...), e.caret, e.anchor})
+	if len(e.undo) > maxUndo {
+		e.undo = e.undo[1:]
+	}
+	e.redo = e.redo[:0]
+	e.lastOp = op
+}
+
+const maxUndo = 200
+
+// insertRaw is Insert without the undo bookkeeping.
+func (e *Editor) insertRaw(s string) {
+	start, end := e.Selection()
+	ins := []rune(s)
+	out := make([]rune, 0, len(e.runes)-(end-start)+len(ins))
+	out = append(out, e.runes[:start]...)
+	out = append(out, ins...)
+	out = append(out, e.runes[end:]...)
+	e.runes = out
+	e.caret = start + len(ins)
+	e.anchor = e.caret
+	e.lastCaret = e.caret
+}
+
+// Replace is Insert as one undo step that never coalesces with typing: a
+// paste, an autocorrect, a programmatic change.
+func (e *Editor) Replace(s string) {
+	e.snapshot(opReplace)
+	e.insertRaw(s)
+}
+
+// Undo reverts the last edit group; false if there was none.
+func (e *Editor) Undo() bool {
+	if len(e.undo) == 0 {
+		return false
+	}
+	e.redo = append(e.redo, editSnapshot{append([]rune(nil), e.runes...), e.caret, e.anchor})
+	snap := e.undo[len(e.undo)-1]
+	e.undo = e.undo[:len(e.undo)-1]
+	e.runes, e.caret, e.anchor = snap.runes, snap.caret, snap.anchor
+	e.lastOp = opNone
+	return true
+}
+
+// Redo reapplies the last undone group; false if there was none.
+func (e *Editor) Redo() bool {
+	if len(e.redo) == 0 {
+		return false
+	}
+	e.undo = append(e.undo, editSnapshot{append([]rune(nil), e.runes...), e.caret, e.anchor})
+	snap := e.redo[len(e.redo)-1]
+	e.redo = e.redo[:len(e.redo)-1]
+	e.runes, e.caret, e.anchor = snap.runes, snap.caret, snap.anchor
+	e.lastOp = opNone
+	return true
+}
+
+// CanUndo and CanRedo report whether the corresponding menu item is enabled.
+func (e *Editor) CanUndo() bool { return len(e.undo) > 0 }
+func (e *Editor) CanRedo() bool { return len(e.redo) > 0 }

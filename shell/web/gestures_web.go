@@ -17,5 +17,13 @@ func (w *window) GestureTuning() shell.GestureTuning {
 	if ua.Type() == js.TypeString && strings.Contains(ua.String(), "Android") {
 		return shell.AndroidGestureTuning()
 	}
-	return shell.IOSGestureTuning()
+	g := shell.IOSGestureTuning()
+	// Touch values are UIKit's everywhere that is not Android; the key
+	// convention follows the host: a Mac browser, an iPhone, an iPad get
+	// Cmd/Alt, a Windows or Linux browser gets Ctrl.
+	if ua.Type() == js.TypeString {
+		u := ua.String()
+		g.MacKeys = strings.Contains(u, "Mac") || strings.Contains(u, "iPhone") || strings.Contains(u, "iPad")
+	}
+	return g
 }

@@ -28,6 +28,14 @@ type GestureTuning struct {
 	// in seconds. Zero means 0.3 — Android's DOUBLE_TAP_TIMEOUT, which is
 	// also about what iOS does in practice (UIKit does not publish one).
 	DoubleTap float64
+	// MacKeys selects Apple's text-editing key conventions: Cmd for
+	// commands, Alt for word movement, Cmd+arrow for line and document ends,
+	// and the Emacs bindings (Ctrl+A/E/K/…) every Cocoa text view honors.
+	// False is the Windows/Linux convention: Ctrl for both, Home/End for
+	// lines, Ctrl+Home/End for the document. A hardware keyboard on an iPad
+	// is a Mac keyboard; a keyboard on Android is a PC keyboard. This is the
+	// one field here that is a convention rather than a measurement.
+	MacKeys bool
 }
 
 // IOSGestureTuning is UIKit's documented defaults.

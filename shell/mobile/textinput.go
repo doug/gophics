@@ -38,12 +38,13 @@ type mobileTextInput struct{ b *Bridge }
 func (t mobileTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandler) {
 	b := t.b
 	b.tiReplace = h.OnReplace
-	if b.tiActive && b.tiType == opts.Type && b.tiAutocorrect == opts.Autocorrect {
+	if b.tiActive && b.tiType == opts.Type && b.tiAutocorrect == opts.Autocorrect && b.tiSecure == opts.Secure {
 		return
 	}
 	b.tiActive = true
 	b.tiType = opts.Type
 	b.tiAutocorrect = opts.Autocorrect
+	b.tiSecure = opts.Secure
 	b.tiRev++
 }
 
@@ -126,3 +127,8 @@ func (b *Bridge) ReplaceText(startRune, endRune int, s string) {
 	}
 	b.tiReplace(a, z, s)
 }
+
+// TextInputSecure reports whether the active field is a password field: the
+// host should use the secure text entry mode (isSecureTextEntry on iOS,
+// TYPE_TEXT_VARIATION_PASSWORD on Android), which also turns suggestions off.
+func (b *Bridge) TextInputSecure() bool { return b.tiSecure }
