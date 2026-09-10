@@ -62,12 +62,3 @@ func (k unixKeyring) Delete(key string) error {
 	_ = exec.Command("secret-tool", "clear", "service", k.service, "key", key).Run()
 	return nil
 }
-
-// checkKey rejects keys the CLI transport cannot carry; shared shape with the
-// darwin backend, duplicated because the two files never build together.
-func checkKey(key string) error {
-	if key == "" || strings.ContainsAny(key, "\n\r\x00") {
-		return fmt.Errorf("desktop: secure storage key %q is empty or contains a control character", key)
-	}
-	return nil
-}

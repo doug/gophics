@@ -2,12 +2,7 @@
 
 package web
 
-import (
-	"strings"
-	"syscall/js"
-
-	"github.com/doug/gophics/shell"
-)
+import "github.com/doug/gophics/shell"
 
 // ScrollPhysics is the host platform's fling curve, from the user agent. A
 // canvas app gets no momentum from the browser — the page's own scroll has it,
@@ -17,8 +12,7 @@ import (
 // curve, desktops with touchscreens included; that was the only curve before
 // this existed and nothing has measured a better answer for them.
 func (w *window) ScrollPhysics() shell.ScrollPhysics {
-	ua := js.Global().Get("navigator").Get("userAgent")
-	if ua.Type() == js.TypeString && strings.Contains(ua.String(), "Android") {
+	if hostIsAndroid() {
 		return shell.AndroidScrollPhysics()
 	}
 	return shell.IOSScrollPhysics()

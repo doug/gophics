@@ -264,3 +264,20 @@ func TestRightClickOpensEditMenuOnWord(t *testing.T) {
 		t.Errorf("right click should have selected the word under it; copied %q", got)
 	}
 }
+
+// A disabled field is skipped by focus entirely: a tap does not focus it and
+// typing goes nowhere, the way a native disabled field is inert rather than
+// merely read-only.
+func TestDisabledFieldIsNotFocusable(t *testing.T) {
+	focused := false
+	cfg := widget.TextField{Value: "off", Disabled: true, OnFocus: func(v bool) { focused = focused || v }}
+	h, st := nativeField(t, cfg, pcKeys)
+	if focused {
+		t.Error("a tap focused a disabled field")
+	}
+	h.Type("x")
+	h.Render()
+	if st.value != "off" {
+		t.Errorf("typing reached a disabled field: %q", st.value)
+	}
+}

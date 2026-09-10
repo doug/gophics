@@ -275,8 +275,23 @@ const (
 	KeyQ
 	KeyR
 	KeyF
-	// The rest of the alphabet, for editing bindings: Emacs Ctrl+B/N/P/H/K on
-	// Apple keyboards, Ctrl+Y redo elsewhere, Cmd/Ctrl+Z undo everywhere.
+	KeyShift
+	KeyCtrl
+	Key0
+	Key1
+	Key2
+	Key3
+	Key4
+	Key5
+	Key6
+	Key7
+	Key8
+	Key9
+	// The rest of the alphabet, for the editing bindings: Emacs Ctrl+B/N/P/H/K
+	// on Apple keyboards, Ctrl+Y redo elsewhere, Cmd/Ctrl+Z undo everywhere.
+	// Appended, per the rule above — a first draft put these beside the other
+	// letters and silently renumbered Shift, Ctrl and the digits under every
+	// host that hardcodes them. keycode_abi_test.go now pins the values.
 	KeyB
 	KeyG
 	KeyH
@@ -292,18 +307,6 @@ const (
 	KeyU
 	KeyY
 	KeyZ
-	KeyShift
-	KeyCtrl
-	Key0
-	Key1
-	Key2
-	Key3
-	Key4
-	Key5
-	Key6
-	Key7
-	Key8
-	Key9
 )
 
 // Mods is a bitmask of held modifier keys.

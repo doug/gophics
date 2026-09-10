@@ -43,16 +43,6 @@ func quoteSec(s string) string {
 	return `"` + s + `"`
 }
 
-// checkKey rejects keys the CLI transport cannot carry. Keys are app-chosen
-// names, not user data, so refusing the exotic ones is a compile-adjacent
-// error rather than a runtime hazard.
-func checkKey(key string) error {
-	if key == "" || strings.ContainsAny(key, "\n\r\x00") {
-		return fmt.Errorf("desktop: secure storage key %q is empty or contains a control character", key)
-	}
-	return nil
-}
-
 func (k macKeychain) run(cmd string) (string, error) {
 	c := exec.Command("security", "-i")
 	c.Stdin = strings.NewReader(cmd + "\n")

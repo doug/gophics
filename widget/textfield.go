@@ -749,6 +749,13 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		},
 		Child: fieldView{state: s},
 	}
+	if f.Disabled {
+		// Inert: no gestures means not focusable (focus follows OnText/OnKey),
+		// not tappable, not autofocused — a disabled native field is skipped
+		// by Tab and ignores the pointer. The view still draws, dimmed.
+		view.Gestures = Gestures{}
+		view.Autofocus = false
+	}
 	// The build-time path remains, for focus gained without a focus *event*: a
 	// focusable widget mounted while nothing has focus takes it silently, and
 	// on that path nothing else would ever call Show — so the field would miss

@@ -9,14 +9,16 @@ import (
 // fakeTextInput records what the field asks the platform keyboard to do.
 type fakeTextInput struct {
 	shown, hidden      int
+	opts               shell.TextInputOptions // what the last Show asked for
 	handler            shell.TextInputHandler
 	lastText           string
 	lastSelA, lastSelB int
 	setTextCalls       int
 }
 
-func (f *fakeTextInput) Show(_ shell.TextInputOptions, h shell.TextInputHandler) {
+func (f *fakeTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandler) {
 	f.shown++
+	f.opts = opts
 	f.handler = h
 }
 func (f *fakeTextInput) Hide() { f.hidden++ }
