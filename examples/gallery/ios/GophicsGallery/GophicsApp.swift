@@ -45,6 +45,7 @@ class GophicsView: UIView, UIKeyInput {
     private var displayLink: CADisplayLink?
     private var lastTime: CFTimeInterval = 0
     private var keyboardVisible = false
+    private var keyboardRevision = 0
     private var surfaceSet = false
 
     // CPU present fallback: when the GPU surface cannot be created, or is
@@ -161,9 +162,127 @@ class GophicsView: UIView, UIKeyInput {
 
     private func syncKeyboard() {
         let want = bridge.textInputActive()
+        let rev = bridge.textInputRevision()
+        if want && keyboardVisible && rev != keyboardRevision {
+            // Same responder, different field options (a password field took
+            // focus from a plain one): the keyboard is rebuilt from the
+            // traits below only when asked.
+            keyboardRevision = rev
+            reloadInputViews()
+            return
+        }
         guard want != keyboardVisible else { return }
         keyboardVisible = want
+        keyboardRevision = rev
         if want { becomeFirstResponder() } else { resignFirstResponder() }
+    }
+
+    // --- UITextInputTraits: the field's options, read from the bridge, so the
+    // keyboard matches the field — a secure keyboard for a password, the email
+    // layout for an address, no suggestions where the field said none. ---
+
+    var keyboardType: UIKeyboardType {
+        get {
+            switch bridge.textInputKind() {
+            case 1: return .emailAddress
+            case 2: return .numberPad
+            case 3: return .URL
+            case 4: return .webSearch
+            default: return .default
+            }
+        }
+        set {}
+    }
+    var isSecureTextEntry: Bool {
+        get { bridge.textInputSecure() }
+        set {}
+    }
+    var autocorrectionType: UITextAutocorrectionType {
+        get { bridge.textInputAutocorrect() && !bridge.textInputSecure() ? .default : .no }
+        set {}
+    }
+
+    // --- Hardware keyboard (an iPad with a keyboard, a Mac running the app):
+    // editing chords reach the Go side as key codes with modifiers, where a
+    // text field binds them the way a Cocoa field does. Plain letters still
+    // arrive through insertText as text. ---
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if !forwardPresses(presses, pressed: true) { super.pressesBegan(presses, with: event) }
+    }
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if !forwardPresses(presses, pressed: false) { super.pressesEnded(presses, with: event) }
+    }
+
+    /// Reports whether any press was forwarded as a key code.
+    private func forwardPresses(_ presses: Set<UIPress>, pressed: Bool) -> Bool {
+        var handled = false
+        for press in presses {
+            guard let key = press.key else { continue }
+            let mods = modsOf(key.modifierFlags)
+            let code = keyCode(for: key.keyCode)
+            // A letter is a chord only under Ctrl, Alt or Cmd; otherwise it is
+            // typing and UIKit delivers it through insertText.
+            let isLetter = code >= 12 && code != 16 && code != 24 && code != 25 && (code < 26 || code > 35)
+            if code == 0 || (isLetter && mods & 14 == 0) { continue }
+            bridge.keyMod(code, mods: mods, pressed: pressed)
+            handled = true
+        }
+        return handled
+    }
+
+    /// UIKeyModifierFlags as shell.Mods bits: 1 shift, 2 ctrl, 4 alt, 8 cmd.
+    private func modsOf(_ f: UIKeyModifierFlags) -> Int {
+        var m = 0
+        if f.contains(.shift) { m |= 1 }
+        if f.contains(.control) { m |= 2 }
+        if f.contains(.alternate) { m |= 4 }
+        if f.contains(.command) { m |= 8 }
+        return m
+    }
+
+    /// shell.KeyCode for a HID usage — the codes are an append-only ABI.
+    private func keyCode(for k: UIKeyboardHIDUsage) -> Int {
+        switch k {
+        case .keyboardReturnOrEnter, .keypadEnter: return 1
+        case .keyboardDeleteOrBackspace: return 2
+        case .keyboardDeleteForward: return 3
+        case .keyboardEscape: return 4
+        case .keyboardTab: return 5
+        case .keyboardLeftArrow: return 6
+        case .keyboardRightArrow: return 7
+        case .keyboardUpArrow: return 8
+        case .keyboardDownArrow: return 9
+        case .keyboardHome: return 10
+        case .keyboardEnd: return 11
+        case .keyboardA: return 12
+        case .keyboardC: return 13
+        case .keyboardV: return 14
+        case .keyboardX: return 15
+        case .keyboardW: return 17
+        case .keyboardS: return 18
+        case .keyboardD: return 19
+        case .keyboardE: return 20
+        case .keyboardQ: return 21
+        case .keyboardR: return 22
+        case .keyboardF: return 23
+        case .keyboardB: return 36
+        case .keyboardG: return 37
+        case .keyboardH: return 38
+        case .keyboardI: return 39
+        case .keyboardJ: return 40
+        case .keyboardK: return 41
+        case .keyboardL: return 42
+        case .keyboardM: return 43
+        case .keyboardN: return 44
+        case .keyboardO: return 45
+        case .keyboardP: return 46
+        case .keyboardT: return 47
+        case .keyboardU: return 48
+        case .keyboardY: return 49
+        case .keyboardZ: return 50
+        default: return 0
+        }
     }
 
     // --- Touch ---

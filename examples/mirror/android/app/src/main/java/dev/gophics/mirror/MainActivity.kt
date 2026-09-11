@@ -109,6 +109,7 @@ class GophicsView(private val activity: Activity) :
     private var lastNanos = 0L
     private var running = false
     private var imeShown = false
+    private var imeRevision = 0L
     private var frameCount = 0
     private var frameTimeSum = 0.0
     private var nativeWin = 0L    // ANativeWindow*, from NativeSurface
@@ -132,7 +133,11 @@ class GophicsView(private val activity: Activity) :
     override fun onCheckIsTextEditor(): Boolean = true
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        outAttrs.inputType = EditorInfo.TYPE_CLASS_TEXT
+        // The field's options, read from the bridge: keyboard layout, password
+        // entry, and whether the IME may suggest and autocorrect. syncIME
+        // restarts the input when these change so this runs again.
+        outAttrs.inputType = inputTypeFor(
+            bridge.textInputKind().toInt(), bridge.textInputSecure(), bridge.textInputAutocorrect())
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
@@ -170,15 +175,68 @@ class GophicsView(private val activity: Activity) :
 
     private fun syncIME() {
         val want = bridge.textInputActive()
+        val rev = bridge.textInputRevision()
+        val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
+        if (want && imeShown && rev != imeRevision) {
+            // Same field shown, different options (a password field took
+            // focus from a plain one): the InputConnection must be rebuilt
+            // for the IME to change its keyboard.
+            imeRevision = rev
+            imm.restartInput(this)
+            return
+        }
         if (want == imeShown) return
         imeShown = want
-        val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
+        imeRevision = rev
         if (want) {
             requestFocus()
+            imm.restartInput(this)
             imm.showSoftInput(this, 0)
         } else {
             imm.hideSoftInputFromWindow(windowToken, 0)
         }
+    }
+
+    /** shell.TextInputType (0 default, 1 email, 2 number, 3 URL, 4 search) to EditorInfo bits. */
+    private fun inputTypeFor(kind: Int, secure: Boolean, autocorrect: Boolean): Int {
+        var t = when (kind) {
+            1 -> EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            2 -> EditorInfo.TYPE_CLASS_NUMBER
+            3 -> EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_URI
+            else -> EditorInfo.TYPE_CLASS_TEXT
+        }
+        if (secure) {
+            // Secure entry: the IME shows a password keyboard, remembers
+            // nothing, and suggests nothing.
+            t = EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_PASSWORD
+        } else if (!autocorrect && (t and EditorInfo.TYPE_CLASS_TEXT) != 0) {
+            t = t or EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        return t
+    }
+
+    /** KeyEvent modifiers as shell.Mods bits: 1 shift, 2 ctrl, 4 alt, 8 meta. */
+    private fun modsOf(event: KeyEvent): Long {
+        var m = 0L
+        if (event.isShiftPressed) m = m or 1L
+        if (event.isCtrlPressed) m = m or 2L
+        if (event.isAltPressed) m = m or 4L
+        if (event.isMetaPressed) m = m or 8L
+        return m
+    }
+
+    /** shell.KeyCode for a letter key — the codes are an append-only ABI. */
+    private fun letterCode(keyCode: Int): Long = when (keyCode) {
+        KeyEvent.KEYCODE_A -> 12L; KeyEvent.KEYCODE_C -> 13L; KeyEvent.KEYCODE_V -> 14L
+        KeyEvent.KEYCODE_X -> 15L; KeyEvent.KEYCODE_W -> 17L; KeyEvent.KEYCODE_S -> 18L
+        KeyEvent.KEYCODE_D -> 19L; KeyEvent.KEYCODE_E -> 20L; KeyEvent.KEYCODE_Q -> 21L
+        KeyEvent.KEYCODE_R -> 22L; KeyEvent.KEYCODE_F -> 23L; KeyEvent.KEYCODE_B -> 36L
+        KeyEvent.KEYCODE_G -> 37L; KeyEvent.KEYCODE_H -> 38L; KeyEvent.KEYCODE_I -> 39L
+        KeyEvent.KEYCODE_J -> 40L; KeyEvent.KEYCODE_K -> 41L; KeyEvent.KEYCODE_L -> 42L
+        KeyEvent.KEYCODE_M -> 43L; KeyEvent.KEYCODE_N -> 44L; KeyEvent.KEYCODE_O -> 45L
+        KeyEvent.KEYCODE_P -> 46L; KeyEvent.KEYCODE_T -> 47L; KeyEvent.KEYCODE_U -> 48L
+        KeyEvent.KEYCODE_Y -> 49L; KeyEvent.KEYCODE_Z -> 50L
+        else -> 0L
     }
 
     // --- Surface + frame loop ---
@@ -334,9 +392,19 @@ class GophicsView(private val activity: Activity) :
             KeyEvent.KEYCODE_MOVE_END -> 11L
             else -> 0L
         }
+        val mods = modsOf(event)
         if (code != 0L) {
-            bridge.key(code, true)
+            bridge.keyMod(code, mods, true)
             return true
+        }
+        // A letter under Ctrl, Alt or Meta is an editing chord (Ctrl+Z,
+        // Ctrl+Backspace's cousins), not typing; the Go side binds it.
+        if (mods and 14L != 0L) {
+            val letter = letterCode(keyCode)
+            if (letter != 0L) {
+                bridge.keyMod(letter, mods, true)
+                return true
+            }
         }
         // Printable characters arrive as text, not as key codes — the same
         // split the Go side makes, where plain typing is Text and only
@@ -367,7 +435,7 @@ class GophicsView(private val activity: Activity) :
             else -> 0L
         }
         if (code != 0L) {
-            bridge.key(code, false)
+            bridge.keyMod(code, modsOf(event), false)
             return true
         }
         return super.onKeyUp(keyCode, event)
