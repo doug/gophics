@@ -18,6 +18,7 @@ type dtState struct {
 	hook    func(*dtState)
 	taps    int
 	doubles int
+	triples int
 }
 
 func (s *dtState) Init(widget.Ctx) { s.hook(s) }
@@ -26,6 +27,7 @@ func (s *dtState) Build(widget.Ctx) widget.Widget {
 		Gestures: widget.Gestures{
 			OnTap:       func() { s.taps++ },
 			OnDoubleTap: func() { s.doubles++ },
+			OnTripleTap: func() { s.triples++ },
 		},
 		Child: widget.Sized{W: 100, H: 100},
 	})
@@ -68,5 +70,31 @@ func TestSingleTapDefersThenFires(t *testing.T) {
 	}
 	if st.taps != 1 || st.doubles != 0 {
 		t.Fatalf("deferred single should fire once: taps=%d doubles=%d", st.taps, st.doubles)
+	}
+}
+
+// A double tap opens the window for a third. That window is frame time, and an
+// idle app renders no frames — so the core must ask for them while it is open,
+// or a click a minute later would still count as the third.
+func TestTripleTapWindowClosesWhileIdle(t *testing.T) {
+	h, st := dtHarness(t)
+	p := geom.Pt{X: 100, Y: 100}
+	h.Tap(p)
+	h.Tap(p)
+	if st.doubles != 1 {
+		t.Fatalf("doubles = %d, want 1", st.doubles)
+	}
+	if !h.core.longPressPending() {
+		t.Fatal("after a double tap the core must keep frames coming for the triple window")
+	}
+	for i := 0; i < 40 && h.core.longPressPending(); i++ {
+		h.Step(0.016)
+	}
+	if h.core.longPressPending() {
+		t.Fatal("the triple window never closed")
+	}
+	h.Tap(p)
+	if st.triples != 0 {
+		t.Fatalf("a tap after the window counted as a triple (triples=%d)", st.triples)
 	}
 }

@@ -12,11 +12,14 @@ import (
 // Pointer, keyboard and gesture dispatch: how a shell event becomes a tap,
 // drag, focus change or key delivered to the widget tree.
 
-// longPressPending reports whether a time-based gesture (long-press or a
-// deferred single-tap) is running — the shell keeps frames coming while it
-// is so the timers advance.
+// longPressPending reports whether a time-based gesture is running — a
+// long-press, a deferred single-tap, or the window in which a third tap makes
+// a triple. The shell keeps frames coming while one is, so the timers
+// advance; an idle app renders nothing, and a window that only advances on
+// frames would otherwise stay open until the next click, whenever that came,
+// and count it as the third.
 func (c *core) longPressPending() bool {
-	return (c.longPress != nil && !c.moved && !c.longFired) || c.pendingTap != nil
+	return (c.longPress != nil && !c.moved && !c.longFired) || c.pendingTap != nil || c.doubled != nil
 }
 
 // TickGestures advances time-based gestures by dt seconds: fires OnLongPress
