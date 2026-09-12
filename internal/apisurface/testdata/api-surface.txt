@@ -406,6 +406,7 @@ input.State.Mods method
 input.State.NewFrame method
 input.State.Pointer method
 input.State.PointerDown method
+input.State.PointerIsTouch method
 input.State.PointerJustPressed method
 input.State.SetTextCapturing method
 input.State.TextCapturing method
@@ -1330,6 +1331,7 @@ text.Editor.LineHome method
 text.Editor.Move method
 text.Editor.MoveTo method
 text.Editor.MoveWord method
+text.Editor.MoveWordStart method
 text.Editor.Redo method
 text.Editor.Replace method
 text.Editor.SelectAll method

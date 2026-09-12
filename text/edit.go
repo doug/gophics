@@ -362,6 +362,29 @@ func (e *Editor) MoveWord(dir int, extend bool) {
 	}
 }
 
+// MoveWordStart is Windows' word-right: to the start of the next word rather
+// than the end of this one. Ctrl+Right on a PC lands before the next word,
+// where Alt+Right on a Mac lands after the current one; both are "a word",
+// and a user of each expects theirs. Left is the same on both platforms.
+func (e *Editor) MoveWordStart(extend bool) {
+	if !extend && e.HasSelection() {
+		_, end := e.Selection()
+		e.caret, e.anchor = end, end
+		return
+	}
+	i, n := e.caret, len(e.runes)
+	for i < n && isWordRune(e.runes[i]) {
+		i++
+	}
+	for i < n && !isWordRune(e.runes[i]) {
+		i++
+	}
+	e.caret = i
+	if !extend {
+		e.anchor = e.caret
+	}
+}
+
 // DeleteWordBackward deletes from the caret to the start of the previous word,
 // or the selection if there is one.
 func (e *Editor) DeleteWordBackward() {

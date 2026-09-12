@@ -157,3 +157,21 @@ func TestEditAfterUndoClearsRedo(t *testing.T) {
 		t.Error("redo survived a new edit")
 	}
 }
+
+// Windows word-right lands at the start of the next word; the Mac lands at the
+// end of the current one. Same text, two conventions, both by request.
+func TestMoveWordStartIsTheWindowsConvention(t *testing.T) {
+	e := ed("one two, three", 0)
+	e.MoveWordStart(false)
+	if e.Caret() != 4 {
+		t.Errorf("Ctrl+Right from 0: caret %d, want 4 (start of 'two')", e.Caret())
+	}
+	e.MoveWordStart(false)
+	if e.Caret() != 9 {
+		t.Errorf("Ctrl+Right again: caret %d, want 9 (start of 'three', past the comma)", e.Caret())
+	}
+	e.MoveWordStart(false)
+	if e.Caret() != 14 {
+		t.Errorf("Ctrl+Right at the last word: caret %d, want the end", e.Caret())
+	}
+}

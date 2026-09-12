@@ -78,3 +78,15 @@ func TestPointer(t *testing.T) {
 		t.Fatal("pointer up: released")
 	}
 }
+
+func TestPointerIsTouchFollowsTheLastEvent(t *testing.T) {
+	var s State
+	s.HandlePointer(shell.Pointer{Kind: shell.PointerDown, Source: shell.SourceTouch})
+	if !s.PointerIsTouch() {
+		t.Error("a touch press did not read as touch")
+	}
+	s.HandlePointer(shell.Pointer{Kind: shell.PointerMove})
+	if s.PointerIsTouch() {
+		t.Error("a mouse move still read as touch")
+	}
+}

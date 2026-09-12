@@ -21,6 +21,7 @@ type State struct {
 	pressed  map[shell.KeyCode]bool // went down this frame (sticky)
 	released map[shell.KeyCode]bool // went up this frame (sticky)
 	mods     shell.Mods
+	touch    bool // the last pointer event came from a finger
 	pointer  geom.Pt
 	buttons  uint8 // bit b set → button b held
 	pressBtn uint8 // pressed this frame
@@ -61,6 +62,13 @@ func (s *State) Axis(neg, pos shell.KeyCode) float32 {
 // Mods returns the active keyboard modifiers.
 func (s *State) Mods() shell.Mods { return s.mods }
 
+// PointerIsTouch reports whether the most recent pointer event came from a
+// finger rather than a mouse or pen. Widgets that behave differently under a
+// thumb — a text field that keeps its selection when tapped inside it, or
+// briefly shows the last typed character of a password — read this at the
+// moment of the gesture.
+func (s *State) PointerIsTouch() bool { return s.touch }
+
 // Pointer returns the last pointer position (logical pixels).
 func (s *State) Pointer() geom.Pt { return s.pointer }
 
@@ -95,6 +103,7 @@ func (s *State) HandleKey(k shell.Key) {
 
 // HandlePointer folds a pointer event into the pointer/button state.
 func (s *State) HandlePointer(p shell.Pointer) {
+	s.touch = p.Source == shell.SourceTouch
 	s.pointer = p.Pos
 	switch p.Kind {
 	case shell.PointerDown:

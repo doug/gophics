@@ -29,9 +29,14 @@ import (
 // It behaves like the platform's own field. The editing keys follow the
 // conventions under the user's hands — Cmd/Alt and the Emacs bindings on
 // Apple keyboards, Ctrl and Home/End on a PC's (shell.GestureTuning.MacKeys);
-// word and line movement and deletion, undo that groups a typed run the way
-// native undo does, shift-click and triple-click selection, a right-click
-// edit menu, and on touch the long-press menu with selection handles. Obscure
+// word and line movement and deletion (Windows' word-right lands at the next
+// word's start, a Mac's at this word's end), a goal column that survives a
+// short line, Home/End on the visual line of wrapped text, undo that groups a
+// typed run the way native undo does, shift-click, double- and triple-click
+// selection that extends by words or lines while dragging, a right-click
+// edit menu, and on touch the long-press menu with selection handles, a tap
+// inside the selection keeping it, and a password field's glimpse of the
+// character just typed. Obscure
 // makes it a password field on every platform at once: bullets on screen,
 // nothing on the clipboard, secure entry from the soft keyboard. ReadOnly,
 // Disabled, MaxLength and Keyboard are the remaining knobs a native field has.
@@ -92,14 +97,86 @@ type TextField struct {
 	NoAutocorrect bool
 }
 
+// dragUnit is what a drag selects by after a multi-click.
+type dragUnit uint8
+
+const (
+	dragChars dragUnit = iota
+	dragWords
+	dragLines
+)
+
+// revealFor is how long a password field shows the character a finger just
+// typed. iOS and Android both do this; a mouse-and-keyboard field does not.
+const revealFor = 1200 * time.Millisecond
+
 // shown is the text as rendered: the content, or a bullet per rune when
-// obscured. Every shaping site goes through this so the caret, hit-testing,
-// selection and painting agree on the same string.
+// obscured (except the one just typed on touch, for a moment). Every shaping
+// site goes through this so the caret, hit-testing, selection and painting
+// agree on the same string.
 func (s *textFieldState) shown() string {
-	if s.W().Obscure {
-		return strings.Repeat("\u2022", len([]rune(s.ed.Text())))
+	if !s.W().Obscure {
+		return s.ed.Text()
 	}
-	return s.ed.Text()
+	runes := []rune(s.ed.Text())
+	out := []rune(strings.Repeat("\u2022", len(runes)))
+	if s.revealOn && s.revealIdx < len(runes) {
+		out[s.revealIdx] = runes[s.revealIdx]
+	}
+	return string(out)
+}
+
+// revealLast shows the rune just typed into a password field until
+// revealFor passes, then masks it. Touch only: the glimpse exists because a
+// thumb on glass cannot feel which key it hit.
+func (s *textFieldState) revealLast(ctx Ctx) {
+	if !s.W().Obscure || !ctx.Input().PointerIsTouch() || s.ed.Caret() == 0 {
+		return
+	}
+	s.revealOn, s.revealIdx = true, s.ed.Caret()-1
+	if s.revealTimer != nil {
+		s.revealTimer.Stop()
+	}
+	owner := ctx.el.owner
+	s.revealTimer = time.AfterFunc(revealFor, func() {
+		owner.Post(func() {
+			s.revealOn = false
+			s.SetState(nil)
+		})
+	})
+}
+
+// forgetReveal masks a revealed character early — on any movement, so a
+// password never shows a character the caret is no longer beside.
+func (s *textFieldState) forgetReveal() { s.revealOn = false }
+
+// dragByUnit extends a word- or line-anchored selection to cover the unit
+// under idx as well as the anchor unit, whichever side idx is on.
+func (s *textFieldState) dragByUnit(idx int) {
+	a0, a1 := s.unitAnchor[0], s.unitAnchor[1]
+	probe := s.ed // a copy: selecting on it leaves the field's own caret alone
+	if s.dragUnit == dragWords {
+		probe.SelectWordAt(idx)
+	} else {
+		probe.SelectLineAt(idx)
+	}
+	u0, u1 := probe.Selection()
+	if u0 < a0 {
+		s.ed.SetSelection(a1, u0) // dragging backwards: the caret leads at the start
+	} else {
+		s.ed.SetSelection(a0, u1)
+	}
+}
+
+// visualLine is the wrapped line the caret is on and its rune span, for the
+// Home/End a wrapped field means: the visual line, not the paragraph.
+func (s *textFieldState) visualLine(ctx Ctx) (start, end int, ok bool) {
+	lines := s.paraLines(ctx)
+	if len(lines) == 0 {
+		return 0, 0, false
+	}
+	l := lines[lineOf(lines, s.ed.Caret())]
+	return l.Start, l.End, true
 }
 
 // editable reports whether edits are accepted at all.
@@ -175,6 +252,32 @@ type textFieldState struct {
 	// blinkGen invalidates fires from stopped or superseded timers.
 	blinkTimer *time.Timer
 	blinkGen   int
+
+	// goalX is the x the caret is trying to keep while moving up and down —
+	// native fields remember it across a short line, so Up, Up, Down returns
+	// to the column you started in rather than the short line's end. Any
+	// other movement or edit forgets it.
+	goalX  float32
+	goalOK bool
+	// A double click then drag selects by whole words, a triple click then
+	// drag by whole lines, on every desktop; unitAnchor is the unit first
+	// selected, which the drag never shrinks below.
+	dragUnit   dragUnit
+	unitAnchor [2]int
+	// Click counting at press time. The dispatcher reports a double tap on
+	// the second release, but a native double-click-drag selects the word on
+	// the second press and extends by words while the button stays down —
+	// so the field counts presses itself, on the platform's double-tap
+	// window, and selects the unit before any drag can start.
+	clicks       int
+	lastPress    time.Time
+	lastPressPos geom.Pt
+	// revealOn/revealIdx: the rune a touch keyboard just typed into a
+	// password field, shown for revealFor before it turns into a bullet —
+	// the glimpse iOS and Android give so a thumb can check itself.
+	revealOn    bool
+	revealIdx   int
+	revealTimer *time.Timer
 	// lastWidth is the box width from the last layout, used by multiline
 	// caret navigation and hit testing.
 	lastWidth float32
@@ -345,9 +448,22 @@ func (s *textFieldState) moveVertical(ctx Ctx, dir int, extend bool) {
 		return
 	}
 	li := lineOf(lines, s.ed.Caret())
-	x := lines[li].CaretX(s.ed.Caret() - lines[li].Start)
+	if !s.goalOK {
+		s.goalX = lines[li].CaretX(s.ed.Caret() - lines[li].Start)
+		s.goalOK = true
+	}
+	x := s.goalX
 	li += dir
-	if li < 0 || li >= len(lines) {
+	// Past the first or last line, every native field goes to the end of the
+	// text in that direction rather than staying put.
+	if li < 0 {
+		s.ed.Home(extend)
+		s.SetState(nil)
+		return
+	}
+	if li >= len(lines) {
+		s.ed.End(extend)
+		s.SetState(nil)
 		return
 	}
 	target := lines[li]
@@ -593,8 +709,10 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 		}
 		t = s.fit(t)
 		if t != "" && f.editable() {
+			s.goalOK = false
 			s.ed.Insert(t)
 			s.revealPending = true // typing moves the caret: keep it visible
+			s.revealLast(ctx)
 			s.change(ctx)
 		}
 	}
@@ -640,6 +758,47 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 					return
 				}
 				s.dragHandle = -1
+				s.dragUnit = dragChars
+				s.goalOK = false
+				s.forgetReveal()
+				// Second and third presses in quick succession, in place.
+				now := time.Now()
+				window := time.Duration(ctx.el.owner.Gestures.Resolved().DoubleTap * float64(time.Second))
+				if now.Sub(s.lastPress) <= window && near(p, s.lastPressPos, 8) {
+					s.clicks++
+				} else {
+					s.clicks = 1
+				}
+				s.lastPress, s.lastPressPos = now, p
+				if s.clicks >= 2 && !ctx.Input().PointerIsTouch() {
+					idx := s.indexAtPt(ctx, p)
+					if s.clicks == 2 {
+						s.ed.SelectWordAt(idx)
+						s.dragUnit = dragWords
+					} else {
+						s.ed.SelectLineAt(idx)
+						s.dragUnit = dragLines
+					}
+					s.unitAnchor[0], s.unitAnchor[1] = s.ed.Selection()
+					s.handles = false
+					s.SetState(nil)
+					return
+				}
+				// A finger tapping inside its own selection is asking for the
+				// menu, not moving the caret — iOS and Android both keep the
+				// selection and show it. A mouse click collapses; that is
+				// what a mouse means.
+				if ctx.Input().PointerIsTouch() && s.ed.HasSelection() {
+					idx := s.indexAtPt(ctx, p)
+					if a, b := s.ed.Selection(); idx >= a && idx <= b {
+						s.handles = true
+						s.SetState(nil)
+						if acts := editActionsFor(ctx, s.editOps(ctx)); len(acts) > 0 {
+							s.dismissMenu = ShowEditMenu(ctx, s.pressGlobal, acts)
+						}
+						return
+					}
+				}
 				s.handles = false // a plain press ends the touch selection
 				// Shift-click extends the selection from the anchor, as every
 				// desktop field does; a plain click places the caret.
@@ -648,9 +807,12 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				s.SetState(nil)
 			},
 			OnTripleTap: func() {
-				// Third click: the line (multiline) or the whole value.
+				// Third click: the line (multiline) or the whole value, and a
+				// drag from here selects by lines.
 				s.activity()
 				s.ed.SelectLineAt(s.ed.Caret())
+				s.dragUnit = dragLines
+				s.unitAnchor[0], s.unitAnchor[1] = s.ed.Selection()
 				s.SetState(nil)
 			},
 			OnSecondaryTap: func(p geom.Pt) {
@@ -690,14 +852,22 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 					s.moveHandle(ctx, p)
 					return
 				}
-				s.ed.MoveTo(s.indexAtPt(ctx, p), true)
+				idx := s.indexAtPt(ctx, p)
+				if s.dragUnit != dragChars {
+					s.dragByUnit(idx)
+					s.SetState(nil)
+					return
+				}
+				s.ed.MoveTo(idx, true)
 				s.SetState(nil)
 			},
 			OnDoubleTap: func() {
 				// OnPress already placed the caret at the click; select the word
-				// around it.
+				// around it, and a drag from here selects by words.
 				s.activity()
 				s.ed.SelectWordAt(s.ed.Caret())
+				s.dragUnit = dragWords
+				s.unitAnchor[0], s.unitAnchor[1] = s.ed.Selection()
 				s.SetState(nil)
 			},
 			OnText:        onText,
@@ -1207,6 +1377,29 @@ func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
 	edit := f.editable()
 	moved := func() { s.SetState(nil) }
 	changed := func() { s.change(ctx) }
+	// Only Up/Down keep the goal column; every other key forgets it, and so
+	// does any edit. A revealed password character is hidden by any key too.
+	if k.Code != shell.KeyUp && k.Code != shell.KeyDown {
+		s.goalOK = false
+	}
+	s.forgetReveal()
+	// Home and End in a wrapped field mean the visual line. LineHome/LineEnd
+	// on the editor mean the paragraph, which is right for single-line text
+	// and for the Emacs bindings' notion of a line.
+	lineHome := func(extend bool) {
+		if start, _, ok := s.visualLine(ctx); ok && f.Multiline {
+			s.ed.MoveTo(start, extend)
+			return
+		}
+		s.ed.LineHome(extend)
+	}
+	lineEnd := func(extend bool) {
+		if _, end, ok := s.visualLine(ctx); ok && f.Multiline {
+			s.ed.MoveTo(end, extend)
+			return
+		}
+		s.ed.LineEnd(extend)
+	}
 
 	// Emacs bindings first: on a Mac, Ctrl+A is "line start", not "select
 	// all", which is why cmd above is Super alone there.
@@ -1267,9 +1460,11 @@ func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
 		}
 		switch {
 		case mac && cmd && dir < 0:
-			s.ed.LineHome(shift)
+			lineHome(shift)
 		case mac && cmd:
-			s.ed.LineEnd(shift)
+			lineEnd(shift)
+		case word && !mac && dir > 0:
+			s.ed.MoveWordStart(shift) // Windows: to the start of the next word
 		case word:
 			s.ed.MoveWord(dir, shift)
 		default:
@@ -1301,14 +1496,14 @@ func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
 		if !mac && cmd {
 			s.ed.Home(shift) // Ctrl+Home: the document
 		} else {
-			s.ed.LineHome(shift)
+			lineHome(shift)
 		}
 		moved()
 	case shell.KeyEnd:
 		if !mac && cmd {
 			s.ed.End(shift)
 		} else {
-			s.ed.LineEnd(shift)
+			lineEnd(shift)
 		}
 		moved()
 	case shell.KeyBackspace:
@@ -1390,4 +1585,10 @@ func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
 			changed()
 		}
 	}
+}
+
+// near reports whether two points are within slop of each other.
+func near(a, b geom.Pt, slop float32) bool {
+	dx, dy := a.X-b.X, a.Y-b.Y
+	return dx*dx+dy*dy <= slop*slop
 }
