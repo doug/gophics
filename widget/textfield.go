@@ -24,7 +24,8 @@ import (
 // IME composition is handled: preedit text is spliced in at the caret and
 // underlined until the input method commits it.
 //
-// Known limits: LTR caret geometry.
+// Known limits: LTR caret geometry; text can be dragged within a field but
+// not between fields or out of the app.
 //
 // It behaves like the platform's own field. The editing keys follow the
 // conventions under the user's hands — Cmd/Alt and the Emacs bindings on
@@ -34,10 +35,12 @@ import (
 // short line, Home/End on the visual line of wrapped text, undo that groups a
 // typed run the way native undo does, shift-click, double- and triple-click
 // selection that extends by words or lines while dragging, a right-click
-// edit menu, and on touch the long-press menu with selection handles, a tap
-// inside the selection keeping it, and a password field's glimpse of the
-// character just typed. Obscure
-// makes it a password field on every platform at once: bullets on screen,
+// edit menu, a selection that keeps scrolling while the pointer is held past
+// the field's edge, selected text that a mouse can drag to a new place (or
+// copy there with Alt/Option), and on touch the long-press menu with
+// selection handles, a magnifier over a finger dragging the caret or a grip,
+// a tap inside the selection keeping it, and a password field's glimpse of
+// the character just typed. Obscure makes it a password field on every platform at once: bullets on screen,
 // nothing on the clipboard, secure entry from the soft keyboard. ReadOnly,
 // Disabled, MaxLength and Keyboard are the remaining knobs a native field has.
 type TextField struct {
@@ -278,6 +281,17 @@ type textFieldState struct {
 	revealOn    bool
 	revealIdx   int
 	revealTimer *time.Timer
+	// auto keeps a drag selection scrolling while the pointer is held past
+	// the box; lastHeight, with lastWidth, is the box it is judged against.
+	auto       *autoScroller
+	lastHeight float32
+	// dragText is a mouse carrying the selected text; dropIdx is where it
+	// would land, -1 until the pointer has moved.
+	dragText bool
+	dropIdx  int
+	// loupeOn is the finger's magnifier, shown in the overlay.
+	loupeOn  bool
+	loupeTok OverlayToken
 	// lastWidth is the box width from the last layout, used by multiline
 	// caret navigation and hit testing.
 	lastWidth float32
@@ -395,7 +409,13 @@ func (s *textFieldState) stopBlink() {
 
 func (s *textFieldState) Init(ctx Ctx) { s.ctx = ctx }
 
-func (s *textFieldState) Dispose() { s.stopBlink() }
+func (s *textFieldState) Dispose() {
+	s.stopBlink()
+	s.hideLoupe()
+	if a := s.auto; a != nil && a.added {
+		s.ctx.el.owner.RemoveTicker(a)
+	}
+}
 
 // activity resets the blink so the caret is solid right after typing or moving,
 // then resumes blinking after an idle half-period.
@@ -745,6 +765,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			OnPress: func(p geom.Pt) {
 				s.activity()
 				s.closeMenu() // a new press replaces whatever the last one raised
+				s.stopAuto()
 				// Both spaces: the index needs the local point, the edit menu
 				// needs the global one, and a long press reports neither.
 				s.pressLocal = p
@@ -799,6 +820,9 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 						return
 					}
 				}
+				if s.beginTextDrag(ctx, p) {
+					return
+				}
 				s.handles = false // a plain press ends the touch selection
 				// Shift-click extends the selection from the anchor, as every
 				// desktop field does; a plain click places the caret.
@@ -848,18 +872,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			OnDrag: func(p, _ geom.Pt) {
 				s.activity()
 				s.closeMenu() // the selection is moving under it
-				if s.dragHandle >= 0 {
-					s.moveHandle(ctx, p)
-					return
-				}
-				idx := s.indexAtPt(ctx, p)
-				if s.dragUnit != dragChars {
-					s.dragByUnit(idx)
-					s.SetState(nil)
-					return
-				}
-				s.ed.MoveTo(idx, true)
-				s.SetState(nil)
+				s.dragTo(ctx, p)
 			},
 			OnDoubleTap: func() {
 				// OnPress already placed the caret at the click; select the word
@@ -874,6 +887,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			OnKey:         onKey,
 			OnComposition: onComposition,
 			OnPressEnd: func() {
+				s.endDrag(ctx)
 				if s.dragHandle >= 0 {
 					s.dragHandle = -1
 					// The range just changed, so re-offer the actions for it —
@@ -1123,6 +1137,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 	}
 	b.size = cs.Constrain(want)
 	b.state.lastWidth = b.size.W
+	b.state.lastHeight = b.size.H
 
 	if f.Multiline {
 		b.state.scrollX = 0
@@ -1233,6 +1248,10 @@ func (b *fieldBox) Paint(c paint.Canvas, at geom.Pt) {
 		x := origin.X + line.CaretX(caretIdx)
 		drawCaret(c, x, at.Y, at.Y+b.size.H, caretC)
 	}
+	if b.state.dragText && b.state.dropIdx >= 0 {
+		// Where the carried text would land.
+		drawCaret(c, origin.X+line.CaretX(b.state.dropIdx), at.Y, at.Y+b.size.H, caretC)
+	}
 
 	b.paintSelHandles(c, at)
 	c.PopClip()
@@ -1301,6 +1320,12 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 	if b.state.caretVisible() && len(lines) > 0 {
 		li := lineOf(lines, b.state.ed.Caret())
 		x := at.X + lines[li].CaretX(b.state.ed.Caret()-lines[li].Start)
+		top := at.Y + float32(li)*lineH
+		drawCaret(c, x, top, top+lineH, caretC)
+	}
+	if d := b.state.dropIdx; b.state.dragText && d >= 0 && len(lines) > 0 {
+		li := lineOf(lines, d)
+		x := at.X + lines[li].CaretX(d-lines[li].Start)
 		top := at.Y + float32(li)*lineH
 		drawCaret(c, x, top, top+lineH, caretC)
 	}
@@ -1551,6 +1576,11 @@ func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
 			f.OnSubmit(s.ed.Text())
 		}
 	case shell.KeyEscape:
+		if s.dragText {
+			s.dragText, s.dropIdx = false, -1 // put the text back
+			s.SetState(nil)
+			return
+		}
 		s.ed.MoveTo(s.ed.Caret(), false) // collapse selection
 		moved()
 	case shell.KeyA:
