@@ -47,6 +47,10 @@ func TestPlatformNodeCarriesEveryField(t *testing.T) {
 		"Children": "the platform node reconstructs hierarchy from ParentID, " +
 			"which every backend's tree API wants anyway — carrying both would " +
 			"be two sources of truth for the same edges",
+		"Secure": "the windowing layer's node has no password trait yet, and " +
+			"Value already arrives masked, so nothing leaks; carrying the flag " +
+			"means adding it to each platform's copy of the node in the vendored " +
+			"tree, which is a change to make there when a backend can announce it",
 	}
 
 	ov := reflect.ValueOf(out[0])

@@ -390,8 +390,11 @@ type Field struct {
 	Value       string
 	Placeholder string
 	Multiline   bool
-	OnChange    func(string)
-	OnSubmit    func(string)
+	// Obscure masks the value with bullets, for passwords: see
+	// widget.TextField.Obscure for exactly what that withholds.
+	Obscure  bool
+	OnChange func(string)
+	OnSubmit func(string)
 	// Autofocus takes keyboard focus when the field mounts. Fields do not
 	// focus on mount otherwise; set it on the one field a screen opens into.
 	// See widget.Interactive.Autofocus.
@@ -424,6 +427,7 @@ func (s *fieldState) Build(ctx widget.Ctx) widget.Widget {
 				Value:       f.Value,
 				Placeholder: f.Placeholder,
 				Multiline:   f.Multiline,
+				Obscure:     f.Obscure,
 				OnChange:    f.OnChange,
 				OnSubmit:    f.OnSubmit,
 				OnFocus: func(v bool) {

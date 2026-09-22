@@ -83,6 +83,12 @@ func describeNode(n shell.A11yNode, scale float64) mirrorElement {
 	if n.Expandable {
 		el.Attrs["aria-expanded"] = strconv.FormatBool(n.Expanded)
 	}
+	if n.Secure {
+		// ARIA has no password state; the mirror is a div, not an <input
+		// type=password>. A role description is what makes the AT say
+		// "secure text field" instead of reading the bullets.
+		el.Attrs["aria-roledescription"] = "secure text field"
+	}
 	el.Focus = n.Focused
 
 	// Nodes are absolutely positioned in page coordinates rather than nested

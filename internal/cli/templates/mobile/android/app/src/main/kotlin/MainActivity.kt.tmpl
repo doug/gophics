@@ -163,7 +163,12 @@ class GophicsView(private val activity: Activity) :
             4 -> EditorInfo.TYPE_CLASS_TEXT
             else -> EditorInfo.TYPE_CLASS_TEXT
         }
-        if (!bridge.textInputAutocorrect()) {
+        if (bridge.textInputSecure()) {
+            // A password field: the password keyboard, and never a suggestion
+            // — a secret in the predictive bar is a secret on screen.
+            outAttrs.inputType = EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_PASSWORD or
+                EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        } else if (!bridge.textInputAutocorrect()) {
             outAttrs.inputType = outAttrs.inputType or EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN

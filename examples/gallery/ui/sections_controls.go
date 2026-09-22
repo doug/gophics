@@ -202,8 +202,9 @@ func (textInputSection) CreateState() widget.State { return &textInputState{} }
 
 type textInputState struct {
 	widget.StateBase[textInputSection]
-	name string
-	note string
+	name   string
+	secret string
+	note   string
 }
 
 func (s *textInputState) Build(ctx widget.Ctx) widget.Widget {
@@ -223,6 +224,17 @@ func (s *textInputState) Build(ctx widget.Ctx) widget.Widget {
 		),
 		widget.Sized{H: 4},
 		widget.Text{Value: fmt.Sprintf("%d characters", len([]rune(s.name))), Size: th.Type.Caption, Color: th.Muted},
+
+		groupLabel("Obscured"),
+		theme.Field{
+			Value:       s.secret,
+			Placeholder: "Password",
+			Obscure:     true,
+			OnChange:    func(v string) { s.SetState(func() { s.secret = v }) },
+		},
+		widget.Sized{H: 4},
+		// Length only: the point of the field is that the value stays in it.
+		widget.Text{Value: fmt.Sprintf("%d characters, none of them copyable", len([]rune(s.secret))), Size: th.Type.Caption, Color: th.Muted},
 
 		groupLabel("Multiline"),
 		theme.Field{

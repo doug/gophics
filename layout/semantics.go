@@ -106,6 +106,14 @@ type SemInfo struct {
 	Expanded *bool
 	// Hint describes the result of activating the node ("opens the thread").
 	Hint string
+	// Secure marks a text field whose content is a secret. Value then carries
+	// the masked string the user sees, never the real one: a screen reader
+	// must not read a password aloud, and a test harness must not be able to
+	// lift it out of the semantics tree when the clipboard cannot. It is
+	// carried to the accessibility bridges as A11yNode.Secure, so one that
+	// can (web's mirror; a mobile host reading A11ySecure) announces "secure
+	// text field" rather than the bullets.
+	Secure bool
 }
 
 // Semantic is implemented by boxes that contribute semantics.
@@ -142,6 +150,7 @@ type SemNode struct {
 	Checked    *bool
 	Expanded   *bool
 	Hint       string
+	Secure     bool
 	OnActivate func()
 	Rect       geom.Rect
 	// Visible is the part of Rect actually on screen: Rect narrowed to every
@@ -216,6 +225,7 @@ func collectSem(b Box, at geom.Pt, clip geom.Rect, clipEmpty bool) []SemNode {
 		Checked:    info.Checked,
 		Expanded:   info.Expanded,
 		Hint:       info.Hint,
+		Secure:     info.Secure,
 		OnActivate: info.OnActivate,
 		Rect:       rect,
 	}

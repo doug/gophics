@@ -622,7 +622,7 @@ func (s *textFieldState) copySelection(ctx Ctx) {
 }
 
 func (s *textFieldState) cutSelection(ctx Ctx) {
-	if !s.ed.HasSelection() {
+	if !s.ed.HasSelection() || s.W().Obscure {
 		return
 	}
 	s.copySelection(ctx)
@@ -667,18 +667,38 @@ func (s *textFieldState) closeMenu() {
 }
 
 // editOps exposes the field to the edit menu.
+// editOps exposes the field to the edit menu. An Obscure field offers no Cut
+// or Copy at all (nil, so the menu does not list them) rather than items that
+// would silently do nothing.
 func (s *textFieldState) editOps(ctx Ctx) selectionOps {
-	return selectionOps{
+	ops := selectionOps{
 		HasSelection: s.ed.HasSelection,
 		AllSelected: func() bool {
 			a, b := s.ed.Selection()
 			return a == 0 && b == len([]rune(s.ed.Text())) && b > 0
 		},
-		Cut:       func() { s.cutSelection(ctx) },
-		Copy:      func() { s.copySelection(ctx) },
 		Paste:     func() { s.pasteClipboard(ctx) },
 		SelectAll: s.selectAll,
 	}
+	if !s.W().Obscure {
+		ops.Cut = func() { s.cutSelection(ctx) }
+		ops.Copy = func() { s.copySelection(ctx) }
+	}
+	return ops
+}
+
+// selectWordAt selects the word around idx — or, in an Obscure field, the
+// whole value: a word highlight over the bullets would give away where the
+// secret's words begin and end, which native password fields avoid the same
+// way. A drag from such a selection extends by lines, never by words, for
+// the same reason.
+func (s *textFieldState) selectWordAt(idx int) {
+	if s.W().Obscure {
+		s.selectAll()
+		s.dragUnit = dragLines
+		return
+	}
+	s.selectWordAt(idx)
 }
 
 func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
@@ -796,8 +816,8 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				if s.clicks >= 2 && !ctx.Input().PointerIsTouch() {
 					idx := s.indexAtPt(ctx, p)
 					if s.clicks == 2 {
-						s.ed.SelectWordAt(idx)
 						s.dragUnit = dragWords
+						s.selectWordAt(idx)
 					} else {
 						s.ed.SelectLineAt(idx)
 						s.dragUnit = dragLines
@@ -848,7 +868,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				s.activity()
 				s.closeMenu()
 				if !s.ed.HasSelection() {
-					s.ed.SelectWordAt(s.indexAtPt(ctx, p))
+					s.selectWordAt(s.indexAtPt(ctx, p))
 				}
 				s.SetState(nil)
 				if acts := editActionsFor(ctx, s.editOps(ctx)); len(acts) > 0 {
@@ -863,7 +883,7 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				// keyboard.
 				s.activity()
 				if !s.ed.HasSelection() {
-					s.ed.SelectWordAt(s.indexAtPt(ctx, s.pressLocal))
+					s.selectWordAt(s.indexAtPt(ctx, s.pressLocal))
 				}
 				s.handles = true // a finger made this selection; give it grips
 				s.SetState(nil)
@@ -880,8 +900,8 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 				// OnPress already placed the caret at the click; select the word
 				// around it, and a drag from here selects by words.
 				s.activity()
-				s.ed.SelectWordAt(s.ed.Caret())
 				s.dragUnit = dragWords
+				s.selectWordAt(s.ed.Caret())
 				s.unitAnchor[0], s.unitAnchor[1] = s.ed.Selection()
 				s.SetState(nil)
 			},
@@ -1356,6 +1376,7 @@ func (b *fieldBox) Semantics() layout.SemInfo {
 		Value:    b.state.shown(), // a screen reader gets bullets for a password too
 		Focused:  b.state.focused,
 		Disabled: f.Disabled,
+		Secure:   f.Obscure,
 	}
 }
 

@@ -278,9 +278,13 @@ class GophicsView: UIView, UITextInput {
         default: want_kb = .default
         }
         let want_ac: UITextAutocorrectionType = bridge.textInputAutocorrect() ? .yes : .no
-        if keyboardType != want_kb || autocorrectionType != want_ac {
+        // A password field gets the secure keyboard: no predictive bar, no
+        // learning, and the system's own bullet glyph handling.
+        let want_secure = bridge.textInputSecure()
+        if keyboardType != want_kb || autocorrectionType != want_ac || isSecureTextEntry != want_secure {
             keyboardType = want_kb
             autocorrectionType = want_ac
+            isSecureTextEntry = want_secure
             reloadInputViews()
         }
     }
@@ -311,6 +315,7 @@ class GophicsView: UIView, UITextInput {
     override var canBecomeFirstResponder: Bool { true }
     var keyboardType: UIKeyboardType = .default
     var autocorrectionType: UITextAutocorrectionType = .default
+    var isSecureTextEntry: Bool = false
     var hasText: Bool { !bridge.textInputText().isEmpty }
     func insertText(_ text: String) {
         if text == "\n" { bridge.key(1, pressed: true) } else { bridge.text(text) }

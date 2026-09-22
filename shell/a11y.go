@@ -95,5 +95,9 @@ type A11yNode struct {
 	// a leaf is not a collapsed branch.
 	Expandable bool
 	Expanded   bool
-	Children   []int
+	// Secure marks a text field holding a secret. Value is already the masked
+	// string; this is the hint that lets a bridge announce "secure text field"
+	// rather than read the bullets out.
+	Secure   bool
+	Children []int
 }

@@ -43,6 +43,7 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 			Focused:  n.Focused, Disabled: n.Disabled, Selected: n.Selected,
 			Checkable: n.Checked != nil, Checked: n.Checked != nil && *n.Checked,
 			Expandable: n.Expanded != nil, Expanded: n.Expanded != nil && *n.Expanded,
+			Secure: n.Secure,
 		}
 		idx := len(t.nodes)
 		t.nodes = append(t.nodes, node)
@@ -105,7 +106,9 @@ func a11yTreeEqual(a, b []A11yNode) bool {
 			x.X != y.X || x.Y != y.Y || x.W != y.W || x.H != y.H ||
 			x.Tappable != y.Tappable || x.Focused != y.Focused ||
 			x.Disabled != y.Disabled || x.Selected != y.Selected ||
-			x.Checkable != y.Checkable || x.Checked != y.Checked {
+			x.Checkable != y.Checkable || x.Checked != y.Checked ||
+			x.Expandable != y.Expandable || x.Expanded != y.Expanded ||
+			x.Secure != y.Secure {
 			return false
 		}
 		if len(x.Children) != len(y.Children) {

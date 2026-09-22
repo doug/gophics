@@ -139,6 +139,32 @@ func TestHideClearsTheEditingContext(t *testing.T) {
 	}
 }
 
+// The secure hint reaches the host, and changing only it is a revision: a
+// field that switches between showing and hiding its password (the eye
+// toggle) must get the keyboard re-configured, or the predictive bar comes
+// back on a field that is masked again.
+func TestSecureHintReachesTheHost(t *testing.T) {
+	b := mobile.NewBridge(nil)
+	ti := b.TextInput()
+
+	ti.Show(shell.TextInputOptions{Secure: true}, shell.TextInputHandler{})
+	if !b.TextInputSecure() {
+		t.Fatal("Secure hint was dropped; the host would raise a suggesting, learning keyboard")
+	}
+	if b.TextInputAutocorrect() {
+		t.Error("a secure field did not ask for autocorrect, but the host was told it did")
+	}
+
+	rev := b.TextInputRevision()
+	ti.Show(shell.TextInputOptions{Secure: false}, shell.TextInputHandler{})
+	if b.TextInputSecure() {
+		t.Error("clearing Secure did not reach the host")
+	}
+	if b.TextInputRevision() == rev {
+		t.Error("toggling Secure alone did not bump the revision; the host would never re-read it")
+	}
+}
+
 // Announce is the half of accessibility the pull model cannot carry: the host
 // asks for the tree when its focus moves, but nothing asks "did anything need
 // saying?" — so a live-region message had nowhere to go on a phone.

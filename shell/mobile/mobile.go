@@ -387,6 +387,11 @@ func (b *Bridge) A11yH(i int) int {
 	return n.H
 }
 func (b *Bridge) A11yTappable(i int) bool { n := b.a11yAt(i); return n != nil && n.Tappable }
+
+// A11ySecure reports whether node i is a password field, for the host to set
+// AccessibilityNodeInfo.isPassword / the secure text trait; its value is
+// already masked.
+func (b *Bridge) A11ySecure(i int) bool { n := b.a11yAt(i); return n != nil && n.Secure }
 func (b *Bridge) A11yChildCount(i int) int {
 	n := b.a11yAt(i)
 	if n == nil {
