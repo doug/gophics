@@ -97,6 +97,19 @@ These are the load-bearing ones. All live in package `widget`.
 
 `Handler` carries `OnTap`, `OnEnter`, `OnExit`, `OnPress(pos)`, `OnDrag(pos, delta)`.
 
+### Building a drag board
+
+Do not hand-roll drag and drop from a `Stack` ghost and pointer math; the
+z-ordering and the drop hit-testing are already solved. `Draggable{Payload,
+Child}` picks a value up and carries a preview under the pointer, painted
+above everything else. `DropTarget{Accept, OnDrop, Builder}` receives it;
+`Builder(hovering)` renders the target and is how it highlights while a
+compatible payload is over it. The two talk through the session `DragHost`
+installs at the root (the app runner does this for you). When the board needs
+the laid-out rects of its lanes or tiers — to size rows to their contents,
+say — wrap them in `LayoutObserver{OnLayout, Child}` rather than computing
+extents by hand.
+
 ## Custom drawing — the escape hatch
 
 For graphics that don't decompose into widgets (charts, gauges, game boards,

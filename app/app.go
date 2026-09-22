@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/doug/gophics/geom"
@@ -209,7 +210,14 @@ type core struct {
 	framePanics  int
 	lastPanicLog time.Time
 
-	posted chan func()
+	// posted is work queued for the UI goroutine by Post, drained at the top
+	// of each frame. A slice under a mutex, not a channel: Post is also called
+	// from the UI goroutine itself — a LayoutObserver reporting from Paint, a
+	// widget marshalling a callback — and a bounded channel whose only reader
+	// is that goroutine deadlocks the moment one frame posts more than the
+	// channel holds. Appending never blocks, from either side.
+	postMu sync.Mutex
+	posted []func()
 
 	// hits and hoverScratch are reused across pointer events: hits backs
 	// interactivesAt's result (transient — no caller retains it), hoverScratch
@@ -298,7 +306,6 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 		size:           cfg.Size,
 		cur:            &scene.List{},
 		prev:           &scene.List{},
-		posted:         make(chan func(), 128),
 	}
 	c.Owner.Post = c.Post
 	c.Owner.ScrollPhysics = cfg.ScrollPhysics
@@ -393,19 +400,28 @@ func (c *core) mount() {
 // build phase (§4.6): the one safe way for background goroutines to touch
 // widget state. Safe to call from any goroutine.
 func (c *core) Post(fn func()) {
-	c.posted <- fn
+	c.postMu.Lock()
+	c.posted = append(c.posted, fn)
+	c.postMu.Unlock()
 	c.Owner.RequestFrameThreadSafe()
 }
 
 // drainPosted runs pending posted work; called on the UI goroutine at the
-// top of each frame.
+// top of each frame. Work posted by a running callback is drained in the
+// same pass, so a chain of posts settles within one frame rather than one
+// link per frame. The queue is swapped out under the lock and run outside
+// it: a callback may itself call Post.
 func (c *core) drainPosted() {
 	for {
-		select {
-		case fn := <-c.posted:
-			fn()
-		default:
+		c.postMu.Lock()
+		fns := c.posted
+		c.posted = nil
+		c.postMu.Unlock()
+		if len(fns) == 0 {
 			return
+		}
+		for _, fn := range fns {
+			fn()
 		}
 	}
 }
