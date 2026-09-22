@@ -2,6 +2,7 @@ package widget
 
 import (
 	"slices"
+	"time"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/internal/layoutbox"
@@ -194,6 +195,10 @@ type Draggable struct {
 	// a hold there makes a draggable feel broken to anyone who just tries to
 	// drag it.
 	LongPressToStart bool
+	// LongPressDelay shortens (or lengthens) the hold LongPressToStart waits
+	// for, for this draggable only; zero is the platform's long-press time.
+	// A drag handle usually wants less than a context menu does.
+	LongPressDelay time.Duration
 	// OnDragStart and OnDragEnd bracket the gesture; dropped reports whether
 	// a target took the payload.
 	OnDragStart func()
@@ -320,6 +325,7 @@ func (s *draggableState) Build(ctx Ctx) Widget {
 				s.touch = false // assume a mouse until a claim says otherwise
 				s.armed = !w.LongPressToStart
 			},
+			LongPressDelay: w.LongPressDelay,
 			OnLongPress: func() {
 				if w.LongPressToStart {
 					s.armed = true

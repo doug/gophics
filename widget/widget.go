@@ -6,6 +6,7 @@ package widget
 
 import (
 	"context"
+	"time"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/input"
@@ -315,6 +316,12 @@ type Gestures struct {
 	// OnLongPress fires once when the pointer is held on this widget past
 	// the long-press threshold without moving; it cancels the pending tap.
 	OnLongPress func()
+	// LongPressDelay is how long a still press is held before OnLongPress
+	// fires, for this handler only; zero uses the platform's long-press time
+	// (Config.Gestures). It exists for a drag handle that should lift after
+	// a short hold: the platform value is tuned for context menus (0.4–0.5 s),
+	// and shortening it app-wide would make every long press hair-trigger.
+	LongPressDelay time.Duration
 	// OnDoubleTap fires on two quick taps. When set, a single OnTap is
 	// deferred by the double-tap window (to disambiguate); a recognized
 	// double-tap cancels that pending OnTap.
