@@ -119,18 +119,17 @@ func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandle
 
 	in := t.input
 	in.Set("inputmode", inputMode(opts.Type))
-	in.Set("type", inputType(opts))
-	if opts.Secure {
-		in.Set("autocomplete", "off")
-	}
 	// A password input is how the browser is told not to suggest, autofill
 	// from history, or show the typed key in the keyboard's preview bubble.
 	// The element is invisible, so the type changes nothing on screen; it
 	// changes what the soft keyboard does with the secret.
+	in.Set("type", inputType(opts))
+	// The <input> is shared by every field, so a plain field after a secure
+	// one must get the attribute taken back off.
 	if opts.Secure {
-		in.Set("type", "password")
+		in.Set("autocomplete", "off")
 	} else {
-		in.Set("type", "text")
+		in.Call("removeAttribute", "autocomplete")
 	}
 	if opts.Autocorrect && !opts.Secure {
 		in.Call("removeAttribute", "autocorrect")
