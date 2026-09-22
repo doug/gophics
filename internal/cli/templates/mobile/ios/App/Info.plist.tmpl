@@ -39,6 +39,19 @@
 	<string>TODO: say why {{.Name}} saves pictures to your library.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>TODO: say why {{.Name}} uses Face ID.</string>
+	<!-- Local networking (mirrors project.yml, which xcodegen regenerates this
+	     file from): ATS allows private ranges and .local names, and iOS 14+
+	     shows NSLocalNetworkUsageDescription before the first such connection.
+	     Add <key>NSAllowsArbitraryLoads</key><true/> to the dict only if the
+	     app must reach plain-http hosts that are not on the local network;
+	     App Review asks for a justification, and https hosts never need it. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TODO: say why {{.Name}} connects to devices on your local network.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

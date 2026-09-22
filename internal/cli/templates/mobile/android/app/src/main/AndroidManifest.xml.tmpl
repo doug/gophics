@@ -6,6 +6,13 @@
          activity throws a SecurityException from onCreate. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- /gophics:permissions -->
+    <!-- Plain http: targetSdk 28+ blocks it by default, and an app that talks
+         to a server on the local network (a dev machine, a box on the LAN)
+         needs it allowed. Add android:usesCleartextTraffic="true" to the
+         element below, or better a networkSecurityConfig limited to private
+         ranges; https hosts never need either. syncAndroidPermissions rewrites
+         only the gophics:permissions block above, so an edit here survives
+         regeneration. -->
     <application android:label="{{.Name}}" android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".MainActivity" android:exported="true"
                   android:configChanges="orientation|screenSize|uiMode">

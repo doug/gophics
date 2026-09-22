@@ -21,6 +21,18 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # Local networking: a gophics app that talks to a server on the LAN
+        # (a dev machine, a box at home) needs ATS to allow private ranges and
+        # .local names, and iOS 14+ shows NSLocalNetworkUsageDescription before
+        # the first such connection. Edit the string to say why *this* app
+        # does it, or delete both keys if the app only talks to public https.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          # NSAllowsArbitraryLoads: true
+          # Uncomment only if the app must reach plain-http hosts that are not
+          # on the local network (a user-typed server URL, say). App Review
+          # asks for a justification; https hosts never need it.
+        NSLocalNetworkUsageDescription: "TODO: say why {{.Name}} connects to devices on your local network."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{.BundleID}}
