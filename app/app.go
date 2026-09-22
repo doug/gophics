@@ -194,6 +194,12 @@ type core struct {
 	cur, prev     *scene.List
 	lastPaintSize geom.Size
 	lastScale     float32
+	// cpuStale records that the most recent frame was recorded for a GPU
+	// present, so the painter's retained CPU surface does not hold prev — the
+	// GPU replayed it and the CPU pixmap was never touched. The next CPU frame
+	// must repaint everything: a damage rect diffed against prev names only
+	// what changed since a frame the CPU surface has never seen.
+	cpuStale bool
 	// lastLayout is the size the tree was last laid out at; pointer-event hit
 	// testing re-lays-out only when it differs or a rebuild is pending.
 	lastLayout geom.Size

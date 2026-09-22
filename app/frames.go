@@ -222,6 +222,18 @@ func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed boo
 	if size != c.lastPaintSize || scale != c.lastScale {
 		changed, damage = true, surface
 	}
+	if gpu {
+		c.cpuStale = true
+	} else if c.cpuStale {
+		// The previous frame went to the GPU, so prev was never rasterized into
+		// the painter's CPU surface — the diff above measures change against a
+		// frame the CPU pixmap does not hold. Painting only that rect onto a
+		// fresh (zeroed) or stale surface is how Android's fallback from a
+		// broken Vulkan swapchain showed a lone text caret on black until a tap
+		// happened to dirty everything. Repaint the whole surface once.
+		changed, damage = true, surface
+		c.cpuStale = false
+	}
 	if !gpu && c.cur.HasLayers() {
 		// Transform groups can't be partially replayed: their ops are recorded
 		// in a transformed coordinate space, so their bounds can't feed the

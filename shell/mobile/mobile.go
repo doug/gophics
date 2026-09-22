@@ -183,6 +183,13 @@ func (b *Bridge) RenderFrame(dtSeconds float64) {
 	b.dirty.Store(false)
 	b.linkStarted = true
 	b.handler.Frame(b, &frame{b: b}, dtSeconds)
+	if b.gpu != nil && b.gpu.failed > 0 {
+		// The frame never reached the screen, so the UI still needs one. Without
+		// this a static scene stalls: the host sees no frame wanted, nothing
+		// retries, and a surface that would retire after a few more failures
+		// sits at one failure showing black.
+		b.dirty.Store(true)
+	}
 }
 
 // Snapshot renders one frame on the CPU and returns it as RGBA8888 pixels
@@ -591,7 +598,7 @@ func (f *frame) Target() shell.Target {
 		return f.b.capturing
 	}
 	if !f.b.snapshotting && f.b.gpu != nil {
-		return mobileGPUTarget{f.b.gpu}
+		return mobileGPUTarget{g: f.b.gpu, failed: f.b.gpu.failed}
 	}
 	// The damage rect is ignored: the host reads the whole frame back through
 	// Snapshot and blits it, so there is no retained destination here to

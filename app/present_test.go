@@ -260,3 +260,53 @@ func TestPaintPanicOnGPUTargetSkipsReplay(t *testing.T) {
 		t.Fatalf("recovered frame must replay: renders = %d, want 2", gt.renders)
 	}
 }
+
+// A CPU frame that follows GPU frames must repaint the whole surface, even
+// when the scene has not changed. GPU frames record and diff like any other,
+// so the CPU painter's retained surface falls behind the diff baseline; a
+// damage rect computed against that baseline names only what changed since a
+// frame the CPU pixmap never held. Mobile hits this when a broken swapchain
+// retires the GPU and the host switches to Snapshot: the first CPU frame
+// showed a text caret on black. (shell/mobile has the end-to-end version.)
+func TestCPUFrameAfterGPUFramesRepaintsWholeSurface(t *testing.T) {
+	col := paint.RGB(0.2, 0.3, 0.4)
+	sh, w := newPresentHarness(t, colorCanvas(&col))
+	size := geom.Size{W: 200, H: 150}
+	gt := newFakeGPUTarget()
+	f := &fakeFrame{size: size, scale: 1, tgt: gt}
+
+	sh.Frame(w, f, 1.0/60)
+	sh.Frame(w, f, 1.0/60)
+	if gt.renders != 1 {
+		t.Fatalf("setup: renders = %d, want 1", gt.renders)
+	}
+
+	// The shell hands over a CPU target — nothing in the scene has changed.
+	var img *image.RGBA
+	var damage geom.Rect
+	puts := 0
+	f.tgt = shell.PixelTarget{Put: func(s *image.RGBA, d geom.Rect) { puts++; img, damage = s, d }}
+	sh.Frame(w, f, 1.0/60)
+	if puts != 1 {
+		t.Fatalf("first CPU frame after GPU frames must present: puts = %d, want 1", puts)
+	}
+	if full := geom.RectFromSize(size); damage != full {
+		t.Fatalf("damage = %v, want the whole surface %v", damage, full)
+	}
+	if sh.core.Skipped {
+		t.Fatal("the first CPU frame cannot be a skip; the CPU surface held nothing")
+	}
+	if img == nil || img.Pix[3] != 255 || img.Pix[len(img.Pix)-1] != 255 {
+		t.Fatal("CPU surface should be fully painted after the switch")
+	}
+
+	// The forced repaint is a one-shot: the CPU surface is current now, so the
+	// next CPU frame goes back to ordinary damage tracking.
+	if sh.core.cpuStale {
+		t.Fatal("cpuStale must clear once a CPU frame has repainted the surface")
+	}
+	sh.Frame(w, f, 1.0/60)
+	if puts != 2 {
+		t.Fatalf("a settled CPU frame still presents the retained surface: puts = %d, want 2", puts)
+	}
+}

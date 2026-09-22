@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"errors"
 	"log"
 	"slices"
 	"unsafe"
@@ -45,6 +46,10 @@ type mobileGPU struct {
 // than the whole session. Android emulators without working Vulkan fail every
 // frame from the first, so they cross it immediately.
 const gpuFailureLimit = 3
+
+// errNoCanvas is the failure RenderGPU reports for a mobileGPU that has no
+// canvas or surface to draw into.
+var errNoCanvas = errors.New("no GPU canvas or surface")
 
 // SetSurface gives the Bridge the native render surface to present to.
 // displayHandle/windowHandle are the platform's raw handles as int64 (iOS: 0,
@@ -267,10 +272,28 @@ func (g *mobileGPU) release() {
 
 // mobileGPUTarget implements app.gpuCanvasTarget (RenderGPU): replay the scene
 // onto the GPU canvas and present to the surface's current texture.
-type mobileGPUTarget struct{ g *mobileGPU }
+type mobileGPUTarget struct {
+	g *mobileGPU
+	// failed is g.failed at the time the target was handed out. The handler
+	// skips the GPU replay for an unchanged scene on the target it last
+	// rendered to, comparing targets by value; a frame that failed to present
+	// has not shown that scene, so the target it failed on must not compare
+	// equal to the one the next frame gets. Otherwise a static scene fails
+	// once, is never replayed, and the surface neither presents nor retires.
+	failed int
+}
 
 func (t mobileGPUTarget) RenderGPU(replay func(*gg.Context)) {
 	g := t.g
+	if g.ggc == nil || g.surface == nil {
+		// A surface with no canvas behind it cannot present, only fail; count
+		// it like any other unpresentable frame so it retires the same way
+		// rather than crashing the host's frame callback. It is also what lets
+		// a headless test stand in a device-less mobileGPU and exercise the
+		// real retirement path.
+		g.presentFailed("gpu canvas", errNoCanvas)
+		return
+	}
 	if err := g.ggc.Draw(func(cc *gg.Context) { replay(cc) }); err != nil {
 		log.Printf("gophics/mobile: gpu draw: %v", err)
 		return
