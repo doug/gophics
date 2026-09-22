@@ -2,6 +2,7 @@ package image
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 )
 
@@ -487,5 +488,130 @@ func BenchmarkDrawImageBicubic(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		DrawImage(dst, src, params)
+	}
+}
+
+// TestDrawImageUnscaledMatchesTransformed checks that the row fast path
+// DrawImage takes for identity draws is bit-identical to the general
+// inverse-mapping path, on random content, for every blend mode and a
+// spread of opacities. Tolerance is zero: the fast path exists so that
+// layer compositing can be cheap, not different.
+//
+// It drives the public DrawImage as well as the fast path directly, and
+// under bilinear sampling too: an identity bilinear draw is not the fast
+// path (the sampler's float round trip truncates one level low on some
+// texels, so a raw copy would differ), and this is what holds DrawImage to
+// the general path there — widening the gate again fails here.
+func TestDrawImageUnscaledMatchesTransformed(t *testing.T) {
+	const w, h = 37, 23
+	rng := rand.New(rand.NewSource(1))
+	randomImage := func(format Format, sparse bool) *ImageBuf {
+		img, err := NewImageBuf(w, h, format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range img.data {
+			img.data[i] = byte(rng.Intn(256))
+		}
+		if sparse {
+			// Layers are mostly transparent: zero alpha on most pixels and
+			// leave some fully opaque, to exercise both skips in blendNormal.
+			for i := 3; i < len(img.data); i += 4 {
+				switch rng.Intn(4) {
+				case 0:
+					img.data[i] = 0
+				case 1:
+					img.data[i] = 255
+				}
+			}
+		}
+		return img
+	}
+	modes := []BlendMode{BlendNormal, BlendMultiply, BlendScreen, BlendOverlay}
+	opacities := []float64{0, 0.13, 0.5, 0.85, 1}
+	formats := []Format{FormatRGBA8, FormatRGBAPremul, FormatBGRA8}
+	interps := []InterpolationMode{InterpNearest, InterpBilinear}
+	for _, format := range formats {
+		for _, interp := range interps {
+			for _, mode := range modes {
+				for _, opacity := range opacities {
+					src := randomImage(format, true)
+					dst := randomImage(format, false)
+					// Some destination rows fully transparent, some opaque.
+					for y := 0; y < h; y += 3 {
+						for x := 0; x < w; x++ {
+							dst.data[y*dst.stride+x*4+3] = byte(255 * (y % 2))
+						}
+					}
+					want, _ := NewImageBuf(w, h, format)
+					copy(want.data, dst.data)
+					srcRect := Rect{X: 0, Y: 0, Width: w, Height: h}
+					identity := Identity()
+					inv, _ := identity.Invert()
+					drawImageTransformed(want, src, srcRect, srcRect, inv, opacity, interp, mode)
+
+					check := func(got *ImageBuf, path string) {
+						t.Helper()
+						for i := range want.data {
+							if want.data[i] != got.data[i] {
+								x, y := (i/4)%w, i/4/w
+								t.Fatalf("format %v interp %v mode %v opacity %v: pixel (%d,%d) byte %d: %s %d, general %d",
+									format, interp, mode, opacity, x, y, i%4, path, got.data[i], want.data[i])
+							}
+						}
+					}
+
+					// The public entry point, which picks the path itself.
+					pub, _ := NewImageBuf(w, h, format)
+					copy(pub.data, dst.data)
+					DrawImage(pub, src, DrawParams{
+						SrcRect: &srcRect, DstRect: srcRect,
+						Interp: interp, Opacity: opacity, BlendMode: mode,
+					})
+					check(pub, "DrawImage")
+
+					if interp != InterpNearest {
+						continue
+					}
+					got, _ := NewImageBuf(w, h, format)
+					copy(got.data, dst.data)
+					if !canDrawUnscaled(got, src, srcRect, srcRect) {
+						t.Fatalf("%v: fast path not eligible", format)
+					}
+					drawImageUnscaled(got, src, srcRect, srcRect, opacity, mode)
+					check(got, "fast")
+				}
+			}
+		}
+	}
+}
+
+// TestDrawImageUnscaledOffsetMatches covers a sub-rectangle draw at an
+// offset, where both rects are inside their images but not at the origin.
+func TestDrawImageUnscaledOffsetMatches(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
+	src, _ := NewImageBuf(20, 16, FormatRGBA8)
+	dst, _ := NewImageBuf(30, 30, FormatRGBA8)
+	for i := range src.data {
+		src.data[i] = byte(rng.Intn(256))
+	}
+	for i := range dst.data {
+		dst.data[i] = byte(rng.Intn(256))
+	}
+	srcRect := Rect{X: 3, Y: 2, Width: 10, Height: 9}
+	dstRect := Rect{X: 15, Y: 20, Width: 10, Height: 9}
+	want, _ := NewImageBuf(30, 30, FormatRGBA8)
+	copy(want.data, dst.data)
+	identity := Identity()
+	inv, _ := identity.Invert()
+	drawImageTransformed(want, src, srcRect, dstRect, inv, 0.7, InterpNearest, BlendNormal)
+
+	got, _ := NewImageBuf(30, 30, FormatRGBA8)
+	copy(got.data, dst.data)
+	DrawImage(got, src, DrawParams{SrcRect: &srcRect, DstRect: dstRect, Opacity: 0.7})
+	for i := range want.data {
+		if want.data[i] != got.data[i] {
+			t.Fatalf("byte %d: DrawImage %d, general %d", i, got.data[i], want.data[i])
+		}
 	}
 }

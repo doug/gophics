@@ -234,11 +234,18 @@ func (p *Pixmap) Clear(c RGBA) {
 	b := uint8(clamp255(c.B * c.A * 255))
 	a := uint8(clamp255(c.A * 255))
 
-	for i := 0; i < len(p.data); i += 4 {
-		p.data[i+0] = r
-		p.data[i+1] = g
-		p.data[i+2] = b
-		p.data[i+3] = a
+	if len(p.data) < 4 {
+		return
+	}
+	if r == 0 && g == 0 && b == 0 && a == 0 {
+		clear(p.data) // memclr: the common case (transparent layers)
+		return
+	}
+	// Seed one pixel and double it: copy runs at memmove speed, far ahead
+	// of a per-pixel store loop on a 10 MB surface.
+	p.data[0], p.data[1], p.data[2], p.data[3] = r, g, b, a
+	for n := 4; n < len(p.data); n *= 2 {
+		copy(p.data[n:], p.data[:n])
 	}
 }
 

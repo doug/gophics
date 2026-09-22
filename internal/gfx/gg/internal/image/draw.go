@@ -1,7 +1,10 @@
 // Package image provides image buffer management for gogpu/gg.
 package image
 
-import "math"
+import (
+	"encoding/binary"
+	"math"
+)
 
 // Rect represents a rectangular region in pixel coordinates.
 type Rect struct {
@@ -131,6 +134,82 @@ func DrawImage(dst, src *ImageBuf, params DrawParams) {
 		return
 	}
 
+	// Unscaled, untransformed, nearest-sampled draw of a matching-size
+	// source: walk the raw rows instead of inverse-mapping and sampling every
+	// pixel. Layer compositing (PopLayer) is this case at full-surface size
+	// every time. Nearest only: the bilinear and bicubic samplers reach the
+	// texel through a float round trip ((dx+0.5)/w*w-0.5) that can land a
+	// hair below the integer and truncate one level low, so they are not
+	// bit-identical to a raw copy and keep the general path.
+	if params.DstRect == dstRect && transform.IsIdentity() && params.Interp == InterpNearest &&
+		canDrawUnscaled(dst, src, *srcRect, dstRect) {
+		drawImageUnscaled(dst, src, *srcRect, dstRect, opacity, params.BlendMode)
+		return
+	}
+
+	drawImageTransformed(dst, src, *srcRect, dstRect, invTransform, opacity, params.Interp, params.BlendMode)
+}
+
+// canDrawUnscaled reports whether drawImageUnscaled may take dst/src: the
+// rectangles are the same size and inside their images, and both buffers
+// share a 4-byte-per-pixel layout with alpha in the last byte so a raw
+// byte read is what GetRGBA would return (channel order does not matter:
+// every blend mode here treats the three colour channels alike).
+func canDrawUnscaled(dst, src *ImageBuf, srcRect, dstRect Rect) bool {
+	if src.format != dst.format || src.bpp != 4 || !src.format.HasAlpha() {
+		return false
+	}
+	if srcRect.Width != dstRect.Width || srcRect.Height != dstRect.Height {
+		return false
+	}
+	srcW, srcH := src.Bounds()
+	return srcRect.X >= 0 && srcRect.Y >= 0 &&
+		srcRect.X+srcRect.Width <= srcW && srcRect.Y+srcRect.Height <= srcH
+}
+
+// drawImageUnscaled blends srcRect of src onto dstRect of dst pixel for
+// pixel. It produces exactly what drawImageTransformed produces for an
+// identity transform with nearest sampling (same blend arithmetic on the
+// same bytes), only without the per-pixel transform, sampling, and accessor
+// overhead. Pixels with zero
+// source alpha are skipped, as blend leaves the destination unchanged for
+// them — a layer is mostly transparent, so this is most of the work.
+func drawImageUnscaled(dst, src *ImageBuf, srcRect, dstRect Rect, opacity float64, mode BlendMode) {
+	if opacity <= 0 {
+		return // every source alpha scales to 0: blend returns dst unchanged
+	}
+	rowBytes := dstRect.Width * 4
+	// Alpha bytes of two adjacent pixels, viewed as one little-endian word.
+	const alphaPair = 0xFF000000FF000000
+	for y := 0; y < dstRect.Height; y++ {
+		so := (srcRect.Y+y)*src.stride + srcRect.X*4
+		do := (dstRect.Y+y)*dst.stride + dstRect.X*4
+		s := src.data[so : so+rowBytes : so+rowBytes]
+		d := dst.data[do : do+rowBytes : do+rowBytes]
+		for x := 0; x+3 < len(s); x += 4 {
+			// Step over transparent runs two pixels at a time: on a
+			// mostly-empty layer the scan, not the blend, is the cost.
+			for x+7 < len(s) && binary.LittleEndian.Uint64(s[x:x+8])&alphaPair == 0 {
+				x += 8
+			}
+			if x+3 >= len(s) {
+				break
+			}
+			srcA := s[x+3]
+			if srcA == 0 {
+				continue
+			}
+			if opacity < 1.0 {
+				srcA = uint8(float64(srcA) * opacity)
+			}
+			d[x], d[x+1], d[x+2], d[x+3] = blend(s[x], s[x+1], s[x+2], srcA, d[x], d[x+1], d[x+2], d[x+3], mode)
+		}
+	}
+}
+
+// drawImageTransformed is the general path: inverse-map every destination
+// pixel into source space and sample it.
+func drawImageTransformed(dst, src *ImageBuf, srcRect, dstRect Rect, invTransform Affine, opacity float64, interp InterpolationMode, mode BlendMode) {
 	// Draw each pixel in the destination rectangle
 	for dy := 0; dy < dstRect.Height; dy++ {
 		for dx := 0; dx < dstRect.Width; dx++ {
@@ -163,7 +242,7 @@ func DrawImage(dst, src *ImageBuf, params DrawParams) {
 			sampleV := srcY / float64(srcHeight)
 
 			// Sample source image
-			srcR, srcG, srcB, srcA := Sample(src, sampleU, sampleV, params.Interp)
+			srcR, srcG, srcB, srcA := Sample(src, sampleU, sampleV, interp)
 
 			// Apply opacity
 			if opacity < 1.0 {
@@ -174,7 +253,7 @@ func DrawImage(dst, src *ImageBuf, params DrawParams) {
 			dstR, dstG, dstB, dstA := dst.GetRGBA(dstX, dstY)
 
 			// Blend and write result
-			r, g, b, a := blend(srcR, srcG, srcB, srcA, dstR, dstG, dstB, dstA, params.BlendMode)
+			r, g, b, a := blend(srcR, srcG, srcB, srcA, dstR, dstG, dstB, dstA, mode)
 			_ = dst.SetRGBA(dstX, dstY, r, g, b, a)
 		}
 	}

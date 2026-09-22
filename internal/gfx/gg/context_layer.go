@@ -29,7 +29,17 @@ type Layer struct {
 type layerStack struct {
 	layers []*Layer
 	pool   *intImage.Pool
+	// free holds popped layer pixmaps for reuse. A phone-resolution layer is
+	// 10 MB; allocating one per PushLayer several times a frame put the
+	// allocator and GC on the frame's critical path. The pixmaps are
+	// retained only while they match the surface size (see acquirePixmap).
+	free []*Pixmap
 }
+
+// maxFreeLayerPixmaps bounds the free list to the layer nesting depth a
+// frame realistically reaches, so a one-off deep nesting does not pin
+// memory for the life of the context.
+const maxFreeLayerPixmaps = 4
 
 // newLayerStack creates a new layer stack with a pool for memory reuse.
 func newLayerStack() *layerStack {
@@ -37,6 +47,34 @@ func newLayerStack() *layerStack {
 		layers: make([]*Layer, 0, 4),
 		pool:   intImage.NewPool(8),
 	}
+}
+
+// acquirePixmap returns a transparent pixmap of the given size, reusing a
+// released one when the size matches. A size change (surface resize) drops
+// the stale free list rather than keeping two sizes around.
+func (s *layerStack) acquirePixmap(width, height int) *Pixmap {
+	if n := len(s.free); n > 0 {
+		pm := s.free[n-1]
+		if pm.Width() == width && pm.Height() == height {
+			s.free[n-1] = nil
+			s.free = s.free[:n-1]
+			pm.Clear(Transparent)
+			return pm
+		}
+		clear(s.free)
+		s.free = s.free[:0]
+	}
+	// A fresh allocation is already zero, which is Transparent premultiplied.
+	return NewPixmap(width, height)
+}
+
+// releasePixmap gives a popped layer's pixmap back for the next PushLayer.
+// The caller must hold no other reference to it.
+func (s *layerStack) releasePixmap(pm *Pixmap) {
+	if len(s.free) >= maxFreeLayerPixmaps {
+		return
+	}
+	s.free = append(s.free, pm)
 }
 
 // PushLayer creates a new layer and makes it the active drawing target.
@@ -92,8 +130,7 @@ func (c *Context) PushLayer(blendMode BlendMode, opacity float64) {
 	// Sizing the layer to c.width/c.height clipped all drawing past the
 	// top-left logical region on HiDPI (deviceScale > 1) — matching c.pixmap
 	// keeps the layer full-resolution.
-	layerPixmap := NewPixmap(c.pixmap.Width(), c.pixmap.Height())
-	layerPixmap.Clear(Transparent)
+	layerPixmap := c.layerStack.acquirePixmap(c.pixmap.Width(), c.pixmap.Height())
 
 	// Create layer
 	layer := &Layer{
@@ -164,6 +201,10 @@ func (c *Context) PopLayer() {
 
 	// Restore parent pixmap as current drawing target
 	c.pixmap = parentPixmap
+
+	// The layer's pixmap is unreachable now; keep it for the next push.
+	c.layerStack.releasePixmap(layer.pixmap)
+	layer.pixmap = nil
 }
 
 // PushMaskLayer creates an isolated layer with an associated alpha mask.
@@ -204,8 +245,7 @@ func (c *Context) PushMaskLayer(mask *Mask) {
 
 	// Create new pixmap for the layer at the current target's PHYSICAL size
 	// (see PushLayer — logical size clips HiDPI content).
-	layerPixmap := NewPixmap(c.pixmap.Width(), c.pixmap.Height())
-	layerPixmap.Clear(Transparent)
+	layerPixmap := c.layerStack.acquirePixmap(c.pixmap.Width(), c.pixmap.Height())
 
 	// Create layer with mask.
 	layer := &Layer{

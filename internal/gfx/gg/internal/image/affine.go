@@ -108,6 +108,11 @@ func (a Affine) TransformPoint(x, y float64) (float64, float64) {
 	return a.a*x + a.b*y + a.c, a.d*x + a.e*y + a.f
 }
 
+// IsIdentity reports whether the transform maps every point to itself.
+func (a Affine) IsIdentity() bool {
+	return a.a == 1 && a.b == 0 && a.c == 0 && a.d == 0 && a.e == 1 && a.f == 0
+}
+
 // RotateAt returns a rotation transformation that rotates by angle (in radians)
 // around the point (cx, cy).
 func RotateAt(angle, cx, cy float64) Affine {

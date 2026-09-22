@@ -16,6 +16,15 @@ copyright notices there are retained as MIT requires.
 | `internal/gfx/gputypes` | `github.com/gogpu/gputypes` — shared GPU types | MIT |
 | `internal/audio` | `github.com/gogpu/audio` (via `github.com/doug/audio`) — audio output drivers | MIT |
 
+## Local modifications
+
+The vendored trees are forks and carry local changes beyond their upstreams.
+`internal/gfx/gg` in particular has performance work not present in
+`gogpu/gg`: a pooled free list for popped layer pixmaps in `context_layer.go`
+and `pixmap.go`, and a row-copy fast path for identity (unscaled, untranslated)
+image draws in `internal/image/draw.go`. Each is covered by tests in its own
+package; the licences and copyright notices are unchanged.
+
 These packages are `internal/` on purpose: they are gophics's private
 implementation substrate, not a public API. The rationale is that gomobile ignores go.work, so a multi-module layout
 could not be bound for Android or iOS at all.
