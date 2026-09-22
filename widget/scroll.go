@@ -855,6 +855,14 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				// passed, and the frame clock is what knows.
 				s.dragVel.moved(delta)
 			},
+			// OnRelease reaches only the drag's winner, so a plain tap inside
+			// the scroll (a button, a row) never released the sampler begun
+			// in OnPress: it kept ticking for as long as the page was mounted
+			// — under a pushed route, in a headless Settle() that never
+			// settled. OnPressEnd reaches every pressed handler, winner or
+			// not, so sampling stops on every pointer-up; the winner's
+			// OnRelease still turns the samples into a fling.
+			OnPressEnd: func() { s.dragVel.active = false },
 			OnRelease: func() {
 				s.dragVel.end()
 				s.releaseOverscroll()
@@ -1016,7 +1024,25 @@ type scrollbarBox struct {
 }
 
 func (b *scrollbarBox) Layout(cs layout.Constraints) geom.Size {
-	b.size = cs.Constrain(cs.Max) // fill the scroll area
+	// Fill the scroll area. On a bounded axis that is cs.Max, as it always was;
+	// on an unbounded one it is the viewport's own extent, which the Stack laid
+	// out just before this layer. Filling cs.Max there made this box Inf on
+	// that axis, the Stack took the max of its layers, and a horizontal Scroll
+	// inside a vertical one — whose cross axis is unbounded — came out Inf
+	// tall, then NaN once anything subtracted from it. The rule the Scroll
+	// keeps as a whole: an unbounded axis shrink-wraps to the content.
+	want := cs.Max
+	var vp geom.Size
+	if b.s != nil && b.s.vp.box != nil {
+		vp = b.s.vp.box.Size()
+	}
+	if !cs.BoundedW() {
+		want.W = vp.W
+	}
+	if !cs.BoundedH() {
+		want.H = vp.H
+	}
+	b.size = cs.Constrain(want)
 	return b.size
 }
 

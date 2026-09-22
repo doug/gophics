@@ -73,6 +73,10 @@ func (v *Viewport) scrollPt() geom.Pt {
 	return geom.Pt{Y: y + v.Lead}
 }
 
+// ClipsChildren implements layout.Clipper: content outside the viewport is
+// not drawn and cannot be hit, and the semantics walk should say so.
+func (v *Viewport) ClipsChildren() bool { return true }
+
 func (v *Viewport) Paint(c paint.Canvas, at geom.Pt) {
 	if v.Child == nil {
 		return

@@ -205,11 +205,25 @@ func (a *App) Role(r layout.Role) *layout.SemNode {
 // TapLabel taps the centre of the widget labelled label.
 //
 // Tapping by label rather than by coordinate keeps a test readable and stops it
-// breaking every time the layout moves. It fails if no such node exists.
+// breaking every time the layout moves. It fails if no such node exists, and
+// it fails if the node has been scrolled out of view: the tap would land on
+// whatever is drawn at that point instead, and the test would go on asserting
+// against the wrong state. ScrollTo brings it back first.
 func (a *App) TapLabel(label string) {
 	a.tb.Helper()
-	n := a.MustNode(label)
-	a.Tap(centerOf(n.Rect))
+	a.tapNode(a.MustNode(label), fmt.Sprintf("node labelled %q", label))
+}
+
+// tapNode taps the centre of the visible part of n, refusing when there is
+// none. A node half under the fold is tapped where it can be seen: the centre
+// of its full rect may lie beyond the clip, over whichever neighbour is drawn
+// there, and a tap that lands on the wrong row is worse than one that fails.
+func (a *App) tapNode(n layout.SemNode, what string) {
+	a.tb.Helper()
+	if n.Offscreen || n.Visible.Dx() < 0 || n.Visible.Dy() < 0 {
+		a.tb.Fatalf("apptest: %s is scrolled out of view (rect %v) — a tap there would hit something else. Call ScrollTo first, or Settle if a transition is still running", what, n.Rect)
+	}
+	a.Tap(centerOf(n.Visible))
 }
 
 // HasLabel reports whether a node with this exact label is present.
@@ -249,7 +263,7 @@ func (a *App) TapText(sub string) {
 		a.tb.Fatalf("apptest: no node whose label contains %q. Present labels: %s",
 			sub, formatLabels(a.Labels()))
 	}
-	a.Tap(centerOf(n.Rect))
+	a.tapNode(*n, fmt.Sprintf("node whose label contains %q", sub))
 }
 
 // AssertText fails the test unless some node's label contains sub.

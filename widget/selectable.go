@@ -322,6 +322,15 @@ func (b *selectableBox) Paint(c paint.Canvas, at geom.Pt) {
 	}
 }
 
+// Semantics reports the text as plain text, the same as Text does. Without
+// this a SelectableText is invisible to assistive technology and to apptest:
+// the Interactive around it declares no role (it has no OnTap and takes no
+// text), so nothing in the subtree produced a node, and a screen reader
+// skipped the one label on the screen that was worth copying.
+func (b *selectableBox) Semantics() layout.SemInfo {
+	return layout.SemInfo{Role: layout.RoleText, Label: b.text}
+}
+
 func (b *selectableBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
 	if p.X >= 0 && p.Y >= 0 && p.X < b.sz.W && p.Y < b.sz.H {
 		*hits = append(*hits, layout.Hit{Box: b, Pos: p})
