@@ -109,13 +109,13 @@ func (s *navState) LoadState(d json.RawMessage) {
 	if json.Unmarshal(d, &v) != nil {
 		return
 	}
-	s.stack = s.stack[:0]
+	s.stack, s.keys = s.stack[:0], s.keys[:0]
 	for _, b := range v.Stack {
 		w, ok := UnmarshalWidget(b)
 		if !ok {
 			break
 		}
-		s.stack = append(s.stack, w)
+		s.pushPage(w)
 	}
 }
 

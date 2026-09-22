@@ -16,9 +16,15 @@ import (
 //	nav := ctx.MustOf[widget.Nav]()
 //	nav.Push(DetailPage{...})
 //	nav.Pop()
+//	nav.Replace(DecisionPage{...}) // slide in, then forget the page underneath
+//	nav.PopToRoot()
 //
 // Home is the root page (never popped). Pushed pages slide in from the
-// right over the previous page; Pop slides them out.
+// right over the previous page; Pop slides them out. Replace slides a page
+// in like Push and drops the one it covered once the slide completes, and
+// PopToRoot slides the top page out over Home, dropping everything between.
+// Every page below the top stays mounted, so its state survives; the handle
+// is also visible from overlays a page opens (Overlay.ShowFrom).
 type Navigator struct {
 	Home Widget
 }
@@ -32,6 +38,23 @@ func (n Nav) Push(w Widget) { n.s.push(w) }
 // Pop animates the top page off; on the root page it does nothing.
 func (n Nav) Pop() { n.s.pop() }
 
+// Replace animates w in exactly as Push does and, when the slide completes,
+// drops the page it covered from the stack — one transition where Pop then
+// Push plays two and flashes the page underneath in between. On the home page
+// (nothing pushed) it is a Push: Home is never dropped. Like Push, a Replace
+// landing during a push or replace transition is ignored (see push for why);
+// one landing during a pop settles the pop first, then replaces the page the
+// pop exposed. While the slide runs both pages are on the stack, so Depth
+// reads one more than it will once the covered page is dropped.
+func (n Nav) Replace(w Widget) { n.s.replace(w) }
+
+// PopToRoot pops every pushed page with a single pop transition: the pages
+// between Home and the top are dropped at once — they were offstage, so
+// nothing visible changes — and the top page slides out over Home the way any
+// pop does. Depth therefore reads 2 during the slide and 1 after it. On the
+// home page it does nothing.
+func (n Nav) PopToRoot() { n.s.popToRoot() }
+
 // Depth is the current stack depth (1 = home only).
 func (n Nav) Depth() int { return len(n.s.stack) + 1 }
 
@@ -40,12 +63,23 @@ func (nv Navigator) CreateState() State { return &navState{} }
 type transition struct {
 	under, over Widget
 	popping     bool
+	// replace marks a push that drops `under` from the stack on completion.
+	// The visuals are a push's; only the bookkeeping at the end differs.
+	replace bool
 }
 
 type navState struct {
 	StateBase[Navigator]
-	ctx       Ctx
-	stack     []Widget // pushed pages; Home is implicit below
+	ctx   Ctx
+	stack []Widget // pushed pages; Home is implicit below
+	// keys[i] is the reconciliation key of stack[i]; Home is key 0. Pages
+	// were once keyed by index, which holds while only the top ever leaves,
+	// but a Replace removes the page *under* the top: the top's index shifts,
+	// and an index key would remount it — dropping the scroll position and
+	// loaded data of the page the user just arrived on — at the exact moment
+	// the transition finished. Keys are issued once and follow the page.
+	keys      []int
+	nextKey   int
 	slide     *anim.Controller
 	trans     *transition
 	animating bool
@@ -68,13 +102,7 @@ func (s *navState) Init(ctx Ctx) {
 			// setup also fires OnChange and must not finish it early.
 			if s.animating && !s.slide.Running() && s.trans != nil {
 				s.animating = false
-				s.SetState(func() {
-					if s.trans.popping {
-						s.stack = s.stack[:len(s.stack)-1]
-					}
-					s.trans = nil
-					s.underReg, s.overReg = nil, nil
-				})
+				s.SetState(s.finish)
 				return
 			}
 			s.SetState(nil)
@@ -92,22 +120,87 @@ func (s *navState) top() Widget {
 	return s.W().Home
 }
 
-// settle synchronously completes an in-flight transition, applying the stack
-// mutation its completion handler would have applied (a pop's truncation).
-// push/pop call it before starting a new transition so a navigation landing
-// mid-animation proceeds from a consistent stack — without it, a push during a
-// pop would replace s.trans and the pop's truncation would silently never run
-// (the popped page stayed retained). Call only from inside SetState.
-func (s *navState) settle() {
-	if s.trans == nil {
-		return
+// pageKey is the reconciliation key of page i of the Build's page list, where
+// 0 is Home. It also repairs keys that have fallen out of step with the
+// stack: LoadState and tests assign s.stack directly, and the cheapest place
+// to issue keys for pages that arrived that way is the first Build that
+// needs them.
+func (s *navState) pageKey(i int) int {
+	if i == 0 {
+		return 0
 	}
-	if s.trans.popping {
-		s.stack = s.stack[:len(s.stack)-1]
+	s.syncKeys()
+	return s.keys[i-1]
+}
+
+// syncKeys brings keys level with the stack, issuing fresh keys for pages
+// that were assigned without one and dropping any left over.
+func (s *navState) syncKeys() {
+	for len(s.keys) < len(s.stack) {
+		s.nextKey++
+		s.keys = append(s.keys, s.nextKey)
+	}
+	s.keys = s.keys[:len(s.stack)]
+}
+
+// pushPage appends w with a fresh key.
+func (s *navState) pushPage(w Widget) {
+	s.syncKeys()
+	s.nextKey++
+	s.stack = append(s.stack, w)
+	s.keys = append(s.keys, s.nextKey)
+}
+
+// removePage drops stack[i] and its key.
+func (s *navState) removePage(i int) {
+	s.syncKeys()
+	s.stack = append(s.stack[:i], s.stack[i+1:]...)
+	s.keys = append(s.keys[:i], s.keys[i+1:]...)
+}
+
+// finish applies the stack mutation a transition owes on completion — a pop's
+// truncation, a replace's removal of the covered page — and clears it. The
+// completion handler and settle both run it, so the two cannot disagree about
+// what a transition leaves behind. Call only from inside SetState.
+func (s *navState) finish() {
+	t := s.trans
+	switch {
+	case t.popping:
+		s.removePage(len(s.stack) - 1)
+	case t.replace && len(s.stack) >= 2:
+		s.removePage(len(s.stack) - 2)
 	}
 	s.trans = nil
 	s.underReg, s.overReg = nil, nil
 	s.animating = false
+}
+
+// settle synchronously completes an in-flight transition, applying the stack
+// mutation its completion handler would have applied (a pop's truncation, a
+// replace's removal). push/pop/replace call it before starting a new
+// transition so a navigation landing mid-animation proceeds from a consistent
+// stack — without it, a push during a pop would replace s.trans and the pop's
+// truncation would silently never run (the popped page stayed retained). Call
+// only from inside SetState.
+func (s *navState) settle() {
+	if s.trans == nil {
+		return
+	}
+	s.finish()
+}
+
+// start begins animating s.trans. Call only from inside SetState.
+func (s *navState) start() {
+	s.underReg, s.overReg = newHeroRegistry(), newHeroRegistry()
+	s.slide.Jump(0)
+	s.slide.Forward()
+	s.animating = true
+}
+
+// pushing reports whether a push-like transition (push or replace) is in
+// flight — the window in which a repeated tap is dropped.
+func (s *navState) pushing() bool {
+	return s.animating && s.trans != nil && !s.trans.popping
 }
 
 func (s *navState) push(w Widget) {
@@ -121,18 +214,34 @@ func (s *navState) push(w Widget) {
 	// push during a pop (or the reverse) settles the in-flight transition and
 	// starts the new one, which is how a "go back and immediately elsewhere"
 	// gesture is meant to behave.
-	if s.animating && s.trans != nil && !s.trans.popping {
+	if s.pushing() {
 		return
 	}
 	s.SetState(func() {
 		s.settle()
 		under := s.top()
-		s.stack = append(s.stack, w)
+		s.pushPage(w)
 		s.trans = &transition{under: under, over: w}
-		s.underReg, s.overReg = newHeroRegistry(), newHeroRegistry()
-		s.slide.Jump(0)
-		s.slide.Forward()
-		s.animating = true
+		s.start()
+	})
+	s.ctx.Invalidate()
+}
+
+// replace is push with the covered page dropped at completion. It shares
+// push's double-tap guard: a replace is what a "continue" button does, and
+// that button is as easy to tap twice as a list row.
+func (s *navState) replace(w Widget) {
+	if s.pushing() {
+		return
+	}
+	s.SetState(func() {
+		s.settle()
+		under := s.top()
+		s.pushPage(w)
+		// With nothing pushed the covered page is Home, which stays: the
+		// transition is then a plain push.
+		s.trans = &transition{under: under, over: w, replace: len(s.stack) > 1}
+		s.start()
 	})
 	s.ctx.Invalidate()
 }
@@ -152,10 +261,29 @@ func (s *navState) pop() {
 			under = s.stack[len(s.stack)-2]
 		}
 		s.trans = &transition{under: under, over: over, popping: true}
-		s.underReg, s.overReg = newHeroRegistry(), newHeroRegistry()
-		s.slide.Jump(0)
-		s.slide.Forward()
-		s.animating = true
+		s.start()
+	})
+	s.ctx.Invalidate()
+}
+
+func (s *navState) popToRoot() {
+	if len(s.stack) == 0 && s.trans == nil {
+		return
+	}
+	s.SetState(func() {
+		s.settle()
+		if len(s.stack) == 0 {
+			return
+		}
+		// Drop the middle pages now rather than at completion: they are
+		// offstage — neither painted nor hit-testable — so nothing visible
+		// changes, and what remains is an ordinary pop of the top page onto
+		// Home, with the same completion bookkeeping as any other pop.
+		for len(s.stack) > 1 {
+			s.removePage(0)
+		}
+		s.trans = &transition{under: s.W().Home, over: s.top(), popping: true}
+		s.start()
 	})
 	s.ctx.Invalidate()
 }
@@ -211,7 +339,7 @@ func (s *navState) Build(Ctx) Widget {
 				frac = under
 			}
 		}
-		children = append(children, WithKey{Key: i, Child: pageW{
+		children = append(children, WithKey{Key: s.pageKey(i), Child: pageW{
 			offstage: i < visibleFrom,
 			fracX:    frac,
 			reg:      slideReg,
