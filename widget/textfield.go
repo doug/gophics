@@ -698,7 +698,7 @@ func (s *textFieldState) selectWordAt(idx int) {
 		s.dragUnit = dragLines
 		return
 	}
-	s.selectWordAt(idx)
+	s.ed.SelectWordAt(idx)
 }
 
 func (s *textFieldState) indexAtPt(ctx Ctx, p geom.Pt) int {
