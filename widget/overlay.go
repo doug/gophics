@@ -6,12 +6,18 @@ package widget
 // the handle:
 //
 //	ov := ctx.MustOf[widget.Overlay]()
-//	tok := ov.Show(myDialog)
+//	tok := ov.ShowFrom(ctx, myDialog)
 //	...
 //	tok.Dismiss()
 //
 // Entries stack in insertion order (last on top) and keep their state until
 // dismissed. The theme package builds Dialog and Menu on this.
+//
+// An entry is mounted under the host, beside the app rather than inside the
+// widget that opened it, so on its own it sees only what is provided above
+// the host. ShowFrom gives an entry the opener's scope (see Scoped): Of and
+// MustOf inside it resolve the opener's Nav, theme and Provides. Show keeps
+// the unscoped behaviour for content that deliberately stands alone.
 
 // OverlayHost provides an Overlay to its subtree and renders active entries
 // above Child.
@@ -28,9 +34,24 @@ type OverlayToken struct {
 	id int
 }
 
-// Show adds w as a new top-most entry and returns its token.
+// Show adds w as a new top-most entry and returns its token. The entry is
+// unscoped: lookups from inside it see only what is provided above the
+// OverlayHost. Use ShowFrom for content that belongs to the widget opening it.
 func (o Overlay) Show(w Widget) OverlayToken {
-	return OverlayToken{s: o.s, id: o.s.push(w)}
+	return OverlayToken{s: o.s, id: o.s.push(w, nil)}
+}
+
+// ShowFrom adds w as a new top-most entry with the scope of ctx: Of/MustOf
+// inside w resolve through ctx's ancestors — the Nav of the page opening a
+// dialog, an in-tree Provide, the theme — exactly as if w were built below
+// ctx, while it still lays out and paints above the whole tree. The scope
+// survives Update; it is a property of the entry, not of one widget value.
+//
+// Should the opener unmount while the entry is still shown, the entry falls
+// back to the unscoped walk (see Scoped for why), so content meant to outlive
+// its opener captures what it needs at show time.
+func (o Overlay) ShowFrom(ctx Ctx, w Widget) OverlayToken {
+	return OverlayToken{s: o.s, id: o.s.push(w, ctx.el)}
 }
 
 // Dismiss removes the entry.
@@ -50,6 +71,7 @@ func (t OverlayToken) Update(w Widget) {
 type overlayEntry struct {
 	id     int
 	widget Widget
+	origin *element // the opener, for ShowFrom; nil for an unscoped Show
 }
 
 type overlayState struct {
@@ -58,10 +80,10 @@ type overlayState struct {
 	nextID  int
 }
 
-func (s *overlayState) push(w Widget) int {
+func (s *overlayState) push(w Widget, origin *element) int {
 	id := s.nextID
 	s.nextID++
-	s.SetState(func() { s.entries = append(s.entries, overlayEntry{id, w}) })
+	s.SetState(func() { s.entries = append(s.entries, overlayEntry{id, w, origin}) })
 	return id
 }
 
@@ -93,7 +115,13 @@ func (s *overlayState) Build(Ctx) Widget {
 	// constraints it would get as the untouched root (Stack loosens).
 	children = append(children, Fill{Child: s.W().Child})
 	for _, e := range s.entries {
-		children = append(children, WithKey{Key: e.id, Child: e.widget})
+		content := e.widget
+		if e.origin != nil {
+			// Wrapped here rather than in ShowFrom so an Update keeps the
+			// scope: the token's caller replaces the content, not the entry.
+			content = scopeBridge{origin: e.origin, child: content}
+		}
+		children = append(children, WithKey{Key: e.id, Child: content})
 	}
 	content := Stack{Children: children}
 	return Provide[Overlay]{Value: Overlay{s: s}, Child: content}

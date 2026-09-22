@@ -51,8 +51,13 @@ func (p RootProvide) provided() any { return p.Value }
 // type parameters on methods. It reads at the call site as the lookup it is —
 // ctx.Of[Theme]() — instead of a free function that happens to take a Ctx, and
 // it stops two very general names, Of and MustOf, sitting in package scope.
+//
+// The walk follows parents, except at a scope bridge (Scoped, Overlay.ShowFrom)
+// where it continues from the bridge's origin element instead — that is what
+// lets a dialog see the Nav and the Provides of the page that opened it even
+// though it is mounted under the OverlayHost.
 func (c Ctx) Of[T any]() (T, bool) {
-	for e := c.el; e != nil; e = e.parent {
+	for e := c.el; e != nil; e = e.scopeParent() {
 		if p, ok := e.widget.(provider); ok {
 			if v, ok := p.provided().(T); ok {
 				return v, true

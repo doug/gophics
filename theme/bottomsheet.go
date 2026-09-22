@@ -38,11 +38,12 @@ func ShowBottomSheet(ctx widget.Ctx, content widget.Widget) (dismiss func()) {
 			tok.Dismiss()
 		}
 	}
-	// Overlay entries sit above the app's providers, so re-provide the theme
-	// captured here for the themed widgets inside the sheet.
+	// ShowFrom lends the sheet the opener's scope; the theme is pinned as
+	// well because the scope falls back to the bare overlay if the opener
+	// unmounts mid-exit, and the sheet must not restyle on its way out.
 	sheet := bottomSheet{theme: th, content: content, handle: h,
 		onGone: func() { tok.Dismiss() }}
-	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: sheet})
+	tok = ov.ShowFrom(ctx, widget.Provide[Theme]{Value: th, Child: sheet})
 	return dismiss
 }
 

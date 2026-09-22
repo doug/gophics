@@ -387,13 +387,16 @@ func (c *core) mount() {
 	if !c.edgeToEdge {
 		root = widget.SafeArea{Child: root}
 	}
-	// Config.Provide, innermost last: a later entry sits nearer the app, so it
-	// wins over an earlier one of the same type, matching the tree's
-	// nearest-ancestor rule.
+	root = widget.OverlayHost{Child: widget.DragHost{Child: root}}
+	// Config.Provide wraps the hosts, not just the app: an overlay entry is a
+	// sibling of the app under the OverlayHost, and with the values inside the
+	// host a dialog's MustOf for an app-lifetime handle panicked. Innermost
+	// last: a later entry sits nearer the app, so it wins over an earlier one
+	// of the same type, matching the tree's nearest-ancestor rule.
 	for i := len(c.provide) - 1; i >= 0; i-- {
 		root = widget.RootProvide{Value: c.provide[i], Child: root}
 	}
-	c.Owner.SetRoot(widget.OverlayHost{Child: widget.DragHost{Child: root}})
+	c.Owner.SetRoot(root)
 }
 
 // Post schedules fn to run on the UI goroutine before the next frame's

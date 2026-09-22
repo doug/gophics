@@ -269,13 +269,15 @@ func (s *draggableState) previewWidget() Widget {
 }
 
 // showPreview puts the carried widget in the overlay, positioned by padding
-// from the top-left — the same mechanism menus and tooltips use.
+// from the top-left — the same mechanism menus and tooltips use. Shown with
+// the Draggable's scope: Preview defaults to Child, and a child that reads a
+// theme or a model from a Provide must keep resolving it while it is carried.
 func (s *draggableState) showPreview() {
 	ov, ok := s.ctx.Of[Overlay]()
 	if !ok {
 		return
 	}
-	s.tok = ov.Show(s.previewWidget())
+	s.tok = ov.ShowFrom(s.ctx, s.previewWidget())
 }
 
 func (s *draggableState) finish(dropped bool) {

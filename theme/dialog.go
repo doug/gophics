@@ -22,9 +22,11 @@ func ShowDialog(ctx widget.Ctx, content widget.Widget) (dismiss func()) {
 			tok.Dismiss()
 		}
 	}
-	// Overlay entries sit above the app's providers, so re-provide the
-	// theme captured here for the themed widgets inside the dialog.
-	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{
+	// ShowFrom gives the dialog the opener's scope (its Nav, its Provides).
+	// The theme is still pinned explicitly: the scope falls back to the bare
+	// overlay if the opener unmounts while the dialog is up, and the dialog
+	// must not change theme, or lose it, at that moment.
+	tok = ov.ShowFrom(ctx, widget.Provide[Theme]{Value: th, Child: modalScrim{
 		OnDismiss: close,
 		Child: widget.Center(widget.Decorated{
 			Color: th.Elevated, Radius: th.Radius,
@@ -68,7 +70,7 @@ func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()
 		Color: th.Elevated, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
 		Child: widget.Sized{W: 200, Child: col},
 	}
-	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{
+	tok = ov.ShowFrom(ctx, widget.Provide[Theme]{Value: th, Child: modalScrim{
 		OnDismiss: close,
 		// Anchor the menu at topLeft via padding from the top-left.
 		Child: widget.Padding{

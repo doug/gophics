@@ -123,7 +123,7 @@ func ShowEditMenu(ctx Ctx, at geom.Pt, actions []EditAction) (dismiss func()) {
 		y = at.Y + editMenuGapAbove
 	}
 
-	tok = ov.Show(editMenuScrim{
+	tok = ov.ShowFrom(ctx, editMenuScrim{
 		OnDismiss: closeFn,
 		Child: Padding{
 			Insets: geom.Insets{Left: x, Top: y},

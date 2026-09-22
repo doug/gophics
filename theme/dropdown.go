@@ -220,7 +220,7 @@ func showSelect(ctx widget.Ctx, topLeft geom.Pt, width float32, border paint.Col
 		Color: th.Elevated, Radius: th.Radius, BorderColor: border, BorderWidth: borderWidth,
 		Child: widget.Sized{W: width, Child: widget.Padding{All: menuInset, Child: col}},
 	}
-	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: modalScrim{
+	tok = ov.ShowFrom(ctx, widget.Provide[Theme]{Value: th, Child: modalScrim{
 		OnDismiss: closeFn,
 		// No dim: the control stays lit so it and its list read as one thing.
 		Clear: true,

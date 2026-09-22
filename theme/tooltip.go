@@ -76,7 +76,7 @@ func (s *tooltipState) show() {
 	}
 	// Positioned via a Stack aligned to the top-left, offset by padding: the
 	// overlay fills the window, so padding is how a child is placed in it.
-	s.tok = ov.Show(widget.Padding{
+	s.tok = ov.ShowFrom(s.ctx, widget.Padding{
 		Insets: geom.Insets{Left: at.X, Top: at.Y},
 		Child:  widget.Align{X: 0, Y: 0, Child: card},
 	})

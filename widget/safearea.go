@@ -62,14 +62,18 @@ type safeAreaState struct {
 // that also wraps its own screen — which the documentation above recommends,
 // and which was the right advice before the default existed — must not end up
 // padded twice.
-type safeAreaApplied struct{}
+//
+// inset is false for the marker a scope bridge provides: content opened from
+// inside an inset subtree but mounted against the whole window (an overlay
+// entry) starts over, so a SafeArea inside it pads again.
+type safeAreaApplied struct{ inset bool }
 
 func (s *safeAreaState) Build(ctx Ctx) Widget {
 	w := s.W()
-	if _, done := ctx.Of[safeAreaApplied](); done {
+	if a, ok := ctx.Of[safeAreaApplied](); ok && a.inset {
 		return w.Child
 	}
-	return Provide[safeAreaApplied]{Value: safeAreaApplied{}, Child: Padding{
+	return Provide[safeAreaApplied]{Value: safeAreaApplied{inset: true}, Child: Padding{
 		Insets: resolveSafeInsets(ctx.SafeInsets(), w.Edges, w.Minimum),
 		Child:  w.Child,
 	}}

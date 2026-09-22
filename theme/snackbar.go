@@ -44,7 +44,10 @@ func ShowSnackbar(ctx widget.Ctx, message string, opts ...SnackOption) (dismiss 
 	}
 	sb := snackbar{theme: th, message: message, cfg: cfg, handle: h,
 		onGone: func() { tok.Dismiss() }}
-	tok = ov.Show(widget.Provide[Theme]{Value: th, Child: sb})
+	// The theme stays pinned even though ShowFrom lends the opener's scope: a
+	// snackbar routinely outlives the page that raised it, and the scope
+	// falls back to the bare overlay once that page unmounts.
+	tok = ov.ShowFrom(ctx, widget.Provide[Theme]{Value: th, Child: sb})
 	return dismiss
 }
 
