@@ -6,6 +6,7 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -88,10 +89,47 @@ type Config struct {
 	// BackgroundDark replaces Background while the platform reports a dark
 	// colour scheme. Leave it zero to use Background in both.
 	BackgroundDark paint.Color
-	Font           []byte // TTF/OTF data for the default font (required for text)
-	// FontFamilies registers named families (e.g. "bold", "mono"),
-	// selectable per text run via widget.Text.Font / layout.RichSpan.Font.
+	// Font is the default face, as TTF/OTF bytes. Required for any text to
+	// draw. It is also the last resort of every named family (see
+	// FontFamilies), so a rune no family or fallback covers draws with this
+	// face's .notdef box.
+	Font []byte
+	// FontFamilies registers named families (e.g. "bold", "mono"), selectable
+	// per text run via widget.Text.Font / layout.RichSpan.Font. Each is one
+	// face; weight and style are the name — theme.FontBold is simply the
+	// family a bold face was registered under, and Font: "display" can be a
+	// serif bold. A family need not be a complete font: runes it lacks fall
+	// through to Fallbacks and then to Font, so a Latin-only display serif
+	// still renders the digits and symbols the other faces have.
 	FontFamilies map[string][]byte
+	// Fallbacks are faces consulted, in order, for any rune the selected
+	// face lacks — a symbols font for ✓ ✕ ⋮ ↩, a CJK or Arabic font, an
+	// emoji font. They apply to the default font and every named family
+	// alike; the chain for a run in family F is F, Fallbacks…, Font, then
+	// the system fonts if SystemFonts is set.
+	//
+	// Fallback is per rune, decided while shaping, so one string may draw
+	// from several faces. That is the point, but it also means a fallback
+	// glyph is rasterized by outline rather than through the cached glyph
+	// atlas — cheap for a stray symbol, worth knowing before routing whole
+	// paragraphs through one. Each face is parsed once and held for the life
+	// of the app: a full Noto CJK is tens of megabytes of binary and memory,
+	// which is what SystemFonts is for on desktop.
+	Fallbacks [][]byte
+	// SystemFonts extends every family with the fonts installed on the
+	// machine, after Font, FontFamilies and Fallbacks: a rune none of the
+	// bundled faces cover — emoji, CJK, a script the app never anticipated —
+	// resolves from the OS instead of drawing as a box. It is a no-op on the
+	// web (a page has no font directory to scan, and the scanner is not
+	// linked into the wasm binary) and on mobile, where the bundled chain is
+	// the app's whole answer.
+	//
+	// The first launch scans the font directories, which takes seconds on a
+	// large install; the index is cached under the user cache dir and later
+	// launches load it in tens of milliseconds. A scan that fails is logged
+	// to GraphicsLog and otherwise ignored — the bundled chain still works,
+	// and a missing cache directory is not a reason for the app not to start.
+	SystemFonts bool
 	// Debug draws box-bounds outlines over the app (Flutter's
 	// debugPaintSize). Toggle at runtime via Headless.SetDebugPaint, or on a
 	// live app through the handler returned by NewHandler.
@@ -293,6 +331,19 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 	for name, data := range cfg.FontFamilies {
 		if err := p.LoadFontFamily(name, data); err != nil {
 			return nil, err
+		}
+	}
+	for i, data := range cfg.Fallbacks {
+		if err := p.LoadFallbackFont(data); err != nil {
+			return nil, fmt.Errorf("app: fallback font %d: %w", i, err)
+		}
+	}
+	// System fonts go on last: the Painter attaches the scanned map to the
+	// shapers that exist at the call, so a family loaded afterwards would
+	// miss it.
+	if cfg.SystemFonts {
+		if err := loadSystemFonts(p); err != nil && cfg.GraphicsLog != nil {
+			cfg.GraphicsLog.Warn("system fonts unavailable; using bundled fonts only", "err", err)
 		}
 	}
 	c := &core{

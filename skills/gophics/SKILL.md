@@ -73,6 +73,10 @@ Key facts from that example:
   arrives as the `ctx widget.Ctx` argument to `Build`.
 - `Font` is **required** for any text to render (`Config.Font` is `[]byte` of a
   TTF/OTF; `golang.org/x/image/font/gofont/goregular` is the usual default).
+  Named faces go in `FontFamilies` (`theme.FontBold: gobold.TTF`, or
+  `"display": newsreaderBold`) and are picked per run with `Text{Font: "display"}`;
+  `Fallbacks` lists faces tried, in order, for any rune the chosen face lacks;
+  `SystemFonts: true` reaches the OS fonts after that (desktop only).
 
 ## Composing UI — layout primitives
 
@@ -140,7 +144,13 @@ and stack ops `PushClip`/`PopClip`, `PushOpacity`/`PopOpacity`,
   are values; rebuild instead of mutating.
 - **State lives in the State struct, not the widget struct.** The widget struct
   is immutable configuration passed in from the parent.
-- **Text needs a font** (`Config.Font`) or nothing draws.
+- **Text needs a font** (`Config.Font`) or nothing draws — and a font only
+  draws the runes it has. The Go fonts cover Latin, Greek and Cyrillic, so
+  `✓ ✕ ⋮ ↩`, CJK and emoji come out as boxes. Add a face that has them to
+  `Config.Fallbacks` (every family falls through to it, then to `Font`), or set
+  `Config.SystemFonts: true` on desktop; on web and mobile only bundled faces
+  count, and a full CJK face is tens of MB, so bundle a small symbols font and
+  leave the rest to the OS.
 - **`CGO_ENABLED=0`** — the whole stack is zero-CGo; don't add cgo deps.
 - **Keyed lists:** when a list reorders/inserts, wrap items in `WithKey` so the
   reconciler preserves state and animations.

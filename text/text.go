@@ -197,6 +197,17 @@ type Shaper struct {
 	wrap   shaping.LineWrapper
 }
 
+// ShareSystemFonts gives s the system font map other loaded with
+// UseSystemFonts (or nothing, if other has none), so one scan serves every
+// Shaper of an owner. The two must then be used from the same goroutine: the
+// map's faces carry shaping caches that are not safe to write concurrently.
+func (s *Shaper) ShareSystemFonts(other *Shaper) {
+	if other == nil {
+		return
+	}
+	s.system = other.system
+}
+
 // NewShaper returns a shaper over the given fallback chain; fonts[0] is the
 // primary. At least one font is required before shaping.
 func NewShaper(fonts ...*Font) *Shaper {

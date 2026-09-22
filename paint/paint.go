@@ -256,8 +256,10 @@ func (m TextMetrics) LineHeight() float32 { return m.Ascent + m.Descent + m.Line
 //
 // Fonts are organized as named families: "" is the default; register others
 // (e.g. "bold", "mono") with LoadFontFamily and select them per text run
-// (widget.Text.Font, layout.RichSpan.Font). Fallback fonts and the system
-// chain apply to every family.
+// (widget.Text.Font, layout.RichSpan.Font). Every family resolves runes
+// through the same chain: its own face, then each LoadFallbackFont face in
+// order, then the default family, then the system fonts if LoadSystemFonts
+// was called.
 type Painter struct {
 	dc    *gg.Context
 	w, h  int
@@ -358,17 +360,27 @@ func NewPainter() *Painter {
 	}
 }
 
+// rebuildShapers recomputes every family's fallback chain: the family's own
+// face, then the shared fallbacks in registration order, then the default
+// family. The default sits at the end so a named family never has to be a
+// complete font: a display serif that covers only Latin still renders the
+// digits, punctuation and symbols the default (or a fallback) has, where
+// before the shaper stopped at the family face and drew .notdef.
 func (p *Painter) rebuildShapers() {
+	def := p.families[""]
 	for name, sh := range p.shapers {
 		primary, ok := p.families[name]
 		if !ok {
-			primary = p.families[""]
+			primary = def
 		}
-		chain := make([]*text.Font, 0, 1+len(p.fallbacks))
+		chain := make([]*text.Font, 0, 2+len(p.fallbacks))
 		if primary != nil {
 			chain = append(chain, primary)
 		}
 		chain = append(chain, p.fallbacks...)
+		if def != nil && primary != def {
+			chain = append(chain, def)
+		}
 		sh.SetFonts(chain...)
 	}
 	clear(p.shapes)
@@ -404,7 +416,11 @@ func (p *Painter) LoadFontFamily(name string, data []byte) error {
 		clear(p.ggFaces)
 	}
 	if _, ok := p.shapers[name]; !ok {
-		p.shapers[name] = text.NewShaper()
+		sh := text.NewShaper()
+		// A family registered after LoadSystemFonts joins the same system
+		// chain the rest already have.
+		sh.ShareSystemFonts(p.shapers[""])
+		p.shapers[name] = sh
 	}
 	p.rebuildShapers()
 	return nil
@@ -1103,11 +1119,19 @@ func (c *ggCanvas) BackdropBlur(r geom.Rect, radius float32) {
 }
 
 // LoadSystemFonts extends every family with the platform's installed fonts
-// (see text.Shaper.UseSystemFonts). Call after loading fonts.
+// (see text.Shaper.UseSystemFonts). The index is loaded once, by the default
+// family's shaper, and shared with the rest — including families registered
+// afterwards. The map belongs to this Painter: it is never shared across
+// Painters, because the faces it hands out are not safe to shape through
+// from two goroutines.
 func (p *Painter) LoadSystemFonts() error {
-	for _, sh := range p.shapers {
-		if err := sh.UseSystemFonts(""); err != nil {
-			return err
+	def := p.shapers[""]
+	if err := def.UseSystemFonts(""); err != nil {
+		return err
+	}
+	for name, sh := range p.shapers {
+		if name != "" {
+			sh.ShareSystemFonts(def)
 		}
 	}
 	clear(p.shapes)
