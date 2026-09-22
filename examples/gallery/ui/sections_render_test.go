@@ -72,6 +72,7 @@ func TestCatalogCoversTheWidgetCapabilities(t *testing.T) {
 		"Rich text & selection",
 		"Transform",
 		"Right to left",
+		"Icons",
 	} {
 		if !titles[want] {
 			t.Errorf("the catalog has no %q section", want)

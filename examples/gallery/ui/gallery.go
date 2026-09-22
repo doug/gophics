@@ -226,6 +226,8 @@ func sections() []section {
 			sp("Text input", "Field / TextField, echoing what you type", textInputSection{})},
 		{"Typography", "The Display → Caption type scale",
 			sp("Typography", "The theme's TypeScale, role by role", typographySection{})},
+		{"Icons", "Every theme.Icon glyph, named",
+			sp("Icons", "The built-in glyph set at three sizes", iconsSection{})},
 		{"Cards & surfaces", "Card, Decorated, Opacity",
 			sp("Cards & surfaces", "Surfaces, borders, and group opacity", cardsSection{})},
 		{"Charts", "Line, area, bar, pie & heatmap marks",

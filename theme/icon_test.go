@@ -21,10 +21,13 @@ func TestEveryGlyphDrawsInsideItsBox(t *testing.T) {
 		IconChevronUp: "ChevronUp", IconChevronDown: "ChevronDown",
 		IconPlus: "Plus", IconClose: "Close", IconCheck: "Check", IconMenu: "Menu",
 		IconCalendar: "Calendar", IconChart: "Chart",
+		IconBell: "Bell", IconPeople: "People", IconPerson: "Person", IconPuzzle: "Puzzle",
+		IconGrip: "Grip", IconReply: "Reply", IconCheckCircle: "CheckCircle",
+		IconTrash: "Trash", IconShare: "Share", IconCopy: "Copy",
 	}
-	// IconChart is the last constant; every value up to it must be covered, so
+	// IconCopy is the last constant; every value up to it must be covered, so
 	// a glyph added without a shape is caught here rather than on screen.
-	for g := IconHome; g <= IconChart; g++ {
+	for g := IconHome; g <= IconCopy; g++ {
 		name, ok := names[g]
 		if !ok {
 			t.Errorf("glyph %d has no name in this test — was a constant added without a shape?", g)
