@@ -30,11 +30,11 @@ func handlerFor(t *testing.T, root widget.Widget) *shellHandler {
 
 // An embedded host polls TextInputActive and raises the keyboard when it turns
 // true. It must therefore mean "something accepts typed text", not "something
-// has focus" -- a widget becomes focusable by handling OnText or OnKey, and one
-// focusable widget is usually mounted from the first frame, since a focusable
-// widget mounted while nothing has focus takes it. Reporting focus meant the
-// answer was already true before any field existed, the host saw no transition,
-// and the keyboard never appeared.
+// has focus" -- a widget becomes focusable by handling OnText or OnKey, and a
+// key-only widget mounted while nothing has focus takes it, so one is often
+// focused from the first frame. Reporting focus meant the answer was already
+// true before any field existed, the host saw no transition, and the keyboard
+// never appeared.
 func TestTextInputActiveOnlyForTextAcceptingFocus(t *testing.T) {
 	if got := handlerFor(t, keyOnly{}).TextInputActive(); got {
 		t.Error("a key-only widget (a button handling Enter) reported wanting the " +
@@ -42,7 +42,9 @@ func TestTextInputActiveOnlyForTextAcceptingFocus(t *testing.T) {
 			"field is focused later")
 	}
 
-	if got := handlerFor(t, widget.TextField{}).TextInputActive(); !got {
+	// A field does not focus on mount; this one asks to, the way a screen
+	// that opens into a field would.
+	if got := handlerFor(t, widget.TextField{Autofocus: true}).TextInputActive(); !got {
 		t.Error("a focused text field did not report wanting the keyboard — " +
 			"there would be no way to type on a phone")
 	}

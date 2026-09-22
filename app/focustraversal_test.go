@@ -25,6 +25,9 @@ func newThree(t *testing.T) *Headless {
 		t.Fatal(err)
 	}
 	h.Render()
+	// Nothing is focused on mount; the user starts by tapping the first field.
+	h.Tap(geom.Pt{X: 100, Y: 20})
+	h.Render()
 	return h
 }
 
@@ -47,7 +50,7 @@ func TestTabWalksFieldsInOrderAndWraps(t *testing.T) {
 
 	first := h.core.Owner.KeyboardTarget
 	if first == nil {
-		t.Fatal("no field took focus on mount")
+		t.Fatal("tapping the first field did not focus it")
 	}
 
 	tab(h, false)
@@ -121,8 +124,13 @@ func TestMultilineFieldKeepsTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Render()
+	h.Tap(geom.Pt{X: 100, Y: 30}) // into the multiline field
+	h.Render()
 
 	before := h.core.Owner.KeyboardTarget
+	if before == nil {
+		t.Fatal("tapping the multiline field did not focus it")
+	}
 	tab(h, false)
 	if h.core.Owner.KeyboardTarget != before {
 		t.Error("Tab moved focus out of a multiline field, which needs it to indent")

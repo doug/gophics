@@ -26,6 +26,9 @@ func (s *fieldAppState) Init(widget.Ctx) { s.hook(s) }
 
 func (s *fieldAppState) Build(widget.Ctx) widget.Widget {
 	return widget.Padding{All: 10, Child: widget.TextField{
+		// The harness types straight in, so the field has to open focused;
+		// nothing focuses a field on mount without this.
+		Autofocus:      true,
 		Value:          s.value,
 		OnChange:       func(v string) { s.SetState(func() { s.value = v }) },
 		OnSubmit:       func(v string) { s.SetState(func() { s.submitted = append(s.submitted, v); s.value = "" }) },

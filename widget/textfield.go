@@ -55,8 +55,10 @@ type TextField struct {
 	OnSubmit  func(string)
 	OnFocus   func(bool)
 	// Autofocus takes keyboard focus when the field mounts, even if another
-	// widget holds it — for a field that appears in response to an action,
-	// such as edit-in-place. See Interactive.Autofocus.
+	// widget holds it. A field never focuses itself otherwise — mounting one
+	// does not raise the keyboard — so this is how a screen names the one
+	// field it opens into, or focuses a field that appears in response to
+	// an action, such as edit-in-place. See Interactive.Autofocus.
 	Autofocus bool
 	// ConsumesTab reports whether something built around this field wants Tab
 	// rather than focus traversal — an autocomplete with a suggestion

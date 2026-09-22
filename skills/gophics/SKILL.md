@@ -154,6 +154,11 @@ and stack ops `PushClip`/`PopClip`, `PushOpacity`/`PopOpacity`,
 - **`CGO_ENABLED=0`** — the whole stack is zero-CGo; don't add cgo deps.
 - **Keyed lists:** when a list reorders/inserts, wrap items in `WithKey` so the
   reconciler preserves state and animations.
+- **Fields do not focus on mount.** A focused field raises the soft keyboard,
+  so a `TextField` (or `theme.Field`) waits for a tap like a native one. Set
+  `Autofocus: true` on the one field a screen should open into — a search box,
+  an edit-in-place field, a dialog's first input. Key-only `Interactive`
+  widgets (`OnKey` without `OnText`) still take focus when nothing has it.
 - **Don't invent widgets.** The catalog is intentionally small and composed from
   primitives. If you need a "Button" or "Card", build it from `Fill` + `Padding`
   + `Interactive` + `Text`.

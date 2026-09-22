@@ -26,9 +26,12 @@ type fieldState struct {
 }
 
 func (s *fieldState) Build(widget.Ctx) widget.Widget {
+	// Fields do not focus on mount; this one asks to, so the tests below
+	// start with the keyboard up the way a tapped field would.
 	return widget.TextField{
-		Value:    s.text,
-		OnChange: func(v string) { s.SetState(func() { s.text = v }) },
+		Value:     s.text,
+		Autofocus: true,
+		OnChange:  func(v string) { s.SetState(func() { s.text = v }) },
 	}
 }
 

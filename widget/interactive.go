@@ -22,13 +22,16 @@ type Interactive struct {
 	// Autofocus takes keyboard focus when this widget mounts, even if
 	// something else already holds it.
 	//
-	// A focusable widget already claims focus when nothing has it, which
-	// covers the first field on a page. It does not cover the case where
-	// focus has to *move*: an edit-in-place field appearing on a double
-	// click, a dialog focusing its first input, a "press / to search" box.
-	// Without this the field would appear with no caret and the keystrokes
-	// would go to whatever was focused before it — which reads as the field
-	// being broken.
+	// A key-only widget (OnKey without OnText) already claims focus when
+	// nothing has it, so a canvas that reads arrows works from the first
+	// frame without this. A text-capturing widget never does: a focused
+	// field raises the soft keyboard, and no platform focuses a field the
+	// user has not tapped. So Autofocus is the only way a field starts
+	// focused — the one field a screen opens into, an edit-in-place field
+	// appearing on a double click, a dialog focusing its first input, a
+	// "press / to search" box. Without it the field appears with no caret
+	// and the keystrokes go to whatever was focused before it, which reads
+	// as the field being broken.
 	//
 	// It fires once per mount, not on every rebuild, so a field that stays
 	// on screen does not steal focus back from wherever the user moved it.
@@ -65,8 +68,16 @@ func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 	switch {
 	case iw.Autofocus && firstUpdate:
 		// Explicitly asked for: takes focus from whatever holds it.
-	case owner.KeyboardTarget == nil && firstUpdate:
-		// "A focusable widget mounted while nothing has focus takes it."
+	case owner.KeyboardTarget == nil && firstUpdate && ib.Gestures.OnText == nil:
+		// "A focusable widget mounted while nothing has focus takes it" — for
+		// key-only widgets (a canvas that reads arrows, a menu that reads
+		// Escape), which is invisible and costs nothing. A text field is
+		// excluded on purpose: a focused field raises the soft keyboard, so
+		// the rule made every page containing a field open with the keyboard
+		// covering half the screen, and the raise cancelled whatever touch
+		// gesture was in progress. No platform focuses a field the user has
+		// not tapped; a field that should start focused says so with
+		// Autofocus.
 	default:
 		return
 	}

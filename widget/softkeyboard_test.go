@@ -39,9 +39,10 @@ func TestFocusRaisesAndDismissesTheSoftKeyboard(t *testing.T) {
 	o := newOwner()
 	o.textInput = ti
 
-	// A focusable widget mounted while nothing has focus takes it, so mounting
-	// the field is what focuses it.
-	o.SetRoot(TextField{Value: "hi"})
+	// A field does not take focus just by mounting — that would raise the
+	// keyboard on every page that has one — so this field asks to start
+	// focused, which goes through the same focus callback a tap does.
+	o.SetRoot(TextField{Autofocus: true, Value: "hi"})
 	o.FlushBuilds()
 
 	if ti.shown != 1 {
@@ -65,7 +66,7 @@ func TestFocusRaisesAndDismissesTheSoftKeyboard(t *testing.T) {
 // A shell with no keyboard capability (desktop) must not panic.
 func TestNoTextInputCapabilityIsHarmless(t *testing.T) {
 	o := newOwner() // Owner.TextInput is nil
-	o.SetRoot(TextField{})
+	o.SetRoot(TextField{Autofocus: true})
 	o.FlushBuilds()
 }
 
@@ -78,7 +79,7 @@ func TestIMEIsToldAboutTextAndSelectionChanges(t *testing.T) {
 	o := newOwner()
 	o.textInput = ti
 
-	o.SetRoot(TextField{Value: "hello"})
+	o.SetRoot(TextField{Autofocus: true, Value: "hello"})
 	o.FlushBuilds()
 
 	if ti.setTextCalls == 0 {
@@ -110,7 +111,7 @@ func TestIMENotToldWhenNothingChanged(t *testing.T) {
 	o := newOwner()
 	o.textInput = ti
 
-	o.SetRoot(TextField{Value: "x"})
+	o.SetRoot(TextField{Autofocus: true, Value: "x"})
 	o.FlushBuilds()
 	n := ti.setTextCalls
 
@@ -139,7 +140,7 @@ func TestFocusRaisesTheKeyboardBeforeTheNextBuild(t *testing.T) {
 	o := newOwner()
 	o.textInput = ti
 
-	o.SetRoot(TextField{Value: "hi"})
+	o.SetRoot(TextField{Autofocus: true, Value: "hi"})
 	o.FlushBuilds()
 
 	// The focused field's handler is what the app calls on a focus change, and

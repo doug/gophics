@@ -106,12 +106,16 @@ func TestReleasedFocusSurvivesRebuilds(t *testing.T) {
 	}
 }
 
-// The first field on a screen still takes focus when it mounts, which is what
-// makes a form usable without a tap. Releasing must not cost that.
-func TestFirstFieldStillAutofocusesOnMount(t *testing.T) {
+// A screen of fields opens with nothing focused. A focused field raises the
+// soft keyboard, so the old "first field takes focus on mount" rule meant every
+// form on a phone opened with the keyboard covering half of it, and the raise
+// cancelled whatever touch gesture was in progress. No platform focuses a field
+// the user has not tapped; a screen that should open into a field says so with
+// Autofocus on that one field.
+func TestFieldsDoNotFocusOnMount(t *testing.T) {
 	h := newFields(t)
-	if h.core.Owner.KeyboardTarget == nil {
-		t.Error("no field took focus on mount; a form would need a tap before " +
-			"the keyboard appeared")
+	if got := h.core.Owner.KeyboardTarget; got != nil {
+		t.Error("a field took focus on mount; on a phone the keyboard would be " +
+			"up before the user touched anything")
 	}
 }

@@ -54,9 +54,14 @@ func TestTapToFocus(t *testing.T) {
 	)
 	h := headless(t, col)
 
-	// Autofocus: first mounted focusable took focus.
+	// A text-capturing widget does not take focus on mount: nothing is
+	// focused until the user taps a field, so the tap comes first.
+	if len(log) != 0 {
+		t.Fatalf("focus moved before any tap: %v", log)
+	}
+	h.Tap(geom.Pt{X: 100, Y: 10})
 	if len(log) == 0 || log[0] != "a:focus:t" {
-		t.Fatalf("autofocus log = %v", log)
+		t.Fatalf("tap-to-focus log = %v", log)
 	}
 	h.Type("x")
 	if log[len(log)-1] != "a:text:x" {

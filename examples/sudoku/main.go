@@ -230,6 +230,10 @@ func (s *game) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Auto(ctx)
 	s.pal = paletteFrom(th)
 	board := widget.Interactive{
+		// The board is the whole game, so it owns the keys from the first
+		// frame. It has to say so: capturing typed digits (OnText) makes it a
+		// text-capturing widget, and those no longer take focus on mount.
+		Autofocus: true,
 		Gestures: widget.Gestures{
 			OnKey: func(k shell.Key) {
 				if k.Kind != shell.KeyPress {

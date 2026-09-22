@@ -392,8 +392,9 @@ type Field struct {
 	Multiline   bool
 	OnChange    func(string)
 	OnSubmit    func(string)
-	// Autofocus takes keyboard focus when the field mounts. See
-	// widget.Interactive.Autofocus.
+	// Autofocus takes keyboard focus when the field mounts. Fields do not
+	// focus on mount otherwise; set it on the one field a screen opens into.
+	// See widget.Interactive.Autofocus.
 	Autofocus bool
 	// OnFocus reports focus gained and lost. Losing it is how a field that
 	// appeared for one edit knows to put itself away.

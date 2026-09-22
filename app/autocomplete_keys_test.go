@@ -56,6 +56,8 @@ func acHarness(t *testing.T) (*Headless, *string) {
 		t.Fatal(err)
 	}
 	h.Render()
+	// Fields do not focus on mount; a user taps the box before typing.
+	h.Tap(geom.Pt{X: 150, Y: 10})
 	return h, picked
 }
 

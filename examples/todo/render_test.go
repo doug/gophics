@@ -9,6 +9,7 @@ import (
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/shell"
 )
 
@@ -47,10 +48,25 @@ func rowPoint(t *testing.T, h *app.Headless, st *todoState, i int) geom.Pt {
 	return geom.Pt{}
 }
 
+// fieldPoint is the centre of the first text field in the semantics tree.
+func fieldPoint(t *testing.T, h *app.Headless) geom.Pt {
+	t.Helper()
+	for _, n := range layout.FlattenSemantics(h.Semantics()) {
+		if n.Role == layout.RoleTextField {
+			return geom.Pt{X: n.Rect.Min.X + n.Rect.Dx()/2, Y: n.Rect.Min.Y + n.Rect.Dy()/2}
+		}
+	}
+	t.Fatal("no text field in the semantics tree")
+	return geom.Pt{}
+}
+
 func TestTypingAddsItem(t *testing.T) {
 	h, st := newHeadless(t)
 	n := len(st.items)
 
+	// The add field does not focus on mount — that would open the app with
+	// the keyboard up on a phone — so the user taps it first.
+	h.Tap(fieldPoint(t, h))
 	h.Type("ship it")
 	if st.input != "ship it" {
 		t.Fatalf("input = %q", st.input)

@@ -44,6 +44,9 @@ func (s *multiState) Build(widget.Ctx) widget.Widget {
 	return widget.Padding{All: 10, Child: widget.TextField{
 		Value:     st.value,
 		Multiline: true,
+		// Fields do not take focus on mount; typing into this one straight
+		// away needs it to open focused, as a real editor screen would ask.
+		Autofocus: true,
 		OnChange:  func(v string) { s.SetState(func() { st.value = v }) },
 		OnSubmit:  func(v string) { st.submitted = append(st.submitted, v) },
 	}}
