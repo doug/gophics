@@ -121,7 +121,10 @@ func (s *overlayState) Build(Ctx) Widget {
 			// scope: the token's caller replaces the content, not the entry.
 			content = scopeBridge{origin: e.origin, child: content}
 		}
-		children = append(children, WithKey{Key: e.id, Child: content})
+		// Each entry is its own Tab cycle: a dialog with fields keeps focus
+		// among them rather than letting Tab wander into the page beneath
+		// its scrim (see focusables).
+		children = append(children, WithKey{Key: e.id, Child: focusScope{child: content}})
 	}
 	content := Stack{Children: children}
 	return Provide[Overlay]{Value: Overlay{s: s}, Child: content}

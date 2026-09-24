@@ -54,6 +54,14 @@ type mutableState struct{ widget.StateBase[mutable] }
 func (s *mutableState) Init(widget.Ctx)                    { s.W().m.st = s }
 func (s *mutableState) Build(ctx widget.Ctx) widget.Widget { return s.W().m.build(ctx) }
 
+// builder is a stateless widget built from a closure, for a test that needs
+// a Ctx (to reach a Nav or an Overlay) and nothing else.
+type builder struct {
+	b func(widget.Ctx) widget.Widget
+}
+
+func (b builder) Build(ctx widget.Ctx) widget.Widget { return b.b(ctx) }
+
 // semRect returns the rect of the first semantics node carrying label.
 func semRect(t *testing.T, h *app.Headless, label string) geom.Rect {
 	t.Helper()

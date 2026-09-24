@@ -488,6 +488,11 @@ type pageBox struct {
 
 func (b *pageBox) offset() geom.Pt { return geom.Pt{X: b.fracX * b.Size().W} }
 
+// hidesFocus keeps Tab away from an offstage page: it is mounted, so its
+// fields still exist, but it is neither painted nor hit-testable, and focus
+// landing on it would put the caret somewhere the user cannot see.
+func (b *pageBox) hidesFocus() bool { return b.offstage }
+
 func (b *pageBox) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
