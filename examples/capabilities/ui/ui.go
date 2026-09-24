@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
@@ -43,10 +44,12 @@ func (App) CreateState() widget.State { return &state{} }
 
 type state struct {
 	widget.StateBase[App]
+	ctx widget.Ctx
 
 	subscribed bool
 	gp         shell.Gamepads
 	gpSummary  string
+	stopPoll   chan struct{} // closes to end the idle gamepad poll
 
 	lastAction string
 	typed      string
@@ -81,6 +84,24 @@ func (s *state) subscribe(ctx widget.Ctx) {
 	if g := ctx.Gamepads(); g != nil {
 		s.gp = g
 		ctx.AddTicker(poller{s})
+		// Frames are where the ticker polls, and an idle screen has none —
+		// so a controller plugged in while nothing moves would go unnoticed.
+		// A timer posts a poll onto the UI goroutine a few times a second
+		// instead; Post itself requests the frame.
+		post, stop := ctx.Post(), make(chan struct{})
+		s.stopPoll = stop
+		go func() {
+			t := time.NewTicker(gamepadPollEvery)
+			defer t.Stop()
+			for {
+				select {
+				case <-t.C:
+					post(s.pollGamepads)
+				case <-stop:
+					return
+				}
+			}
+		}()
 	}
 	if st := ctx.SecureStorage(); st != nil {
 		if v, ok := st.Get("note"); ok {
@@ -89,22 +110,43 @@ func (s *state) subscribe(ctx widget.Ctx) {
 	}
 }
 
+func (s *state) Init(ctx widget.Ctx) { s.ctx = ctx }
+
 func (s *state) Dispose() {
 	if s.wv != nil {
 		s.wv.Close()
 	}
+	if s.stopPoll != nil {
+		close(s.stopPoll)
+		s.stopPoll = nil
+		s.ctx.RemoveTicker(poller{s})
+	}
 }
 
-// poller re-reads gamepad state each frame (input is inherently live), rebuilding
-// only when the snapshot changes so a still controller doesn't churn.
+// gamepadPollEvery is how often an idle inspector looks for a controller.
+const gamepadPollEvery = 100 * time.Millisecond
+
+// pollGamepads re-reads controller state, rebuilding only when the snapshot
+// changes so a still controller costs nothing.
+func (s *state) pollGamepads() {
+	if s.stopPoll == nil {
+		return // disposed; a poll posted before the stop landed after it
+	}
+	sum := gamepadSummary(s.gp.Poll())
+	if sum != s.gpSummary {
+		s.SetState(func() { s.gpSummary = sum })
+	}
+}
+
+// poller polls on frames that happen anyway (input is inherently live). It
+// reports itself idle: an active ticker asks the runtime for another frame,
+// and a card that rendered at every vsync while nothing moved was what the
+// idle inspector cost on any shell with a gamepad capability.
 type poller struct{ s *state }
 
 func (p poller) Tick(float64) bool {
-	sum := gamepadSummary(p.s.gp.Poll())
-	if sum != p.s.gpSummary {
-		p.s.SetState(func() { p.s.gpSummary = sum })
-	}
-	return true
+	p.s.pollGamepads()
+	return false
 }
 
 func gamepadSummary(gs []shell.Gamepad) string {
@@ -261,7 +303,7 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 				OnText: func(t string) { s.SetState(func() { s.typed += t }) },
 				OnEditKey: func(k shell.EditKey) {
 					if k == shell.EditBackspace && s.typed != "" {
-						s.SetState(func() { s.typed = s.typed[:len(s.typed)-1] })
+						s.SetState(func() { s.typed = backspace(s.typed) })
 					}
 				},
 			})
@@ -425,6 +467,14 @@ func (s *state) lastActionFor(title string) string {
 		return s.lastAction
 	}
 	return ""
+}
+
+// backspace drops the last character of s. The IME is where multi-byte text
+// arrives, so this trims a rune, not a byte: a byte off the end of "日本"
+// leaves a torn character behind that draws as garbage.
+func backspace(s string) string {
+	_, n := utf8.DecodeLastRuneInString(s)
+	return s[:len(s)-n]
 }
 
 func boolStr(b bool, t, f string) string {
