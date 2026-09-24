@@ -21,6 +21,10 @@ func TestSemanticsLabel(t *testing.T) {
 			[]string{"Pie chart", "x 5"}},
 		{"heatmap", Chart{Marks: []Mark{RectMark{Cells: []Cell{{}, {}, {}}}}},
 			[]string{"Heatmap", "3 cells"}},
+		// A range chart is not selectable and used to fall through to "",
+		// invisible to a screen reader while every other kind was described.
+		{"range", Chart{Marks: []Mark{RangeMark{Data: []Span{{X: 0, Lo: 2, Hi: 5}, {X: 1, Lo: 1, Hi: 9}}}}},
+			[]string{"Range chart", "2 spans", "1 to 9"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -40,6 +40,10 @@ func (w Chart) semanticsLabel(loc intl.Locale) string {
 		if cm, ok := mk.(CandleMark); ok {
 			return fmt.Sprintf("Candlestick chart, %d bars.", len(cm.Data))
 		}
+		if rm, ok := mk.(RangeMark); ok && len(rm.Data) > 0 {
+			lo, hi := rm.yDomain()
+			return fmt.Sprintf("Range chart, %d spans, %s to %s.", len(rm.Data), fmtNumber(lo, loc), fmtNumber(hi, loc))
+		}
 	}
 	return ""
 }

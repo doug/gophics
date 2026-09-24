@@ -49,3 +49,33 @@ func TestTimeScaleMonthlyTicks(t *testing.T) {
 		}
 	}
 }
+
+// A run of ticks starts from the calendar boundary at or before Lo, which is
+// before Lo whenever Lo is not itself on the boundary. Such a tick has a
+// negative position: its gridline landed left of the plot and its label was
+// clamped into the y-axis column. No branch may emit one.
+func TestTimeTicksNeverPrecedeLo(t *testing.T) {
+	cases := []struct {
+		name   string
+		lo, hi time.Time
+	}{
+		{"daily from noon", time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC), time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)},
+		{"two-daily from noon", time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC), time.Date(2026, 1, 17, 0, 0, 0, 0, time.UTC)},
+		{"weekly from Monday afternoon", time.Date(2026, 1, 5, 15, 0, 0, 0, time.UTC), time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)}, // Jan 5 2026 is a Monday
+		{"monthly from mid-month", time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC), time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+		{"yearly from mid-year", time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC), time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ticks := NewTime(c.lo, c.hi).Ticks(0)
+			if len(ticks) == 0 {
+				t.Fatal("no ticks")
+			}
+			for _, tk := range ticks {
+				if tk.Pos < 0 || tk.Pos > 1 {
+					t.Fatalf("tick %q at %v is outside the scale", tk.Label, tk.Pos)
+				}
+			}
+		})
+	}
+}

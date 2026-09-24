@@ -7,7 +7,7 @@ import (
 
 // drawSelection highlights the selected datum with a crosshair, an emphasized
 // marker, and a floating value tooltip.
-func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col paint.Color, yaxis Axis, th chartTheme, p *paint.Painter) {
+func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col paint.Color, xaxis, yaxis Axis, th chartTheme, p *paint.Painter) {
 	x := area.Min.X + xs.Map(d.X)*area.Dx()
 	y := area.Max.Y - ys.Map(d.Y)*area.Dy()
 
@@ -15,11 +15,25 @@ func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col pa
 	dot(c, x, y, 13, halo(th)) // ring
 	dot(c, x, y, 8, col)
 
-	label := d.Label
-	if label == "" {
-		label = fmtNumber(d.X, th.loc)
+	drawTooltip(c, p, area, geom.Pt{X: x, Y: y}, selectionLabel(xs, xaxis, d), yaxis.label(Tick{Value: d.Y}), th)
+}
+
+// selectionLabel is the tooltip's first line: what the selected datum is,
+// as opposed to its value. A category is its label; otherwise the x axis
+// formats the position the way it formats its ticks, so a caller's
+// XAxis.Format applies and a time scale reads as a date rather than as the
+// epoch seconds behind it ("1,758.9M" was what a tap on a time series said).
+func selectionLabel(xs Scale, xaxis Axis, d Datum) string {
+	if d.Label != "" {
+		return d.Label
 	}
-	drawTooltip(c, p, area, geom.Pt{X: x, Y: y}, label, yaxis.label(Tick{Value: d.Y}), th)
+	if xaxis.Format != nil {
+		return xaxis.Format(d.X)
+	}
+	if ts, ok := xs.(*Time); ok {
+		return ts.pointLabel(d.X)
+	}
+	return xaxis.label(Tick{Value: d.X})
 }
 
 // halo is the marker ring color: near-white on light charts, near-black on dark.

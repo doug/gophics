@@ -129,6 +129,11 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 	// spoken summary rather than asked of each caller — most would forget, and
 	// a German chart would go on reading 1,234.5.
 	loc := ctx.IntlLocale()
+	// Applied once, up front, so the margin measured for the y labels is
+	// measured on the same strings that are painted: with the locale applied
+	// only at draw time the reserved width was for "1,234.5" and the label
+	// painted was "1.234,5".
+	w.XAxis, w.YAxis = w.XAxis.withLocale(loc), w.YAxis.withLocale(loc)
 	xs, ys := resolveScales(w)
 	// A chart whose marks have no domains at all — a pie, a donut — has no
 	// axes. resolveScales still has to return non-nil scales, so it invents
@@ -175,8 +180,8 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		if area.IsEmpty() {
 			return
 		}
-		drawYAxis(c, area, ys, w.YAxis.withLocale(loc), th, p)
-		drawXAxis(c, area, bounds, xs, w.XAxis.withLocale(loc), th, p)
+		drawYAxis(c, area, ys, w.YAxis, th, p)
+		drawXAxis(c, area, bounds, xs, w.XAxis, th, p)
 
 		pl := plot{Area: area, X: xs, Y: ys, Canvas: c, th: th, T: s.t, groups: 1}
 		c.PushClip(area)
@@ -199,7 +204,7 @@ func (s *chartState) Build(ctx widget.Ctx) widget.Widget {
 		c.PopClip()
 
 		if s.sel >= 0 && s.sel < len(s.primary) {
-			drawSelection(c, area, xs, ys, s.primary[s.sel], s.selCol, w.YAxis, th, p)
+			drawSelection(c, area, xs, ys, s.primary[s.sel], s.selCol, w.XAxis, w.YAxis, th, p)
 		}
 		if w.Legend && len(s.legend) > 0 {
 			drawLegend(c, area, s.legend, th, p)
