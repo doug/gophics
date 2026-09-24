@@ -42,6 +42,10 @@ type selRef struct{ box *selectableBox }
 
 func (s *selectableState) Init(ctx Ctx) { s.ctx = ctx; s.ref = &selRef{} }
 
+// Dispose takes the edit menu down with the text: the menu is an overlay
+// entry beside the tree, not a descendant, so nothing else would.
+func (s *selectableState) Dispose() { s.closeMenu() }
+
 func (s *selectableState) sel() (lo, hi int) {
 	if s.anchor <= s.focus {
 		return s.anchor, s.focus

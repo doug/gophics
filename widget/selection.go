@@ -44,6 +44,10 @@ func (s *selectionAreaState) Init(ctx Ctx) {
 	s.reg = &selectionRegistry{}
 }
 
+// Dispose takes the edit menu down with the area: the menu is an overlay
+// entry beside the tree, not a descendant, so nothing else would.
+func (s *selectionAreaState) Dispose() { s.closeMenu() }
+
 func (s *selectionAreaState) Build(ctx Ctx) Widget {
 	col := s.W().SelectionColor
 	if col.A == 0 {

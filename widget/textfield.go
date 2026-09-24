@@ -142,9 +142,16 @@ func (s *textFieldState) revealLast(ctx Ctx) {
 	if s.revealTimer != nil {
 		s.revealTimer.Stop()
 	}
-	owner := ctx.el.owner
+	// The timer fires on its own goroutine, and Post is the only way back to
+	// the UI one. Without a runner (a bare Owner, a headless embedding) there
+	// is no Post, so no timer: the glimpse then lasts until the next
+	// keystroke or caret move masks it, the same policy as startBlink.
+	post := ctx.Post()
+	if post == nil {
+		return
+	}
 	s.revealTimer = time.AfterFunc(revealFor, func() {
-		owner.Post(func() {
+		post(func() {
 			s.revealOn = false
 			s.SetState(nil)
 		})
@@ -414,6 +421,15 @@ func (s *textFieldState) Init(ctx Ctx) { s.ctx = ctx }
 func (s *textFieldState) Dispose() {
 	s.stopBlink()
 	s.hideLoupe()
+	// The menu lives in the overlay, beside the tree rather than under this
+	// field, so unmounting the field does not take it down: without this a
+	// route pop or a list scroll-out left the scrim and Cut/Copy/Paste bar
+	// up, bound to a state that no longer exists.
+	s.closeMenu()
+	if s.revealTimer != nil {
+		s.revealTimer.Stop()
+		s.revealTimer = nil
+	}
 	if a := s.auto; a != nil && a.added {
 		s.ctx.el.owner.RemoveTicker(a)
 	}
@@ -622,7 +638,9 @@ func (s *textFieldState) copySelection(ctx Ctx) {
 }
 
 func (s *textFieldState) cutSelection(ctx Ctx) {
-	if !s.ed.HasSelection() || s.W().Obscure {
+	// The keyboard path checks editable before reaching here; the edit menu
+	// did not, and Cut edited a ReadOnly field.
+	if !s.ed.HasSelection() || s.W().Obscure || !s.W().editable() {
 		return
 	}
 	s.copySelection(ctx)
@@ -631,8 +649,11 @@ func (s *textFieldState) cutSelection(ctx Ctx) {
 }
 
 func (s *textFieldState) pasteClipboard(ctx Ctx) {
+	// Editable first, then read: reading the clipboard is what makes iOS put
+	// up its "pasted from" notice, and a field that cannot take the paste
+	// has no business triggering it.
 	cb := ctx.Clipboard()
-	if cb == nil {
+	if cb == nil || !s.W().editable() {
 		return
 	}
 	t, err := cb.ClipboardRead()
@@ -645,7 +666,7 @@ func (s *textFieldState) pasteClipboard(ctx Ctx) {
 		t = sanitize(t)
 	}
 	t = s.fit(t)
-	if t == "" || !s.W().editable() {
+	if t == "" {
 		return
 	}
 	s.ed.Replace(t) // a paste is its own undo step, never merged with typing
@@ -666,10 +687,10 @@ func (s *textFieldState) closeMenu() {
 	}
 }
 
-// editOps exposes the field to the edit menu.
-// editOps exposes the field to the edit menu. An Obscure field offers no Cut
-// or Copy at all (nil, so the menu does not list them) rather than items that
-// would silently do nothing.
+// editOps exposes the field to the edit menu. An action the field cannot
+// perform is left nil so the menu omits it rather than listing an item that
+// would silently do nothing: an Obscure field offers no Cut or Copy, and a
+// field that cannot be edited (ReadOnly, Disabled) offers no Cut or Paste.
 func (s *textFieldState) editOps(ctx Ctx) selectionOps {
 	ops := selectionOps{
 		HasSelection: s.ed.HasSelection,
@@ -677,12 +698,16 @@ func (s *textFieldState) editOps(ctx Ctx) selectionOps {
 			a, b := s.ed.Selection()
 			return a == 0 && b == len([]rune(s.ed.Text())) && b > 0
 		},
-		Paste:     func() { s.pasteClipboard(ctx) },
 		SelectAll: s.selectAll,
 	}
 	if !s.W().Obscure {
-		ops.Cut = func() { s.cutSelection(ctx) }
 		ops.Copy = func() { s.copySelection(ctx) }
+	}
+	if s.W().editable() {
+		ops.Paste = func() { s.pasteClipboard(ctx) }
+		if !s.W().Obscure {
+			ops.Cut = func() { s.cutSelection(ctx) }
+		}
 	}
 	return ops
 }
@@ -1143,7 +1168,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 	f := b.state.W()
 	m := b.painter.MetricsIn("", f.size())
 	want := geom.Size{
-		W: b.painter.MeasureWidthIn("", b.state.ed.Text(), f.size()),
+		W: b.painter.MeasureWidthIn("", b.state.shown(), f.size()),
 		H: m.Ascent + m.Descent,
 	}
 	// A text field fills its available width (clicks in the empty area
@@ -1152,7 +1177,7 @@ func (b *fieldBox) Layout(cs layout.Constraints) geom.Size {
 		want.W = cs.Max.W
 	}
 	if f.Multiline && cs.BoundedW() {
-		lines := b.painter.ParagraphIn("", b.state.ed.Text(), f.size(), cs.Max.W)
+		lines := b.painter.ParagraphIn("", b.state.shown(), f.size(), cs.Max.W)
 		if n := len(lines); n > 1 {
 			want.H += float32(n-1) * m.LineHeight()
 		}
@@ -1309,7 +1334,7 @@ func (b *fieldBox) paintMultiline(c paint.Canvas, at geom.Pt) {
 	txC, caretC, selC, phC := f.resolvedColors()
 	sz := f.size()
 	m := b.painter.MetricsIn("", sz)
-	txt := b.state.ed.Text()
+	txt := b.state.shown() // bullets for a password: the plaintext never paints
 	lines := b.painter.ParagraphIn("", txt, sz, b.size.W)
 	lineH := m.LineHeight()
 

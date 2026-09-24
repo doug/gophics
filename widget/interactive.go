@@ -42,12 +42,26 @@ type Interactive struct {
 func (iw Interactive) createBox(ctx Ctx) layout.Box { return &InteractiveBox{} }
 func (iw Interactive) updateBox(ctx Ctx, b layout.Box) {
 	ib := b.(*InteractiveBox)
+	wasFocus := ib.Gestures.OnFocus // the handlers about to be overwritten
 	ib.Gestures = iw.Gestures
 	ib.sem = iw.Sem
+	owner := ctx.el.owner
 	if !ib.Gestures.focusable() {
+		// A widget that stops being focusable while it holds focus lets go
+		// of it, the way unmounting does. A TextField turning Disabled swaps
+		// in empty Gestures; leaving KeyboardTarget on them kept the caret
+		// drawing, reported Focused and Disabled together to a screen
+		// reader, never hid the soft keyboard (the field's OnFocus(false)
+		// is what hides it), and blocked key-only widgets from autofocusing
+		// because the target was never nil again.
+		if owner.KeyboardTarget == &ib.Gestures {
+			owner.KeyboardTarget = nil
+			if wasFocus != nil {
+				wasFocus(false)
+			}
+		}
 		return
 	}
-	owner := ctx.el.owner
 
 	// Both autofocus rules are one-shot at mount, and the shot is spent here
 	// whether or not it is taken.
