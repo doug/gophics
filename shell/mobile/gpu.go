@@ -110,17 +110,18 @@ func (b *Bridge) ClearSurface() {
 // color, resolve target, and viewport all matched at an aligned size.
 func alignSurface(px int) int { return px &^ 7 }
 
-func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (g *mobileGPU, err error) {
+func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (_ *mobileGPU, err error) {
 	wPx, hPx = alignSurface(wPx), alignSurface(hPx)
-	g = &mobileGPU{pw: wPx, ph: hPx, scale: scale}
+	g := &mobileGPU{pw: wPx, ph: hPx, scale: scale}
 	// A build that fails halfway has already taken an instance, a surface, a
 	// device — the same handles a completed one holds — and SetSurface retries
 	// on every rotation. Tear down whatever exists on the way out, so a device
 	// that cannot configure its swapchain does not leak a device per attempt.
+	// g is a local, not the result: the early returns set the result to nil
+	// before this runs.
 	defer func() {
 		if err != nil {
 			g.release()
-			g = nil
 		}
 	}()
 	inst, err := wgpu.CreateInstance(&wgpu.InstanceDescriptor{Backends: gputypes.BackendsPrimary})
