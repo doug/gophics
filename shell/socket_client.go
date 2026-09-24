@@ -25,6 +25,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +65,22 @@ const (
 // wsGUID is the magic value appended to the client key to derive the accept key
 // (RFC 6455 §1.3).
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+// maxMessageSize bounds one frame and one reassembled message. The 64-bit
+// length in a frame header was trusted as given: a length with the high bit
+// set became a negative int and make panicked, and a merely large one was
+// allocated — so one bad or hostile frame took the app down. 16 MiB is far
+// past anything a UI socket carries and small enough that a lie costs
+// nothing.
+const maxMessageSize = 16 << 20
+
+// errMessageTooLarge is the protocol error a frame or message past
+// maxMessageSize is reported as, through OnClose.
+var errMessageTooLarge = errors.New("shell: websocket message exceeds 16 MiB")
+
+// closeTimeout is how long Close waits for the peer to answer the close
+// handshake before giving up on it. A variable so a test can shorten it.
+var closeTimeout = 5 * time.Second
 
 // acceptKey computes the expected Sec-WebSocket-Accept for a client key.
 func acceptKey(clientKey string) string {
@@ -175,7 +192,16 @@ func (c *wsConn) SendText(s string) { c.writeFrame(opText, []byte(s)) }
 
 // Close starts a clean close handshake by sending a close frame. The read loop
 // observes the peer's echo (or the socket teardown) and reports OnClose(nil).
-func (c *wsConn) Close() { c.writeClose() }
+//
+// A peer that never echoes and never drops TCP used to leave the read loop
+// blocked forever, so OnClose never fired and the connection was never
+// released. The read deadline bounds that wait: after closeTimeout the read
+// fails, and because we initiated the close it is reported as the clean end
+// it is from the caller's side.
+func (c *wsConn) Close() {
+	c.writeClose()
+	_ = c.conn.SetReadDeadline(time.Now().Add(closeTimeout))
+}
 
 // writeClose sends a single close frame (status 1000, normal). Idempotent: only
 // the first call for a connection emits a frame.
@@ -260,8 +286,11 @@ func (c *wsConn) readLoop(h SocketHandlers) {
 			initiated := c.sentClose
 			c.mu.Unlock()
 			// A socket teardown after we've entered the close handshake is the
-			// expected clean end (many servers just drop TCP after echoing close).
-			if initiated && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)) {
+			// expected clean end (many servers just drop TCP after echoing
+			// close), and so is the close deadline running out: the caller
+			// asked for the connection to end, and it has.
+			if initiated && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+				errors.Is(err, net.ErrClosed) || errors.Is(err, os.ErrDeadlineExceeded)) {
 				report(nil)
 			} else {
 				report(err)
@@ -286,6 +315,11 @@ func (c *wsConn) readLoop(h SocketHandlers) {
 			}
 			deliver(h, opcode, payload)
 		case opContinuation:
+			if len(frag)+len(payload) > maxMessageSize {
+				// Each fragment fits; the message they are assembling does not.
+				report(errMessageTooLarge)
+				return
+			}
 			frag = append(frag, payload...)
 			if fin {
 				deliver(h, fragOp, frag)
@@ -332,7 +366,19 @@ func (c *wsConn) readFrame() (fin bool, opcode byte, payload []byte, err error) 
 		if _, err = io.ReadFull(c.br, ext[:]); err != nil {
 			return
 		}
-		n = int(binary.BigEndian.Uint64(ext[:]))
+		// Compared as the unsigned 64-bit value it is, before it becomes an
+		// int: a length with the high bit set would otherwise turn negative
+		// and make would panic.
+		n64 := binary.BigEndian.Uint64(ext[:])
+		if n64 > maxMessageSize {
+			err = errMessageTooLarge
+			return
+		}
+		n = int(n64)
+	}
+	if n > maxMessageSize {
+		err = errMessageTooLarge
+		return
 	}
 
 	var mask [4]byte
