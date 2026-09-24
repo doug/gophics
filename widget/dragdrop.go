@@ -44,8 +44,10 @@ type DragSession struct {
 type dropReg struct {
 	accept func(payload any) bool
 	drop   func(payload any, at geom.Pt)
-	// rect is the target's bounds in root coordinates, refreshed each frame
-	// by the target's own render object.
+	// rect is the target's bounds in root coordinates, recorded by the
+	// target's own render object each frame it paints and cleared by the
+	// DragHost's box at the start of every frame, so a target that was not
+	// painted (scrolled out of view, culled) matches nothing.
 	rect geom.Rect
 	// hovered is true while a compatible payload is over this target.
 	hovered bool
@@ -169,7 +171,71 @@ func (s *dragHostState) Init(Ctx) {
 }
 
 func (s *dragHostState) Build(ctx Ctx) Widget {
-	return Provide[*DragSession]{Value: &s.sess, Child: s.W().Child}
+	return Provide[*DragSession]{Value: &s.sess, Child: dragArena{sess: &s.sess, Child: s.W().Child}}
+}
+
+// dragArena is the render widget under DragHost. Its box paints before every
+// target in the subtree, which is the one moment that can forget the rects
+// the previous frame recorded — see dragArenaBox.Paint.
+type dragArena struct {
+	sess  *DragSession
+	Child Widget
+}
+
+func (a dragArena) createBox(Ctx) layout.Box { return &dragArenaBox{} }
+func (a dragArena) updateBox(_ Ctx, b layout.Box) {
+	b.(*dragArenaBox).sess = a.sess
+}
+func (a dragArena) childWidgets() []Widget { return []Widget{a.Child} }
+func (a dragArena) soleChild() Widget      { return a.Child }
+func (a dragArena) attach(b layout.Box, kids []layout.Box) {
+	b.(*dragArenaBox).Child = first(kids)
+}
+
+type dragArenaBox struct {
+	sess  *DragSession
+	Child layout.Box
+	size  geom.Size
+}
+
+func (b *dragArenaBox) Layout(cs layout.Constraints) geom.Size {
+	if b.Child != nil {
+		b.size = b.Child.Layout(cs)
+	} else {
+		b.size = cs.Constrain(geom.Size{})
+	}
+	return b.size
+}
+
+func (b *dragArenaBox) Size() geom.Size { return b.size }
+
+// Paint clears every registered target's rect before the subtree paints, so
+// only the targets painted *this* frame can match the pointer. A target's
+// rect is recorded in its own Paint, and a target scrolled out of view is
+// culled and never painted — so without this it kept the rect from the last
+// frame it was visible in, and a payload carried over that patch of screen
+// hovered and dropped onto a target the user could not see.
+func (b *dragArenaBox) Paint(c paint.Canvas, at geom.Pt) {
+	if b.sess != nil {
+		for _, t := range b.sess.targets {
+			t.rect = geom.Rect{}
+		}
+	}
+	if b.Child != nil {
+		b.Child.Paint(c, at)
+	}
+}
+
+func (b *dragArenaBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
+	if b.Child != nil {
+		visit(b.Child, geom.Pt{})
+	}
+}
+
+func (b *dragArenaBox) AddHits(p geom.Pt, hits *[]layout.Hit) {
+	if b.Child != nil {
+		b.Child.AddHits(p, hits)
+	}
 }
 
 // Draggable makes its child the handle for dragging Payload.
@@ -345,6 +411,13 @@ func (s *draggableState) Build(ctx Ctx) Widget {
 						return
 					}
 					s.start()
+					// start declines without a DragHost above or a Payload
+					// to carry; there is then no session to move. Without
+					// this check the first move past the slop dereferenced a
+					// nil session in any tree the app runner did not build.
+					if !s.active {
+						return
+					}
 				}
 				s.sess.update(at)
 				// Re-issue the overlay entry so the carried copy follows.
@@ -535,8 +608,8 @@ func (b *dropZoneBox) Size() geom.Size { return b.size }
 
 // Paint is where the root-space rect is captured: it is the one pass that
 // knows a box's absolute position, and it runs every frame the target is
-// visible. A target scrolled off screen stops painting and stops matching,
-// which is the behavior you want anyway.
+// visible. A target scrolled off screen stops painting, and the DragHost's
+// box has already cleared its rect for the frame, so it stops matching.
 func (b *dropZoneBox) Paint(c paint.Canvas, at geom.Pt) {
 	if b.reg != nil {
 		b.reg.rect = geom.Rect{Min: at, Max: at.Add(b.size.Pt())}
