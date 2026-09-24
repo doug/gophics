@@ -191,6 +191,12 @@ type sweepTicker struct {
 	repaint func()
 }
 
+// Running is what the frame pipeline's post-build check reads. A Progress
+// that turns indeterminate sets running from Build, after the frame's tick
+// already ran; without this the loop saw no live ticker and asked for no
+// further frame, and the sweep sat still until some unrelated event.
+func (t *sweepTicker) Running() bool { return t.running }
+
 func (t *sweepTicker) Tick(dt float64) bool {
 	if !t.running {
 		return false

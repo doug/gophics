@@ -100,6 +100,10 @@ func (s *tooltipState) Build(ctx widget.Ctx) widget.Widget {
 			OnEnter: func() {
 				s.origin = ctx.Input().Pointer()
 				s.hover.start(s.delay())
+				// Pointer moves do not ask for a frame, so the countdown
+				// needs one requested here: over a stateless child (an
+				// Icon) nothing else would, and the tip never appeared.
+				ctx.Invalidate()
 			},
 			OnExit: func() { s.hide() },
 			// Touch has no hover, so the tip is reachable by holding — the
@@ -129,6 +133,10 @@ func (t *hoverTimer) start(seconds float32) {
 }
 
 func (t *hoverTimer) stop() { t.running = false }
+
+// Running keeps the frame loop awake while the countdown is live; see
+// sweepTicker.Running.
+func (t *hoverTimer) Running() bool { return t.running }
 
 func (t *hoverTimer) Tick(dt float64) bool {
 	if !t.running {
