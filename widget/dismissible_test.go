@@ -136,3 +136,32 @@ func TestDismissibleCustomThreshold(t *testing.T) {
 		t.Fatalf("dx = %v, want spring-back to 0", s.dx)
 	}
 }
+
+// OnDismissed fires when the slide-out has finished, not when the finger lets
+// go.
+//
+// It fired at release: the dismiss flag was set before the animation was
+// re-based with Jump, whose OnChange saw "not running, gone, not yet fired"
+// and called back before a single frame of the slide had drawn. An app that
+// removes the row in OnDismissed — the documented use — never saw the row
+// leave.
+func TestDismissibleFiresOnDismissedAfterTheAnimation(t *testing.T) {
+	fired := 0
+	o, s := dismissFixture(t, Dismissible{
+		Child:       Sized{W: 200, H: 40},
+		OnDismissed: func() { fired++ },
+	})
+	s.width = 200
+	s.SetState(func() { s.dx = 120 }) // past the default 0.4*200 = 80
+	s.release()
+	if fired != 0 {
+		t.Fatalf("OnDismissed fired %d times at release, before any animation frame", fired)
+	}
+	if !s.anim.Running() {
+		t.Fatal("release did not start the slide-out")
+	}
+	pumpDismiss(t, o, s)
+	if fired != 1 {
+		t.Fatalf("OnDismissed fired %d times after the slide-out, want 1", fired)
+	}
+}

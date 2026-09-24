@@ -126,7 +126,6 @@ const (
 )
 
 func (s *dismissState) animateTo(to float32, dismiss bool) {
-	s.gone = dismiss
 	s.from, s.to = s.dx, to
 	// Springing back is arriving against something; being dismissed is
 	// leaving. A card that eases to rest at its own position reads as dead
@@ -141,6 +140,12 @@ func (s *dismissState) animateTo(to float32, dismiss bool) {
 	s.anim.Duration = releaseDuration(s.dx, to, s.velocity)
 	s.anim.Jump(0)
 	s.anim.Forward()
+	// Only now: Jump ran OnChange with the run not yet started, and with gone
+	// already set it saw "settled and dismissed" and fired OnDismissed at the
+	// moment of release — before the slide-out had drawn a frame. An app that
+	// removes the row in the callback (the documented use) never saw the
+	// animation at all.
+	s.gone = dismiss
 	s.ctx.Invalidate()
 }
 
