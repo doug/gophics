@@ -201,3 +201,22 @@ func TestBaselineManifestPermissionCoversNetwork(t *testing.T) {
 		t.Errorf("INTERNET appears %d times after merging, want 1", n)
 	}
 }
+
+// AndroidMaxSDK existed, and the renderer wrote it, but no entry ever set it:
+// Photos declared WRITE_EXTERNAL_STORAGE uncapped while the reference host
+// asks for it only below API 29, so every scaffolded app carried the one
+// legacy permission the Play Console questions, for nothing.
+func TestPhotosCapsTheLegacyStoragePermission(t *testing.T) {
+	p, ok := For("Photos")
+	if !ok {
+		t.Fatal("no Photos entry")
+	}
+	if got := p.AndroidMaxSDK["android.permission.WRITE_EXTERNAL_STORAGE"]; got != 28 {
+		t.Errorf("WRITE_EXTERNAL_STORAGE maxSdkVersion = %d, want 28: scoped storage needs none from 29", got)
+	}
+	// And the cap survives a merge, which is what the build actually calls.
+	m := Merge([]string{"Photos"}, Baseline)
+	if got := m.AndroidMaxSDK["android.permission.WRITE_EXTERNAL_STORAGE"]; got != 28 {
+		t.Errorf("after Merge, maxSdkVersion = %d, want 28", got)
+	}
+}

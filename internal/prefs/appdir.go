@@ -12,7 +12,10 @@ import (
 // of the same app must read the same preferences file, and they would not if
 // each sanitized the identifier its own way.
 //
-// It falls an app identifier into a single directory name, falls back to the executable's name so an app that sets no identifier still gets a
+// An empty identifier falls back to the executable's name, so an app that
+// sets none still gets a directory of its own rather than sharing one with
+// every other such app; an identifier that sanitises to nothing gets
+// "gophics-app".
 func AppDirName(id string) string {
 	if id == "" {
 		if exe, err := os.Executable(); err == nil {

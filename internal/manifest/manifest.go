@@ -134,8 +134,15 @@ var capabilityManifestPermissions = map[string]Permission{
 	"Permissions": {}, // the mechanism for asking, not something to ask for
 	// Add-only access, deliberately: an app that saves a picture has no reason
 	// to enumerate the library, and the add-only key is the smaller ask.
+	//
+	// WRITE_EXTERNAL_STORAGE is capped at API 28 because scoped storage made
+	// it meaningless from 29 on — MediaStore inserts need no permission there,
+	// which is what the reference host's authorizePhotos already relies on.
+	// Declared uncapped it was the one legacy permission the Play Console
+	// asks every submission to justify, for a build that never used it.
 	"Photos": {
 		Android:        []string{"android.permission.WRITE_EXTERNAL_STORAGE"},
+		AndroidMaxSDK:  map[string]int{"android.permission.WRITE_EXTERNAL_STORAGE": 28},
 		IOSKeys:        []string{"NSPhotoLibraryAddUsageDescription"},
 		RuntimeRequest: true,
 	},
@@ -201,8 +208,9 @@ func For(capability string) (Permission, bool) {
 	return p, ok
 }
 
-// CapabilitiesWithPermissions lists the capabilities that require any
-// declaration, sorted. Used by tests and by `gophics doctor`.
+// KnownCapabilities lists every capability the table knows, sorted — those
+// that need nothing included, since a present-and-empty entry is the point.
+// Used by the tests that hold the table to the capability set.
 func KnownCapabilities() []string {
 	out := make([]string, 0, len(capabilityManifestPermissions))
 	for name := range capabilityManifestPermissions {

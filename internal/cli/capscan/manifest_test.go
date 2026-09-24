@@ -222,3 +222,18 @@ func TestMacEntitlementsShape(t *testing.T) {
 		}
 	}
 }
+
+// A capped permission is rendered with android:maxSdkVersion, which is the
+// whole point of the cap: the manifest is what the Play Console reads.
+func TestAndroidManifestRendersMaxSDK(t *testing.T) {
+	path := writeTemp(t, "AndroidManifest.xml", manifestWithMarkers)
+	perm := manifest.Merge([]string{"Photos"}, manifest.Baseline)
+	if _, err := AndroidManifest(path, perm, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	want := `android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"`
+	if !strings.Contains(string(got), want) {
+		t.Errorf("manifest lacks %s\n%s", want, got)
+	}
+}

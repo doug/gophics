@@ -9,9 +9,9 @@
 //
 //	widget/capabilities_gen.go  — the Capabilities struct (embedded in Owner) plus
 //	                              a Ctx.<Cap>() accessor for each capability
-//	app/capabilities_gen.go     — wireCapabilities(owner, window): one type-assert
+//	widget/wire_gen.go          — wireCapabilities(owner, window): one type-assert
 //	                              per <X>Window, publishing what the window exposes
-//	shell/posted_gen.go         — Posted<Cap> wrappers that deliver every callback
+//	widget/posted_gen.go        — Posted<Cap> wrappers that deliver every callback
 //	                              through a post func (the UI-goroutine scheduler),
 //	                              so shell implementations may invoke callbacks
 //	                              from any goroutine and the documented

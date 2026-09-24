@@ -37,7 +37,10 @@ type Analyzer struct {
 }
 
 // New returns an Analyzer buffering window samples at the given rate. window is
-// rounded up to a power of two (the FFT requires one) and floored at 256.
+// rounded up to a power of two (the FFT requires one); anything below 256 —
+// including zero, the "I don't care" value — is replaced by DefaultWindow
+// rather than clamped, because a window that small answers no query usefully
+// and a caller who asked for one meant the default.
 func New(rate, window int) *Analyzer {
 	if window < 256 {
 		window = DefaultWindow
