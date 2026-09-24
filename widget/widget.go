@@ -29,12 +29,29 @@ type Stateful interface {
 }
 
 // State is the mutable companion of a Stateful widget.
+//
+// Platform capabilities are not available while the tree mounts. Init and the
+// first Build run inside the app runner before any window exists, so every
+// capability accessor on Ctx — Preferences, FilePicker, Camera, and the rest
+// of the generated set — returns nil during both. The shell wires them on the
+// first frame and the runner then marks the whole tree dirty, so the first
+// Build that can see them is the one after that; on a headless harness they
+// stay nil unless the test wires a window itself. Read capabilities in Build,
+// or re-check in a Ticker, and treat nil as "not yet" until a Build has seen
+// the capability non-nil: only then does nil mean "not on this platform".
+// A decision made once in Init, or on the first Build, is made while they are
+// all nil and is never revisited.
 type State interface {
 	Build(ctx Ctx) Widget
 	internalState
 }
 
 // Initer is implemented by State that wants a lifecycle hook after mount.
+//
+// Init runs once, when the State is created, and never again — RebuildAll only
+// marks the tree dirty. It runs before the shell has wired any capability
+// (see State), so Init is the place to allocate controllers and tickers, not
+// to ask the platform for anything: the answer there is always nil.
 type Initer interface{ Init(ctx Ctx) }
 
 // Disposer is implemented by State that wants a hook before unmount.
@@ -165,6 +182,23 @@ func (c Ctx) Clipboard() Clipboard { return c.el.owner.Clipboard }
 // The platform capability accessors — Ctx.Camera(), Ctx.Haptic(),
 // Ctx.FilePicker(), etc. — are generated from the shell.<X>Window interfaces
 // into capabilities_gen.go. See gen.go / internal/capgen/README.md.
+//
+// Each returns nil both when the platform lacks the capability and while the
+// tree is still mounting: they are wired on the first frame, after Init and
+// the first Build, and the tree is rebuilt when they arrive. The pattern that
+// works is to read them in Build and act the first time one is non-nil —
+//
+//	func (s *st) Build(ctx widget.Ctx) widget.Widget {
+//	    if s.store == nil { // not resolved yet, or not on this platform
+//	        if p := ctx.Preferences(); p != nil {
+//	            s.store = p
+//	            s.restore() // one-time work that needed the capability
+//	        }
+//	    }
+//	    ...
+//	}
+//
+// See State for the ordering in full.
 
 // Input returns per-frame poll-style input state (held keys, pointer) for games.
 func (c Ctx) Input() *input.State { return c.el.owner.Input }
