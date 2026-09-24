@@ -9,7 +9,12 @@ import (
 // A11yNode is one accessibility node in a flat, ID-addressed tree — the
 // shape platform screen-reader bridges (Android AccessibilityNodeProvider,
 // iOS UIAccessibilityElement, AccessKit) consume. Rects are in physical
-// pixels. Built from the semantics tree (core.Semantics).
+// pixels and are the part of the node actually on screen (SemNode.Visible):
+// a row half under a sticky header is published as the strip below it, and a
+// node clipped wholly out of view — scrolled under the fold, or on a page
+// slid past the window's edge — is left out of the tree altogether, as it
+// would be by a platform's own view hierarchy. Built from the semantics tree
+// (core.Semantics).
 //
 // It is an alias for shell.A11yNode so the tree the app flattens is the same
 // value a platform bridge publishes, with no copy or conversion between the
@@ -30,15 +35,24 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 	t := &a11yTree{byID: map[int]int{}, actions: map[int]func(){}}
 	sem := c.Semantics()
 	next := 0
+	// walk returns the node's ID, or -1 for a node it left out.
 	var walk func(n layout.SemNode, parent int) int
 	walk = func(n layout.SemNode, parent int) int {
+		if n.Offscreen {
+			// Nothing of it is on screen, so nothing of it can be explored to
+			// or focused. Published at its pre-clip rect it was handed to the
+			// screen reader as a tappable element under the header — and its
+			// rect being smaller than the header's, explore-by-touch preferred
+			// it. Its subtree is clipped with it.
+			return -1
+		}
 		id := next
 		next++
 		node := A11yNode{
 			ID: id, ParentID: parent,
 			Role: n.Role.String(), Label: n.Label, Value: n.Value, Hint: n.Hint,
-			X: int(n.Rect.Min.X * scale), Y: int(n.Rect.Min.Y * scale),
-			W: int(n.Rect.Dx() * scale), H: int(n.Rect.Dy() * scale),
+			X: int(n.Visible.Min.X * scale), Y: int(n.Visible.Min.Y * scale),
+			W: int(n.Visible.Dx() * scale), H: int(n.Visible.Dy() * scale),
 			Tappable: n.OnActivate != nil,
 			Focused:  n.Focused, Disabled: n.Disabled, Selected: n.Selected,
 			Checkable: n.Checked != nil, Checked: n.Checked != nil && *n.Checked,
@@ -52,8 +66,9 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 			t.actions[id] = n.OnActivate
 		}
 		for _, ch := range n.Children {
-			cid := walk(ch, id)
-			t.nodes[idx].Children = append(t.nodes[idx].Children, cid)
+			if cid := walk(ch, id); cid >= 0 {
+				t.nodes[idx].Children = append(t.nodes[idx].Children, cid)
+			}
 		}
 		return id
 	}
@@ -66,8 +81,9 @@ func (c *core) A11yTree(scale float32) []A11yNode {
 	t.byID[rootID] = rootIdx
 	next++
 	for _, n := range sem {
-		cid := walk(n, rootID)
-		t.nodes[rootIdx].Children = append(t.nodes[rootIdx].Children, cid)
+		if cid := walk(n, rootID); cid >= 0 {
+			t.nodes[rootIdx].Children = append(t.nodes[rootIdx].Children, cid)
+		}
 	}
 	c.a11y = t
 	return t.nodes
@@ -144,6 +160,9 @@ func (c *core) A11yHitTest(xPx, yPx int, scale float32) int {
 	best := -1
 	bestArea := float32(1e18)
 	for _, n := range c.a11y.nodes {
+		if n.W <= 0 || n.H <= 0 {
+			continue // no visible area: nothing to explore to
+		}
 		r := geom.RectXYWH(float32(n.X), float32(n.Y), float32(n.W), float32(n.H))
 		if r.Contains(p) && (n.Label != "" || n.Tappable) {
 			if a := r.Dx() * r.Dy(); a < bestArea {

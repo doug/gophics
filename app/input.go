@@ -132,6 +132,9 @@ func (c *core) Semantics() []layout.SemNode {
 // slice is scratch reused across calls; callers must not retain it.
 func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
 	needsLayout := c.Owner.NeedsBuild() // check before RootBox flushes builds
+	if needsLayout {
+		c.built = true
+	}
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil

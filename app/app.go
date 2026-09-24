@@ -242,6 +242,12 @@ type core struct {
 	// lastLayout is the size the tree was last laid out at; pointer-event hit
 	// testing re-lays-out only when it differs or a rebuild is pending.
 	lastLayout geom.Size
+	// built records that pending builds were flushed since the last frame
+	// published its accessibility tree — by the frame's own Layout, or by a
+	// pointer event's hit test between frames, which flushes them too. The
+	// frame uses it to republish semantics a rebuild may have changed
+	// without changing any pixel.
+	built bool
 
 	// framePanics counts recovered layout/paint panics (each drops its frame);
 	// lastPanicLog rate-limits their logging.
@@ -483,6 +489,9 @@ func (c *core) drainPosted() {
 // Layout flushes pending builds and lays out the tree at the given size.
 func (c *core) Layout(size geom.Size) layout.Box {
 	c.size = size
+	if c.Owner.NeedsBuild() {
+		c.built = true
+	}
 	box := c.Owner.RootBox()
 	if box == nil {
 		return nil
@@ -494,6 +503,7 @@ func (c *core) Layout(size geom.Size) layout.Box {
 	// region is never blank for a frame. Bounded to guard a pathological Build
 	// whose output keeps changing the constraints it sees.
 	for i := 0; i < 4 && c.Owner.NeedsBuild(); i++ {
+		c.built = true
 		box = c.Owner.RootBox() // FlushBuilds picks up the LayoutBuilder rebuild
 		box.Layout(layout.Tight(size))
 	}

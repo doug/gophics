@@ -136,11 +136,16 @@ func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
 	// Present via the GPU rasterizer or the CPU rasterizer, chosen per frame
 	// from the frame's Target (see present.go).
 	h.present(f, tgt, changed, damage)
-	if changed {
-		// Semantics can only have moved if the frame did, so republishing is
-		// gated on the same signal the renderer uses.
+	// Semantics move when the frame does, and change when a Build does — and
+	// a Build can change a label, a value or a checked state without painting
+	// a single different pixel. Gated on the renderer's signal alone, that
+	// left the screen reader with the old tree indefinitely. publishA11y diffs
+	// the flattened tree, so a build that changed no semantics still costs
+	// the platform nothing.
+	if changed || h.core.built {
 		h.publishA11y()
 	}
+	h.core.built = false
 	if in := h.core.Owner.Input; in != nil {
 		in.NewFrame() // clear per-frame key/pointer edges after the frame read them
 	}
