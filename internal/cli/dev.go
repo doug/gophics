@@ -81,9 +81,10 @@ func devRestart(o buildOpts) error {
 		if proc == nil || proc.Process == nil {
 			return
 		}
-		// SIGTERM asks the app to snapshot and exit; wait for it, but don't let
-		// a wedged child freeze the loop — force-kill after a grace period.
-		_ = proc.Process.Signal(syscall.SIGTERM)
+		// Ask the app to snapshot and exit (SIGTERM, or a console break on
+		// Windows); wait for it, but don't let a wedged child freeze the loop
+		// — force-kill after a grace period.
+		_ = askToSnapshot(proc.Process)
 		done := make(chan error, 1)
 		go func() { done <- proc.Wait() }()
 		select {
@@ -101,6 +102,7 @@ func devRestart(o buildOpts) error {
 			return
 		}
 		proc = exec.Command(bin)
+		ownConsoleGroup(proc) // so askToSnapshot can address it on Windows
 		proc.Env = append(append(os.Environ(), stateEnv), o.rendererEnv()...)
 		proc.Stdout, proc.Stderr, proc.Stdin = os.Stdout, os.Stderr, os.Stdin
 		if err := proc.Start(); err != nil {

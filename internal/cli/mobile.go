@@ -508,15 +508,27 @@ func androidHome() string {
 		}
 	}
 	home, _ := os.UserHomeDir()
-	for _, p := range []string{
-		filepath.Join(home, "Library", "Android", "sdk"), // macOS
-		filepath.Join(home, "Android", "Sdk"),            // Linux
-	} {
+	for _, p := range androidSDKCandidates(home, os.Getenv("LOCALAPPDATA")) {
 		if dirExists(p) {
 			return p
 		}
 	}
 	return ""
+}
+
+// androidSDKCandidates is where Android Studio puts the SDK when nothing says
+// otherwise, per OS. All of them are probed everywhere: a stat each, and the
+// paths cannot collide. Windows was missing, so `gophics run -p android` there
+// needed ANDROID_HOME set by hand even with Studio installed.
+func androidSDKCandidates(home, localAppData string) []string {
+	c := []string{
+		filepath.Join(home, "Library", "Android", "sdk"), // macOS
+		filepath.Join(home, "Android", "Sdk"),            // Linux
+	}
+	if localAppData != "" {
+		c = append(c, filepath.Join(localAppData, "Android", "Sdk")) // Windows
+	}
+	return c
 }
 
 // ensureAndroidSDK installs the pinned NDK + CMake if they're missing (the JNI
@@ -556,12 +568,18 @@ func ensureAndroidSDK(sdk string) error {
 }
 
 func sdkmanager(sdk string) string {
-	for _, p := range []string{
-		filepath.Join(sdk, "cmdline-tools", "latest", "bin", "sdkmanager"),
-		filepath.Join(sdk, "tools", "bin", "sdkmanager"),
+	for _, dir := range []string{
+		filepath.Join(sdk, "cmdline-tools", "latest", "bin"),
+		filepath.Join(sdk, "tools", "bin"),
 	} {
-		if fileExists(p) {
-			return p
+		// The Windows command-line tools ship sdkmanager.bat and no
+		// extension-less script, so looking for `sdkmanager` alone reported
+		// "sdkmanager not found" on every Windows machine. Both names are
+		// tried on every OS; a stat on a name that does not exist is the cost.
+		for _, name := range []string{"sdkmanager", "sdkmanager.bat"} {
+			if p := filepath.Join(dir, name); fileExists(p) {
+				return p
+			}
 		}
 	}
 	if p, err := exec.LookPath("sdkmanager"); err == nil {
@@ -577,7 +595,17 @@ func findJDK() (string, error) {
 			return h, nil
 		}
 	}
-	cands := []string{"/Applications/Android Studio.app/Contents/jbr/Contents/Home"}
+	// Android Studio's bundled JBR, wherever Studio installs itself. The
+	// Linux and Windows locations were missing, so on those a working Studio
+	// install still ended in "no JDK found" unless JAVA_HOME was set by hand.
+	cands := []string{
+		"/Applications/Android Studio.app/Contents/jbr/Contents/Home", // macOS
+		"/opt/android-studio/jbr",                                     // Linux (tarball)
+		"/usr/local/android-studio/jbr",
+	}
+	if pf := os.Getenv("ProgramFiles"); pf != "" {
+		cands = append(cands, filepath.Join(pf, "Android", "Android Studio", "jbr")) // Windows
+	}
 	if runtime.GOOS == "darwin" {
 		for _, v := range []string{"21", "17"} {
 			if out, err := exec.Command("/usr/libexec/java_home", "-v", v).Output(); err == nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 func cmdBuild(args []string) error {
@@ -51,7 +52,7 @@ func buildNative(o buildOpts) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	bin := filepath.Join(dir, "app")
+	bin := filepath.Join(dir, exeName(runtime.GOOS, "app"))
 	args := []string{"build", "-o", bin}
 	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
@@ -61,6 +62,20 @@ func buildNative(o buildOpts) (string, error) {
 		return "", fmt.Errorf("go build: %w", err)
 	}
 	return bin, nil
+}
+
+// exeName is the file name a native binary gets on goos.
+//
+// `go build -o <file>` writes exactly the name it is given, and on Windows a
+// name without an extension is one the CLI cannot then start: exec.Command
+// resolves its path through PATHEXT and reports "file does not exist" for a
+// bare `app`, so `gophics run` and `gophics dev` built a binary and then
+// could not launch it.
+func exeName(goos, name string) string {
+	if goos == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 // buildWeb compiles the wasm, copies the toolchain-matched wasm_exec.js, and

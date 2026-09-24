@@ -374,8 +374,8 @@ exactly where you were. See ui/app.go for the two conventions that enable it.
 ## Build
 
     gophics build -p web       # → build/web/  (wasm + html)
-    gophics build -p desktop   # → build/desktop/app  (single binary)
-    gophics build -p terminal  # → build/terminal/app
+    gophics build -p desktop   # → build/desktop/app  (single binary; app.exe on Windows)
+    gophics build -p terminal  # → build/terminal/app (app.exe on Windows)
 
 Run ` + "`gophics doctor`" + ` to check your toolchain.
 `
