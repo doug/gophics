@@ -54,12 +54,15 @@ func DecodeWAV(data []byte) (*WAVDecoder, error) {
 
 	for offset+8 <= len(data) {
 		chunkID := string(data[offset : offset+4])
-		chunkSize := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
 		chunkDataStart := offset + 8
 
-		if chunkDataStart+chunkSize > len(data) {
-			// Truncated chunk -- use what we have
-			chunkSize = len(data) - chunkDataStart
+		// Truncated chunk -- use what we have. The comparison is in 64 bits:
+		// on a 32-bit target a declared size of 2³¹ or more converted to int
+		// is negative, passes a `start+size > len` guard, and the slice below
+		// panics on a malformed file instead of returning an error.
+		chunkSize := len(data) - chunkDataStart
+		if declared := binary.LittleEndian.Uint32(data[offset+4 : offset+8]); uint64(declared) < uint64(chunkSize) {
+			chunkSize = int(declared)
 		}
 
 		switch chunkID {

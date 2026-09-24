@@ -44,10 +44,15 @@ func Decode(b []byte) (pcm []int16, sampleRate int, err error) {
 	var data []byte
 	for off := 12; off+8 <= len(b); {
 		id := string(b[off : off+4])
-		sz := int(binary.LittleEndian.Uint32(b[off+4 : off+8]))
 		body := off + 8
-		if body+sz > len(b) {
-			sz = len(b) - body
+		// A chunk that claims more than the file has is truncated to what is
+		// there. The comparison is in 64 bits: on a 32-bit target a declared
+		// size of 2³¹ or more converted to int is negative, passes a
+		// `body+sz > len(b)` guard, and the slice below panics on a malformed
+		// file instead of returning an error.
+		sz := len(b) - body
+		if declared := binary.LittleEndian.Uint32(b[off+4 : off+8]); uint64(declared) < uint64(sz) {
+			sz = int(declared)
 		}
 		switch id {
 		case "fmt ":

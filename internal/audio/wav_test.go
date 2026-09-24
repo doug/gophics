@@ -388,3 +388,22 @@ func assertNear(t *testing.T, label string, got, want float32, epsilon float64) 
 		t.Errorf("%s = %v, want %v (diff %v > epsilon %v)", label, got, want, diff, epsilon)
 	}
 }
+
+// A chunk that declares more bytes than the file holds is truncated to what
+// is there. The guard used to compare an int-converted size, which on a
+// 32-bit target turns 2³¹ and above negative, passes the bound, and panics
+// slicing past the end; the fuzz test only ever ran on 64-bit hosts. The
+// comparison is now in 64 bits on every target, and this pins the behaviour
+// the fix guarantees: a huge declared size decodes as the bytes present.
+func TestDecodeWAV_HugeDeclaredChunkIsTruncated(t *testing.T) {
+	wav := buildWAV(1, 1, 44100, 16, []byte{0x00, 0x40, 0x00, 0xC0})
+	// The data chunk's size field sits after RIFF(12) + fmt(24) + "data".
+	wav[40], wav[41], wav[42], wav[43] = 0xFF, 0xFF, 0xFF, 0xFF
+	dec, err := DecodeWAV(wav)
+	if err != nil {
+		t.Fatalf("DecodeWAV: %v", err)
+	}
+	if got := len(readAllSamples(t, dec)); got != 2 {
+		t.Errorf("decoded %d samples, want the 2 actually present", got)
+	}
+}

@@ -65,3 +65,20 @@ func TestWAVStereoDownmix(t *testing.T) {
 		}
 	}
 }
+
+// A chunk that declares more bytes than the file holds is truncated to what
+// is there. The guard used to compare an int-converted size, which on a
+// 32-bit target turns 2³¹ and above negative, passes the bound, and panics
+// slicing past the end; the fuzz test only ever ran on 64-bit hosts. The
+// comparison is now in 64 bits on every target.
+func TestWAVHugeDeclaredChunkIsTruncated(t *testing.T) {
+	wav := Encode([]int16{1, 2, 3}, 44100)
+	wav[40], wav[41], wav[42], wav[43] = 0xFF, 0xFF, 0xFF, 0xFF // data chunk size
+	got, _, err := Decode(wav)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Errorf("decoded %d samples, want the 3 actually present", len(got))
+	}
+}
