@@ -35,6 +35,7 @@
 package web
 
 import (
+	"fmt"
 	"syscall/js"
 
 	"github.com/doug/gophics/shell"
@@ -134,12 +135,30 @@ func (a *webA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
 	// mirror instead of announcing an unlabeled graphic.
 	a.setCanvasHidden(true)
 
+	// Node bounds are physical pixels; describeNode turns them into logical
+	// ones, and the host is then placed and scaled to match the canvas's
+	// on-screen box (see canvasBox) — resize offsets the canvas by the host
+	// page's top inset and the letterbox margins and scales it under
+	// ScaleToFit, and a mirror pinned to the page origin in raw logical
+	// pixels sat off the content it described by exactly those amounts.
 	scale := a.win.dpr
 	if scale <= 0 {
 		scale = 1
 	}
+	left, top, fit := a.win.canvasBox()
+	style := host.Get("style")
+	style.Set("position", "fixed")
+	style.Set("left", px(left))
+	style.Set("top", px(top))
+	style.Set("transformOrigin", "0 0")
+	style.Set("transform", fmt.Sprintf("scale(%g)", fit))
+
+	focused := js.Null()
 	for _, n := range nodes {
 		a.els[n.ID] = a.element(n, scale, activate)
+		if n.Focused {
+			focused = a.els[n.ID]
+		}
 	}
 	// Parent each element under its parent's element so the AT walks the same
 	// hierarchy the widget tree has; orphans fall back to the host.
@@ -153,6 +172,14 @@ func (a *webA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
 			parent = a.els[n.ParentID]
 		}
 		parent.Call("appendChild", a.els[n.ID])
+	}
+	// Keep the AT's focus on the node gophics considers focused, so tabbing
+	// through the mirror and typing into the app agree. Only now: focus() on
+	// an element that is not yet in the document is a no-op, so doing it in
+	// element(), before the append pass, never focused anything and every
+	// tree rebuild dropped screen-reader focus.
+	if focused.Truthy() {
+		focused.Call("focus", map[string]any{"preventScroll": true})
 	}
 }
 
@@ -185,11 +212,7 @@ func (a *webA11y) element(n shell.A11yNode, scale float64, activate func(id int)
 		a.funcs = append(a.funcs, fn)
 		el.Call("addEventListener", "click", fn)
 	}
-	if d.Focus {
-		// Keep the AT's focus on the node gophics considers focused, so
-		// tabbing through the mirror and typing into the app agree.
-		el.Call("focus", map[string]any{"preventScroll": true})
-	}
+	// d.Focus is acted on by SetTree once the element is in the document.
 	return el
 }
 

@@ -219,10 +219,12 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		}
 	})
 	onResize := func(js.Value) {
-		w.resize()
+		changed := w.resize()
 		refreshRect()
-		h.Event(w, shell.Resize{Size: w.logical, Scale: float32(w.dpr)})
-		w.Invalidate()
+		if changed {
+			h.Event(w, shell.Resize{Size: w.logical, Scale: float32(w.dpr)})
+			w.Invalidate()
+		}
 	}
 	listen(js.Global(), "resize", onResize)
 	listen(doc, "scroll", func(js.Value) { refreshRect() })
@@ -376,7 +378,12 @@ type window struct {
 	// fit factor when a design size is in play. Everything downstream derives
 	// the backing store from logical*dpr, so folding fit in here is all that is
 	// needed to render the scaled view crisply.
-	dpr        float64
+	dpr float64
+	// backing and box are what resize last applied to the canvas — its
+	// bitmap size and its CSS size/margins — so an unchanged value is not
+	// written again (writing the bitmap size clears the canvas).
+	backing    geom.Size
+	box        string
 	rafPending bool
 	rafFunc    js.Func
 	lastNow    float64
@@ -401,8 +408,12 @@ func (w *window) watchDarkMode() {
 	}))
 }
 
-func (w *window) resize() {
+// resize re-derives the logical size, device scale and canvas box from the
+// viewport, applying them to the canvas only when they changed, and reports
+// whether anything did.
+func (w *window) resize() (changed bool) {
 	win := js.Global()
+	prevLogical, prevDPR := w.logical, w.dpr
 	w.dpr = win.Get("devicePixelRatio").Float()
 
 	// Prefer visualViewport: on mobile it reports the area actually visible,
@@ -445,28 +456,61 @@ func (w *window) resize() {
 		w.logical = geom.Size{W: float32(lw), H: float32(lh)}
 	}
 
-	w.canvas.Set("width", int(float64(w.logical.W)*w.dpr))
-	w.canvas.Set("height", int(float64(w.logical.H)*w.dpr))
-
-	// Pin the displayed size explicitly. The stylesheet asks for 100vw/100vh,
-	// and on mobile 100vh is the *large* viewport — the height with the address
-	// bar hidden — while the measurement above is the height visible right now.
-	// Those differ by roughly the address bar, so the browser stretches a frame
-	// drawn for the smaller height across the taller box, and every touch lands
-	// further from where it was aimed the further down the screen it is.
-	// Horizontally nothing goes wrong, because 100vw and innerWidth agree —
-	// which is exactly the reported symptom.
-	style := w.canvas.Get("style")
-	style.Set("width", fmt.Sprintf("%gpx", cssW))
-	style.Set("height", fmt.Sprintf("%gpx", cssH))
+	// Only touch the canvas when something actually changed. Assigning a
+	// canvas dimension clears its bitmap even when the value is the same, and
+	// this runs on every visualViewport scroll as well as on resize — so a
+	// pinch-zoom pan or the soft keyboard animating blanked the canvas until
+	// the next frame painted, a visible flash, and sent the app a spurious
+	// Resize on top.
+	backing := geom.Size{W: float32(int(float64(w.logical.W) * w.dpr)), H: float32(int(float64(w.logical.H) * w.dpr))}
 	// Centre the letterbox, below any reserved strip. Harmless when the canvas
 	// fills the viewport and nothing is reserved.
 	mv := math.Max(0, (lh-cssH)/2)
 	mh := math.Max(0, (lw-cssW)/2)
-	style.Set("margin", fmt.Sprintf("%gpx %gpx %gpx %gpx", insetTop+mv, mh, mv, mh))
-	if w.pres != nil {
+	box := fmt.Sprintf("%gpx %gpx %gpx %gpx %gpx %gpx", cssW, cssH, insetTop+mv, mh, mv, mh)
+	changed = w.logical != prevLogical || w.dpr != prevDPR || backing != w.backing
+	if backing != w.backing {
+		w.backing = backing
+		w.canvas.Set("width", int(backing.W))
+		w.canvas.Set("height", int(backing.H))
+	}
+	if box != w.box {
+		w.box = box
+		// Pin the displayed size explicitly. The stylesheet asks for
+		// 100vw/100vh, and on mobile 100vh is the *large* viewport — the
+		// height with the address bar hidden — while the measurement above is
+		// the height visible right now. Those differ by roughly the address
+		// bar, so the browser stretches a frame drawn for the smaller height
+		// across the taller box, and every touch lands further from where it
+		// was aimed the further down the screen it is. Horizontally nothing
+		// goes wrong, because 100vw and innerWidth agree — which is exactly
+		// the reported symptom.
+		style := w.canvas.Get("style")
+		style.Set("width", fmt.Sprintf("%gpx", cssW))
+		style.Set("height", fmt.Sprintf("%gpx", cssH))
+		style.Set("margin", fmt.Sprintf("%gpx %gpx %gpx %gpx", insetTop+mv, mh, mv, mh))
+	}
+	if changed && w.pres != nil {
 		w.pres.onResize()
 	}
+	return changed
+}
+
+// canvasBox returns the canvas's on-screen box, read fresh: its top-left in
+// viewport CSS pixels and the factor from logical to CSS pixels — 1 unless a
+// design size is being scaled to fit. Anything laid over the canvas in the
+// DOM (the accessibility mirror, a web view) has to be placed through this,
+// not from logical coordinates: resize offsets the canvas by the host's top
+// inset and the letterbox margins, and scales it under ScaleToFit, so raw
+// logical pixels land the overlay off the content it belongs to.
+func (w *window) canvasBox() (left, top, fit float64) {
+	r := w.canvas.Call("getBoundingClientRect")
+	left, top = r.Get("left").Float(), r.Get("top").Float()
+	fit = 1
+	if cw := r.Get("width").Float(); cw > 0 && w.logical.W > 0 {
+		fit = cw / float64(w.logical.W)
+	}
+	return left, top, fit
 }
 
 // hostTopInset reads --gophics-top-inset off the root element: the height a
@@ -526,7 +570,24 @@ func (w *window) ClipboardRead() (string, error) {
 }
 
 func (w *window) ClipboardWrite(text string) error {
-	js.Global().Get("navigator").Get("clipboard").Call("writeText", text)
+	// navigator.clipboard exists only in a secure context. Plain http:// on a
+	// LAN — the usual way a phone is pointed at a dev build — leaves it
+	// undefined, and Value.Call on undefined panics, which would have killed
+	// the app on a copy.
+	cb := js.Global().Get("navigator").Get("clipboard")
+	if !cb.Truthy() {
+		return errors.New("web: clipboard unavailable (insecure context?)")
+	}
+	// The write is a promise; it cannot fail synchronously, but an unhandled
+	// rejection (the document not focused, permission denied) logs an error
+	// to the console, so it is caught and dropped. One callback for both
+	// outcomes: exactly one of them runs, and it releases the func.
+	var settled js.Func
+	settled = js.FuncOf(func(js.Value, []js.Value) any {
+		settled.Release()
+		return nil
+	})
+	cb.Call("writeText", text).Call("then", settled, settled)
 	return nil
 }
 
