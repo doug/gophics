@@ -83,6 +83,9 @@ type bindData struct {
 //   - Otherwise the app is a plain main package, and the bind package is
 //     generated under its build/ directory.
 func resolveBindPkg(o buildOpts) (string, error) {
+	if o.bindPkg != "" {
+		return o.bindPkg, nil
+	}
 	name, err := packageName(o.pkg)
 	if err != nil {
 		return "", err

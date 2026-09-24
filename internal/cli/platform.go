@@ -53,6 +53,11 @@ type buildOpts struct {
 	device   bool   // run on a connected physical device rather than a simulator/emulator
 	serial   string // adb serial to target when several Android devices are attached
 	team     string // Apple Developer team ID for device signing ("" = detect)
+	// bindPkg is the resolved bind package, filled in by runMobile so the
+	// several steps that need it (permission scan, framework name, the bind
+	// itself) share one answer rather than each running go list twice and
+	// regenerating build/bind. "" means not resolved yet.
+	bindPkg string
 }
 
 // addBuildFlags registers the flags common to build/run/dev on fs. platName is

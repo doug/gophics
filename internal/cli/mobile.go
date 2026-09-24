@@ -105,6 +105,14 @@ const bridgePkg = "github.com/doug/gophics/shell/mobile"
 // under build/, so `gophics run -p ios` works on an app that is nothing but a
 // main.go and a ui package.
 func runMobile(o buildOpts) error {
+	// Once, up front. The permission scan, the framework name and the bind
+	// each need it, and resolving it costs two go list runs plus a rewrite of
+	// build/bind — three times over was slow and noisy for one answer.
+	bindPkg, err := resolveBindPkg(o)
+	if err != nil {
+		return err
+	}
+	o.bindPkg = bindPkg
 	host, err := ensureHost(o)
 	if err != nil {
 		return err
