@@ -86,3 +86,38 @@ func TestHardwareCapture(t *testing.T) {
 	}
 	t.Logf("captured %dx%d, %d%% non-black", w, h, lit*100/px)
 }
+
+// TestHardwareOpenStopCycles opens and stops the camera repeatedly, with a
+// Stop that lands while frames are flowing and one that lands before the
+// first frame has arrived.
+//
+// Same opt-in as above. It is here because teardown used to race the frame
+// path on two of the three backends: Linux unmapped the V4L2 ring while the
+// stream goroutine could still be converting out of it, and Windows released
+// the source reader while that goroutine was blocked inside ReadSample on it.
+// Neither shows up in a single open/capture/stop, and both are the kind of
+// crash a preview page that is opened and closed a few times produces. macOS
+// leaked a session, an output, a delegate and a queue per cycle instead.
+func TestHardwareOpenStopCycles(t *testing.T) {
+	if os.Getenv("GOPHICS_CAMERA_HW") == "" {
+		t.Skip("set GOPHICS_CAMERA_HW=1 to run against a real camera")
+	}
+	for i := 0; i < 6; i++ {
+		c, err := Open(Options{Facing: FacingFront, Width: 640})
+		if err != nil {
+			t.Fatalf("cycle %d: open: %v", i, err)
+		}
+		if i%2 == 0 {
+			// Let frames flow so Stop interrupts a live stream.
+			deadline := time.Now().Add(3 * time.Second)
+			for c.Frame() == nil && time.Now().Before(deadline) {
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+		c.Stop()
+		c.Stop() // idempotent
+		if c.Frame() != nil && i%2 != 0 {
+			t.Logf("cycle %d: a frame arrived before Stop", i)
+		}
+	}
+}

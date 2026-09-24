@@ -158,7 +158,13 @@ type Capture struct {
 
 	reader iface
 	source iface
-	done   chan struct{}
+	done   chan struct{} // closed by Stop: the stream goroutine's cue to exit
+	// finished is closed by the stream goroutine on its way out. Stop waits
+	// on it before releasing the reader: the goroutine is usually blocked in
+	// a synchronous ReadSample on that very object, and releasing a COM
+	// object under an in-flight call — then nilling the field the next loop
+	// iteration dereferences — is two crashes, not one.
+	finished chan struct{}
 }
 
 // Open starts capture on a camera.
@@ -184,7 +190,7 @@ func Open(o Options) (*Capture, error) {
 		release(source)
 		return nil, err
 	}
-	c := &Capture{reader: reader, source: source, done: make(chan struct{})}
+	c := &Capture{reader: reader, source: source, done: make(chan struct{}), finished: make(chan struct{})}
 	go c.stream(w, h, stride)
 	return c, nil
 }
@@ -321,6 +327,7 @@ func configure(reader iface) (w, h, stride int, err error) {
 }
 
 func (c *Capture) stream(w, h, stride int) {
+	defer close(c.finished)
 	for {
 		select {
 		case <-c.done:
@@ -426,6 +433,9 @@ func (c *Capture) Stop() {
 		return
 	}
 	close(c.done)
+	// Join before releasing: ReadSample returns on the next frame, or with an
+	// error once the device is gone, and only then is the reader nobody's.
+	<-c.finished
 	release(c.reader)
 	release(c.source)
 	c.reader, c.source = nil, nil

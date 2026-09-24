@@ -206,7 +206,11 @@ type Capture struct {
 
 	fd   int
 	bufs [][]byte
-	done chan struct{}
+	done chan struct{} // closed by Stop: the stream goroutine's cue to exit
+	// finished is closed by the stream goroutine on its way out. Stop waits
+	// on it before unmapping the ring: the goroutine reads the mmapped
+	// buffers in convert, and a Stop that unmapped them under it faulted.
+	finished chan struct{}
 }
 
 // Open starts capture on a camera.
@@ -232,7 +236,7 @@ func Open(o Options) (*Capture, error) {
 	if err != nil {
 		return nil, fmt.Errorf("camera: opening %s: %w", path, err)
 	}
-	c := &Capture{fd: fd, done: make(chan struct{})}
+	c := &Capture{fd: fd, done: make(chan struct{}), finished: make(chan struct{})}
 
 	width := o.Width
 	if width <= 0 {
@@ -323,6 +327,7 @@ func (c *Capture) mapBuffers() error {
 
 // stream owns the ring until Stop.
 func (c *Capture) stream(format uint32, w, h, stride int) {
+	defer close(c.finished)
 	fds := []unix.PollFd{{Fd: int32(c.fd), Events: unix.POLLIN}}
 	for {
 		select {
@@ -466,6 +471,11 @@ func (c *Capture) Stop() {
 	close(c.done)
 	typ := int32(bufTypeVideoCapture)
 	_ = ioctl(c.fd, vidiocStreamoff, unsafe.Pointer(&typ))
+	// Join before releasing. The goroutine is in Poll (200 ms timeout), in a
+	// DQBUF that STREAMOFF makes fail, or in convert reading a ring buffer —
+	// and the last of those is why the buffers cannot be unmapped, nor the
+	// fd closed, until it has seen done and returned.
+	<-c.finished
 	c.release()
 }
 

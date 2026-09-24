@@ -42,7 +42,6 @@ const (
 // that would need converting per frame.
 const pixelFormat32BGRA = 0x42475241 // 'BGRA'
 
-// Options configure a capture session.
 // Authorization reports whether the process may use the camera.
 //
 // It does not prompt. On macOS the prompt is raised by opening the device, so
@@ -67,7 +66,11 @@ func Authorization() Status {
 
 // Capture is a running preview. Frame returns the most recent image.
 type Capture struct {
+	// All four are owned (+1) by the Capture from Open until Stop releases
+	// them. A preview page that opened and closed the camera repeatedly used
+	// to leak a session, an output, a delegate and a dispatch queue per visit.
 	session  objc.ID
+	output   objc.ID
 	delegate objc.ID
 	queue    uintptr
 
@@ -80,6 +83,8 @@ var (
 
 	symDispatchQueueCreate unsafe.Pointer
 	cifDispatchQueueCreate types.CallInterface
+	symDispatchRelease     unsafe.Pointer
+	cifDispatchRelease     types.CallInterface
 
 	symSampleBufferGetImageBuffer unsafe.Pointer
 	cifSampleBufferGetImageBuffer types.CallInterface
@@ -120,6 +125,9 @@ func load() error {
 	}
 	if symDispatchQueueCreate, err = ffi.GetSymbol(sys, "dispatch_queue_create"); err != nil {
 		return fmt.Errorf("camera: dispatch_queue_create: %w", err)
+	}
+	if symDispatchRelease, err = ffi.GetSymbol(sys, "dispatch_release"); err != nil {
+		return fmt.Errorf("camera: dispatch_release: %w", err)
 	}
 
 	cm, err := ffi.LoadLibrary("/System/Library/Frameworks/CoreMedia.framework/CoreMedia")
@@ -162,6 +170,10 @@ func load() error {
 		[]*types.TypeDescriptor{ptr}); err != nil {
 		return err
 	}
+	if err := ffi.PrepareCallInterface(&cifDispatchRelease, types.DefaultCall, types.VoidTypeDescriptor,
+		[]*types.TypeDescriptor{ptr}); err != nil {
+		return err
+	}
 	// CVReturn CVPixelBufferLockBaseAddress(CVPixelBufferRef, CVOptionFlags)
 	if err := ffi.PrepareCallInterface(&cifCVLock, types.DefaultCall, types.SInt32TypeDescriptor,
 		[]*types.TypeDescriptor{ptr, u64}); err != nil {
@@ -197,17 +209,32 @@ func Open(o Options) (*Capture, error) {
 	// for a long time indistinguishable from one. AVCaptureDevice knows the
 	// difference, so ask it rather than leaving the caller to guess from an
 	// empty frame.
-	var errOut objc.ID
+	//
+	// The NSError** out-parameter is NULL, which the API allows. It used to
+	// be the address of a stack local passed as a uintptr — the goffi hazard
+	// the audio drivers moved every out-parameter onto the heap for: the
+	// goroutine stack can move during the call, and on the failure path the
+	// callee writes an NSError* through the stale address. Nothing ever read
+	// the error, so the pointer bought nothing but the risk.
 	input := objc.Class("AVCaptureDeviceInput").Send("deviceInputWithDevice:error:",
-		objc.Obj(dev), objc.Obj(objc.ID(uintptr(unsafe.Pointer(&errOut)))))
+		objc.Obj(dev), objc.Obj(0))
 	if !input.Valid() {
 		return nil, errors.New("camera: could not open the device for capture")
 	}
 
+	// Everything alloc'd from here is this function's until the Capture takes
+	// it over, and is released on every error path. Each failed Open used to
+	// leak the session and output it had built so far.
+	ok := false
 	session := objc.Class("AVCaptureSession").Send("alloc").Send("init")
 	if !session.Valid() {
 		return nil, errors.New("camera: could not create a capture session")
 	}
+	defer func() {
+		if !ok {
+			session.SendVoid("release")
+		}
+	}()
 	if !session.SendBool("canAddInput:", objc.Obj(input)) {
 		return nil, errors.New("camera: the session refused the camera input")
 	}
@@ -217,6 +244,11 @@ func Open(o Options) (*Capture, error) {
 	if !out.Valid() {
 		return nil, errors.New("camera: could not create the video output")
 	}
+	defer func() {
+		if !ok {
+			out.SendVoid("release")
+		}
+	}()
 	// One known pixel layout, and drop rather than queue: a preview wants the
 	// newest frame, not every frame.
 	settings := objc.Class("NSMutableDictionary").Send("dictionary")
@@ -235,7 +267,7 @@ func Open(o Options) (*Capture, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Capture{session: session}
+	c := &Capture{session: session, output: out}
 	c.delegate = cls.New()
 	if !c.delegate.Valid() {
 		return nil, errors.New("camera: could not create the frame delegate")
@@ -248,12 +280,15 @@ func Open(o Options) (*Capture, error) {
 	var q uintptr
 	if _, err := ffi.CallFunction(&cifDispatchQueueCreate, symDispatchQueueCreate,
 		unsafe.Pointer(&q), []unsafe.Pointer{unsafe.Pointer(&np), unsafe.Pointer(&nilAttr)}); err != nil {
+		live.Delete(c.delegate)
+		c.delegate.SendVoid("release")
 		return nil, fmt.Errorf("camera: dispatch_queue_create: %w", err)
 	}
 	c.queue = q
 	out.SendVoid("setSampleBufferDelegate:queue:", objc.Obj(c.delegate), objc.Obj(objc.ID(q)))
 
 	session.SendVoid("startRunning")
+	ok = true
 	return c, nil
 }
 
@@ -405,7 +440,31 @@ func (c *Capture) Stop() {
 	}
 
 	if c.session.Valid() {
-		c.session.SendVoid("stopRunning")
+		c.session.SendVoid("stopRunning") // blocks until the session has stopped
+	}
+	// Detach the delegate before releasing it. The output does not retain
+	// its delegate, so it has to stop naming the object before the object
+	// goes away; stopRunning has already drained the frames in flight.
+	if c.output.Valid() {
+		c.output.SendVoid("setSampleBufferDelegate:queue:", objc.Obj(0), objc.Obj(0))
 	}
 	live.Delete(c.delegate)
+
+	// Each of these was +1 from Open. The session releases the input and
+	// output it retained itself; the output here is Open's own alloc.
+	if c.session.Valid() {
+		c.session.SendVoid("release")
+	}
+	if c.output.Valid() {
+		c.output.SendVoid("release")
+	}
+	if c.delegate.Valid() {
+		c.delegate.SendVoid("release")
+	}
+	if c.queue != 0 {
+		q := c.queue
+		_, _ = ffi.CallFunction(&cifDispatchRelease, symDispatchRelease, nil,
+			[]unsafe.Pointer{unsafe.Pointer(&q)})
+	}
+	c.session, c.output, c.delegate, c.queue = 0, 0, 0, 0
 }
