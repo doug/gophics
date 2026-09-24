@@ -74,3 +74,31 @@ func TestShapedGlyphsCarryPositions(t *testing.T) {
 		t.Error("shaped glyphs have no X positions; CaretX cannot use them")
 	}
 }
+
+// IndexAt is CaretX's inverse, so on an RTL line a click has to land on the
+// caret CaretX would draw nearest to it. The LTR-only rule — left half of a
+// glyph means "before its cluster" — puts the caret a full glyph away from the
+// click, because "before" an RTL glyph is its right edge.
+func TestIndexAtRTL(t *testing.T) {
+	l := rtlLine10(5) // cluster 0 is the rightmost glyph, at X=40..50
+	for x, want := range map[float32]int{
+		48: 0, // right half of cluster 0: before it, caret at 50
+		42: 1, // left half of cluster 0: after it, caret at 40
+		18: 3, // right half of cluster 3 (X=10..20): caret at 20
+		12: 4, // left half of cluster 3: caret at 10
+		-5: 5, // left of the line: the end of the text
+		60: 0, // right of the line: the start of the text
+	} {
+		got := l.IndexAt(x)
+		if got != want {
+			t.Errorf("IndexAt(%v) = %d (CaretX %v), want %d (CaretX %v)", x, got, l.CaretX(got), want, l.CaretX(want))
+		}
+	}
+	// And the LTR line still answers the way it always has.
+	ltr := line10(5)
+	for x, want := range map[float32]int{-5: 0, 4: 0, 6: 1, 14: 1, 16: 2, 60: 5} {
+		if got := ltr.IndexAt(x); got != want {
+			t.Errorf("LTR IndexAt(%v) = %d, want %d", x, got, want)
+		}
+	}
+}

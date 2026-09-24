@@ -82,19 +82,23 @@ func (e *Editor) Insert(s string) {
 }
 
 // DeleteBackward deletes the selection, or the grapheme before the caret.
-func (e *Editor) DeleteBackward() {
-	e.snapshot(opDelete)
-	if !e.HasSelection() {
-		e.anchor = e.prevBoundary(e.caret)
-	}
-	e.insertRaw("")
-}
+func (e *Editor) DeleteBackward() { e.deleteTo(e.prevBoundary(e.caret)) }
 
 // DeleteForward deletes the selection, or the grapheme after the caret.
-func (e *Editor) DeleteForward() {
+func (e *Editor) DeleteForward() { e.deleteTo(e.nextBoundary(e.caret)) }
+
+// deleteTo deletes the selection, or the range between the caret and idx, as
+// one undo step. When there is nothing to delete — Backspace at the start of
+// a field, Delete at its end — it records nothing: a snapshot per no-op would
+// fill the history with identical entries, and the next Undo would then appear
+// to do nothing.
+func (e *Editor) deleteTo(idx int) {
+	if !e.HasSelection() && idx == e.caret {
+		return
+	}
 	e.snapshot(opDelete)
 	if !e.HasSelection() {
-		e.anchor = e.nextBoundary(e.caret)
+		e.anchor = idx
 	}
 	e.insertRaw("")
 }
@@ -150,9 +154,7 @@ func (e *Editor) SelectWordAt(idx int) {
 	if n == 0 {
 		return
 	}
-	if idx > n {
-		idx = n
-	}
+	idx = clampIdx(idx, n)
 	lo, hi := idx, idx
 	for lo > 0 && isWordRune(e.runes[lo-1]) {
 		lo--
@@ -276,21 +278,43 @@ func (l Line) rtlAt(i int) bool {
 }
 
 // IndexAt returns the rune index whose caret position is nearest to x
-// (for click-to-position). Inverse of CaretX under the same LTR caveat.
+// (for click-to-position): the inverse of CaretX.
+//
+// Each glyph offers two caret positions — before its cluster and after it, in
+// reading order — and the half of the glyph x falls in picks the nearer one.
+// Which edge is "before" depends on the glyph's direction: in a left-to-right
+// run it is the left edge, in a right-to-left run the right one (see CaretX).
+// An LTR-only rule puts a click on the left half of an RTL glyph *before* the
+// cluster, whose caret CaretX then draws at the glyph's right edge — a full
+// glyph away from where the user clicked.
 func (l Line) IndexAt(x float32) int {
-	if x <= 0 || len(l.Glyphs) == 0 {
+	if len(l.Glyphs) == 0 {
 		return 0
 	}
 	var pen float32
-	for _, g := range l.Glyphs {
+	for i, g := range l.Glyphs {
+		rtl := l.rtlAt(i)
 		if x < pen+g.Advance/2 {
+			// Left half: the caret at the glyph's left edge.
+			if rtl {
+				return l.nextCluster(g.Cluster) - l.Start
+			}
 			return g.Cluster - l.Start
 		}
 		pen += g.Advance
 		if x < pen {
-			// Past the midpoint: caret after this cluster.
+			// Right half: the caret at the glyph's right edge.
+			if rtl {
+				return g.Cluster - l.Start
+			}
 			return l.nextCluster(g.Cluster) - l.Start
 		}
+	}
+	// Past the last glyph: the caret at the line's right edge, which is the
+	// start of the text on an RTL line and the end on an LTR one (CaretX
+	// places both there).
+	if l.RTL {
+		return 0
 	}
 	return l.End - l.Start
 }
@@ -387,23 +411,11 @@ func (e *Editor) MoveWordStart(extend bool) {
 
 // DeleteWordBackward deletes from the caret to the start of the previous word,
 // or the selection if there is one.
-func (e *Editor) DeleteWordBackward() {
-	e.snapshot(opDelete)
-	if !e.HasSelection() {
-		e.anchor = e.wordStartBefore(e.caret)
-	}
-	e.insertRaw("")
-}
+func (e *Editor) DeleteWordBackward() { e.deleteTo(e.wordStartBefore(e.caret)) }
 
 // DeleteWordForward deletes from the caret to the end of the next word, or the
 // selection if there is one.
-func (e *Editor) DeleteWordForward() {
-	e.snapshot(opDelete)
-	if !e.HasSelection() {
-		e.anchor = e.wordEndAfter(e.caret)
-	}
-	e.insertRaw("")
-}
+func (e *Editor) DeleteWordForward() { e.deleteTo(e.wordEndAfter(e.caret)) }
 
 // lineStart is the index just after the newline before idx, or 0.
 func (e *Editor) lineStart(idx int) int {
@@ -433,27 +445,17 @@ func (e *Editor) LineEnd(extend bool) { e.MoveTo(e.lineEnd(e.caret), extend) }
 
 // DeleteToLineStart deletes from the caret to the start of its line — Cmd+
 // Backspace on a Mac. A selection is deleted instead.
-func (e *Editor) DeleteToLineStart() {
-	e.snapshot(opDelete)
-	if !e.HasSelection() {
-		e.anchor = e.lineStart(e.caret)
-	}
-	e.insertRaw("")
-}
+func (e *Editor) DeleteToLineStart() { e.deleteTo(e.lineStart(e.caret)) }
 
 // DeleteToLineEnd deletes from the caret to the end of its line — Ctrl+K. On
 // an empty remainder it deletes the newline itself, as Emacs does, so
 // repeated Ctrl+K eats lines.
 func (e *Editor) DeleteToLineEnd() {
-	e.snapshot(opDelete)
-	if !e.HasSelection() {
-		end := e.lineEnd(e.caret)
-		if end == e.caret && end < len(e.runes) {
-			end++ // the newline
-		}
-		e.anchor = end
+	end := e.lineEnd(e.caret)
+	if end == e.caret && end < len(e.runes) {
+		end++ // the newline
 	}
-	e.insertRaw("")
+	e.deleteTo(end)
 }
 
 // SelectLineAt selects the whole line containing idx — a triple click.
@@ -494,15 +496,21 @@ func (e *Editor) snapshot(op editOp) {
 		e.lastCaret = e.caret // still contiguous; updated after the insert below
 		return
 	}
-	e.undo = append(e.undo, editSnapshot{append([]rune(nil), e.runes...), e.caret, e.anchor})
-	if len(e.undo) > maxUndo {
-		e.undo = e.undo[1:]
-	}
+	e.pushUndo()
 	e.redo = e.redo[:0]
 	e.lastOp = op
 }
 
 const maxUndo = 200
+
+// pushUndo records the current state as an undo step, dropping the oldest
+// once the history is full.
+func (e *Editor) pushUndo() {
+	e.undo = append(e.undo, editSnapshot{append([]rune(nil), e.runes...), e.caret, e.anchor})
+	if len(e.undo) > maxUndo {
+		e.undo = e.undo[1:]
+	}
+}
 
 // insertRaw is Insert without the undo bookkeeping.
 func (e *Editor) insertRaw(s string) {
@@ -543,7 +551,7 @@ func (e *Editor) Redo() bool {
 	if len(e.redo) == 0 {
 		return false
 	}
-	e.undo = append(e.undo, editSnapshot{append([]rune(nil), e.runes...), e.caret, e.anchor})
+	e.pushUndo()
 	snap := e.redo[len(e.redo)-1]
 	e.redo = e.redo[:len(e.redo)-1]
 	e.runes, e.caret, e.anchor = snap.runes, snap.caret, snap.anchor

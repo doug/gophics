@@ -129,3 +129,34 @@ func TestSelectWordAt(t *testing.T) {
 		t.Errorf("word at 10 = %q, want \"world_foo\"", got)
 	}
 }
+
+// A double-click that resolves to a negative index (a hit test left of the
+// text) must select the first word, not panic.
+func TestSelectWordAtNegativeIndex(t *testing.T) {
+	var e Editor
+	e.SetText("abc def")
+	e.SelectWordAt(-1)
+	if s, en := e.Selection(); s != 0 || en != 3 {
+		t.Errorf("SelectWordAt(-1) selected [%d,%d), want [0,3)", s, en)
+	}
+}
+
+// Backspace with nothing before the caret is not an edit, so it must not be
+// an undo step either: otherwise mashing Backspace in an empty field fills the
+// history with no-ops and the next Undo appears to do nothing.
+func TestDeleteNoOpIsNotAnUndoStep(t *testing.T) {
+	var e Editor
+	e.Insert("x")
+	e.DeleteBackward() // deletes x
+	for range 5 {
+		e.DeleteBackward() // nothing to delete
+		e.DeleteForward()
+		e.DeleteWordBackward()
+		e.DeleteWordForward()
+		e.DeleteToLineStart()
+		e.DeleteToLineEnd()
+	}
+	if !e.Undo() || e.Text() != "x" {
+		t.Fatalf("after Undo: %q, want %q (the no-op deletes must not push history)", e.Text(), "x")
+	}
+}

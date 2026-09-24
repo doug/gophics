@@ -278,11 +278,141 @@ func (s *Shaper) shapeRuns(runes []rune, size float32, base di.Direction) []shap
 		// to anchor them.
 		Direction: base,
 	}, fontmap{s})
+	if base == di.DirectionLTR {
+		inputs = splitNumbers(inputs, runes)
+	}
 	outs := make([]shaping.Output, len(inputs))
 	for i, in := range inputs {
 		outs[i] = s.hb.Shape(in)
 	}
 	return outs
+}
+
+// splitNumbers cuts a left-to-right run that follows right-to-left text where
+// its leading number ends, so the number can be reordered on its own.
+//
+// The segmenter splits runs by direction only, and a number inside Arabic or
+// Hebrew text in a left-to-right paragraph has the same direction as the Latin
+// that follows it — but not the same embedding level. UAX #9 gives the number
+// level 2 (it belongs to the RTL phrase around it) and the Latin level 0, and
+// rule L2 needs that boundary to reverse the phrase as one block. Without the
+// cut the number is shaped together with the Latin, and the Arabic words on
+// either side of it end up in the wrong order.
+func splitNumbers(inputs []shaping.Input, runes []rune) []shaping.Input {
+	out := make([]shaping.Input, 0, len(inputs))
+	for _, in := range inputs {
+		if in.Direction == di.DirectionLTR {
+			if strong := strongBefore(runes, in.RunStart); strong != bidi.L {
+				n := numericPrefix(runes[in.RunStart:in.RunEnd], strong == bidi.AL)
+				if n > 0 && n < in.RunEnd-in.RunStart {
+					head, tail := in, in
+					head.RunEnd = in.RunStart + n
+					tail.RunStart = head.RunEnd
+					out = append(out, head, tail)
+					continue
+				}
+			}
+		}
+		out = append(out, in)
+	}
+	return out
+}
+
+// strongBefore returns the class of the nearest strong character (L, R or AL)
+// before rune index i, or L when there is none: the start of an LTR paragraph
+// counts as L (UAX #9's sos).
+func strongBefore(runes []rune, i int) bidi.Class {
+	for i--; i >= 0; i-- {
+		p, _ := bidi.LookupRune(runes[i])
+		switch c := p.Class(); c {
+		case bidi.L, bidi.R, bidi.AL:
+			return c
+		}
+	}
+	return bidi.L
+}
+
+// numericPrefix returns how many leading runes of a run resolve to a number
+// (EN or AN) under UAX #9's weak-type rules W1–W6, for a run whose nearest
+// preceding strong character is R or AL — afterAL says which, because after
+// an Arabic letter European digits become Arabic numbers (W2), and Arabic
+// numbers do not absorb currency signs and other terminators (W5). Everything
+// after the number resolves to L or to a neutral at the paragraph level, so
+// the prefix is exactly the part that sits one level deeper.
+func numericPrefix(runes []rune, afterAL bool) int {
+	cls := make([]bidi.Class, len(runes))
+	for i, r := range runes {
+		p, _ := bidi.LookupRune(r)
+		c := p.Class()
+		switch c {
+		case bidi.NSM: // W1: a non-spacing mark takes the class before it
+			c = bidi.ON
+			if i > 0 {
+				c = cls[i-1]
+			}
+		case bidi.EN:
+			if afterAL {
+				c = bidi.AN // W2
+			}
+		}
+		cls[i] = c
+	}
+	// W4: a single separator between two numbers of one kind joins them.
+	for i := 1; i+1 < len(cls); i++ {
+		switch cls[i] {
+		case bidi.ES:
+			if cls[i-1] == bidi.EN && cls[i+1] == bidi.EN {
+				cls[i] = bidi.EN
+			}
+		case bidi.CS:
+			if cls[i-1] == cls[i+1] && (cls[i-1] == bidi.EN || cls[i-1] == bidi.AN) {
+				cls[i] = cls[i-1]
+			}
+		}
+	}
+	// W5: terminators adjacent to a European number become part of it.
+	for i := 0; i < len(cls); {
+		if cls[i] != bidi.ET {
+			i++
+			continue
+		}
+		j := i
+		for j < len(cls) && cls[j] == bidi.ET {
+			j++
+		}
+		if (i > 0 && cls[i-1] == bidi.EN) || (j < len(cls) && cls[j] == bidi.EN) {
+			for k := i; k < j; k++ {
+				cls[k] = bidi.EN
+			}
+		}
+		i = j
+	}
+	// W6 turns every separator still standing into a neutral, which is where
+	// the number ends.
+	n := 0
+	for n < len(cls) && (cls[n] == bidi.EN || cls[n] == bidi.AN || cls[n] == bidi.BN) {
+		n++
+	}
+	return n
+}
+
+// runLevel returns the UAX #9 embedding level of a shaped run within a
+// paragraph of the given base direction. Runs against the base direction sit
+// one level above it; a number that the bidi algorithm attached to preceding
+// RTL text in an LTR paragraph sits two above (see splitNumbers). Explicit
+// embeddings and isolates are not modelled, so levels never exceed 2.
+func runLevel(run *shaping.Output, runes []rune, base di.Direction) int {
+	if run.Direction == di.DirectionRTL {
+		return 1
+	}
+	if base == di.DirectionRTL {
+		return 2
+	}
+	off, n := run.Runes.Offset, run.Runes.Count
+	if strong := strongBefore(runes, off); strong != bidi.L && numericPrefix(runes[off:off+n], strong == bidi.AL) == n {
+		return 2
+	}
+	return 0
 }
 
 // Line shapes str as a single line (no wrapping; newlines are not special).
@@ -296,7 +426,7 @@ func (s *Shaper) Line(str string, size float32) Line {
 		return Line{}
 	}
 	base := s.baseDir(runes)
-	return s.assemble(s.shapeRuns(runes, size, base), 0, base)
+	return s.assemble(s.shapeRuns(runes, size, base), 0, base, runes)
 }
 
 // Paragraph shapes and wraps str to maxWidth (Inf or <= 0 disables
@@ -326,13 +456,13 @@ func (s *Shaper) Paragraph(str string, size, maxWidth float32) []Line {
 			base := s.baseDir(para)
 			outs := s.shapeRuns(para, size, base)
 			if maxWidth <= 0 || maxWidth > 1e8 {
-				l := s.assemble(outs, start, base)
+				l := s.assemble(outs, start, base, para)
 				lines = append(lines, l)
 			} else {
 				wrapped, _ := s.wrap.WrapParagraphF(shaping.WrapConfig{}, fx(maxWidth), para,
 					shaping.NewSliceIterator(outs))
 				for _, wl := range wrapped {
-					lines = append(lines, s.assemble(wl, start, base))
+					lines = append(lines, s.assemble(wl, start, base, para))
 				}
 			}
 		}
@@ -345,9 +475,14 @@ func (s *Shaper) Paragraph(str string, size, maxWidth float32) []Line {
 }
 
 // assemble positions the runs of one line in visual order and computes
-// bounds. runeOffset shifts cluster/rune indices into the full string.
-func (s *Shaper) assemble(runs []shaping.Output, runeOffset int, base di.Direction) Line {
-	visual := visualOrder(runs, base)
+// bounds. runeOffset shifts cluster/rune indices into the full string; para is
+// the paragraph the runs were shaped from (their Runes.Offset indexes it).
+func (s *Shaper) assemble(runs []shaping.Output, runeOffset int, base di.Direction, para []rune) Line {
+	levels := make([]int, len(runs))
+	for i := range runs {
+		levels[i] = runLevel(&runs[i], para, base)
+	}
+	visual := visualOrder(runs, levels)
 	var l Line
 	l.RTL = base == di.DirectionRTL
 	l.Start = 1<<31 - 1
@@ -412,50 +547,58 @@ func (s *Shaper) fontFor(face *font.Face) *Font {
 }
 
 // visualOrder reorders logical runs into the order they are painted, left to
-// right, applying UAX #9 rule L2 over the two embedding levels a bidi split
-// produces: runs at the base level, and runs of the opposite direction one
-// level above.
+// right, applying UAX #9 rule L2: from the highest embedding level down to the
+// lowest odd one, reverse every maximal sequence of runs at that level or
+// higher. levels[i] is the level of runs[i] (see runLevel).
 //
-// L2 says to reverse each contiguous sequence at the highest level, then at
-// every level down to the lowest odd one. For an LTR base (levels 0 and 1)
-// that is just "reverse each maximal RTL sequence". For an RTL base (levels 1
-// and 2) it is two passes: reverse each maximal LTR sequence in place — which
-// keeps several adjacent LTR runs in their own relative order — and then
-// reverse the whole line, because every run sits at level 1 or above.
-//
-// Getting the second case right is what makes an Arabic sentence with an
+// For an LTR base with only levels 0 and 1 that is just "reverse each maximal
+// RTL sequence". For an RTL base (levels 1 and 2) it is two passes: reverse
+// each maximal LTR sequence in place — which keeps several adjacent LTR runs
+// in their own relative order — and then reverse the whole line, because every
+// run sits at level 1 or above. That is what makes an Arabic sentence with an
 // English phrase in it read correctly: the phrase stays LTR internally while
 // the sentence around it runs right to left.
-func visualOrder(runs []shaping.Output, base di.Direction) []shaping.Output {
+//
+// A number inside RTL text in an LTR paragraph is the three-level case: the
+// number (level 2) reverses alone, which is a no-op, and then the RTL runs on
+// both sides of it reverse together with it as one block, so the phrase keeps
+// its reading order around the number. Reversing each RTL run on its own would
+// leave the two halves of the phrase swapped.
+func visualOrder(runs []shaping.Output, levels []int) []shaping.Output {
 	out := make([]shaping.Output, len(runs))
 	copy(out, runs)
+	lv := make([]int, len(levels))
+	copy(lv, levels)
 
-	rtlBase := base == di.DirectionRTL
-	// The level above the base is whichever direction the base is not.
-	upper := di.DirectionRTL
-	if rtlBase {
-		upper = di.DirectionLTR
-	}
-	for i := 0; i < len(out); {
-		if out[i].Direction != upper {
-			i++
-			continue
+	highest, lowest := 0, 0
+	for i, l := range lv {
+		if i == 0 || l < lowest {
+			lowest = l
 		}
-		j := i
-		for j < len(out) && out[j].Direction == upper {
-			j++
-		}
-		reverseRuns(out[i:j])
-		i = j
+		highest = max(highest, l)
 	}
-	if rtlBase {
-		reverseRuns(out)
+	// The lowest odd level: with nothing at an odd level (all-LTR runs on an
+	// RTL base) nothing reverses, and the runs keep their logical order.
+	for level := highest; level >= lowest|1; level-- {
+		for i := 0; i < len(out); {
+			if lv[i] < level {
+				i++
+				continue
+			}
+			j := i
+			for j < len(out) && lv[j] >= level {
+				j++
+			}
+			reverseRuns(out[i:j], lv[i:j])
+			i = j
+		}
 	}
 	return out
 }
 
-func reverseRuns(runs []shaping.Output) {
+func reverseRuns(runs []shaping.Output, levels []int) {
 	for i, j := 0, len(runs)-1; i < j; i, j = i+1, j-1 {
 		runs[i], runs[j] = runs[j], runs[i]
+		levels[i], levels[j] = levels[j], levels[i]
 	}
 }
