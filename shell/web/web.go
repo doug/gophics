@@ -591,7 +591,13 @@ func (w *window) ClipboardWrite(text string) error {
 	return nil
 }
 
+// OpenURL opens a tab, for the schemes shell.CheckOpenURL agrees to — the same
+// rule as desktop and mobile, so a link that opens in the browser opens
+// everywhere.
 func (w *window) OpenURL(url string) error {
+	if err := shell.CheckOpenURL(url); err != nil {
+		return err
+	}
 	js.Global().Call("open", url, "_blank", "noopener")
 	return nil
 }

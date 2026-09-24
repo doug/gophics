@@ -559,7 +559,13 @@ func (b *Bridge) Invalidate()     { b.dirty.Store(true) }
 func (b *Bridge) SetTitle(string) {}
 func (b *Bridge) Close()          {}
 func (b *Bridge) DarkMode() bool  { return b.dark }
+
+// OpenURL queues u for the host (TakeOpenedURL), for the schemes
+// shell.CheckOpenURL agrees to — the same rule as desktop and web.
 func (b *Bridge) OpenURL(u string) error {
+	if err := shell.CheckOpenURL(u); err != nil {
+		return err
+	}
 	b.opened = append(b.opened, u)
 	return nil
 }

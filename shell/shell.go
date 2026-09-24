@@ -117,7 +117,12 @@ type Window interface {
 	ClipboardRead() (string, error)
 	ClipboardWrite(text string) error
 
-	// OpenURL opens url in the system browser (or a new tab on web).
+	// OpenURL hands url to the system: a browser tab for http and https, the
+	// mail client for mailto, the dialer for tel. Those four schemes are the
+	// contract, on every shell — CheckOpenURL is the rule, and a shell
+	// refuses anything else with an error rather than handing an arbitrary
+	// string to `open`, `xdg-open` or window.open. See CheckOpenURL for why
+	// the list is closed.
 	OpenURL(url string) error
 
 	// DarkMode reports whether the platform prefers a dark color scheme.

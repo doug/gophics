@@ -5,10 +5,8 @@
 package desktop
 
 import (
-	"fmt"
 	"os/exec"
 	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/doug/gophics/internal/gfx/gogpu"
@@ -271,18 +269,29 @@ type window struct {
 	cpuTexH int
 }
 
-func (w *window) Invalidate()           { w.app.RequestRedraw() }
-func (w *window) SetTitle(title string) { w.app.SetTitle(title) }
-func (w *window) Close()                { w.app.Quit() }
+func (w *window) Invalidate() { w.app.RequestRedraw() }
+
+// SetTitle goes through runOnMain for the reason windowctl_desktop.go records
+// at length: AppKit aborts the process on a window mutation off the main
+// thread, and Build runs on the render thread. WindowControl.SetTitle already
+// took that route; this one, which the same apps call from Build, did not.
+func (w *window) SetTitle(title string) { w.runOnMain(func() { w.app.SetTitle(title) }) }
+
+// Close sets gogpu's run flag; the loop notices on its next turn, so there is
+// no AppKit call here to marshal.
+func (w *window) Close() { w.app.Quit() }
 
 func (w *window) ClipboardRead() (string, error)   { return w.app.ClipboardRead() }
 func (w *window) ClipboardWrite(text string) error { return w.app.ClipboardWrite(text) }
 
 func (w *window) DarkMode() bool { return w.app.DarkMode() }
 
+// OpenURL hands the URL to the platform's opener once shell.CheckOpenURL has
+// agreed to it. The check matters more here than anywhere: `open`, `xdg-open`
+// and rundll32 will run whatever scheme a string names.
 func (w *window) OpenURL(url string) error {
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return fmt.Errorf("desktop: refusing to open non-http URL %q", url)
+	if err := shell.CheckOpenURL(url); err != nil {
+		return err
 	}
 	switch runtime.GOOS {
 	case "darwin":

@@ -769,6 +769,7 @@ shell.CaptureOptions type
 shell.CaptureOptions.Facing field
 shell.CaptureOptions.MaxDim field
 shell.CheckFolderName func
+shell.CheckOpenURL func
 shell.Clip type
 shell.Clip.Data field
 shell.Clip.Duration field
