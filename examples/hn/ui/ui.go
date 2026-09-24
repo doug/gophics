@@ -140,6 +140,9 @@ func (f feedPage) CreateState() widget.State { return &feedState{} }
 // together: there is no assignment that leaves an error showing beside stale
 // stories, or a spinner running after the items arrived. The zero value is the
 // initial state — no items, no error, not yet loaded.
+//
+// items may be a prefix of the page while done is false: the load streams,
+// and the list is shown as soon as there is anything in it.
 type feed struct {
 	items []Item
 	err   error
@@ -148,6 +151,7 @@ type feed struct {
 
 type feedState struct {
 	widget.StateBase[feedPage]
+	ctx  widget.Ctx
 	feed feed
 	// refreshing is presentation, not result: it says the load was triggered by
 	// a pull rather than by opening the page, and so shows a different spinner.
@@ -158,10 +162,17 @@ type feedState struct {
 var stateHook func(*feedState)
 
 func (s *feedState) Init(ctx widget.Ctx) {
+	s.ctx = ctx
 	if stateHook != nil {
 		stateHook(s)
 	}
-	s.fetch(ctx)
+	s.fetch()
+}
+
+// refresh reloads the page behind the list that is already showing.
+func (s *feedState) refresh() {
+	s.SetState(func() { s.refreshing = true })
+	s.fetch()
 }
 
 // fetch loads the top stories on a background goroutine and swaps them in.
@@ -170,14 +181,22 @@ func (s *feedState) Init(ctx widget.Ctx) {
 // The context comes from the widget, so leaving the page stops the load: the
 // per-item walk below is the expensive part, and without cancellation a feed
 // that is closed a moment after opening keeps fetching every one of them.
-func (s *feedState) fetch(ctx widget.Ctx) {
-	lifetime := ctx.Lifetime()
-	api := ctx.MustOf[API]()
+func (s *feedState) fetch() {
+	lifetime := s.ctx.Lifetime()
+	api := s.ctx.MustOf[API]()
 	n := s.W().N
 	go func() {
 		ids, err := api.TopStories(lifetime)
 		if err != nil {
-			s.PostState(func() { s.feed, s.refreshing = feed{err: err, done: true}, false })
+			s.PostState(func() {
+				// A refresh that fails leaves the list it was replacing; the
+				// stories on screen are still stories. Only a first load has
+				// nothing better to show than the error.
+				if !s.refreshing {
+					s.feed = feed{err: err, done: true}
+				}
+				s.refreshing = false
+			})
 			return
 		}
 		if len(ids) > n {
@@ -194,6 +213,12 @@ func (s *feedState) fetch(ctx widget.Ctx) {
 				}
 			}
 			s.PostState(func() {
+				// During a refresh the old list stays up until the new one is
+				// whole. Swapping a growing prefix in would shrink the list
+				// under the reader and unmount the rows they were looking at.
+				if s.refreshing && !done {
+					return
+				}
 				s.feed = feed{items: keep, done: done}
 				if done {
 					s.refreshing = false
@@ -212,21 +237,22 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	var body widget.Widget
 	switch f := s.feed; {
-	case !f.done:
+	case len(f.items) == 0 && !f.done:
 		body = widget.Center(widget.Text{Value: "loading…", Size: th.Type.Body, Color: th.Muted})
-	case f.err != nil:
+	case len(f.items) == 0 && f.err != nil:
 		body = widget.Center(widget.Text{Value: f.err.Error(), Wrap: true, Size: th.Type.Body, Color: th.Muted})
 	default:
+		// The list, whether it is the whole page or the prefix that has
+		// landed so far: the stories at the top are readable before the
+		// ones at the bottom have arrived, which is what streaming the load
+		// was for.
 		nav := ctx.MustOf[widget.Nav]()
 		body = widget.LazyList{
 			Count:           len(s.feed.items),
 			EstimatedExtent: 66,
 			Build:           func(i int) widget.Widget { return s.storyRow(th, nav, i) },
 			Refreshing:      s.refreshing,
-			OnRefresh: func() {
-				s.SetState(func() { s.refreshing = true })
-				s.fetch(ctx)
-			},
+			OnRefresh:       s.refresh,
 		}
 	}
 	return page(ctx, header(th, "Hacker News", nil), body)
@@ -301,11 +327,11 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 	} else {
 		n := len(s.comments)
 		openURL := func(u string) { _ = ctx.OpenURL(u) }
-		// A thread is for reading, and reading includes quoting: without a
-		// SelectionArea every Text here is inert and a comment cannot be
-		// copied out. Wrapping the list rather than each row is what makes a
-		// drag across two comments one continuous selection.
-		body = widget.SelectionArea{Child: widget.LazyList{
+		// Text here is selectable — a thread is for reading, and reading
+		// includes quoting — through the SelectionArea that page wraps
+		// every body in. One around the whole list is what makes a drag
+		// across two comments a single continuous selection.
+		body = widget.LazyList{
 			Count:           n + 1,
 			EstimatedExtent: 90,
 			Build: func(i int) widget.Widget {
@@ -314,7 +340,7 @@ func (s *threadState) Build(ctx widget.Ctx) widget.Widget {
 				}
 				return commentRow(th, s.comments[i-1], openURL)
 			},
-		}}
+		}
 	}
 	return page(ctx, header(th, st.Title, backButton(ctx)), body)
 }

@@ -76,6 +76,143 @@ func harness(t *testing.T) (*app.Headless, *feedState) {
 	return h, st
 }
 
+// slowHarness mounts the feed over an API that answers each item slowly, so
+// the load is observable while it is in flight, and returns before it is done.
+func slowHarness(t *testing.T, api API, stories int) (*app.Headless, *feedState) {
+	t.Helper()
+	var st *feedState
+	stateHook = func(s *feedState) { st = s }
+	defer func() { stateHook = nil }()
+	h, err := app.NewHeadless(HN{PageSize: stories},
+		app.Config{
+			Size: geom.Size{W: 480, H: 720}, Background: colBg, Font: goregular.TTF,
+			Provide: []any{api},
+		}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	if st == nil {
+		t.Fatal("feed state not mounted")
+	}
+	return h, st
+}
+
+// awaitFeed renders until the feed's current load is done.
+func awaitFeed(t *testing.T, h *app.Headless, st *feedState) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for (!st.feed.done || st.refreshing) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		h.Render()
+	}
+	if !st.feed.done || st.refreshing {
+		t.Fatal("feed never finished loading")
+	}
+}
+
+// The load streams: the stories at the top are on screen while the ones at
+// the bottom are still in flight. The fetch-layer tests prove the prefix is
+// reported; this mounts the feed and proves it is painted — the feed used to
+// store every partial and draw "loading…" over all of them until the last
+// item landed.
+func TestFeedPaintsPartialPrefix(t *testing.T) {
+	api := &slowAPI{fakeAPI: fakeAPI{stories: 48}, delay: 20 * time.Millisecond}
+	h, st := slowHarness(t, api, 48)
+
+	partialShown := false
+	deadline := time.Now().Add(10 * time.Second)
+	for !st.feed.done && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+		h.Render()
+		if !st.feed.done && len(st.feed.items) > 0 && hasLabel(h, "Story number") {
+			partialShown = true
+		}
+	}
+	if !st.feed.done {
+		t.Fatal("feed never finished loading")
+	}
+	if !partialShown {
+		t.Error("the list was never painted before the last story landed")
+	}
+	if len(st.feed.items) != 48 {
+		t.Errorf("loaded %d stories, want 48", len(st.feed.items))
+	}
+}
+
+// Pull-to-refresh keeps the list up until the new page is whole. The first
+// partial of a refresh used to replace the mounted list with the loading
+// placeholder, unmounting the rows the reader was looking at — and the
+// refresh spinner with them.
+func TestRefreshKeepsTheListUntilTheNewPageLands(t *testing.T) {
+	api := &slowAPI{fakeAPI: fakeAPI{stories: 40}, delay: 15 * time.Millisecond}
+	h, st := slowHarness(t, api, 40)
+	awaitFeed(t, h, st)
+	if !hasLabel(h, "Story number") {
+		t.Fatal("feed not shown after the first load")
+	}
+
+	st.refresh()
+	h.Render()
+	if !st.refreshing {
+		t.Fatal("refresh did not start")
+	}
+	listGone := false
+	deadline := time.Now().Add(10 * time.Second)
+	for st.refreshing && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+		h.Render()
+		if !hasLabel(h, "Story number") {
+			listGone = true
+		}
+	}
+	if st.refreshing {
+		t.Fatal("refresh never finished")
+	}
+	if listGone {
+		t.Error("the list was replaced by the loading placeholder during the refresh")
+	}
+	if len(st.feed.items) != 40 {
+		t.Errorf("refreshed to %d stories, want 40", len(st.feed.items))
+	}
+}
+
+// failingTopAPI serves one page and then refuses, as a network that drops
+// mid-session does.
+type failingTopAPI struct {
+	fakeAPI
+	mu    sync.Mutex
+	calls int
+}
+
+func (f *failingTopAPI) TopStories(ctx context.Context) ([]int, error) {
+	f.mu.Lock()
+	f.calls++
+	n := f.calls
+	f.mu.Unlock()
+	if n > 1 {
+		return nil, fmt.Errorf("top stories: connection reset")
+	}
+	return f.fakeAPI.TopStories(ctx)
+}
+
+// A refresh that fails leaves the stories it was replacing on screen. They
+// are still stories; the error has nothing better to offer than them.
+func TestRefreshFailureKeepsTheList(t *testing.T) {
+	api := &failingTopAPI{fakeAPI: fakeAPI{stories: 12}}
+	h, st := slowHarness(t, api, 12)
+	awaitFeed(t, h, st)
+
+	st.refresh()
+	awaitFeed(t, h, st)
+	if len(st.feed.items) != 12 || !hasLabel(h, "Story number") {
+		t.Errorf("a failed refresh dropped the list: %d items, err=%v", len(st.feed.items), st.feed.err)
+	}
+	if hasLabel(h, "connection reset") {
+		t.Error("the error replaced the list")
+	}
+}
+
 func settle(h *app.Headless) {
 	for i := 0; i < 300 && h.Step(0.016); i++ {
 		h.Render()

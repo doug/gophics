@@ -145,16 +145,6 @@ func assembleComments(story Item, loaded map[int]Item, limit int) []Comment {
 	return out
 }
 
-// plainText strips HN's comment HTML down to displayable text: paragraph
-// breaks preserved, tags dropped, entities unescaped.
-func plainText(s string) string {
-	var b strings.Builder
-	for _, sp := range parseSpans(s, spanStyle{}) {
-		b.WriteString(sp.Text)
-	}
-	return strings.TrimSpace(b.String())
-}
-
 // spanStyle carries the colors parseSpans assigns per span kind.
 type spanStyle struct {
 	Text, Link, Emph paint.Color
