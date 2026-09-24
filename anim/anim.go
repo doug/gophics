@@ -128,14 +128,29 @@ func (c *Controller) Toggle() {
 	}
 }
 
-// Jump sets the value immediately, without animating.
+// Jump sets the value immediately, without animating. It calls OnChange, so
+// whatever repaints on the value sees the new one.
 func (c *Controller) Jump(v float32) {
-	c.progress = clamp01(v)
-	c.dir = 0
+	c.Set(v)
 	if c.OnChange != nil {
 		c.OnChange()
 	}
 }
+
+// Set is Jump without the OnChange: the value moves and the run stops, and
+// nothing reacts. It is for re-basing a controller whose OnChange reads state
+// the caller is about to replace — a scroll about to jump does not want the
+// previous glide's target applied first — and for constructing one already
+// settled without marking its owner dirty.
+func (c *Controller) Set(v float32) {
+	c.progress = clamp01(v)
+	c.dir = 0
+}
+
+// Stop halts the run where it is, without calling OnChange. The value stays
+// put, so a gesture that interrupts an animation continues from what is on
+// screen.
+func (c *Controller) Stop() { c.dir = 0 }
 
 // Tick advances the controller; it implements the app's ticker contract and
 // reports whether the controller is still running.

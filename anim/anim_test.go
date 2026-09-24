@@ -62,3 +62,35 @@ func TestJump(t *testing.T) {
 		t.Fatalf("Jump(1): value=%v running=%v", c.Value(), c.Running())
 	}
 }
+
+// Set and Stop are the silent counterparts of Jump: a controller being re-based
+// by a caller that is about to replace the state OnChange reads must not have
+// OnChange applied first.
+func TestControllerSetAndStopDoNotNotify(t *testing.T) {
+	changes := 0
+	c := &Controller{Duration: 100 * time.Millisecond, Curve: Linear, OnChange: func() { changes++ }}
+	c.Forward()
+	c.Tick(0.05)
+	changes = 0
+
+	c.Stop()
+	if c.Running() {
+		t.Fatal("Stop left the controller running")
+	}
+	if v := c.Value(); v < 0.4 || v > 0.6 {
+		t.Fatalf("Stop moved the value to %v; it must stay where it was", v)
+	}
+
+	c.Set(1)
+	if c.Value() != 1 || c.Running() {
+		t.Fatalf("Set(1): value=%v running=%v", c.Value(), c.Running())
+	}
+	if changes != 0 {
+		t.Fatalf("Set/Stop called OnChange %d times; Jump is the one that notifies", changes)
+	}
+
+	c.Jump(0)
+	if changes != 1 {
+		t.Fatalf("Jump called OnChange %d times, want 1", changes)
+	}
+}

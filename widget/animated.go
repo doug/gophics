@@ -45,7 +45,9 @@ func (s *animatedState[T]) Init(ctx Ctx) {
 	s.ctrl = &anim.Controller{OnChange: func() { s.SetState(nil) }}
 	ctx.AddTicker(s.ctrl)
 	s.from, s.to = s.W().Value, s.W().Value
-	s.ctrl.Jump(1) // start settled at the initial value
+	// Set, not Jump: the widget is about to build for the first time, and
+	// Jump's OnChange would mark it dirty on the way in and build it twice.
+	s.ctrl.Set(1) // start settled at the initial value
 }
 
 func (s *animatedState[T]) Dispose() { s.ctx.RemoveTicker(s.ctrl) }
@@ -61,7 +63,10 @@ func (s *animatedState[T]) Build(Ctx) Widget {
 	if w.Value != s.to {
 		s.from = s.current() // continue smoothly from the current point
 		s.to = w.Value
-		s.ctrl.Jump(0)
+		// Set, not Jump: this is Build, and Jump's OnChange would SetState the
+		// element mid-build, queueing a second build of the same value. The
+		// frame that follows this build ticks the controller.
+		s.ctrl.Set(0)
 		s.ctrl.Forward()
 	}
 	return w.Build(s.current())

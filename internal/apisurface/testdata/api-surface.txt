@@ -11,6 +11,8 @@ anim.Controller.Jump method
 anim.Controller.OnChange field
 anim.Controller.Reverse method
 anim.Controller.Running method
+anim.Controller.Set method
+anim.Controller.Stop method
 anim.Controller.Tick method
 anim.Controller.Toggle method
 anim.Controller.Value method

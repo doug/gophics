@@ -117,10 +117,8 @@ type scrollState struct {
 	// place the drag target over it. It lags by one frame, which is invisible:
 	// the bar is hidden until a scroll happens, and that scroll is the frame
 	// that measures it.
-	barThumbLen  float32 // thumb length along the scroll axis
-	barTrackLen  float32 // travel available to the thumb (extent - thumbLen)
-	barDragging  bool
-	barDragStart float32 // offset when the drag began
+	barThumbLen float32 // thumb length along the scroll axis
+	barTrackLen float32 // travel available to the thumb (extent - thumbLen)
 
 	// reveal lets a focused descendant (a TextField caret) ask to be scrolled
 	// into view; provided to the child subtree and captured at paint.
@@ -282,7 +280,11 @@ func barOffsetFor(offset, delta, maxOff, track float32) float32 {
 
 func (s *scrollState) jumpTo(offset float32) {
 	s.fling.active = false
-	s.glide.Jump(1)
+	// Stop, not Jump: Jump runs the glide's OnChange, which sets the offset
+	// to the *previous* AnimateTo target and reports it — so every jump (and
+	// every caret reveal) first announced a stale position, and an infinite
+	// feed whose last glide ended near the bottom loaded another page.
+	s.glide.Stop()
 	s.SetState(func() {
 		s.offset = offset
 		if s.vp.box != nil {
@@ -809,6 +811,11 @@ func (sp *spinner) Tick(dt float64) bool {
 		if sp.phase >= 1 {
 			sp.phase -= 1
 		}
+		// The indicator reads phase straight from here at paint, so a frame is
+		// all it needs — no rebuild. Without the request nothing changed once
+		// the band had settled, the frame was skipped as identical, and the
+		// spinner sat still for the whole refresh.
+		sp.s.ctx.Invalidate()
 		return true
 	}
 	return sp.s.overscroll > 0 // stay alive while springing back
@@ -816,6 +823,12 @@ func (sp *spinner) Tick(dt float64) bool {
 
 func (s *scrollState) Build(ctx Ctx) Widget {
 	w := s.W()
+	// Bind on every build, not just Init: a controller handed over on a later
+	// build (created lazily, or swapped) would otherwise never attach, and
+	// its Offset/JumpTo/AnimateTo would silently do nothing.
+	if c := w.Controller; c != nil && c.s != s {
+		c.s = s
+	}
 	// The app cleared Refreshing: retract the indicator.
 	if s.refreshing && !w.Refreshing {
 		s.refreshing = false
@@ -840,6 +853,14 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			OnPress: func(geom.Pt) {
 				s.fling.active = false      // grab stops the fling
 				s.overSpring.active = false // ...and any in-flight bounce
+				// ...and the indicator's retraction, which would otherwise
+				// keep writing overscroll under the drag's own setOverscroll.
+				// While a refresh is held the band is not the drag's to move
+				// (dragMain leaves it alone), so the snap to its rest height
+				// runs on.
+				if !s.refreshing {
+					s.snap.Stop()
+				}
 				// Grabbing mid-bounce: re-derive the raw drag distance from the
 				// displayed band so continued dragging resumes on the curve.
 				if s.overscroll != 0 && !s.refreshing {
@@ -890,7 +911,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			extent:   s.overscroll,
 			progress: s.overscroll / refreshTrigger,
 			spinning: s.refreshing,
-			phase:    s.spin.phase,
+			spin:     &s.spin,
 		}})
 	}
 	return Stack{Children: layers}
@@ -994,7 +1015,6 @@ func scrollbarThumb(s *scrollState) Widget {
 	size.Child = Interactive{
 		Gestures: Gestures{
 			DragAxis: axis,
-			OnPress:  func(geom.Pt) { s.barDragging, s.barDragStart = true, s.offset },
 			OnDrag: func(_, d geom.Pt) {
 				if horiz {
 					s.barDrag(d.X)
@@ -1002,8 +1022,6 @@ func scrollbarThumb(s *scrollState) Widget {
 					s.barDrag(d.Y)
 				}
 			},
-			OnRelease:  func() { s.barDragging = false },
-			OnPressEnd: func() { s.barDragging = false },
 		},
 	}
 	align.Child = size
@@ -1091,13 +1109,15 @@ type refreshIndicator struct {
 	extent   float32 // band height (== overscroll)
 	progress float32 // 0..1 pull toward trigger
 	spinning bool
-	phase    float32
+	// spin is read at paint rather than copied here: the rotation advances on
+	// the ticker between builds, the way scrollbarBox reads its fade live.
+	spin *spinner
 }
 
 func (r refreshIndicator) createBox(Ctx) layout.Box { return &refreshBox{} }
 func (r refreshIndicator) updateBox(_ Ctx, b layout.Box) {
 	rb := b.(*refreshBox)
-	rb.extent, rb.progress, rb.spinning, rb.phase = r.extent, r.progress, r.spinning, r.phase
+	rb.extent, rb.progress, rb.spinning, rb.spin = r.extent, r.progress, r.spinning, r.spin
 }
 func (r refreshIndicator) childWidgets() []Widget          { return nil }
 func (r refreshIndicator) attach(layout.Box, []layout.Box) {}
@@ -1107,7 +1127,7 @@ type refreshBox struct {
 	extent   float32
 	progress float32
 	spinning bool
-	phase    float32
+	spin     *spinner
 	size     geom.Size
 }
 
@@ -1138,7 +1158,11 @@ func (b *refreshBox) Paint(c paint.Canvas, at geom.Pt) {
 		rad = 11
 	}
 	ri, ro := rad*0.5, rad
-	head := b.phase * refreshSpokes
+	var phase float32
+	if b.spin != nil {
+		phase = b.spin.phase
+	}
+	head := phase * refreshSpokes
 	fadeIn := b.progress
 	if fadeIn > 1 || b.spinning {
 		fadeIn = 1
