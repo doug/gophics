@@ -45,6 +45,7 @@ specs=(
   "drummachine 1 "
   "luminaria   3 "
   "whiteboard  1 "
+  "capabilities 1 "
   "solitaire  8 "
   "hn        10 1"   # networked — realtime so the fetch completes
 )
