@@ -59,6 +59,64 @@ func TestImageChangedRefreshesTheCachedPixels(t *testing.T) {
 	}
 }
 
+// sliceImg is a value-typed image whose dynamic type is not comparable: a
+// map keyed by it panics.
+type sliceImg struct{ pix []uint8 }
+
+func (sliceImg) ColorModel() color.Model { return color.RGBAModel }
+func (sliceImg) Bounds() image.Rectangle { return image.Rect(0, 0, 4, 4) }
+func (sliceImg) At(x, y int) color.Color { return color.RGBA{R: 255, A: 255} }
+
+// Canvas.Image promises that a struct-typed image draws without a panic; the
+// texture cache is a map keyed by the image value, and that promise has to
+// hold there too — and for DrawSprite and ImageChanged, which use the same
+// caches.
+func TestNonComparableImageDrawsWithoutPanic(t *testing.T) {
+	p := NewPainter()
+	img := sliceImg{pix: []uint8{1}}
+	c := p.BeginOffscreen(geom.Size{W: 10, H: 10}, 1)
+	c.Image(img, geom.RectXYWH(0, 0, 4, 4))
+	c.DrawSprite(img, Sprite{Src: image.Rect(0, 0, 4, 4), Dst: geom.RectXYWH(4, 4, 4, 4)})
+	c.DrawSprite(img, Sprite{Src: image.Rect(0, 0, 4, 4), Dst: geom.RectXYWH(4, 4, 4, 4), Tint: Color{1, 1, 1, 1}})
+	p.ImageChanged(img)
+	if r, _, _, _ := p.Image().At(2, 2).RGBA(); r>>8 < 200 {
+		t.Errorf("the image did not draw (red = %d)", r>>8)
+	}
+}
+
+// A tinted sprite is cached by a 4-bit quantized tint, so its pixels must be
+// rasterized with that same quantized tint: otherwise two sprites whose tints
+// share a key share the first caller's exact colour, and which one wins
+// depends on draw order.
+func TestTintedSpriteRendersTheQuantizedTint(t *testing.T) {
+	atlas := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	fill(atlas, color.RGBA{255, 255, 255, 255})
+	red := func(p *Painter, tint float32) uint8 {
+		c := p.BeginOffscreen(geom.Size{W: 4, H: 4}, 1)
+		c.DrawSprite(atlas, Sprite{Src: image.Rect(0, 0, 4, 4), Dst: geom.RectXYWH(0, 0, 4, 4),
+			Tint: Color{R: tint, G: 1, B: 1, A: 1}})
+		r, _, _, _ := p.Image().At(2, 2).RGBA()
+		return uint8(r >> 8)
+	}
+	// 0.53 and 0.50 both quantize to 7/15.
+	want := mul8(255, 7.0/15)
+	p := NewPainter()
+	if got := red(p, 0.53); got != want {
+		t.Errorf("first draw at tint 0.53: red = %d, want %d (the quantized tint)", got, want)
+	}
+	if got := red(p, 0.50); got != want {
+		t.Errorf("second draw at tint 0.50: red = %d, want %d", got, want)
+	}
+	// And drawn the other way round, the same answer.
+	p = NewPainter()
+	if got := red(p, 0.50); got != want {
+		t.Errorf("first draw at tint 0.50: red = %d, want %d", got, want)
+	}
+	if got := red(p, 0.53); got != want {
+		t.Errorf("second draw at tint 0.53: red = %d, want %d", got, want)
+	}
+}
+
 // Rotating a pool does not avoid the cache, which is the trap worth pinning:
 // every buffer is cached in turn, and from then on the display cycles stale
 // snapshots. A camera preview built that way shows its first frames and stops.

@@ -53,28 +53,43 @@ func mul8(v uint8, f float32) uint8 {
 
 // tinted returns a cached texture of src (from atlas) with every pixel
 // multiplied by tint — used for lighting and palette-swaps.
+//
+// The pixels are multiplied by the *quantized* tint, the one the cache key
+// carries: rasterizing with the exact tint of whichever call came first made
+// two sprites whose tints round to the same key share one image, so the
+// second rendered in the first one's colour — and which colour that was
+// depended on draw order.
 func (p *Painter) tinted(atlas image.Image, src image.Rectangle, tint Color) *gg.ImageBuf {
 	key := tintKey{atlas, src, q4(tint.R), q4(tint.G), q4(tint.B), q4(tint.A)}
-	if b, ok := p.tintBufs[key]; ok {
-		return b
+	cache := cacheable(atlas)
+	if cache {
+		if b, ok := p.tintBufs[key]; ok {
+			return b
+		}
+		if len(p.tintBufs) > 512 {
+			evictHalf(p.tintBufs)
+		}
 	}
-	if len(p.tintBufs) > 512 {
-		evictHalf(p.tintBufs)
-	}
+	tr, tg, tb, ta := unq4(key.r), unq4(key.g), unq4(key.b), unq4(key.a)
 	w, h := src.Dx(), src.Dy()
 	out := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := range h {
 		for x := range w {
 			r, g, b, a := atlas.At(src.Min.X+x, src.Min.Y+y).RGBA() // 16-bit, straight
 			out.SetRGBA(x, y, color.RGBA{
-				R: mul8(uint8(r>>8), tint.R),
-				G: mul8(uint8(g>>8), tint.G),
-				B: mul8(uint8(b>>8), tint.B),
-				A: mul8(uint8(a>>8), tint.A),
+				R: mul8(uint8(r>>8), tr),
+				G: mul8(uint8(g>>8), tg),
+				B: mul8(uint8(b>>8), tb),
+				A: mul8(uint8(a>>8), ta),
 			})
 		}
 	}
 	buf := gg.ImageBufFromImage(out)
-	p.tintBufs[key] = buf
+	if cache {
+		p.tintBufs[key] = buf
+	}
 	return buf
 }
+
+// unq4 maps a 4-bit channel back to the factor tinted multiplies by.
+func unq4(q uint8) float32 { return float32(q) / 15 }

@@ -12,6 +12,7 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"reflect"
 
 	"github.com/doug/gophics/internal/gfx/gg"
 	ggtext "github.com/doug/gophics/internal/gfx/gg/text"
@@ -990,10 +991,20 @@ func (s ggSink) Close() { s.dc.ClosePath() }
 // sidesteps by making ui.Image immutable. Cheap: it drops one map entry, and
 // the next draw re-copies what it would have had to copy anyway.
 func (p *Painter) ImageChanged(img image.Image) {
-	if p == nil || img == nil {
+	if p == nil || img == nil || !cacheable(img) {
 		return
 	}
 	delete(p.imgBufs, img)
+}
+
+// cacheable reports whether img can key a texture cache. The caches are maps
+// keyed by the image value, and a map lookup with an interface key whose
+// dynamic type is not comparable — a struct-typed image holding a slice —
+// panics. Canvas.Image promises such images draw without one, so they draw
+// uncached instead: they are rare, and scene diffing already treats them as
+// changed every frame, so there was nothing to reuse anyway.
+func cacheable(img image.Image) bool {
+	return reflect.TypeOf(img).Comparable()
 }
 
 // imgBuf returns the cached gg texture for img (shared by Image and
@@ -1004,6 +1015,9 @@ func (p *Painter) ImageChanged(img image.Image) {
 // photo — which are written once and drawn many times, and wrong for one whose
 // pixels change under a stable image value. See ImageChanged.
 func (c *ggCanvas) imgBuf(img image.Image) *gg.ImageBuf {
+	if !cacheable(img) {
+		return gg.ImageBufFromImage(img)
+	}
 	buf, ok := c.p.imgBufs[img]
 	if !ok {
 		if len(c.p.imgBufs) > 256 {
