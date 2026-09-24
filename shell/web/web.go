@@ -114,7 +114,20 @@ func Run(h shell.Handler, cfg shell.Config) error {
 			return shell.SourceMouse
 		}
 	}
+	// The gesture model is single-pointer: a second finger on a touch screen
+	// is not a second press but an interruption of the first, and forwarding
+	// it as one ended the live scroll without a release and left pressed
+	// highlights stuck. Only the primary pointer of each device reaches the
+	// app; the others are dropped here, where the browser already says which
+	// is which.
+	primary := func(e js.Value) bool {
+		p := e.Get("isPrimary")
+		return p.IsUndefined() || p.Bool()
+	}
 	listen(canvas, "pointermove", func(e js.Value) {
+		if !primary(e) {
+			return
+		}
 		h.Event(w, shell.Pointer{Kind: shell.PointerMove, Pos: pos(e), Source: src(e)})
 	})
 	// DOM buttons are 0 left, 1 middle, 2 right; the shell contract is
@@ -130,6 +143,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		return 0
 	}
 	listen(canvas, "pointerdown", func(e js.Value) {
+		if !primary(e) {
+			return
+		}
 		refreshRect()
 		// Capture the pointer so drags keep delivering move/up even if the
 		// finger/cursor leaves the canvas.
@@ -139,7 +155,19 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		h.Event(w, shell.Pointer{Kind: shell.PointerDown, Pos: pos(e), Button: button(e), Source: src(e)})
 	})
 	listen(canvas, "pointerup", func(e js.Value) {
+		if !primary(e) {
+			return
+		}
 		h.Event(w, shell.Pointer{Kind: shell.PointerUp, Pos: pos(e), Button: button(e), Source: src(e)})
+	})
+	// The browser cancels a pointer it has taken for itself — a touch that
+	// became a native scroll or pinch, a captured pointer whose capture was
+	// lost. The press ends without a tap, and without moving the pointer.
+	listen(canvas, "pointercancel", func(e js.Value) {
+		if !primary(e) {
+			return
+		}
+		h.Event(w, shell.Pointer{Kind: shell.PointerCancel, Source: src(e)})
 	})
 	listen(canvas, "wheel", func(e js.Value) {
 		e.Call("preventDefault")

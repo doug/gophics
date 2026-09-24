@@ -200,6 +200,14 @@ const (
 	PointerDown
 	PointerUp
 	PointerScroll
+	// PointerCancel ends the live press or drag without completing it: the
+	// platform took the pointer away — a touch the browser turned into a
+	// native scroll, a system gesture on mobile, the window losing focus
+	// mid-drag. The app releases the gesture (no tap) and leaves the pointer
+	// where it last was; Pos is ignored. Before it existed a cancel was a
+	// synthetic PointerUp at (-1e6, -1e6), which also moved the pointer the
+	// app reports a million pixels off screen.
+	PointerCancel
 )
 
 // Pointer is a mouse/touch/stylus event in logical coordinates.

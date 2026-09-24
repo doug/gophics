@@ -90,3 +90,22 @@ func TestPointerIsTouchFollowsTheLastEvent(t *testing.T) {
 		t.Error("a mouse move still read as touch")
 	}
 }
+
+// A cancel releases the buttons and nothing else: the pointer is still where
+// it was, and a cancel names no device. Cancels used to arrive as an up at
+// (-1e6, -1e6), which was stored as the position and, sourced from nothing,
+// read as a mouse.
+func TestPointerCancelKeepsPositionAndDevice(t *testing.T) {
+	var s State
+	s.HandlePointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 10, Y: 20}, Source: shell.SourceTouch})
+	s.HandlePointer(shell.Pointer{Kind: shell.PointerCancel})
+	if s.PointerDown(0) {
+		t.Error("button still held after a cancel")
+	}
+	if s.Pointer() != (geom.Pt{X: 10, Y: 20}) {
+		t.Errorf("Pointer() = %v after a cancel, want the last real position", s.Pointer())
+	}
+	if !s.PointerIsTouch() {
+		t.Error("a cancel flipped PointerIsTouch to mouse")
+	}
+}

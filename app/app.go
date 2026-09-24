@@ -508,6 +508,7 @@ func (c *core) Layout(size geom.Size) layout.Box {
 		box.Layout(layout.Tight(size))
 	}
 	c.lastLayout = size
+	c.syncTextCapturing() // a field mounted by these builds may have taken focus
 	return box
 }
 

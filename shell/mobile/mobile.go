@@ -246,7 +246,7 @@ func (b *Bridge) Touch(phase int, xPx, yPx float32) {
 	case TouchUp:
 		b.handler.Event(b, shell.Pointer{Kind: shell.PointerUp, Pos: p, Source: touch})
 	case TouchCancel:
-		b.handler.Event(b, shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: -1e6, Y: -1e6}, Source: touch})
+		b.handler.Event(b, shell.Pointer{Kind: shell.PointerCancel, Source: touch})
 	}
 }
 

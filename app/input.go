@@ -270,11 +270,14 @@ func (c *core) Pointer(e shell.Pointer) {
 		if e.Button != 0 {
 			return
 		}
+		// A down while a press or drag is still live — a second finger on a
+		// touch screen, a down whose up was never delivered — ends that
+		// gesture first, so the dragging box gets its OnRelease and every
+		// pressed box its OnPressEnd. Resetting the lists silently left a
+		// scroller in its dragging state (no fling) with highlights stuck.
+		c.endPress(nil)
 		c.downPos, c.lastPos, c.moved = e.Pos, e.Pos, false
 		c.downTouch = e.Source == shell.SourceTouch
-		c.pressed, c.dragging, c.longPress = nil, nil, nil
-		c.dragCandidates = c.dragCandidates[:0]
-		c.pressBoxes = c.pressBoxes[:0]
 		c.pressHeld, c.longFired = 0, false
 		hits := c.interactivesAt(e.Pos)
 		for _, h := range hits {
@@ -304,24 +307,41 @@ func (c *core) Pointer(e shell.Pointer) {
 		if e.Button != 0 {
 			return
 		}
-		pressed, dragging := c.pressed, c.dragging
-		c.pressed, c.dragging, c.longPress = nil, nil, nil
-		c.dragCandidates = c.dragCandidates[:0]
-		if dragging != nil {
-			if h := dragging.GestureHandler(); h.OnRelease != nil {
-				h.OnRelease()
-			}
-		}
-		if pressed != nil {
-			for _, h := range c.interactivesAt(e.Pos) {
-				if h.box == pressed {
-					c.fireTap(pressed, e.Pos)
-					break
-				}
-			}
-		}
-		c.firePressEnd() // end any press highlight, tapped or not
+		c.endPress(&e.Pos)
+
+	case shell.PointerCancel:
+		// The platform took the pointer (see shell.PointerCancel): the
+		// gesture ends as an up would, minus the tap. Nothing here touches
+		// the pointer position — Input.HandlePointer skipped it too — so a
+		// widget polling Pointer() keeps the last real position rather than
+		// seeing a sentinel a million pixels off screen.
+		c.endPress(nil)
 	}
+}
+
+// endPress concludes the live gesture: OnRelease for the box that was
+// dragging, a tap for a press released over the box it landed on, and
+// OnPressEnd for every box still highlighted. upAt is where the pointer went
+// up, or nil when it did not — a cancel, or a new press arriving while this
+// one was still live — in which case no tap is fired.
+func (c *core) endPress(upAt *geom.Pt) {
+	pressed, dragging := c.pressed, c.dragging
+	c.pressed, c.dragging, c.longPress = nil, nil, nil
+	c.dragCandidates = c.dragCandidates[:0]
+	if dragging != nil {
+		if h := dragging.GestureHandler(); h.OnRelease != nil {
+			h.OnRelease()
+		}
+	}
+	if pressed != nil && upAt != nil {
+		for _, h := range c.interactivesAt(*upAt) {
+			if h.box == pressed {
+				c.fireTap(pressed, *upAt)
+				break
+			}
+		}
+	}
+	c.firePressEnd() // end any press highlight, tapped or not
 }
 
 // firePressEnd notifies every box that received OnPress this gesture that the
@@ -360,6 +380,7 @@ func (c *core) firePressEndExcept(skip widget.GestureTarget) {
 // user presses elsewhere. Nothing about those involves a keyboard that needs
 // dismissing.
 func (c *core) focusFrom(hits []hitInteractive) {
+	defer c.syncTextCapturing() // focus moved by a tap, with no key to refresh it
 	for _, hit := range hits {
 		h := hit.box.GestureHandler()
 		if h.OnText == nil && h.OnKey == nil {
@@ -388,6 +409,20 @@ func (c *core) focusFrom(hits []hitInteractive) {
 	}
 }
 
+// syncTextCapturing tells the polled input state whether a text field owns
+// the keyboard. It is derived from KeyboardTarget, which moves on a key
+// (Tab), on a tap (focusFrom) and on a mount (an Autofocus field takes it
+// during a build), so it is refreshed at each of those rather than only on
+// key events: a game that polled it after the user tapped into a chat field
+// kept moving the player until the next key arrived, and after the user
+// tapped out it kept ignoring the keys.
+func (c *core) syncTextCapturing() {
+	if in := c.Owner.Input; in != nil {
+		t := c.Owner.KeyboardTarget
+		in.SetTextCapturing(t != nil && t.OnText != nil)
+	}
+}
+
 // Keyboard dispatches key/text events to the current keyboard target.
 func (c *core) Keyboard(e shell.Event) {
 	// Feed held-state polling first, before the focus early-return — a game
@@ -396,9 +431,8 @@ func (c *core) Keyboard(e shell.Event) {
 		if k, ok := e.(shell.Key); ok {
 			in.HandleKey(k)
 		}
-		t := c.Owner.KeyboardTarget
-		in.SetTextCapturing(t != nil && t.OnText != nil)
 	}
+	c.syncTextCapturing()
 	t := c.Owner.KeyboardTarget
 
 	// Tab moves focus, before the focused widget sees it.
@@ -412,6 +446,7 @@ func (c *core) Keyboard(e shell.Event) {
 		if t == nil || t.ConsumesTab == nil || !t.ConsumesTab() {
 			if c.Owner.MoveFocus(k.Mods&shell.ModShift == 0) {
 				c.Owner.RebuildAll()
+				c.syncTextCapturing()
 			}
 			return
 		}

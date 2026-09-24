@@ -103,6 +103,13 @@ func (s *State) HandleKey(k shell.Key) {
 
 // HandlePointer folds a pointer event into the pointer/button state.
 func (s *State) HandlePointer(p shell.Pointer) {
+	if p.Kind == shell.PointerCancel {
+		// The platform took the pointer: no button is held any more, but the
+		// pointer is still where it was, and a cancel carries no position or
+		// device of its own to report.
+		s.buttons = 0
+		return
+	}
 	s.touch = p.Source == shell.SourceTouch
 	s.pointer = p.Pos
 	switch p.Kind {

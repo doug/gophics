@@ -1048,6 +1048,7 @@ shell.Pointer.Kind field
 shell.Pointer.Pos field
 shell.Pointer.Scroll field
 shell.Pointer.Source field
+shell.PointerCancel const
 shell.PointerDown const
 shell.PointerKind type
 shell.PointerMove const

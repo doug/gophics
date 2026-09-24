@@ -236,7 +236,7 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		// gesture or a held key stuck down: cancel the press/drag and clear the
 		// input state.
 		if !e.Focused {
-			h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: geom.Pt{X: -1e6, Y: -1e6}})
+			h.core.Pointer(shell.Pointer{Kind: shell.PointerCancel})
 			if in := h.core.Owner.Input; in != nil {
 				in.Clear()
 			}
