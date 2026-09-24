@@ -1,8 +1,9 @@
 // Package healthui is the live health-dashboard showcase: a scrollable set of
 // metric cards — a real-time heart rate, today's steps, weight, and sleep — each
 // with a custom-painted chart, tappable through to a detail screen. It is built
-// entirely from gophics widgets + one Canvas per chart, and streams live via a
-// per-frame Ticker.
+// entirely from gophics widgets + one Canvas per chart. The synthetic source
+// streams via a per-frame Ticker; a device source repaints when the host
+// pushes.
 //
 // Data comes through the Provider interface (provider.go). Desktop and web run
 // the synthetic live provider; on iOS/Android the mobile bind injects a
@@ -94,21 +95,36 @@ func metricByView(v string) (Metric, bool) {
 
 type healthState struct {
 	widget.StateBase[App]
+	ctx       widget.Ctx
 	p         Provider
 	connected bool
 }
 
-func (s *healthState) Init(ctx widget.Ctx) { ctx.AddTicker(s) }
+func (s *healthState) Init(ctx widget.Ctx) {
+	s.ctx = ctx
+	ctx.AddTicker(s)
+	// A pushed source says when it changed; that is the repaint. Polling for
+	// it every frame kept the frame loop awake on a phone whose data changes
+	// a few times a minute.
+	if n, ok := s.p.(Notifier); ok {
+		n.OnChange(func() { s.PostState(nil) })
+	}
+}
 
-// Tick advances a live synthetic source (if the provider is an Advancer) and
-// repaints. A device provider isn't an Advancer — the platform pushes samples
-// via callbacks — so this just repaints so pushed updates show.
+func (s *healthState) Dispose() { s.ctx.RemoveTicker(s) }
+
+// Tick advances a live synthetic source and rebuilds so the new samples show.
+// It reports false — let the frame loop sleep — whenever there is nothing to
+// advance: the onboarding screen, or a device provider, which is not an
+// Advancer and repaints from its own pushes instead. A false here does not
+// unregister the ticker, so the frame that Connect's SetState requests wakes
+// it up again.
 func (s *healthState) Tick(dt float64) bool {
-	s.SetState(func() {
-		if a, ok := s.p.(Advancer); ok {
-			a.Advance(dt)
-		}
-	})
+	a, ok := s.p.(Advancer)
+	if !ok || !s.connected {
+		return false
+	}
+	s.SetState(func() { a.Advance(dt) })
 	return true
 }
 
@@ -118,9 +134,15 @@ func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
 	// app follows light/dark automatically.
 	th := theme.Auto(ctx)
 	var content widget.Widget
-	if !s.connected {
+	switch {
+	case !s.connected:
 		content = s.onboarding(th)
-	} else {
+	case !s.p.Authorized():
+		// The host answered the permission prompt with no, or has not
+		// answered yet. Four cards reading 0 would be indistinguishable from
+		// a person with no data; say what is actually the case.
+		content = s.noAccess(th)
+	default:
 		// The dashboard is the Navigator's Home so it (and pushed detail pages)
 		// can reach the Nav handle. The provider lives here at the root and keeps
 		// streaming regardless of which page is on top.
@@ -174,6 +196,22 @@ func (s *healthState) onboarding(th theme.Theme) widget.Widget {
 			widget.Padding{Insets: geom.Insets{Top: 6, Bottom: 26}, Child: widget.Text{
 				Value: "Connect your data to see it live.", Size: 15, Color: th.Muted}},
 			connect,
+		}},
+	}}
+}
+
+// noAccess is the screen for a source the user has not let the app read. There
+// is no button: the prompt is the platform's and the host raises it, and the
+// provider's OnChange repaints this the moment the answer changes.
+func (s *healthState) noAccess(th theme.Theme) widget.Widget {
+	return widget.Align{X: 0.5, Y: 0.5, Child: widget.Padding{
+		All: 32,
+		Child: widget.Flex{CrossAlign: layout.CrossCenter, Children: []widget.Widget{
+			widget.Text{Value: "♥", Size: 72, Color: th.Muted},
+			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{Value: "No access to " + s.p.Name(), Size: 22, Color: th.Text}},
+			widget.Padding{Insets: geom.Insets{Top: 6}, Child: widget.Text{
+				Value: "Allow this app to read your health data in " + s.p.Name() + " and the dashboard fills in by itself.",
+				Size:  15, Color: th.Muted, Wrap: true}},
 		}},
 	}}
 }

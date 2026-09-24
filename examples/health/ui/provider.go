@@ -45,6 +45,11 @@ type Provider interface {
 // samples via platform callbacks instead and won't implement this.
 type Advancer interface{ Advance(dt float64) }
 
+// Notifier is the other optional capability: a pushed source that can say when
+// it changed. The app installs a callback that posts a repaint, so a host push
+// reaches the screen without the UI rebuilding every frame to look for one.
+type Notifier interface{ OnChange(func()) }
+
 // hrWindow is how many seconds of heart-rate history the live chart shows.
 const hrWindow = 60.0
 
@@ -161,6 +166,27 @@ type DeviceProvider struct {
 	authed   bool
 	series   [4][]Sample // indexed by Metric
 	stepsSum float64     // Steps reports a running total, like the synthetic one
+	changed  func()      // called after every change, on the caller's thread
+}
+
+// OnChange registers fn to run after each Push, ReplaceSeries and
+// SetAuthorized, on whichever thread made the change. It is for a repaint
+// request (PostState is safe from any goroutine), not for reading back —
+// the change is already committed and visible through Series and Latest.
+func (d *DeviceProvider) OnChange(fn func()) {
+	d.mu.Lock()
+	d.changed = fn
+	d.mu.Unlock()
+}
+
+// notify runs the OnChange callback, outside the lock so it may read.
+func (d *DeviceProvider) notify() {
+	d.mu.RLock()
+	fn := d.changed
+	d.mu.RUnlock()
+	if fn != nil {
+		fn()
+	}
 }
 
 // NewDeviceProvider builds an empty device provider labelled with the platform
@@ -186,6 +212,7 @@ func (d *DeviceProvider) SetAuthorized(ok bool) {
 	d.mu.Lock()
 	d.authed = ok
 	d.mu.Unlock()
+	d.notify()
 }
 
 // Push appends a sample for a metric from the native health store. cap bounds
@@ -195,7 +222,6 @@ func (d *DeviceProvider) Push(m Metric, t, v float64, capN int) {
 		return
 	}
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	s := append(d.series[m], Sample{T: t, V: v})
 	if capN > 0 && len(s) > capN {
 		s = s[len(s)-capN:]
@@ -204,6 +230,8 @@ func (d *DeviceProvider) Push(m Metric, t, v float64, capN int) {
 	if m == Steps {
 		d.stepsSum = v // HealthKit/Health Connect report cumulative steps directly
 	}
+	d.mu.Unlock()
+	d.notify()
 }
 
 // ReplaceSeries swaps a metric's whole history at once — used when the host
@@ -218,6 +246,7 @@ func (d *DeviceProvider) ReplaceSeries(m Metric, xs []Sample) {
 		d.stepsSum = xs[len(xs)-1].V
 	}
 	d.mu.Unlock()
+	d.notify()
 }
 
 func (d *DeviceProvider) Series(m Metric) []Sample {
@@ -242,4 +271,7 @@ func (d *DeviceProvider) Latest(m Metric) (Sample, bool) {
 	return s[len(s)-1], true
 }
 
-var _ Provider = (*DeviceProvider)(nil)
+var (
+	_ Provider = (*DeviceProvider)(nil)
+	_ Notifier = (*DeviceProvider)(nil)
+)

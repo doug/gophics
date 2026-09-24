@@ -9,8 +9,11 @@ import (
 )
 
 // detailPage is a per-metric drill-down pushed onto the Navigator from the
-// dashboard. It reads the shared provider and repaints itself each frame so
-// live updates (advanced by the root ticker) show here too.
+// dashboard. It reads the shared provider and has no ticker of its own: the
+// root rebuilds the whole tree, pushed pages included, on every frame the
+// source advances and on every host push, so live updates show here too. A
+// ticker here once registered itself in Init with nothing to remove it, and
+// every card → back cycle left one more ticking an unmounted page forever.
 type detailPage struct {
 	p Provider
 	m Metric
@@ -22,12 +25,6 @@ type detailState struct {
 	widget.StateBase[detailPage]
 	rangeIdx int
 }
-
-func (s *detailState) Init(ctx widget.Ctx) { ctx.AddTicker(s) }
-
-// Tick repaints only — the root ticker owns advancing the provider, so the
-// detail never double-advances it.
-func (s *detailState) Tick(dt float64) bool { s.SetState(nil); return true }
 
 type rangeOpt struct {
 	label string

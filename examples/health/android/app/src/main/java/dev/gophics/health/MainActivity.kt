@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             else -> Log.w("gophics", "Health Connect unavailable (status=" +
-                "${HealthConnectClient.getSdkStatus(this)}) — showing empty dashboard")
+                "${HealthConnectClient.getSdkStatus(this)}) — the app stays on its no-access screen")
         }
     }
 
