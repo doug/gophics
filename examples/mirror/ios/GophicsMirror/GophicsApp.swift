@@ -45,8 +45,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    func applicationWillResignActive(_ application: UIApplication) { bridge.focused(false) }
-    func applicationDidBecomeActive(_ application: UIApplication) { bridge.focused(true) }
+    // Run states, matching shell.AppState: 0 active, 1 inactive, 2 background.
+    // Lifecycle is always published on the Go side, so without these calls
+    // ctx.Lifecycle() would report a state that never changes — and the
+    // "persist before you are stopped" moment it exists for would never come.
+    func applicationWillResignActive(_ application: UIApplication) {
+        bridge.focused(false)
+        bridge.setAppState(1)
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) { bridge.setAppState(2) }
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        bridge.focused(true)
+        bridge.setAppState(0)
+    }
 }
 
 class GophicsViewController: UIViewController {
