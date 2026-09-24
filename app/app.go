@@ -146,9 +146,6 @@ type Config struct {
 	// is redrawing its frame and re-compositing every tick anyway, so damage
 	// tracking was buying it little.
 	Transparent bool
-	// Renderer selects the rasterization backend: Auto (default) prefers the
-	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
-	// rasterizer. The GOPHICS_RENDERER env var overrides this at startup.
 	// ScrollPhysics overrides the platform's touch-fling curve. Leave it zero
 	// to take the platform's: an iPhone decays one way, an Android another,
 	// and a user's reference for "native" is the device in their hand. Set it
@@ -158,6 +155,9 @@ type Config struct {
 	// thresholds. Leave it zero to take the platform's — including a Mac's
 	// live double-click setting.
 	Gestures shell.GestureTuning
+	// Renderer selects the rasterization backend: Auto (default) prefers the
+	// GPU with CPU fallback, GPU forces it, CPU forces the deterministic CPU
+	// rasterizer. The GOPHICS_RENDERER env var overrides this at startup.
 	Renderer RendererMode
 	// GraphicsLog receives diagnostics from the rendering stack: adapter and
 	// surface selection, shader and pipeline compilation, atlas uploads, and
@@ -344,12 +344,20 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 			return nil, fmt.Errorf("app: fallback font %d: %w", i, err)
 		}
 	}
+	// The rendering stack's logger, resolved here rather than inside
+	// applyGraphicsLog so the font scan below warns to the same place: the
+	// Config's logger, else the one GOPHICS_GPU_LOG asks for. Resolved
+	// afterwards, the env logger never heard about a failed scan.
+	glog := cfg.GraphicsLog
+	if glog == nil {
+		glog = envGraphicsLog()
+	}
 	// System fonts go on last: the Painter attaches the scanned map to the
 	// shapers that exist at the call, so a family loaded afterwards would
 	// miss it.
 	if cfg.SystemFonts {
-		if err := loadSystemFonts(p); err != nil && cfg.GraphicsLog != nil {
-			cfg.GraphicsLog.Warn("system fonts unavailable; using bundled fonts only", "err", err)
+		if err := loadSystemFonts(p); err != nil && glog != nil {
+			glog.Warn("system fonts unavailable; using bundled fonts only", "err", err)
 		}
 	}
 	c := &core{
@@ -369,7 +377,7 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 	c.Owner.Gestures = cfg.Gestures
 	c.debugPaint = cfg.Debug
 	c.transparent = cfg.Transparent
-	applyGraphicsLog(cfg.GraphicsLog)
+	applyGraphicsLog(glog)
 	return c, nil
 }
 
@@ -378,15 +386,13 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 // HAL beneath it, in either order — registering an accelerator later re-applies
 // whatever logger is current.
 //
-// With nothing configured this does nothing at all, rather than resetting the
-// stack to silent. The distinction matters: gg is silent to begin with, so an
-// app that configures nothing gets nothing, and an embedder or test that called
+// With nothing configured (nil: neither the Config nor GOPHICS_GPU_LOG named a
+// logger) this does nothing at all, rather than resetting the stack to silent.
+// The distinction matters: gg is silent to begin with, so an app that
+// configures nothing gets nothing, and an embedder or test that called
 // gg.SetLogger directly keeps what it asked for instead of having it cleared by
 // the next app that happens to start.
 func applyGraphicsLog(l *slog.Logger) {
-	if l == nil {
-		l = envGraphicsLog()
-	}
 	if l == nil {
 		return
 	}

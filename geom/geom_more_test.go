@@ -57,6 +57,19 @@ func TestRectHelpers(t *testing.T) {
 	}
 }
 
+// A lopsided over-inset collapses the axis at the midpoint of the edges that
+// crossed, which is not r's centre and can lie outside r — the documented
+// behaviour, pinned so the doc and the code cannot drift apart again.
+func TestInsetCollapsesAtCrossedEdges(t *testing.T) {
+	got := (Insets{Left: 20}).Inset(RectXYWH(0, 0, 10, 10))
+	if got != (Rect{Min: Pt{15, 0}, Max: Pt{15, 10}}) {
+		t.Errorf("Insets{Left: 20}.Inset(0..10) = %v, want a zero-width span at x=15", got)
+	}
+	if got.Dx() < 0 || got.Dy() < 0 {
+		t.Errorf("over-inset inverted the rect: %v", got)
+	}
+}
+
 func TestInsetsSymmetric(t *testing.T) {
 	i := InsetsSymmetric(10, 20) // horizontal=10, vertical=20
 	if i != (Insets{Top: 20, Right: 10, Bottom: 20, Left: 10}) {

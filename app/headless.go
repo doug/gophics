@@ -119,7 +119,10 @@ func (h *Headless) SetSafeInsets(in geom.Insets) {
 }
 
 // Resize changes the logical surface size (simulates a window resize) and
-// delivers a Resize event so the tree can react.
+// marks the whole tree for rebuild, so the next Render lays it out at the
+// new size and any Build that reads the size sees the new one. No event is
+// delivered: Headless has no event path, and a real Resize event does no
+// more than request a frame.
 func (h *Headless) Resize(size geom.Size) {
 	h.size = size
 	h.core.Owner.RebuildAll()

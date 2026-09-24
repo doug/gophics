@@ -158,8 +158,11 @@ func InsetsSymmetric(horizontal, vertical float32) Insets {
 func (i Insets) Horizontal() float32 { return i.Left + i.Right }
 func (i Insets) Vertical() float32   { return i.Top + i.Bottom }
 
-// Inset shrinks r by the insets. If the insets exceed the rectangle's size,
-// the result collapses to a zero-size Rect at its center.
+// Inset shrinks r by the insets. Where the insets on an axis exceed the
+// rectangle's extent, that axis collapses to zero length at the midpoint of
+// the two edges that crossed — the centre of r for symmetric insets, but for
+// lopsided ones a point that can lie outside r: Insets{Left: 20} on a rect
+// spanning 0..10 gives 15. The result never inverts.
 func (i Insets) Inset(r Rect) Rect {
 	out := Rect{
 		Min: Pt{r.Min.X + i.Left, r.Min.Y + i.Top},
