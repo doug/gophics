@@ -46,7 +46,14 @@ func (s *webStorage) Set(key, value string) (err error) {
 	return nil
 }
 
-func (s *webStorage) Delete(key string) error {
+func (s *webStorage) Delete(key string) (err error) {
+	// Same guard as Set (and as webPrefs.Delete): a storage call throws when
+	// the store is unavailable, and a JS throw is a Go panic.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("web: storage delete %q: %v", key, r)
+		}
+	}()
 	s.ls.Call("removeItem", key)
 	return nil
 }

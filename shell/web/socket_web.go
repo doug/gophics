@@ -10,6 +10,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"syscall/js"
 
 	"github.com/doug/gophics/shell"
@@ -22,7 +23,15 @@ func (w *window) Socket() shell.Socket { return webSocket{} }
 type webSocket struct{}
 
 func (webSocket) Dial(url string, h shell.SocketHandlers) {
-	ws := js.Global().Get("WebSocket").New(url)
+	ws, err := newWebSocket(url)
+	if err != nil {
+		// Dial has no error return; a bad URL is reported the way a failed
+		// connection is, through OnClose, instead of crashing the app.
+		if h.OnClose != nil {
+			h.OnClose(err)
+		}
+		return
+	}
 	ws.Set("binaryType", "arraybuffer") // deliver binary frames as ArrayBuffer, not Blob
 
 	conn := &webSocketConn{ws: ws}
@@ -92,6 +101,18 @@ func (webSocket) Dial(url string, h shell.SocketHandlers) {
 	ws.Call("addEventListener", "message", onMessage)
 	ws.Call("addEventListener", "error", onError)
 	ws.Call("addEventListener", "close", onClose)
+}
+
+// newWebSocket constructs a WebSocket, turning the constructor's throw — a
+// SyntaxError for a malformed or non-ws URL — back into an error. Value.New
+// turns a JS throw into a Go panic, and nothing above Dial expects one.
+func newWebSocket(url string) (ws js.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("websocket: %v", r)
+		}
+	}()
+	return js.Global().Get("WebSocket").New(url), nil
 }
 
 type webSocketConn struct{ ws js.Value }

@@ -19,9 +19,10 @@ func (w *window) FilePicker() shell.FilePicker { return &webFilePicker{doc: w.do
 
 type webFilePicker struct{ doc js.Value }
 
-// Open pops a file dialog. Browsers fire no event when the dialog is cancelled,
-// so on cancel `done` simply isn't called (callers must treat that as "no
-// change") — matching how the camera capture path behaves.
+// Open pops a file dialog. A cancelled dialog reports (nil, nil), as the
+// contract says: browsers fire `cancel` on the input when the user dismisses
+// the chooser, and before that was listened for each cancelled pick leaked
+// its callback and left the caller waiting for an answer that never came.
 func (p *webFilePicker) Open(opts shell.OpenOptions, done func([]shell.PickedFile, error)) {
 	if done == nil {
 		return // result-only: a picker nobody receives is a no-op
@@ -35,17 +36,21 @@ func (p *webFilePicker) Open(opts shell.OpenOptions, done func([]shell.PickedFil
 		input.Set("multiple", true)
 	}
 
-	var onChange js.Func
+	var onChange, onCancel js.Func
+	release := func() {
+		onChange.Release()
+		onCancel.Release()
+	}
 	onChange = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		files := input.Get("files")
 		n := files.Length()
 		if n == 0 {
-			onChange.Release()
+			release()
 			done(nil, nil)
 			return nil
 		}
 		go func() {
-			defer onChange.Release()
+			defer release()
 			out := make([]shell.PickedFile, 0, n)
 			for i := 0; i < n; i++ {
 				f := files.Index(i)
@@ -61,7 +66,13 @@ func (p *webFilePicker) Open(opts shell.OpenOptions, done func([]shell.PickedFil
 		}()
 		return nil
 	})
+	onCancel = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		release()
+		done(nil, nil)
+		return nil
+	})
 	input.Call("addEventListener", "change", onChange)
+	input.Call("addEventListener", "cancel", onCancel)
 	input.Call("click") // relies on the calling user gesture
 }
 

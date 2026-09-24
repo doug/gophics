@@ -387,7 +387,6 @@ type webPlayback struct {
 	startedAt           float64 // ctx.currentTime when the source started
 	playing             bool
 	live                bool // the current source has been started and not yet stopped/ended
-	onEnded             js.Func
 }
 
 func (p *webPlayback) startFrom(offset float64) {
@@ -395,13 +394,22 @@ func (p *webPlayback) startFrom(offset float64) {
 		offset = 0
 	}
 	p.ctx.Call("resume") // AudioContext may start suspended under autoplay policy
-	p.source = p.ctx.Call("createBufferSource")
-	p.source.Set("buffer", p.buffer)
-	p.source.Call("connect", p.ctx.Get("destination"))
-	if !p.onEnded.IsUndefined() {
-		p.onEnded.Release()
-	}
-	p.onEnded = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+	src := p.ctx.Call("createBufferSource")
+	src.Set("buffer", p.buffer)
+	src.Call("connect", p.ctx.Get("destination"))
+	// Each source gets its own handler, released from inside its one and
+	// only call. Every source is started, and both a natural end and stop()
+	// fire `ended` exactly once — but stop() queues it, so releasing the
+	// previous handler here, while a Seek's stop() was still pending, had
+	// the bridge log "call to released function" on every seek. The handler
+	// also checks it still belongs to the current source: a stale one, run
+	// after a seek restarted playback, must not clear the new source's state.
+	var onEnded js.Func
+	onEnded = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		defer onEnded.Release()
+		if !p.source.Equal(src) {
+			return nil
+		}
 		p.live = false
 		// Natural end (not a seek/stop, which clear playing first).
 		if p.playing {
@@ -410,7 +418,8 @@ func (p *webPlayback) startFrom(offset float64) {
 		}
 		return nil
 	})
-	p.source.Call("addEventListener", "ended", p.onEnded)
+	src.Call("addEventListener", "ended", onEnded)
+	p.source = src
 	p.offset = offset
 	p.startedAt = p.ctx.Get("currentTime").Float()
 	p.source.Call("start", 0, offset)

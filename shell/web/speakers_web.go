@@ -3,6 +3,7 @@
 package web
 
 import (
+	"syscall/js"
 	"time"
 
 	"github.com/doug/gophics/shell"
@@ -26,15 +27,26 @@ func (w *window) Speakers() shell.Speakers {
 	return w.spk
 }
 
-type webSpeakers struct{}
+// webSpeakers owns one AudioContext for every clip it plays. A context is a
+// live hardware output stream, and browsers cap how many a page may hold;
+// constructing one per Play and never closing it — nothing in a Playback's
+// life ever did — accumulated one per UI sound until they stopped working.
+type webSpeakers struct{ ctx js.Value }
+
+// context returns the shared AudioContext, creating it on first use.
+func (a *webSpeakers) context() js.Value {
+	if !a.ctx.Truthy() {
+		a.ctx = audioContextCtor().New()
+	}
+	return a.ctx
+}
 
 func (a *webSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
-	ctx := audioContextCtor().New()
+	ctx := a.context()
 	u8 := bytesToJS(clip.Data)
 	go func() {
 		buf, err := await(ctx.Call("decodeAudioData", u8.Get("buffer")))
 		if err != nil {
-			ctx.Call("close")
 			if done != nil {
 				done(nil, err)
 			}

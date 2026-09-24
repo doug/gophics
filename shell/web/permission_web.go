@@ -49,30 +49,21 @@ func (p *webPermissions) Request(k shell.PermissionKind, cb func(shell.Permissio
 		}()
 
 	case shell.PermCamera, shell.PermMicrophone:
-		md := js.Global().Get("navigator").Get("mediaDevices")
-		if md.IsUndefined() {
-			cb(shell.PermissionDenied)
-			return
+		// The same request the camera preview's and microphone's own
+		// Authorize make (mediautil_web.go), which also covers a null
+		// mediaDevices — not only an undefined one.
+		constraints := map[string]any{"video": true}
+		if k == shell.PermMicrophone {
+			constraints = map[string]any{"audio": true}
 		}
-		constraints := map[string]any{}
-		if k == shell.PermCamera {
-			constraints["video"] = true
-		} else {
-			constraints["audio"] = true
-		}
-		go func() {
-			stream, err := await(md.Call("getUserMedia", constraints))
+		requestStream(constraints, func(stream js.Value, err error) {
 			if err != nil {
 				cb(shell.PermissionDenied)
 				return
 			}
-			// We only wanted the grant — stop the tracks immediately.
-			tracks := stream.Call("getTracks")
-			for i := 0; i < tracks.Length(); i++ {
-				tracks.Index(i).Call("stop")
-			}
+			stopTracks(stream) // only the grant was wanted
 			cb(shell.PermissionGranted)
-		}()
+		})
 
 	case shell.PermLocation:
 		geo := js.Global().Get("navigator").Get("geolocation")

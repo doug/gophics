@@ -65,17 +65,21 @@ func (c *webCamera) Capture(opts shell.CaptureOptions, done func(image.Image, er
 	} else {
 		input.Set("capture", "environment")
 	}
-	var onChange js.Func
+	var onChange, onCancel js.Func
+	release := func() {
+		onChange.Release()
+		onCancel.Release()
+	}
 	onChange = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		files := input.Get("files")
 		if files.Length() == 0 {
-			onChange.Release()
+			release()
 			done(nil, errors.New("no photo selected"))
 			return nil
 		}
 		file := files.Index(0)
 		go func() {
-			defer onChange.Release()
+			defer release()
 			buf, err := await(file.Call("arrayBuffer"))
 			if err != nil {
 				done(nil, err)
@@ -87,7 +91,15 @@ func (c *webCamera) Capture(opts shell.CaptureOptions, done func(image.Image, er
 		}()
 		return nil
 	})
+	// A dismissed chooser fires `cancel`; without listening for it each
+	// cancelled capture leaked its callback and never answered the caller.
+	onCancel = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		release()
+		done(nil, errors.New("no photo selected"))
+		return nil
+	})
 	input.Call("addEventListener", "change", onChange)
+	input.Call("addEventListener", "cancel", onCancel)
 	input.Call("click") // relies on the calling user gesture (Capture is called from a tap)
 }
 
