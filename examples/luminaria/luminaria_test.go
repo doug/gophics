@@ -249,6 +249,40 @@ func TestEchoRepeatsThenStops(t *testing.T) {
 	}
 }
 
+// A paused, dark board wants no more frames; it used to ask for one every
+// tick regardless, which kept a phone drawing a still image at full rate.
+// Playing, or paused with something still fading, must keep asking.
+func TestPausedBoardLetsTheFrameLoopSleep(t *testing.T) {
+	_, s := newApp(t)
+	s.playing = false
+	s.flash = [rows][cols]float32{}
+	s.ripples, s.pending = nil, nil
+	if s.Tick(1.0 / 60) {
+		t.Error("a paused, dark board still asks for frames")
+	}
+
+	s.ripples = append(s.ripples, ripple{x: 1, y: 1})
+	if !s.Tick(1.0 / 60) {
+		t.Error("a ripple mid-fade was not enough to keep ticking")
+	}
+	s.ripples = nil
+	s.flash[3][4] = 0.5
+	if !s.Tick(1.0 / 60) {
+		t.Error("a node still glowing was not enough to keep ticking")
+	}
+	s.flash = [rows][cols]float32{}
+	s.pending = append(s.pending, pending{in: 1})
+	if !s.Tick(1.0 / 60) {
+		t.Error("a queued echo was not enough to keep ticking")
+	}
+
+	s.pending = nil
+	s.playing = true
+	if !s.Tick(1.0 / 60) {
+		t.Error("playing stopped asking for frames")
+	}
+}
+
 // TestTickDrivesTheClock checks the step rate follows the tempo, so a BPM
 // change is a tempo change and not just a label.
 func TestTickDrivesTheClock(t *testing.T) {

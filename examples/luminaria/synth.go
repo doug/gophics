@@ -197,10 +197,12 @@ func triangle(phase float64) float64 { return 4*math.Abs(phase-0.5) - 1 }
 // --- Scales ------------------------------------------------------------------
 
 // Scale is a set of semitone offsets from the root, repeating every octave.
-// Every scale here is gapped or symmetric — no minor seconds against the root —
-// so the crawlers cannot land on a combination that sounds like a mistake. That
-// is the whole trick behind this kind of toy: constrain the pitch set and any
-// pattern the user draws is consonant.
+// Every scale here is a pitch set whose members sound like a set — gapped
+// pentatonics, a mode, the whole-tone circle — so the crawlers cannot land on a
+// combination that sounds like a mistake. That is the whole trick behind this
+// kind of toy: constrain the pitch set and any pattern the user draws is
+// consonant. Insen keeps its minor second on purpose: that ♭2 is the scale's
+// colour, and it reads as intended rather than as a wrong note.
 type Scale struct {
 	Name    string
 	Degrees []int

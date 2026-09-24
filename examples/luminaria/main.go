@@ -222,8 +222,11 @@ func (s *lum) removeCrawler() {
 func (s *lum) stepDur() float64 { return 60 / s.bpm / 2 } // eighth notes
 
 // Tick runs the clock, the decay of everything that glows, and the echo queue.
-// It reports true while it wants more frames, which is always: even stopped,
-// ripples and flashes are still fading.
+// It reports true while it wants more frames: playing, or paused with ripples,
+// flashes or echoes still fading. Paused and dark it reports false so the
+// frame loop can sleep — a phone showing a still board should not be drawing
+// it sixty times a second. Reporting false does not unregister the ticker;
+// Play is a SetState, which requests the frame that ticks this again.
 func (s *lum) Tick(dt float64) bool {
 	if dt > 0.1 { // a backgrounded tab shouldn't fire a burst of steps on return
 		dt = 0.1
@@ -236,8 +239,26 @@ func (s *lum) Tick(dt float64) bool {
 	}
 	s.decay(float32(dt))
 	s.drainEcho(dt)
+	if !s.playing && !s.fading() {
+		return false
+	}
 	s.ctx.Invalidate()
 	return true
+}
+
+// fading reports whether anything on the board is still mid-animation.
+func (s *lum) fading() bool {
+	if len(s.ripples) > 0 || len(s.pending) > 0 {
+		return true
+	}
+	for y := range s.flash {
+		for x := range s.flash[y] {
+			if s.flash[y][x] > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // advance walks every crawler one cell and applies whatever it landed on.
