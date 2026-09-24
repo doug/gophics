@@ -234,17 +234,38 @@ func collectSem(b Box, at geom.Pt, clip geom.Rect, clipEmpty bool) []SemNode {
 	} else {
 		node.Visible = clampTo(rect, clip)
 	}
+	// Plain text children are absorbed into the node when they are its name:
+	// when they supplied the label, or when the role is a control whose text
+	// *is* its label (a button reading "Send" is "Send, button", not a button
+	// containing a text). Structural children (buttons inside a group) always
+	// stay, and so does text inside a container that has a label of its own —
+	// a group labeled "Settings" wrapping "Version 1.2" would otherwise make
+	// that line unreadable to assistive technology: neither in the label nor
+	// in the tree.
+	absorbText := node.Label == "" || info.Role.childrenPresentational()
 	if node.Label == "" {
 		node.Label = joinLabels(kids)
 	}
-	// Plain text children are absorbed into the labeled node; structural
-	// children (buttons inside a group, etc.) stay.
 	for _, k := range kids {
-		if k.Role != RoleText {
+		if k.Role != RoleText || !absorbText {
 			node.Children = append(node.Children, k)
 		}
 	}
 	return []SemNode{node}
+}
+
+// childrenPresentational reports whether a role's descendants are part of its
+// own presentation rather than content of their own — ARIA's
+// childrenPresentational: a button, a checkbox, a slider, a tab. Assistive
+// technology names such a control from its text and does not descend into
+// it. Containers (groups, lists, links, headings) expose what is inside them.
+func (r Role) childrenPresentational() bool {
+	switch r {
+	case RoleButton, RoleTextField, RoleImage, RoleCheckbox, RoleRadio,
+		RoleSwitch, RoleSlider, RoleProgress, RoleTab:
+		return true
+	}
+	return false
 }
 
 // visibleIn reports whether any part of r lies inside clip. A zero-extent
