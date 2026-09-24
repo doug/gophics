@@ -66,7 +66,9 @@ func WithAction(label string, onTap func()) SnackOption {
 	return func(c *snackConfig) { c.actionLabel, c.onAction = label, onTap }
 }
 
-// WithDuration overrides how long the snackbar stays before auto-dismissing.
+// WithDuration overrides how long the snackbar stays before auto-dismissing
+// (4s by default). Zero or negative means it stays until its action is
+// tapped or the returned dismiss is called — a message the user must act on.
 func WithDuration(d time.Duration) SnackOption {
 	return func(c *snackConfig) { c.duration = d }
 }
@@ -126,7 +128,12 @@ func (s *snackbarState) Init(ctx widget.Ctx) {
 	} else {
 		s.t.Forward()
 	}
-	s.hold.Forward()
+	// A non-positive duration is "until dismissed": the hold is simply never
+	// started. Starting it anyway ran the controller's 0.2s fallback, so
+	// WithDuration(0) auto-dismissed after 200ms rather than never.
+	if s.W().cfg.duration > 0 {
+		s.hold.Forward()
+	}
 	ctx.Invalidate() // kick the frame loop so entrance + hold advance
 }
 

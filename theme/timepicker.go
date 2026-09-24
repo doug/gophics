@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/widget"
 )
@@ -68,7 +69,7 @@ func (s *timePickerState) column(th Theme, hour bool, val int) widget.Widget {
 		widget.Sized{H: 4},
 		vArrow(th, false, func() { s.step(hour, -1) }),
 	)
-	c.CrossAlign = 1 // CrossCenter
+	c.CrossAlign = layout.CrossCenter
 	return c
 }
 

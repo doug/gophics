@@ -59,6 +59,25 @@ func snackHarness(t *testing.T, open func(s *snackState, ctx widget.Ctx)) (*appt
 	return a, st
 }
 
+// WithDuration(0) means "until dismissed". The hold controller treats a
+// non-positive Duration as its 0.2s default, so starting it auto-dismissed
+// the snackbar after 200ms; it must not be started at all.
+func TestSnackbarZeroDurationStaysUntilDismissed(t *testing.T) {
+	h, st := snackHarness(t, func(s *snackState, ctx widget.Ctx) {
+		s.dismiss = theme.ShowSnackbar(ctx, "Reconnecting", theme.WithDuration(0))
+	})
+	h.TapLabel("Open")
+	stepFor(h, 3*time.Second)
+	if !h.HasText("Reconnecting") {
+		t.Fatal("a snackbar with no duration dismissed itself")
+	}
+	st.dismiss()
+	stepFor(h, 500*time.Millisecond)
+	if h.HasText("Reconnecting") {
+		t.Fatal("programmatic dismiss did not close it")
+	}
+}
+
 // stepFor advances roughly d worth of frames (plus a margin) at 60fps.
 func stepFor(h *apptest.App, d time.Duration) {
 	n := int(d.Seconds()*60) + 30

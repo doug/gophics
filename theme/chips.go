@@ -29,10 +29,7 @@ type Chip struct {
 
 func (ch Chip) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
-	accent := ch.Color
-	if accent == (paint.Color{}) {
-		accent = th.Primary
-	}
+	accent := colorOr(ch.Color, th.Primary)
 
 	fill, text, border := paint.Color{}, th.Text, th.Outline
 	if ch.Selected {
@@ -83,10 +80,7 @@ func (b Badge) Build(ctx widget.Ctx) widget.Widget {
 	if !b.Dot && b.Count <= 0 {
 		return widget.Sized{}
 	}
-	fill := b.Color
-	if fill == (paint.Color{}) {
-		fill = th.Danger
-	}
+	fill := colorOr(b.Color, th.Danger)
 
 	if b.Dot {
 		return widget.Semantics{
@@ -140,12 +134,9 @@ func (a Avatar) Build(ctx widget.Ctx) widget.Widget {
 	if d <= 0 {
 		d = 36
 	}
-	fill := a.Color
-	if fill == (paint.Color{}) {
-		// Deriving the color from the name keeps one person the same color
-		// everywhere in the app without anyone storing a color.
-		fill = th.ChartAt(nameHash(a.Name))
-	}
+	// Deriving the color from the name keeps one person the same color
+	// everywhere in the app without anyone storing a color.
+	fill := colorOr(a.Color, th.ChartAt(nameHash(a.Name)))
 
 	var child widget.Widget
 	if a.Image != nil {
@@ -166,8 +157,9 @@ func (a Avatar) Build(ctx widget.Ctx) widget.Widget {
 	}
 }
 
-// initials takes up to two leading letters from the name's words. Non-letters
-// are skipped so "  (dr.) ada lovelace" still yields "AL".
+// initials takes up to two leading letters from the name's words, where only
+// whitespace separates words: "  ada  lovelace " and "(ada) lovelace" both
+// yield "AL", while "dr. ada lovelace" yields "DA" — a title is a word too.
 func initials(name string) string {
 	var out []rune
 	inWord := false

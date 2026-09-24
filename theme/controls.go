@@ -44,9 +44,23 @@ func (s *switchState) Dispose() { s.ctx.RemoveTicker(s.knob) }
 func (s *switchState) Build(ctx widget.Ctx) widget.Widget {
 	th := Of(ctx)
 	on := s.W().On
-	if on && !s.knob.Running() && s.knob.Value() < 1 {
+	// The knob slides, unless the platform asks for reduced motion, in which
+	// case it jumps: the slide is decoration and every other animated
+	// control here already goes solid under the preference. Jump fires
+	// OnChange (a SetState), so it is only taken when the knob is away from
+	// its resting place — from Build, an unconditional Jump rebuilds forever.
+	target := float32(0)
+	if on {
+		target = 1
+	}
+	switch {
+	case s.knob.Value() == target && !s.knob.Running():
+		// At rest where it should be.
+	case ctx.ReduceMotion():
+		s.knob.Jump(target)
+	case !s.knob.Running() && on:
 		s.knob.Forward()
-	} else if !on && !s.knob.Running() && s.knob.Value() > 0 {
+	case !s.knob.Running():
 		s.knob.Reverse()
 	}
 	const w, h = 44, 26

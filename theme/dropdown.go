@@ -132,7 +132,13 @@ func (s *dropdownState) Build(ctx widget.Ctx) widget.Widget {
 		Child:  widget.Align{X: 0, Y: 0.5, Child: widget.Text{Value: label, Size: th.Type.Body, Color: labelColor, MaxLines: 1, Ellipsis: true}},
 	}}
 
+	open := s.open
 	return widget.Interactive{
+		// A button that opens and closes: the label is the displayed text
+		// (derived from the child), and Expanded tells a screen reader
+		// whether the list is up — without it the control announced as a
+		// bare button that seemed to do nothing.
+		Sem: &layout.SemInfo{Role: layout.RoleButton, Expanded: &open, Hint: "opens the list of options"},
 		Gestures: widget.Gestures{
 			// The popup must hang from the control's own edge. A press reports
 			// its position in the control's local coordinates, and Input reports

@@ -171,19 +171,23 @@ func chevron(th Theme, left bool) widget.Widget {
 // chosen day and the dialog dismisses.
 func ShowDatePicker(ctx widget.Ctx, initial time.Time, onPick func(time.Time)) (dismiss func()) {
 	var close func()
-	close = ShowDialog(ctx, DatePicker{
-		Initial: initial,
-		Today:   initial,
-		OnPick: func(t time.Time) {
-			if close != nil {
-				close()
-			}
-			if onPick != nil {
-				onPick(t)
-			}
-		},
-	})
+	close = ShowDialog(ctx, datePickerDialog(initial, func(t time.Time) {
+		if close != nil {
+			close()
+		}
+		if onPick != nil {
+			onPick(t)
+		}
+	}))
 	return close
+}
+
+// datePickerDialog is the picker ShowDatePicker presents. Today is left zero
+// so the picker rings the actual today: passing initial ringed whatever date
+// was handed in — a stored due date from last month — and once the user
+// moved off it, the real today was never marked at all.
+func datePickerDialog(initial time.Time, onPick func(time.Time)) DatePicker {
+	return DatePicker{Initial: initial, OnPick: onPick}
 }
 
 // --- calendar math (pure, so it is directly testable) ---

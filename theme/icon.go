@@ -70,10 +70,7 @@ func (ic Icon) Build(ctx widget.Ctx) widget.Widget {
 	if size <= 0 {
 		size = th.Type.Body
 	}
-	col := ic.Color
-	if col.A == 0 {
-		col = th.Text
-	}
+	col := colorOr(ic.Color, th.Text)
 	stroke := ic.Stroke
 	if stroke <= 0 {
 		stroke = size / 12 // 2px on a 24px icon
@@ -145,8 +142,7 @@ func drawGlyph(p *paint.Path, g IconGlyph, s float32) {
 		p.LineTo(at(s, 18.5, 20))
 		p.LineTo(at(s, 18.5, 10))
 	case IconList:
-		for i, y := range []float32{6, 12, 18} {
-			_ = i
+		for _, y := range []float32{6, 12, 18} {
 			line(p, s, 8, y, 20, y)
 			line(p, s, 4, y, 4.6, y) // bullet, a dot the round cap fills out
 		}

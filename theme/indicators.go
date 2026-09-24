@@ -53,10 +53,7 @@ func (s *progressState) Build(ctx widget.Ctx) widget.Widget {
 	if h <= 0 {
 		h = 4
 	}
-	fill := w.Color
-	if fill == (paint.Color{}) {
-		fill = th.Primary
-	}
+	fill := colorOr(w.Color, th.Primary)
 	indeterminate := w.Value < 0
 	s.tick.running = indeterminate
 	phase := s.tick.phase
@@ -100,6 +97,12 @@ func progressLabel(label string, value float32) string {
 
 // Spinner is an indeterminate circular activity indicator — the right choice
 // when there is no measurable progress and no room for a bar.
+//
+// It keeps spinning under the reduce-motion preference, as does the
+// indeterminate Progress sweep. The motion is the information: a still arc
+// says "finished" or "stuck", and the platforms' own activity indicators
+// make the same call. Decorative motion — a sliding knob or indicator, a
+// sheet's entrance — is what the preference turns off.
 type Spinner struct {
 	// Size is the diameter. 0 → 20.
 	Size float32
@@ -135,10 +138,7 @@ func (s *spinnerState) Build(ctx widget.Ctx) widget.Widget {
 	if d <= 0 {
 		d = 20
 	}
-	col := w.Color
-	if col == (paint.Color{}) {
-		col = th.Primary
-	}
+	col := colorOr(w.Color, th.Primary)
 	phase := s.tick.phase
 	stroke := d / 9
 	if stroke < 1.5 {
@@ -218,6 +218,18 @@ func (t *sweepTicker) Tick(dt float64) bool {
 // cosNorm maps a wrapping phase to a 0..1 cosine ease.
 func cosNorm(phase float32) float32 {
 	return float32(0.5 * (1 + math.Cos(float64(phase)*2*math.Pi)))
+}
+
+// colorOr is c when it is visible and fallback when it is not, the one rule
+// for "no colour given" across the theme. A colour with zero alpha and
+// non-zero RGB is not a colour anyone meant: Icon already read it as unset
+// while Chip, Badge, Avatar, Progress and Spinner compared against the zero
+// value and painted nothing, and chart's colorOr agrees with Icon.
+func colorOr(c, fallback paint.Color) paint.Color {
+	if c.A > 0 {
+		return c
+	}
+	return fallback
 }
 
 func clamp01(v float32) float32 {

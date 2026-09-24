@@ -52,6 +52,16 @@ func TestCalendarMath(t *testing.T) {
 	}
 }
 
+// ShowDatePicker marks the real today, not the date it was opened on. It used
+// to pass initial as Today, so a stored due date from last month wore the
+// "today" ring and the actual today was never marked.
+func TestShowDatePickerMarksRealToday(t *testing.T) {
+	initial := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC)
+	if p := datePickerDialog(initial, nil); !p.Today.IsZero() {
+		t.Fatalf("ShowDatePicker pins Today to %v; zero means time.Now", p.Today)
+	}
+}
+
 // TestDatePickerPick renders a DatePicker and taps a specific day, asserting
 // OnPick fires with that date. It computes the tap point from the fixed
 // calendar metrics, so it exercises the real grid layout and hit target.

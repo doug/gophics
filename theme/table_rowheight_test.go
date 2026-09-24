@@ -82,6 +82,14 @@ func TestRowExtentReportsTheResolvedHeight(t *testing.T) {
 	if got := (theme.Table{}).RowExtent(th); got <= 0 {
 		t.Errorf("RowExtent with no RowHeight = %v, want the derived default", got)
 	}
+	// Exact below the default too. A floor on the vertical padding made any
+	// RowHeight under Body+4 come out as Body+4, so a dense table's RowExtent
+	// disagreed with its RowHeight and count*RowHeight lost rows.
+	for _, h := range []float32{12, 16} {
+		if got := (theme.Table{RowHeight: h}).RowExtent(th); got != h {
+			t.Errorf("RowExtent with RowHeight %v = %v", h, got)
+		}
+	}
 }
 
 func label(row int) string { return "r" + string(rune('0'+row)) }

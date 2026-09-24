@@ -131,15 +131,13 @@ func (s *tableState) Build(ctx widget.Ctx) widget.Widget {
 func (t Table) RowExtent(th Theme) float32 { return t.rowExtent(th) }
 
 func (t Table) rowExtent(th Theme) float32 {
-	line := th.Type.Body
-	vpad := float32(9)
+	// Exact when set, as the field's doc promises: a floor here (it used to
+	// pad to at least Body+4) made RowExtent disagree with RowHeight for a
+	// dense table, and the caller sizing count*RowHeight lost rows.
 	if t.RowHeight > 0 {
-		vpad = (t.RowHeight - line) / 2
-		if vpad < 2 {
-			vpad = 2
-		}
+		return t.RowHeight
 	}
-	return line + 2*vpad
+	return th.Type.Body + 2*9
 }
 
 func (t Table) rowTap(i int) func() {
