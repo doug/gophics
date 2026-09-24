@@ -69,15 +69,48 @@ func TestClockAdvances(t *testing.T) {
 	g.bpm = 120 // 16th-note step = 60/120/4 = 0.125s
 	g.start()   // step 0, acc 0
 
-	// Advance just over four steps' worth of time; step should land on 4.
-	h.Step(0.125*4 + 0.001)
+	// Advance just over four steps' worth of time, a step per frame; step
+	// should land on 4. (A single long frame is a stall and is clamped — see
+	// TestClockDoesNotCatchUpAfterAStall.)
+	for range 4 {
+		h.Step(0.125)
+	}
+	h.Step(0.001)
 	if g.step != 4 {
 		t.Fatalf("after 4 steps, step=%d want 4", g.step)
 	}
-	// Advance a full bar (16 steps) more; step wraps back to 4.
-	h.Step(0.125 * 16)
+	// Advance a full bar (16 steps) more, a step per frame; step wraps back to 4.
+	for range 16 {
+		h.Step(0.125)
+	}
 	if g.step != 4 {
 		t.Fatalf("after wrapping a bar, step=%d want 4", g.step)
+	}
+}
+
+// TestClockDoesNotCatchUpAfterAStall: a frame that arrives a minute late — the
+// machine slept, the window was hidden — advances one step, not the 480 that
+// elapsed. Firing them all at once was a burst of hundreds of one-shots and a
+// playhead that had, by chance, wrapped back to where it started.
+func TestClockDoesNotCatchUpAfterAStall(t *testing.T) {
+	var g *drum
+	stateHook = func(gg *drum) { g = gg }
+	defer func() { stateHook = nil }()
+
+	h, err := app.NewHeadless(App{Mixer: sound.NewMixer()}, app.Config{Size: geom.Size{W: 760, H: 424}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	g.bpm = 120
+	g.start()
+
+	h.Step(60) // a minute is 480 steps; 480 % 16 == 0 would look untouched
+	if g.step != 1 {
+		t.Fatalf("after a 60s frame, step=%d want 1", g.step)
+	}
+	if g.acc >= g.stepDur() {
+		t.Fatalf("acc=%v still holds a backlog after the stall", g.acc)
 	}
 }
 

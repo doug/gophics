@@ -138,12 +138,18 @@ func (s *drum) trigger(step int) {
 func (s *drum) stepDur() float64 { return 60.0 / s.bpm / 4 }
 
 // Tick advances the rhythmic clock, firing each step it crosses.
+//
+// A frame longer than a step is a stall — a laptop lid closed, a window
+// hidden — not music to catch up on, so dt is capped at one step. The web
+// shell clamps a long frame itself; desktop hands the wall-clock gap through,
+// and at 120 BPM a minute asleep fired 480 steps, up to 2,400 one-shots, in
+// the first frame back.
 func (s *drum) Tick(dt float64) bool {
 	if !s.playing {
 		return false
 	}
 	dur := s.stepDur()
-	s.acc += dt
+	s.acc += min(dt, dur)
 	for s.acc >= dur {
 		s.acc -= dur
 		s.step = (s.step + 1) % steps
