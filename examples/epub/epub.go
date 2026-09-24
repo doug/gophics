@@ -191,7 +191,10 @@ func parseEPUB(data []byte) (*Book, error) {
 		if err != nil {
 			return nil, err
 		}
-		blocks := extractBlocks(raw)
+		blocks, err := extractBlocks(raw)
+		if err != nil {
+			return nil, fmt.Errorf("epub: %s: %w", rel, err)
+		}
 		ch := Chapter{Blocks: blocks}
 		if len(blocks) > 0 && blocks[0].Heading {
 			ch.Title = blocks[0].Text
@@ -206,14 +209,26 @@ func parseEPUB(data []byte) (*Book, error) {
 // extractBlocks walks an XHTML document and reduces it to heading/paragraph
 // blocks of flattened, whitespace-collapsed text. Inline markup (em/strong) is
 // kept as plain text.
-func extractBlocks(xhtml []byte) []Block {
+//
+// Real chapters are HTML in XML clothing: &nbsp; and &mdash; are on most
+// pages, declared by the XHTML DTD and unknown to a strict XML decoder. The
+// decoder runs lenient with the HTML entity table so those read as text. What
+// it still cannot read is an error rather than a shorter chapter — stopping
+// quietly at the first bad token truncated real books with nothing on screen
+// to say so.
+func extractBlocks(xhtml []byte) ([]Block, error) {
 	dec := xml.NewDecoder(bytes.NewReader(xhtml))
+	dec.Strict = false
+	dec.Entity = xml.HTMLEntity
 	var blocks []Block
 	var cur *Block
 	for {
 		tok, err := dec.Token()
-		if err != nil {
+		if err == io.EOF {
 			break
+		}
+		if err != nil {
+			return nil, err
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
@@ -240,7 +255,7 @@ func extractBlocks(xhtml []byte) []Block {
 			}
 		}
 	}
-	return blocks
+	return blocks, nil
 }
 
 func readZip(files map[string]*zip.File, name string) ([]byte, error) {

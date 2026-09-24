@@ -1,6 +1,9 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -51,4 +54,89 @@ func TestParseEPUB(t *testing.T) {
 	if !strings.Contains(joined, "do not correct it") {
 		t.Error("inline <em> text was dropped")
 	}
+}
+
+// A book from "Open EPUB…" is not the bundled one. Real chapters are HTML in
+// XML clothing — &nbsp; and &mdash; on most pages, paragraphs wrapped in
+// <div>s — and a spine can name an item the manifest does not have. None of
+// that may lose text: the first entity used to end the chapter silently.
+func TestParseEPUBFromTheWild(t *testing.T) {
+	b, err := parseEPUB(zipOf(
+		"mimetype", "application/epub+zip",
+		"META-INF/container.xml", `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>`,
+		"OEBPS/book.opf", `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Wild</dc:title><dc:creator>Anon</dc:creator></metadata>
+  <manifest>
+    <item id="one" href="text/one.xhtml" media-type="application/xhtml+xml"/>
+    <item id="two" href="text/two.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="one"/><itemref idref="missing"/><itemref idref="two"/></spine>
+</package>`,
+		"OEBPS/text/one.xhtml", `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2>One</h2>
+<p>Ink&nbsp;and&mdash;paper</p>
+<p>after the entity</p>
+</body></html>`,
+		"OEBPS/text/two.xhtml", `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<div class="section"><p>wrapped in a div</p></div>
+</body></html>`,
+	))
+	if err != nil {
+		t.Fatalf("parseEPUB: %v", err)
+	}
+	if len(b.Chapters) != 2 {
+		t.Fatalf("chapters = %d, want 2 (the unresolvable itemref is skipped)", len(b.Chapters))
+	}
+	if got := blockTexts(b.Chapters[0]); strings.Join(got, "|") != "One|Ink and—paper|after the entity" {
+		t.Errorf("chapter with entities = %q", got)
+	}
+	if got := blockTexts(b.Chapters[1]); strings.Join(got, "|") != "wrapped in a div" {
+		t.Errorf("div-wrapped chapter = %q", got)
+	}
+	if b.Chapters[1].Title != "Chapter 2" {
+		t.Errorf("headingless chapter title = %q", b.Chapters[1].Title)
+	}
+}
+
+// A chapter the decoder cannot read is reported, not shown shorter. The UI
+// keeps the bundled book on error, which is an honest outcome; a chapter that
+// ends mid-page with no explanation is not.
+func TestParseEPUBReportsAnUnreadableChapter(t *testing.T) {
+	_, err := parseEPUB(zipOf(
+		"META-INF/container.xml", `<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="book.opf"/></rootfiles></container>`,
+		"book.opf", `<package xmlns="http://www.idpf.org/2007/opf"><manifest><item id="c" href="c.xhtml"/></manifest><spine><itemref idref="c"/></spine></package>`,
+		"c.xhtml", `<html><body><p>fine</p><p>broken</q></body></html>`,
+	))
+	if err == nil {
+		t.Fatal("a chapter with a mismatched end tag parsed without error")
+	}
+	if !strings.Contains(err.Error(), "c.xhtml") {
+		t.Errorf("error does not name the chapter: %v", err)
+	}
+}
+
+func blockTexts(c Chapter) []string {
+	out := make([]string, len(c.Blocks))
+	for i, b := range c.Blocks {
+		out[i] = b.Text
+	}
+	return out
+}
+
+// zipOf builds a zip from name/body pairs, in order.
+func zipOf(pairs ...string) []byte {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for i := 0; i+1 < len(pairs); i += 2 {
+		w, _ := zw.Create(pairs[i])
+		_, _ = io.WriteString(w, pairs[i+1])
+	}
+	_ = zw.Close()
+	return buf.Bytes()
 }
