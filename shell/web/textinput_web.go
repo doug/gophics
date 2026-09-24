@@ -2,8 +2,19 @@
 
 // Web implementation of the shell text-input capability (shell/textinput.go).
 // gophics draws its own editor, so to raise the mobile soft keyboard we focus a
-// hidden <input> and forward its input/composition/edit-key events. The input is
-// a commit funnel: each `input` event yields committed text and is cleared.
+// hidden <input> and forward its input and composition events. The input is a
+// commit funnel: each `input` event yields committed text and is cleared.
+//
+// Editing keys (Backspace, Enter, arrows) are deliberately *not* forwarded
+// through OnEditKey. A keydown on the input bubbles to the document, where
+// web.go's listener already turns it into a shell.Key — with its modifiers,
+// which is what makes Shift+Arrow select and Alt+Backspace delete a word. An
+// input-level listener saw the same keydown first and forwarded it as an
+// unmodified edit key, so every Backspace deleted two characters and every
+// Enter submitted twice. Printable keys never doubled, because the document
+// listener's preventDefault stops the browser inserting the character and no
+// `input` event fires; that asymmetry is why the bug hid behind typing that
+// looked fine.
 //
 // One element, created once and reused. Recreating it per field looked tidier
 // and broke moving between fields on Chrome for Android: focus moves as blur
@@ -82,27 +93,10 @@ func (t *webTextInput) ensure() {
 		}
 		return nil
 	})
-	onKey := js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if t.h.OnEditKey == nil || len(args) == 0 {
-			return nil
-		}
-		switch args[0].Get("key").String() {
-		case "Backspace":
-			t.h.OnEditKey(shell.EditBackspace)
-		case "Enter":
-			t.h.OnEditKey(shell.EditEnter)
-		case "ArrowLeft":
-			t.h.OnEditKey(shell.EditLeft)
-		case "ArrowRight":
-			t.h.OnEditKey(shell.EditRight)
-		}
-		return nil
-	})
 	in.Call("addEventListener", "input", onInput)
 	in.Call("addEventListener", "compositionupdate", onComp)
-	in.Call("addEventListener", "keydown", onKey)
 
-	t.input, t.funcs = in, []js.Func{onInput, onComp, onKey}
+	t.input, t.funcs = in, []js.Func{onInput, onComp}
 }
 
 func (t *webTextInput) cancelBlur() {
@@ -118,7 +112,11 @@ func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandle
 	t.h, t.active = h, true
 
 	in := t.input
-	in.Set("inputmode", inputMode(opts.Type))
+	// Through setAttribute, not a property assignment: the reflected IDL
+	// property is spelled inputMode, and assigning to a lowercase `inputmode`
+	// only creates a JS expando the browser never reads — so the numeric,
+	// email and URL keyboards were never requested.
+	in.Call("setAttribute", "inputmode", inputMode(opts.Type))
 	// A password input is how the browser is told not to suggest, autofill
 	// from history, or show the typed key in the keyboard's preview bubble.
 	// The element is invisible, so the type changes nothing on screen; it
@@ -136,8 +134,12 @@ func (t *webTextInput) Show(opts shell.TextInputOptions, h shell.TextInputHandle
 		in.Call("removeAttribute", "autocapitalize")
 		in.Set("spellcheck", true)
 	} else {
-		in.Set("autocorrect", "off")
-		in.Set("autocapitalize", "off")
+		// Also setAttribute: `autocorrect` is a boolean IDL property in
+		// browsers that reflect it, and a non-empty string assigned to a
+		// boolean coerces to true — turning autocorrect *on* for exactly the
+		// fields (secure ones included) that asked to have it off.
+		in.Call("setAttribute", "autocorrect", "off")
+		in.Call("setAttribute", "autocapitalize", "off")
 		in.Set("spellcheck", false)
 	}
 	in.Set("value", "")
