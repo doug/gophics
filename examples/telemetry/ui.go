@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/doug/gophics/chart"
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/intl"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
@@ -154,7 +156,7 @@ func (s *dash) header(th theme.Theme) widget.Widget {
 	if s.loadErr != "" {
 		sub = s.loadErr
 	}
-	return widget.Row(
+	kids := []widget.Widget{
 		widget.Expand(widget.Flex{
 			Axis:       layout.Vertical,
 			CrossAlign: layout.CrossStart,
@@ -165,11 +167,19 @@ func (s *dash) header(th theme.Theme) widget.Widget {
 			},
 		}),
 		s.loadButtons(),
-		widget.Text{Value: "Live", Size: th.Type.Label, Color: th.Muted},
-		widget.Sized{W: 8},
-		theme.Switch{On: s.live, Label: "Live tail",
-			OnChange: func(v bool) { s.SetState(func() { s.live = v; s.dirty = v }) }},
-	)
+	}
+	// A loaded capture stops the producer for good (see Store.Replace), so
+	// there is no tail to follow: the switch would toggle a rebuild-every-tick
+	// over data that never changes. It goes away rather than doing nothing.
+	if !s.store.Paused() {
+		kids = append(kids,
+			widget.Text{Value: "Live", Size: th.Type.Label, Color: th.Muted},
+			widget.Sized{W: 8},
+			theme.Switch{On: s.live, Label: "Live tail",
+				OnChange: func(v bool) { s.SetState(func() { s.live = v; s.dirty = v }) }},
+		)
+	}
+	return widget.Row(kids...)
 }
 
 // tiles is the headline row. Every number on it comes out of the same pass that
@@ -365,13 +375,19 @@ func (s *dash) filters(th theme.Theme, narrow bool) widget.Widget {
 		OnChange: func(i int) { s.setQuery(func(q *Query) { q.Svc = i - 1 }) }}
 
 	if narrow {
+		// Stacked, but nothing dropped: a service picked while the window was
+		// wide stays applied, and the only way to clear it must stay on screen.
 		return widget.Flex{
 			Axis:       layout.Vertical,
 			CrossAlign: layout.CrossStretch,
 			Children: []widget.Widget{
 				search,
 				widget.Sized{H: 8},
-				status,
+				widget.Row(
+					widget.Expand(status),
+					widget.Sized{W: 8},
+					widget.Sized{W: 150, Child: svc},
+				),
 			},
 		}
 	}
@@ -561,22 +577,12 @@ func fmtBytes(b int32) string {
 	return fmt.Sprintf("%.1f kB", float64(b)/1024)
 }
 
-// commas groups an integer for reading: 100000 → "100,000".
-func commas(n int64) string {
-	s := fmt.Sprint(n)
-	neg := ""
-	if s[0] == '-' {
-		neg, s = "-", s[1:]
-	}
-	out := make([]byte, 0, len(s)+len(s)/3)
-	for i := 0; i < len(s); i++ {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			out = append(out, ',')
-		}
-		out = append(out, s[i])
-	}
-	return neg + string(out)
-}
+// locale decides how numbers are punctuated, resolved once from the environment.
+var locale = intl.Auto()
+
+// commas groups an integer for reading: 100000 → "100,000" (or "100.000" where
+// the locale writes it that way).
+func commas(n int64) string { return locale.Number(strconv.FormatInt(n, 10)) }
 
 // maxSvcBars is how many services the p95 chart can label legibly at the width
 // it gets. A capture with more is truncated to the busiest — and says so, rather
@@ -625,7 +631,7 @@ func (s *dash) openOTLP() {
 // into the live one.
 func (s *dash) load(r io.Reader, name string) {
 	v := newVocab()
-	spans, err := DecodeOTLP(r, v)
+	c, err := DecodeOTLP(r, v)
 	s.SetState(func() {
 		if err != nil {
 			s.loadErr = err.Error()
@@ -634,7 +640,7 @@ func (s *dash) load(r io.Reader, name string) {
 		s.loadErr = ""
 		s.live = false
 		useVocab(v)
-		s.store.Replace(spans, name) // also stops the synthetic producer
+		s.store.Replace(c, name) // also stops the synthetic producer
 		s.q = Query{Svc: -1, SortCol: colTime, Desc: true}
 		s.selected = -1
 		s.dirty = true

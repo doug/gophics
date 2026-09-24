@@ -80,12 +80,12 @@ func load(store *Store, path string) error {
 	}
 	defer f.Close()
 	v := newVocab()
-	spans, err := DecodeOTLP(f, v)
+	c, err := DecodeOTLP(f, v)
 	if err != nil {
 		return err
 	}
 	useVocab(v)
-	store.Replace(spans, filepath.Base(path))
-	log.Printf("loaded %d spans from %s", len(spans), path)
+	store.Replace(c, filepath.Base(path))
+	log.Printf("loaded %d spans from %s", len(c.Spans), path)
 	return nil
 }

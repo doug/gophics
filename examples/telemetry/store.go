@@ -92,6 +92,11 @@ type Store struct {
 	buf   []Span
 	n     uint64 // total spans ever written
 	epoch time.Time
+	// wall is the wall-clock time a span at At 0 started. For the synthetic
+	// fleet it is the epoch; for a loaded capture it is the capture's own
+	// newest timestamp, which is why it is kept apart from the epoch the Age
+	// column is measured against.
+	wall time.Time
 
 	// Source names where the data came from, for the header line.
 	source string
@@ -109,9 +114,11 @@ type Store struct {
 }
 
 func NewStore(seed int64) *Store {
+	now := time.Now()
 	s := &Store{
 		buf:      make([]Span, Window),
-		epoch:    time.Now(),
+		epoch:    now,
+		wall:     now,
 		source:   "synthetic fleet",
 		rng:      rand.New(rand.NewSource(seed)),
 		degraded: 3,
@@ -201,21 +208,31 @@ func (s *Store) Total() uint64 {
 	return s.n
 }
 
-// Wall converts a span's timestamp to a wall clock time.
-func (s *Store) Wall(at int32) time.Time { return s.epoch.Add(time.Duration(at) * time.Millisecond) }
+// Wall converts a span's timestamp to the wall clock it was recorded on: the
+// live clock for the synthetic fleet, the capture's own for a loaded file.
+func (s *Store) Wall(at int32) time.Time { return s.wall.Add(time.Duration(at) * time.Millisecond) }
+
+// Paused reports whether the synthetic producer has been stopped by a load.
+func (s *Store) Paused() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.paused
+}
 
 // Replace swaps the window's contents for a decoded capture, keeping the newest
-// Window spans and rebasing the clock so the newest span reads as "now" — a
-// capture from last Tuesday should still show a sensible Age column.
+// Window spans and rebasing the Age clock so the newest span reads as "now" — a
+// capture from last Tuesday should still show a sensible Age column — while
+// the Time column keeps the capture's own clock (Wall).
 //
 // Spans are sorted by time first. An OTLP file is grouped by service, not
 // ordered by clock, and the ring being chronological is not a cosmetic detail:
 // it is the invariant the query engine's default view relies on to skip sorting
 // entirely (see Run). Loading an unsorted capture without this shows the last
 // service in the file as though it were the most recent traffic.
-func (s *Store) Replace(spans []Span, source string) {
+func (s *Store) Replace(c Capture, source string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	spans := c.Spans
 	slices.SortFunc(spans, func(a, b Span) int { return int(a.At - b.At) })
 	if len(spans) > Window {
 		spans = spans[len(spans)-Window:]
@@ -226,6 +243,7 @@ func (s *Store) Replace(spans []Span, source string) {
 	}
 	s.n = 0
 	s.epoch = time.Now()
+	s.wall = c.Newest.Add(time.Duration(newest) * time.Millisecond)
 	for _, sp := range spans {
 		sp.At -= newest // newest lands at 0, everything else is negative
 		s.write(sp)
@@ -255,8 +273,12 @@ func (s *Store) Fill(n int, over time.Duration) {
 		// thins them out in others, which is what a varying arrival rate looks
 		// like after the fact. The amplitudes are kept small enough that dw/du
 		// never approaches zero: a warp that briefly ran backwards would pile
-		// thousands of spans onto one millisecond and spike the chart.
-		w := u + 0.022*math.Sin(u*7.1) + 0.010*math.Sin(u*19.3+1.2)
+		// thousands of spans onto one millisecond and spike the chart. The
+		// ripple fades out towards u = 1 so the warp ends exactly at now: left
+		// unfaded it overshoots by ~2.6%, which stamped the newest spans almost
+		// two seconds into the future, where the Age column clamped them to
+		// 0.0s and the throughput chart never counted them.
+		w := u + (0.022*math.Sin(u*7.1)+0.010*math.Sin(u*19.3+1.2))*(1-u)
 		s.write(s.gen(int32(-span * (1 - w))))
 	}
 }

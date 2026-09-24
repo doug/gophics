@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // OTLP/JSON — the OpenTelemetry Protocol's JSON encoding — is what this loads.
@@ -41,28 +44,45 @@ import (
 //go:embed otlp-sample.json
 var sampleOTLP string
 
+// Capture is a decoded trace file. Span.At is int32 milliseconds, which cannot
+// hold a Unix timestamp, so the spans are timed relative to the newest one
+// (At 0; everything older is negative) and Newest carries that span's wall-clock
+// start. Store.Replace uses the first for the Age column and the second for the
+// Time column, so a capture recorded last Tuesday reads as last Tuesday rather
+// than as the moment it was loaded.
+type Capture struct {
+	Spans  []Span
+	Newest time.Time
+}
+
 // DecodeOTLP reads OTLP/JSON traces and converts them to Spans, interning names
-// into v as it goes. Timestamps are returned in milliseconds on the file's own
-// clock; Store.Replace rebases them.
-func DecodeOTLP(r io.Reader, v *vocab) ([]Span, error) {
+// into v as it goes.
+func DecodeOTLP(r io.Reader, v *vocab) (Capture, error) {
 	dec := json.NewDecoder(r)
 	var out []Span
+	var starts []int64 // each span's start in Unix milliseconds, parallel to out
 	for {
 		var req otlpRequest
 		if err := dec.Decode(&req); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, fmt.Errorf("otlp: %w", err)
+			return Capture{}, fmt.Errorf("otlp: %w", err)
 		}
 		for _, rs := range req.ResourceSpans {
-			out = append(out, rs.spans(v)...)
+			out, starts = rs.spans(v, out, starts)
 		}
 	}
 	if len(out) == 0 {
-		return nil, errors.New("otlp: no spans found (is this an OTLP/JSON trace export?)")
+		return Capture{}, errors.New("otlp: no spans found (is this an OTLP/JSON trace export?)")
 	}
-	return out, nil
+	newest := slices.Max(starts)
+	for i := range out {
+		// A capture wider than int32 milliseconds (24 days) saturates its
+		// oldest spans rather than wrapping them into the future.
+		out[i].At = int32(max(starts[i]-newest, math.MinInt32))
+	}
+	return Capture{Spans: out, Newest: time.UnixMilli(newest)}, nil
 }
 
 type otlpRequest struct {
@@ -79,8 +99,9 @@ type resourceSpans struct {
 }
 
 // spans flattens one resource's spans, applying the resource-level identity
-// (service name, host) to each.
-func (rs resourceSpans) spans(v *vocab) []Span {
+// (service name, host) to each. Each span's Unix-millisecond start goes to
+// starts, since Span.At cannot hold one; DecodeOTLP rebases them at the end.
+func (rs resourceSpans) spans(v *vocab, out []Span, starts []int64) ([]Span, []int64) {
 	res := attrs(rs.Resource.Attributes)
 	service := res.first("service.name")
 	if service == "" {
@@ -89,13 +110,14 @@ func (rs resourceSpans) spans(v *vocab) []Span {
 	resHost := res.first("host.name", "service.instance.id", "k8s.pod.name")
 
 	svc := v.svc.intern(service)
-	var out []Span
 	for _, ss := range rs.ScopeSpans {
 		for _, sp := range ss.Spans {
-			out = append(out, sp.decode(v, svc, resHost))
+			span, start := sp.decode(v, svc, resHost)
+			out = append(out, span)
+			starts = append(starts, start)
 		}
 	}
-	return out
+	return out, starts
 }
 
 type otlpSpan struct {
@@ -104,12 +126,16 @@ type otlpSpan struct {
 	StartNanos json.Number `json:"startTimeUnixNano"`
 	EndNanos   json.Number `json:"endTimeUnixNano"`
 	Attributes []attr      `json:"attributes"`
-	Status     struct {
-		Code json.Number `json:"code"`
+	// Code is kept raw: protobuf's JSON mapping writes an enum as either its
+	// number (2) or its name ("STATUS_CODE_ERROR"), and encoders differ.
+	Status struct {
+		Code json.RawMessage `json:"code"`
 	} `json:"status"`
 }
 
-func (sp otlpSpan) decode(v *vocab, svc uint16, resHost string) Span {
+// decode converts one wire span, returning it alongside its start time in Unix
+// milliseconds (see DecodeOTLP for why that is not simply in Span.At).
+func (sp otlpSpan) decode(v *vocab, svc uint16, resHost string) (Span, int64) {
 	a := attrs(sp.Attributes)
 
 	// Route: the low-cardinality template if the instrumentation recorded one,
@@ -133,11 +159,13 @@ func (sp otlpSpan) decode(v *vocab, svc uint16, resHost string) Span {
 	start, end := u64(sp.StartNanos), u64(sp.EndNanos)
 	dur := int32(0)
 	if end > start {
-		dur = int32((end - start) / 1000) // nanoseconds → microseconds
+		// nanoseconds → microseconds, saturating: a span longer than 35
+		// minutes would otherwise wrap negative (or, with the sign bit
+		// clear, land in some arbitrary bucket).
+		dur = int32(min((end-start)/1000, math.MaxInt32))
 	}
 
 	out := Span{
-		At:    int32(start / 1e6), // nanoseconds → milliseconds
 		Dur:   dur,
 		Bytes: -1,
 		Svc:   svc,
@@ -153,16 +181,17 @@ func (sp otlpSpan) decode(v *vocab, svc uint16, resHost string) Span {
 	if raw, err := hex.DecodeString(sp.TraceID); err == nil {
 		copy(out.Trace[:], raw)
 	}
-	return out
+	return out, int64(start / 1e6) // nanoseconds → milliseconds
 }
 
 // status prefers the HTTP status code, and falls back to the span's own OTLP
-// status — 2 is STATUS_CODE_ERROR — so non-HTTP spans still colour correctly.
-func status(a attrs, spanStatus json.Number) uint16 {
+// status — 2, or STATUS_CODE_ERROR by name — so non-HTTP spans still colour
+// correctly.
+func status(a attrs, spanStatus json.RawMessage) uint16 {
 	if n := a.firstInt("http.response.status_code", "http.status_code"); n > 0 {
 		return uint16(n)
 	}
-	if spanStatus.String() == "2" || spanStatus.String() == "STATUS_CODE_ERROR" {
+	if code := strings.Trim(string(spanStatus), `"`); code == "2" || code == "STATUS_CODE_ERROR" {
 		return 500
 	}
 	return 200

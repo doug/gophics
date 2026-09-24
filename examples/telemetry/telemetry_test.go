@@ -13,6 +13,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/apptest"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/theme"
 )
@@ -25,10 +26,11 @@ import (
 // blank rather than wrong-looking.
 func TestDecodeSample(t *testing.T) {
 	v := newVocab()
-	spans, err := DecodeOTLP(strings.NewReader(sampleOTLP), v)
+	c, err := DecodeOTLP(strings.NewReader(sampleOTLP), v)
 	if err != nil {
 		t.Fatal(err)
 	}
+	spans := c.Spans
 	if len(spans) < 50 {
 		t.Fatalf("decoded %d spans, want the sample's full set", len(spans))
 	}
@@ -87,10 +89,11 @@ func TestDecodeConventions(t *testing.T) {
 
 	for name, doc := range map[string]string{"modern": modern, "legacy": legacy} {
 		v := newVocab()
-		spans, err := DecodeOTLP(strings.NewReader(doc), v)
+		c, err := DecodeOTLP(strings.NewReader(doc), v)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+		spans := c.Spans
 		if len(spans) != 1 {
 			t.Fatalf("%s: %d spans, want 1", name, len(spans))
 		}
@@ -119,12 +122,66 @@ func TestDecodeStream(t *testing.T) {
 	one := `{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"a"}}]},
 	 "scopeSpans":[{"spans":[{"traceId":"aa","name":"n","startTimeUnixNano":"1","endTimeUnixNano":"2"}]}]}]}`
 	v := newVocab()
-	spans, err := DecodeOTLP(strings.NewReader(one+"\n"+one+"\n"+one), v)
+	c, err := DecodeOTLP(strings.NewReader(one+"\n"+one+"\n"+one), v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(spans) != 3 {
-		t.Errorf("got %d spans from 3 concatenated objects, want 3", len(spans))
+	if len(c.Spans) != 3 {
+		t.Errorf("got %d spans from 3 concatenated objects, want 3", len(c.Spans))
+	}
+}
+
+// TestDecodeStatusEnumString covers the other spelling of the span status.
+// protojson writes enums by name unless told otherwise, so a capture from a
+// Go exporter says "STATUS_CODE_ERROR" where the Collector says 2; the decoder
+// used to reject the whole file on the string form.
+func TestDecodeStatusEnumString(t *testing.T) {
+	const tmpl = `{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"a"}}]},
+	 "scopeSpans":[{"spans":[{"traceId":"aa","name":"n","startTimeUnixNano":"1","endTimeUnixNano":"2","status":{"code":%s}}]}]}]}`
+	for _, c := range []struct {
+		code string
+		want uint16
+	}{
+		{`2`, 500}, {`"2"`, 500}, {`"STATUS_CODE_ERROR"`, 500},
+		{`1`, 200}, {`"STATUS_CODE_OK"`, 200}, {`0`, 200},
+	} {
+		cap, err := DecodeOTLP(strings.NewReader(fmt.Sprintf(tmpl, c.code)), newVocab())
+		if err != nil {
+			t.Fatalf("status.code %s: %v", c.code, err)
+		}
+		if got := cap.Spans[0].Code; got != c.want {
+			t.Errorf("status.code %s decoded as HTTP %d, want %d", c.code, got, c.want)
+		}
+	}
+}
+
+// TestDecodeLongSpanSaturates: a span longer than int32 microseconds (about 35
+// minutes — a batch job, or a clock that jumped) must clamp rather than wrap,
+// and the capture's clock must survive the trip through Span.At.
+func TestDecodeLongSpanSaturates(t *testing.T) {
+	const doc = `{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"a"}}]},
+	 "scopeSpans":[{"spans":[
+	  {"traceId":"aa","name":"long","startTimeUnixNano":"1700000000000000000","endTimeUnixNano":"1700007200000000000"},
+	  {"traceId":"bb","name":"late","startTimeUnixNano":"1700000060000000000","endTimeUnixNano":"1700000060001000000"}]}]}]}`
+	c, err := DecodeOTLP(strings.NewReader(doc), newVocab())
+	if err != nil {
+		t.Fatal(err)
+	}
+	long, late := c.Spans[0], c.Spans[1]
+	if long.Dur != 1<<31-1 {
+		t.Errorf("a two-hour span decoded as %d µs, want saturation at MaxInt32", long.Dur)
+	}
+	if late.At != 0 || long.At != -60_000 {
+		t.Errorf("At = %d / %d; want the newest span at 0 and the older one 60 s before it", late.At, long.At)
+	}
+	if want := time.Unix(1700000060, 0); !c.Newest.Equal(want) {
+		t.Errorf("Newest = %v, want %v", c.Newest, want)
+	}
+	// Both spans must survive Run — the histogram must have a bucket for
+	// anything Dur can hold.
+	res := Run(c.Spans, 0, Query{Svc: -1})
+	if res.Matching != 2 {
+		t.Errorf("Run kept %d of 2 spans", res.Matching)
 	}
 }
 
@@ -379,14 +436,15 @@ func TestSnapshotReusesItsBuffer(t *testing.T) {
 func TestReplaceSortsAndStopsTheProducer(t *testing.T) {
 	store := NewStore(1)
 	v := newVocab()
-	spans, err := DecodeOTLP(strings.NewReader(sampleOTLP), v)
+	c, err := DecodeOTLP(strings.NewReader(sampleOTLP), v)
 	if err != nil {
 		t.Fatal(err)
 	}
 	useVocab(v)
 	defer func() { useVocab(newVocab()) }()
 
-	store.Replace(spans, "sample")
+	spans := c.Spans
+	store.Replace(c, "sample")
 	snap, _ := store.Snapshot(nil)
 	if len(snap) != len(spans) {
 		t.Fatalf("stored %d spans, decoded %d", len(snap), len(spans))
@@ -522,4 +580,138 @@ func TestRunsWithoutPanic(t *testing.T) {
 	if img := h.Render(); img.Bounds().Dx() != 1360 {
 		t.Fatalf("rendered %v", img.Bounds())
 	}
+}
+
+// --- Bounds ------------------------------------------------------------------
+
+// TestLatBucketStaysInRange pins the histogram's ends. The formula alone runs
+// past 200 for anything over 2^27 µs and turns a negative duration into a huge
+// unsigned one, and Run indexes a fixed array with the result — one 134-second
+// span in a capture used to crash the app.
+func TestLatBucketStaysInRange(t *testing.T) {
+	for _, us := range []int32{-1, -1 << 31, 0, 15, 16, 1<<27 - 1, 1 << 27, 200_000_000, 1<<31 - 1} {
+		if b := latBucket(us); b < 0 || b >= numBuckets {
+			t.Errorf("latBucket(%d) = %d, outside [0, %d)", us, b, numBuckets)
+		}
+	}
+	if latBucket(1<<27) < latBucket(1<<27-1) {
+		t.Error("the clamp broke monotonicity at the top")
+	}
+	rows := []Span{{Dur: 1 << 27}, {Dur: 1<<31 - 1}, {Dur: -5}, {Dur: 300}}
+	res := Run(rows, 0, Query{Svc: -1})
+	if res.Matching != len(rows) {
+		t.Errorf("Run kept %d of %d spans", res.Matching, len(rows))
+	}
+	if res.P99 < bucketUs(numBuckets-1) {
+		t.Errorf("p99 of a set dominated by >134 s spans reads as %d µs, below the top bucket", res.P99)
+	}
+}
+
+// TestFillStaysInThePast: the backfill's warp must end at now, not after it.
+// Spans stamped into the future read as 0.0s old and fall outside PerSec, so
+// the first seconds of the throughput chart under-counted.
+func TestFillStaysInThePast(t *testing.T) {
+	s := NewStore(9)
+	s.Fill(Window, 71*time.Second)
+	snap, now := s.Snapshot(nil)
+	future := 0
+	for _, sp := range snap {
+		if sp.At > now {
+			future++
+		}
+	}
+	if future > 0 {
+		t.Errorf("%d of %d backfilled spans are timestamped after now", future, len(snap))
+	}
+	// And the ripple must still be there: a flat fill would satisfy the check
+	// above and defeat the point of the warp.
+	res := Run(snap, now, Query{Svc: -1})
+	lo, hi := res.PerSec[0], res.PerSec[0]
+	for _, n := range res.PerSec[:ThroughputSecs-1] {
+		lo, hi = min(lo, n), max(hi, n)
+	}
+	if hi-lo < 50 {
+		t.Errorf("throughput ranges only %d..%d spans/s; the warp has gone flat", lo, hi)
+	}
+}
+
+// TestWallKeepsTheCaptureClock: loading a capture rebases the Age column to
+// now (that is what makes a week-old file readable) but the Time column must
+// keep the file's own timestamps — a request recorded at 09:15 last Tuesday
+// reads 09:15, not the moment the file was opened.
+func TestWallKeepsTheCaptureClock(t *testing.T) {
+	const doc = `{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"a"}}]},
+	 "scopeSpans":[{"spans":[
+	  {"traceId":"aa","name":"n","startTimeUnixNano":"1700000000000000000","endTimeUnixNano":"1700000000001000000"},
+	  {"traceId":"bb","name":"n","startTimeUnixNano":"1700000030000000000","endTimeUnixNano":"1700000030001000000"}]}]}]}`
+	v := newVocab()
+	c, err := DecodeOTLP(strings.NewReader(doc), v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	useVocab(v)
+	defer func() { useVocab(newVocab()) }()
+	store := NewStore(1)
+	store.Replace(c, "old")
+	snap, now := store.Snapshot(nil)
+	if got, want := store.Wall(snap[1].At), time.Unix(1700000030, 0); !got.Equal(want) {
+		t.Errorf("newest span's wall time is %v, want %v", got, want)
+	}
+	if got, want := store.Wall(snap[0].At), time.Unix(1700000000, 0); !got.Equal(want) {
+		t.Errorf("oldest span's wall time is %v, want %v", got, want)
+	}
+	if age := now - snap[1].At; age < 0 || age > 5_000 {
+		t.Errorf("newest span is %d ms old; the Age clock should have been rebased to now", age)
+	}
+}
+
+// TestLoadRetiresTheLiveSwitch: a loaded capture stops the producer for good,
+// so the "Live tail" switch — which would only flip a flag nothing reads —
+// must leave the header rather than sit there doing nothing.
+func TestLoadRetiresTheLiveSwitch(t *testing.T) {
+	a, st := newTestApp(t, 1360, 860)
+	a.AssertLabel("Live tail")
+	st.loadSample()
+	defer func() { useVocab(newVocab()) }()
+	a.Render()
+	a.AssertNoLabel("Live tail")
+	if st.live {
+		t.Error("live is still set after a load")
+	}
+}
+
+// TestNarrowLayoutKeepsTheServiceFilter: the phone layout stacks the filters
+// but must not drop the service dropdown — a service picked while the window
+// was wide stays applied, and that control is the only way to clear it.
+func TestNarrowLayoutKeepsTheServiceFilter(t *testing.T) {
+	a, s := newTestApp(t, 1360, 860)
+	s.setQuery(func(q *Query) { q.Svc = 2 })
+	a.Resize(geom.Size{W: 430, H: 900})
+	a.Render()
+	if s.q.Svc != 2 {
+		t.Fatalf("q.Svc = %d after the resize; the filter was reset", s.q.Svc)
+	}
+	if want := svcDict.Name(2); !a.HasLabel(want) && !a.HasText(want) {
+		t.Errorf("the narrow layout shows no control naming the %q filter that is applied", want)
+	}
+}
+
+// newTestApp mounts the app through apptest with a small backfill, and hands
+// back the state for driving it directly.
+func newTestApp(t *testing.T, w, h float32) (*apptest.App, *dash) {
+	t.Helper()
+	store := NewStore(3)
+	store.Fill(2_000, 5*time.Second)
+	var st *dash
+	stateHook = func(d *dash) { st = d }
+	defer func() { stateHook = nil }()
+	a := apptest.New(t, App{Store: store}, apptest.WithConfig(app.Config{
+		Size: geom.Size{W: w, H: h}, Font: goregular.TTF,
+		FontFamilies: map[string][]byte{theme.FontBold: gobold.TTF, "mono": gomono.TTF},
+	}))
+	a.Render()
+	if st == nil {
+		t.Fatal("state never mounted")
+	}
+	return a, st
 }

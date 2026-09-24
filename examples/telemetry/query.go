@@ -93,8 +93,8 @@ func Run(rows []Span, now int32, q Query) Result {
 	res.SvcCount = make([]int32, nsvc)
 
 	view := make([]int32, 0, len(rows))
-	var fine [200]int32
-	svcFine := make([][200]int32, nsvc)
+	var fine [numBuckets]int32
+	svcFine := make([][numBuckets]int32, nsvc)
 
 	for i := range rows {
 		sp := rows[i]
@@ -288,18 +288,31 @@ func parseNibbles(q string, dst []byte) (int, bool) {
 	return len(q), true
 }
 
+// numBuckets is how many latency buckets the histograms hold. Every array
+// indexed by latBucket is this long, so latBucket must never return more.
+const numBuckets = 200
+
 // latBucket maps microseconds to one of ~200 log-spaced buckets with integer
 // operations only: the bucket's octave is the position of the leading set bit,
 // and the three bits under it split that octave into eight — about 9%
 // resolution, which is finer than a percentile off a live sample deserves and
 // costs a shift and a mask instead of a call to math.Log.
+//
+// The last bucket is open-ended. The formula alone runs to 240 for the top
+// octaves, so a request over 2^27 µs (about 134 s — a capture of a batch job,
+// or a clock skew) would index past the histogram; and a negative duration,
+// which a malformed capture can produce, would become a huge unsigned one.
+// Both land in the ends rather than out of bounds.
 func latBucket(us int32) int {
+	if us < 0 {
+		return 0
+	}
 	u := uint32(us)
 	if u < 16 {
 		return int(u)
 	}
-	e := bits.Len32(u) // 5..32
-	return 16 + (e-5)*8 + int((u>>(e-4))&7)
+	e := bits.Len32(u) // 5..31
+	return min(16+(e-5)*8+int((u>>(e-4))&7), numBuckets-1)
 }
 
 // bucketUs is latBucket's inverse: the middle of the range a bucket covers.
@@ -315,7 +328,7 @@ func bucketUs(b int) int32 {
 
 // percentile reads a quantile straight off the histogram — O(buckets), not
 // O(n log n), and no copy of the matching durations to sort.
-func percentile(h *[200]int32, n int, p float64) int32 {
+func percentile(h *[numBuckets]int32, n int, p float64) int32 {
 	if n == 0 {
 		return 0
 	}
