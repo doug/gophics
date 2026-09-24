@@ -8,6 +8,7 @@ package audio
 import (
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/go-webgpu/goffi/ffi"
@@ -122,30 +123,41 @@ func (c *pulseCapture) Start(sink func([]float32)) error {
 	}
 	c.stop = make(chan struct{})
 	c.done = make(chan struct{})
-	go c.pump()
+	// The stream handle and the sink go in as arguments rather than being
+	// read off the struct: Close writes both fields under c.mu, and the pump
+	// reading them unlocked was a data race — one that could hand
+	// pa_simple_read a handle Close had just freed.
+	go c.pump(c.s, sink, c.stop, c.done)
 	return nil
 }
 
 // pump blocks in pa_simple_read and delivers each block to the sink.
-func (c *pulseCapture) pump() {
-	defer close(c.done)
+func (c *pulseCapture) pump(s uintptr, sink func([]float32), stop, done chan struct{}) {
+	defer close(done)
 	buf := make([]float32, c.frames)
 	raw := unsafe.Slice((*byte)(unsafe.Pointer(&buf[0])), len(buf)*4)
 	for {
 		select {
-		case <-c.stop:
+		case <-stop:
 			return
 		default:
 		}
 		var perr int32
-		if int32(paSimpleRead.call(c.s, uintptr(unsafe.Pointer(&raw[0])), uintptr(len(raw)), uintptr(unsafe.Pointer(&perr)))) < 0 {
+		if int32(paSimpleRead.call(s, uintptr(unsafe.Pointer(&raw[0])), uintptr(len(raw)), uintptr(unsafe.Pointer(&perr)))) < 0 {
 			return // the source went away; Close will tidy up
 		}
-		if s := c.sink; s != nil {
-			s(buf)
+		if sink != nil {
+			sink(buf)
 		}
 	}
 }
+
+// pumpJoinWait is how long Close gives the pump to notice stop before
+// freeing the stream under it. A read returns every 2048 frames — about 46 ms
+// at 44.1 kHz — so a source that is delivering at all is joined well within
+// this; only one that has stopped delivering leaves the read blocked, and
+// then freeing the stream is the one thing that ends it.
+const pumpJoinWait = 500 * time.Millisecond
 
 func (c *pulseCapture) Close() error {
 	c.mu.Lock()
@@ -154,8 +166,15 @@ func (c *pulseCapture) Close() error {
 		close(c.stop)
 		c.stop = nil
 	}
-	// pa_simple_read may be blocked in the kernel; freeing the stream is what
-	// unblocks it, so the pump is joined after the free rather than before.
+	// Join before freeing, because pa_simple is not thread-safe: the old
+	// order freed the stream to unblock the read, which is a use-after-free
+	// on every Close, in exchange for never waiting.
+	if c.done != nil {
+		select {
+		case <-c.done:
+		case <-time.After(pumpJoinWait):
+		}
+	}
 	if c.s != 0 {
 		paSimpleFreeIn.call(c.s)
 		c.s = 0

@@ -54,12 +54,21 @@ func (p *Player) Resume() {
 }
 
 // Stop ends playback permanently. The player cannot be restarted.
+//
+// It also detaches the player from its context and mixer. A stopped player
+// that stayed in the mix list kept its source — the whole decoded clip — and
+// was walked by every Mix call for the life of the context, and nothing else
+// ever removed one.
 func (p *Player) Stop() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.playing = false
 	p.paused = false
 	p.done = true
+	ctx := p.ctx
+	p.mu.Unlock()
+	if ctx != nil {
+		ctx.detach(p)
+	}
 }
 
 // IsPlaying reports whether the player is actively producing audio
@@ -89,9 +98,18 @@ func (p *Player) Volume() float64 {
 	return p.volume
 }
 
+// isDone reports whether playback has ended, by Stop or by EOF.
+func (p *Player) isDone() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.done
+}
+
 // readSamples fills dst with float32 samples from the source reader.
 // Returns the number of samples written into dst. Marks the player done
-// on EOF. Caller must NOT hold p.mu.
+// on EOF; the mixer drops it from the mix list on the next pass, and the
+// context forgets it the next time a player is created. Caller must NOT
+// hold p.mu.
 func (p *Player) readSamples(dst []float32) int {
 	bytesNeeded := len(dst) * 4 // 4 bytes per float32
 	p.mu.Lock()

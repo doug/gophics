@@ -54,8 +54,9 @@ func WithChannels(ch int) Option {
 	}
 }
 
-// WithDriver sets a specific audio driver. If not set, NullDriver is used
-// until platform drivers are implemented.
+// WithDriver sets a specific audio driver. If not set, the platform's default
+// driver is used (CoreAudio, WASAPI, PulseAudio, AAudio or WebAudio), falling
+// back to NullDriver where there is none.
 func WithDriver(d Driver) Option {
 	return func(c *Context) {
 		c.driver = d
@@ -121,11 +122,37 @@ func (c *Context) NewPlayer(src io.Reader) *Player {
 	}
 
 	c.mu.Lock()
-	c.players = append(c.players, p)
+	// Players that reached EOF are done but were never Stopped, so nothing
+	// has detached them; they are forgotten here, which bounds the list by
+	// the number of players ever live at once rather than ever created.
+	live := c.players[:0]
+	for _, q := range c.players {
+		if !q.isDone() {
+			live = append(live, q)
+		}
+	}
+	clear(c.players[len(live):])
+	c.players = append(live, p)
 	c.mixer.AddSource(p)
 	c.mu.Unlock()
 
 	return p
+}
+
+// detach forgets a player: Stop calls it so the source — the whole decoded
+// clip, for a WAV — is released rather than held by the mix list forever.
+func (c *Context) detach(p *Player) {
+	c.mu.Lock()
+	for i, q := range c.players {
+		if q == p {
+			copy(c.players[i:], c.players[i+1:])
+			c.players[len(c.players)-1] = nil
+			c.players = c.players[:len(c.players)-1]
+			break
+		}
+	}
+	c.mu.Unlock()
+	c.mixer.RemoveSource(p)
 }
 
 // PlayWAV decodes WAV data and starts playback immediately.

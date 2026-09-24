@@ -54,7 +54,16 @@ func (d *webDriver) Start() error {
 	if !ctxClass.Truthy() {
 		return fmt.Errorf("audio: no AudioContext available")
 	}
-	d.ctx = ctxClass.New()
+	// The rate Open asked for, or the context runs at the hardware rate —
+	// 48 kHz on most laptops and phones — while the mixer keeps producing
+	// 44.1 kHz frames, and everything plays about 9% sharp and fast. Every
+	// current browser honours AudioContextOptions.sampleRate and resamples to
+	// the device itself.
+	if d.sampleRate > 0 {
+		d.ctx = ctxClass.New(map[string]any{"sampleRate": d.sampleRate})
+	} else {
+		d.ctx = ctxClass.New()
+	}
 	d.channels = d.ctx.Get("destination").Get("channelCount").Int()
 	if d.channels < 1 {
 		d.channels = 2

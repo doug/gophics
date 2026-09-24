@@ -45,7 +45,9 @@ func (m *Mixer) RemoveSource(p *Player) {
 
 // Mix reads samples from all active sources, sums them with per-source
 // volume, applies master volume, and writes the result into out.
-// Inactive or finished sources contribute silence.
+// Inactive sources contribute silence; finished ones are dropped from the
+// mix list, so a player that reached EOF does not stay in it for the life of
+// the mixer, holding its source and costing a lock per Mix.
 func (m *Mixer) Mix(out []float32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -55,18 +57,24 @@ func (m *Mixer) Mix(out []float32) {
 		out[i] = 0
 	}
 
+	keep := m.sources[:0]
 	for _, s := range m.sources {
 		if s.player == nil {
 			continue
 		}
 
 		s.player.mu.Lock()
-		if !s.player.playing || s.player.paused || s.player.done {
-			s.player.mu.Unlock()
-			continue
-		}
+		done := s.player.done
+		active := s.player.playing && !s.player.paused && !done
 		vol := float32(s.player.volume)
 		s.player.mu.Unlock()
+		if done {
+			continue
+		}
+		keep = append(keep, s)
+		if !active {
+			continue
+		}
 
 		// Ensure source buffer is large enough
 		if len(s.buf) < len(out) {
@@ -78,6 +86,8 @@ func (m *Mixer) Mix(out []float32) {
 			out[i] += s.buf[i] * vol
 		}
 	}
+	clear(m.sources[len(keep):])
+	m.sources = keep
 
 	// Apply master volume and clamp
 	masterVol := float32(m.master)
