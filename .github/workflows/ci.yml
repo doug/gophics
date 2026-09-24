@@ -6,7 +6,7 @@ on:
   pull_request:
 
 # Test scoping:
-#   - lint:           fast gates — gofmt, go vet (framework scope), generated-code
+#   - lint:           fast gates — gofmt, go vet, generated-code
 #                     freshness, and a tracked-binary size guard.
 #   - build:          the "one static binary, zero CGo" invariant, cross-compiled.
 #   - test-framework: gophics's own packages (CPU/headless, deterministic) — the
@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # gofmt, go vet (framework scope), generated-code freshness, doc-embed
+      # gofmt, go vet, generated-code freshness, doc-embed
       # drift and the tracked-binary size guard. The same script runs from
       # .githooks/pre-push, so a developer sees these before the push rather
       # than in a red run afterwards — this job used to be a second copy of

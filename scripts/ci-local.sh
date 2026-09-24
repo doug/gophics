@@ -16,6 +16,10 @@
 #
 # Override the image with CI_LOCAL_IMAGE if CI moves to another Go version.
 #
+# Needs podman for the Linux jobs and PyYAML for python3 (`pip install pyyaml`,
+# or `uv pip install pyyaml`) to read the workflow file — the one non-stdlib
+# dependency, because there is no YAML parser in Python's standard library.
+#
 # Linux jobs run in podman on the Go version CI uses. macOS jobs run natively:
 # `runs-on: macos-latest` means what it says and a container cannot stand in —
 # the substrate job builds the Metal HAL.
@@ -54,9 +58,14 @@ IMAGE="${CI_LOCAL_IMAGE:-docker.io/library/golang:1.27}"
 # a backslash, producing a step that "failed" for a reason existing only here.
 steps() {
 	python3 - "$@" <<'PY'
-import base64, re, shlex, sys, yaml
+import base64, re, shlex, sys
 
-with open(".github/workflows/ci.yml") as f:
+try:
+    import yaml
+except ImportError:
+    sys.exit("ci-local.sh needs PyYAML to read the workflow file: pip install pyyaml")
+
+with open(".github/workflows/ci.yml", encoding="utf-8") as f:
     wf = yaml.safe_load(f)
 
 want = sys.argv[1] if len(sys.argv) > 1 else ""

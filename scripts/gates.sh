@@ -42,11 +42,13 @@ if [ $? -ne 0 ] || [ -n "$out" ]; then
 	fail "gofmt" "$out" "" "  fix: gofmt -w <file>"
 fi
 
-# ---- go vet, framework scope ------------------------------------------------
+# ---- go vet -----------------------------------------------------------------
 # The vendored internal/gfx + internal/audio have known benign unsafe.Pointer
-# warnings, so they are out of scope here exactly as they are in CI.
+# warnings, so they are out of scope here exactly as they are in CI. The
+# examples are in scope: nothing else vets them (CI only runs their tests),
+# and they compile in seconds.
 say "go vet…"
-pkgs=$(go list ./... 2>/dev/null | grep -vE 'internal/gfx|internal/audio|/examples/')
+pkgs=$(go list ./... 2>/dev/null | grep -vE 'internal/gfx|internal/audio')
 if [ -n "$pkgs" ]; then
 	# shellcheck disable=SC2086
 	if ! out=$(go vet $pkgs 2>&1); then
