@@ -50,6 +50,12 @@ func (iconsSection) Build(ctx widget.Ctx) widget.Widget {
 	for _, g := range iconGlyphs {
 		inline = append(inline, theme.Icon{Glyph: g.glyph, Color: th.Primary})
 	}
+	// And twice the grid: a stroke that drifted off it, or a corner that is
+	// not quite where its neighbour's is, shows here before anywhere else.
+	large := make([]widget.Widget, 0, len(iconGlyphs))
+	for _, g := range iconGlyphs {
+		large = append(large, theme.Icon{Glyph: g.glyph, Size: 48, Color: th.Muted})
+	}
 	return sectionColumn(
 		groupLabel("Every glyph"),
 		theme.Body("Stroked paths on a 24×24 grid — no icon font to go missing."),
@@ -57,5 +63,7 @@ func (iconsSection) Build(ctx widget.Ctx) widget.Widget {
 		widget.Wrap{Spacing: 4, RunSpacing: 16, Children: tiles},
 		groupLabel("At body size"),
 		widget.Padding{Insets: geom.InsetsSymmetric(0, 4), Child: widget.Wrap{Spacing: 10, RunSpacing: 10, Children: inline}},
+		groupLabel("At 48px"),
+		widget.Padding{Insets: geom.InsetsSymmetric(0, 4), Child: widget.Wrap{Spacing: 8, RunSpacing: 8, Children: large}},
 	)
 }

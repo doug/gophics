@@ -22,7 +22,18 @@ func (dialogsSection) CreateState() widget.State { return &dialogsState{} }
 type dialogsState struct {
 	widget.StateBase[dialogsSection]
 	result string
+	// menuOrigin is the "Show menu" button's top-left in window coordinates,
+	// captured on press. There is no widget-origin API, and none is needed: a
+	// press reports its position in the button's own coordinates and Input
+	// reports the same point globally, so the difference is the origin. It
+	// is what lets the menu hang from the button rather than from a window
+	// point that was only near the button at one size and scroll position.
+	menuOrigin geom.Pt
 }
+
+// menuButtonH fixes the trigger's height so the menu can open just under it,
+// the way theme.Dropdown opens under its own fixed-height control.
+const menuButtonH = 40
 
 func (s *dialogsState) set(r string) { s.SetState(func() { s.result = r }) }
 
@@ -46,11 +57,27 @@ func (s *dialogsState) showDialog(ctx widget.Ctx) {
 }
 
 func (s *dialogsState) showMenu(ctx widget.Ctx) {
-	theme.ShowMenu(ctx, geom.Pt{X: 40, Y: 320}, []theme.MenuItem{
+	anchor := geom.Pt{X: s.menuOrigin.X, Y: s.menuOrigin.Y + menuButtonH}
+	theme.ShowMenu(ctx, anchor, []theme.MenuItem{
 		{Label: "Rename", OnTap: func() { s.set("Rename") }},
 		{Label: "Duplicate", OnTap: func() { s.set("Duplicate") }},
 		{Label: "Move to trash", OnTap: func() { s.set("Move to trash") }},
 	})
+}
+
+// menuButton is the menu's trigger: a Button inside an Interactive that only
+// listens for the press, to learn where the button is. OnPress reaches every
+// handler under the pointer, so the wrapper sees it without taking the tap
+// from the Button.
+func (s *dialogsState) menuButton(ctx widget.Ctx) widget.Widget {
+	return widget.Interactive{
+		Gestures: widget.Gestures{OnPress: func(local geom.Pt) {
+			p := ctx.Input().Pointer()
+			s.menuOrigin = geom.Pt{X: p.X - local.X, Y: p.Y - local.Y}
+		}},
+		Child: widget.Sized{H: menuButtonH, Child: widget.Align{X: 0, Y: 0.5,
+			Child: theme.Button{Label: "Show menu", OnTap: func() { s.showMenu(ctx) }}}},
+	}
 }
 
 func (s *dialogsState) showSheet(ctx widget.Ctx) {
@@ -81,11 +108,11 @@ func (s *dialogsState) Build(ctx widget.Ctx) widget.Widget {
 	th := theme.Of(ctx)
 	return sectionColumn(
 		groupLabel("Dialog & menu"),
-		theme.Body("A centered modal over a dimming scrim; tap the scrim or press Escape to dismiss."),
+		theme.Body("A centered modal over a dimming scrim; tap the scrim or press Escape to dismiss. The menu hangs from the button that raised it."),
 		widget.Sized{H: 10},
 		widget.Wrap{Spacing: 10, RunSpacing: 10, Children: []widget.Widget{
 			theme.Button{Label: "Show dialog", Primary: true, OnTap: func() { s.showDialog(ctx) }},
-			theme.Button{Label: "Show menu", OnTap: func() { s.showMenu(ctx) }},
+			s.menuButton(ctx),
 		}},
 
 		groupLabel("Bottom sheet"),

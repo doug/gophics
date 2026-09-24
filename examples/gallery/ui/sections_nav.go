@@ -152,11 +152,11 @@ type feedPage struct{}
 
 func (feedPage) CreateState() widget.State { return &feedState{} }
 
+// feedState holds the rows only. Pull-to-refresh and swipe-to-dismiss have
+// their own sections (sections_gestures.go); this page is about navigation.
 type feedState struct {
 	widget.StateBase[feedPage]
-	cards      []card
-	seed       int
-	refreshing bool
+	cards []card
 }
 
 // feedHook lets tests observe the mounted feed.
@@ -167,31 +167,6 @@ func (s *feedState) Init(widget.Ctx) {
 		feedHook(s)
 	}
 	s.cards = makeCards(12, 0)
-}
-
-func (s *feedState) refresh(ctx widget.Ctx) {
-	s.SetState(func() { s.refreshing = true })
-	// Regenerate from a new seed on the next frame (no network to await; a real
-	// app would fetch here, then clear refreshing when done).
-	post := ctx.Post()
-	post(func() {
-		s.SetState(func() {
-			s.seed += 12
-			s.cards = makeCards(12, s.seed)
-			s.refreshing = false
-		})
-	})
-}
-
-func (s *feedState) remove(id int) {
-	s.SetState(func() {
-		for i, c := range s.cards {
-			if c.id == id {
-				s.cards = append(s.cards[:i], s.cards[i+1:]...)
-				return
-			}
-		}
-	})
 }
 
 func (s *feedState) Build(ctx widget.Ctx) widget.Widget {

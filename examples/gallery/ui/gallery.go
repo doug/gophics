@@ -479,11 +479,15 @@ func divider(th theme.Theme) widget.Widget {
 // it: the desktop binary, the web build, and the mobile bind package.
 func Config() app.Config {
 	return app.Config{
-		Title:        "Gophics Catalog",
-		AppID:        "com.gophics.gallery",
-		Size:         geom.Size{W: 420, H: 760},
-		Background:   theme.Light().Bg,
-		Font:         goregular.TTF,
-		FontFamilies: map[string][]byte{"bold": gobold.TTF},
+		Title:      "Gophics Catalog",
+		AppID:      "com.gophics.gallery",
+		Size:       geom.Size{W: 420, H: 760},
+		Background: theme.Light().Bg,
+		// The root seeds its mode from the platform scheme, so the window
+		// ground has to follow it too, or a dark first frame and every resize
+		// gap paint light behind dark-theme text.
+		BackgroundDark: theme.Dark().Bg,
+		Font:           goregular.TTF,
+		FontFamilies:   map[string][]byte{"bold": gobold.TTF},
 	}
 }

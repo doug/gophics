@@ -1,5 +1,5 @@
-// Thin iOS host for the gophics HN app (M9 embedding model): the Go side
-// (Hnmobile.xcframework, built by gomobile bind) owns the UI; this host
+// Thin iOS host for the gophics catalog app (M9 embedding model): the Go side
+// (Gallerymobile.xcframework, built by gomobile bind) owns the UI; this host
 // owns the layer, display link, touch, keyboard, and URL opening —
 // mirroring the Android host.
 import UIKit
