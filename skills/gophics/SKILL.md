@@ -51,10 +51,10 @@ type counterState struct {
 
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 	return widget.Column(
-		widget.Text{S: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
+		widget.Text{Value: fmt.Sprintf("count: %d", s.n), Size: 28, Color: paint.RGB(0.92, 0.93, 0.95)},
 		widget.Interactive{
 			Gestures: widget.Gestures{OnTap: func() { s.SetState(func() { s.n++ }) }},
-			Child:   widget.Text{S: "increment", Size: 18, Color: paint.RGB(0.36, 0.62, 0.98)},
+			Child:    widget.Text{Value: "increment", Size: 18, Color: paint.RGB(0.36, 0.62, 0.98)},
 		},
 	)
 }
@@ -85,7 +85,7 @@ These are the load-bearing ones. All live in package `widget`.
 | Primitive | Shape |
 | --- | --- |
 | `Column(children...)`, `Row(children...)` | flex stacks (return a `Flex`) |
-| `Flex{Direction, Justify, Align, Children}` | full flex control |
+| `Flex{Axis, MainAlign, CrossAlign, Children}` | full flex control |
 | `Expand(child)` / `Flexible{Flex, Child}` | grow to share free space |
 | `Spacer()` | flexible empty gap |
 | `Padding{All: 8, Child: …}` or `Padding{Insets: …}` | inset a child |
@@ -94,12 +94,13 @@ These are the load-bearing ones. All live in package `widget`.
 | `Fill{Color, Child}` | fill available space, paint a background |
 | `Stack{Children}` | overlap / z-stack |
 | `Scroll{Child}` | scrollable viewport |
-| `LazyList{Count, Item}` | virtualized long lists |
-| `Text{S, Size, Color, Wrap}` | text |
-| `Interactive{Handler, Child}` | make a child respond to input (adds no visuals) |
+| `LazyList{Count, Build}` | virtualized long lists; `Build(i)` returns item `i` |
+| `Text{Value, Size, Color, Wrap}` | text (`Font` names a family from `FontFamilies`) |
+| `Interactive{Gestures, Child}` | make a child respond to input (adds no visuals) |
 | `WithKey{Key, Child}` | stable identity for list reconciliation |
 
-`Handler` carries `OnTap`, `OnEnter`, `OnExit`, `OnPress(pos)`, `OnDrag(pos, delta)`.
+`Gestures` carries `OnTap`, `OnEnter`, `OnExit`, `OnPress(pos)`, `OnDrag(pos, delta)`,
+and `OnKey`/`OnText` for keyboard input while focused.
 
 ### Building a drag board
 
@@ -123,12 +124,13 @@ generative art), use `widget.Canvas`. Its `Draw` gets a `paint.Canvas`:
 widget.Canvas{Clip: true, Draw: func(c paint.Canvas, size geom.Size) {
 	c.Clear(paint.RGB(0.09, 0.10, 0.13))
 	c.FillRRect(geom.RectXYWH(20, 20, 120, 80), 8, paint.RGB(0.36, 0.62, 0.98))
-	c.Text("hello", geom.Pt{X: 30, Y: 60}, 16, paint.RGB(1, 1, 1))
+	c.TextIn("", "hello", geom.Pt{X: 30, Y: 60}, 16, paint.RGB(1, 1, 1))
 }}
 ```
 
 `paint.Canvas` primitives: `Clear`, `FillRect`, `FillRRect`, `FillRRectGradient`,
-`StrokeRRect`, `FillPath`, `StrokePath`, `Line`, `Text`, `Image`, `DrawSprite`,
+`StrokeRRect`, `FillPath`, `StrokePath`, `Line`, `TextIn(family, s, pos, size,
+color)` (`""` is the default face; there is no `Text`), `Image`, `DrawSprite`,
 and stack ops `PushClip`/`PopClip`, `PushOpacity`/`PopOpacity`,
 `PushTransform`/`PopTransform`. See `examples/customdraw/main.go` beside this file.
 
@@ -176,7 +178,7 @@ fields are, **check** rather than guess:
 
 ## Version
 
-Written against `github.com/doug/gophics` at commit `66340ac` (2026-08-04). The
+Written against `github.com/doug/gophics` at commit `59ae84e` (2026-09-24). The
 project is young and moving fast; **treat `go doc` and the `examples/` in the
 version pinned in your `go.mod` as authoritative** if anything here disagrees.
 The compiled example files and `apicheck/` package beside this skill fail CI if
