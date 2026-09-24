@@ -118,13 +118,3 @@ func (s *navState) LoadState(d json.RawMessage) {
 		s.pushPage(w)
 	}
 }
-
-func clampInt(i, max int) int {
-	if i < 0 {
-		return 0
-	}
-	if i > max {
-		return max
-	}
-	return i
-}

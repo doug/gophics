@@ -444,7 +444,7 @@ func (s *navState) buildFlights(width float32) []Widget {
 	return flights
 }
 
-// stackW and translatedW are internal render widgets over the layout boxes.
+// stackW is the internal render widget over the layout Stack.
 type stackW struct{ Children []Widget }
 
 func (w stackW) createBox(Ctx) layout.Box      { return &layoutbox.Stack{} }
@@ -531,19 +531,4 @@ func (b *pageBox) VisitChildren(visit func(layout.Box, geom.Pt)) {
 		return
 	}
 	visit(b.child, b.offset())
-}
-
-type translatedW struct {
-	FracX float32
-	Child Widget
-}
-
-func (w translatedW) createBox(Ctx) layout.Box { return &layoutbox.Translated{} }
-func (w translatedW) updateBox(_ Ctx, b layout.Box) {
-	b.(*layoutbox.Translated).FracX = w.FracX
-}
-func (w translatedW) childWidgets() []Widget { return []Widget{w.Child} }
-func (w translatedW) soleChild() Widget      { return w.Child }
-func (w translatedW) attach(b layout.Box, kids []layout.Box) {
-	b.(*layoutbox.Translated).Child = first(kids)
 }

@@ -494,14 +494,15 @@ func (s *dropTargetState) Build(ctx Ctx) Widget {
 	// dropZone reports its root-space rect back into the registration every
 	// frame, which is what lets the session hit-test targets it is not
 	// receiving gestures for.
-	return dropZone{reg: &s.reg, onHoverChange: func() { s.SetState(nil) }, Child: child}
+	return dropZone{reg: &s.reg, Child: child}
 }
 
-// dropZone is the render object that keeps a target's bounds current.
+// dropZone is the render object that keeps a target's bounds current. Hover
+// changes reach it as rebuilds from the DragHost (DragSession.notify), not
+// through a callback of its own.
 type dropZone struct {
-	reg           *dropReg
-	onHoverChange func()
-	Child         Widget
+	reg   *dropReg
+	Child Widget
 }
 
 func (z dropZone) createBox(Ctx) layout.Box { return &dropZoneBox{} }
