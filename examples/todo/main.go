@@ -293,9 +293,20 @@ func (s *todoState) commitEdit() {
 	s.editing, s.draft = -1, ""
 }
 
+// remove deletes row i. editing is an index into items, so it has to move
+// with the rows: left alone, deleting an earlier row while an edit is open
+// slides the editor onto the next item, and the eventual commit writes the
+// draft over a todo the user never touched. Deleting the row being edited
+// drops the edit with it — there is nothing left to commit to.
 func (s *todoState) remove(i int) {
 	s.items = append(s.items[:i], s.items[i+1:]...)
 	s.hover = -1
+	switch {
+	case s.editing == i:
+		s.editing, s.draft = -1, ""
+	case s.editing > i:
+		s.editing--
+	}
 }
 
 func (s *todoState) leave(i int) {
