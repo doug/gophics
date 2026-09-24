@@ -195,10 +195,6 @@ func runIOS(o buildOpts, host string) error {
 		return fmt.Errorf("full Xcode required (not just Command Line Tools); run:\n" +
 			"  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer")
 	}
-	if err := checkIOSPermissions(o, host); err != nil {
-		return err
-	}
-
 	fw, err := frameworkName(o)
 	if err != nil {
 		return err
@@ -215,6 +211,12 @@ func runIOS(o buildOpts, host string) error {
 		if err := run(host, nil, "xcodegen", "generate"); err != nil {
 			return fmt.Errorf("xcodegen: %w", err)
 		}
+	}
+	// After xcodegen, not before. It rewrites the plist from project.yml, so a
+	// check run first passes against keys that are about to be deleted and
+	// ships an app iOS terminates on its first camera use.
+	if err := checkIOSPermissions(o, host); err != nil {
+		return err
 	}
 	proj, err := findByExt(host, ".xcodeproj")
 	if err != nil {

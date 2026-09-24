@@ -33,6 +33,34 @@ targets:
           # on the local network (a user-typed server URL, say). App Review
           # asks for a justification; https hosts never need it.
         NSLocalNetworkUsageDescription: "TODO: say why {{.Name}} connects to devices on your local network."
+        # Usage strings for the permission-gated capabilities. iOS terminates
+        # an app that reaches one of these without a string — a crash, not a
+        # refusal — and `gophics run` refuses to build earlier than that.
+        #
+        # They live here, not only in App/Info.plist, because xcodegen
+        # regenerates that file from this one on every `gophics run`: a key
+        # added to the plist alone is gone after the next generate, and the
+        # first thing a scaffolded app did on its second build was fail the
+        # very check it had passed on its first. Info.plist.tmpl carries the
+        # same keys so the check sees one set before and after xcodegen.
+        #
+        # These are placeholders on purpose. The text is shown in the
+        # permission prompt and read at App Review, so it has to say why
+        # *this* app needs the thing — which no generator can know. Edit the
+        # ones you use and delete the ones you do not: a prompt is more likely
+        # to be granted when it explains itself, and an unused key invites a
+        # reviewer's question.
+        #
+        # Location, photos and Face ID are served by the bundled
+        # GophicsPlatform host. Camera and microphone need a media host the
+        # app registers itself (see shell/mobile/native/GophicsMedia.swift);
+        # until it does, ctx.Camera() and ctx.Microphone() are nil and these
+        # two strings describe nothing.
+        NSCameraUsageDescription: "TODO: say why {{.Name}} needs the camera."
+        NSMicrophoneUsageDescription: "TODO: say why {{.Name}} needs the microphone."
+        NSLocationWhenInUseUsageDescription: "TODO: say why {{.Name}} needs your location."
+        NSPhotoLibraryAddUsageDescription: "TODO: say why {{.Name}} saves pictures to your library."
+        NSFaceIDUsageDescription: "TODO: say why {{.Name}} uses Face ID."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{.BundleID}}

@@ -20,15 +20,25 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<!-- Usage strings for the capabilities the bundled GophicsPlatform host can
-	     serve. iOS terminates an app that reaches one of these without a string,
-	     and `gophics build` refuses earlier than that.
+	<!-- Usage strings for the permission-gated capabilities. iOS terminates an
+	     app that reaches one of these without a string, and `gophics run`
+	     refuses earlier than that.
+
+	     Edit them in project.yml, not here: xcodegen regenerates this file from
+	     project.yml on every `gophics run`, so a change made only here is gone
+	     after the next build. The keys are mirrored here so the check sees the
+	     same set before xcodegen has run for the first time.
 
 	     These are placeholders on purpose. The text is shown in the permission
 	     prompt and read at App Review, so it has to say why *this* app needs the
 	     thing — which no generator can know. Edit the ones you use and delete
 	     the ones you do not: a prompt is more likely to be granted when it
-	     explains itself, and an unused key invites a reviewer's question. -->
+	     explains itself, and an unused key invites a reviewer's question.
+
+	     Location, photos and Face ID are served by the bundled GophicsPlatform
+	     host. Camera and microphone need a media host the app registers itself
+	     (see shell/mobile/native/GophicsMedia.swift); until it does,
+	     ctx.Camera() and ctx.Microphone() are nil. -->
 	<key>NSCameraUsageDescription</key>
 	<string>TODO: say why {{.Name}} needs the camera.</string>
 	<key>NSMicrophoneUsageDescription</key>
