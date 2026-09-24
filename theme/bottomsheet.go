@@ -167,7 +167,12 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 
 		sheet := widget.Align{X: 0.5, Y: 1,
 			Child: widget.Transform{T: paint.Transform{TY: ty}, Child: draggable}}
-		return widget.Stack{Children: []widget.Widget{scrim, sheet}}
+		// The Modal is what makes Escape dismiss when a field in the sheet
+		// holds focus; the scrim's OnKey only sees it while the scrim does.
+		return widget.Modal{
+			OnEscape: s.close,
+			Child:    widget.Stack{Children: []widget.Widget{scrim, sheet}},
+		}
 	}}
 }
 

@@ -101,6 +101,8 @@ type Owner struct {
 	root    *element
 	dirty   []*element
 	tickers []Ticker
+	// modals are the mounted Modal layers, innermost last; see TopModal.
+	modals []*modalState
 }
 
 // Ticker is per-frame animation work. Tick reports whether the ticker is

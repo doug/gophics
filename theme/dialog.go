@@ -2,6 +2,7 @@ package theme
 
 import (
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
@@ -65,7 +66,7 @@ func ShowMenu(ctx widget.Ctx, topLeft geom.Pt, items []MenuItem) (dismiss func()
 		}
 	}
 	col := widget.Column(rows...)
-	col.CrossAlign = 3 // CrossStretch
+	col.CrossAlign = layout.CrossStretch
 	menu := widget.Decorated{
 		Color: th.Elevated, Radius: th.Radius, BorderColor: th.Border, BorderWidth: 1,
 		Child: widget.Sized{W: 200, Child: col},
@@ -114,8 +115,14 @@ func (m modalScrim) Build(widget.Ctx) widget.Widget {
 		},
 		Child: widget.Fill{Color: scrimColor(m.Clear)},
 	}
-	// Scrim below, content above; content taps don't reach the scrim.
-	return widget.Stack{Children: []widget.Widget{scrim, m.Child}}
+	// Scrim below, content above; content taps don't reach the scrim. The
+	// scrim's own OnKey only sees Escape while the scrim is focused, which it
+	// is not once a field inside the content takes focus; the Modal is what
+	// makes Escape dismiss regardless (the app routes it there first).
+	return widget.Modal{
+		OnEscape: m.OnDismiss,
+		Child:    widget.Stack{Children: []widget.Widget{scrim, m.Child}},
+	}
 }
 
 // scrimColor is the modal dim, or fully transparent for a clear scrim.

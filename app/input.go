@@ -414,6 +414,18 @@ func (c *core) Keyboard(e shell.Event) {
 		}
 	}
 
+	// Escape dismisses the innermost modal layer, before the focused widget
+	// sees it — see widget.Modal. A dialog's scrim can only read the key while
+	// it is focused, and a field inside the dialog takes focus away from it;
+	// routing here is what lets the field keep its Escape (collapse the
+	// selection) when nothing modal is up, and lets the dialog close when it is.
+	if k, ok := e.(shell.Key); ok && k.Code == shell.KeyEscape && k.Kind == shell.KeyPress {
+		if dismiss := c.Owner.TopModal(); dismiss != nil {
+			dismiss()
+			return
+		}
+	}
+
 	if t == nil {
 		return
 	}

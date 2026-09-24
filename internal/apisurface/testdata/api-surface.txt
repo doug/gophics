@@ -1922,6 +1922,10 @@ widget.LazyList.Refreshing field
 widget.LazyList.Reverse field
 widget.Left const
 widget.MarshalWidget func
+widget.Modal type
+widget.Modal.Child field
+widget.Modal.CreateState method
+widget.Modal.OnEscape field
 widget.MsgCopy const
 widget.MsgCut const
 widget.MsgPaste const
@@ -2009,6 +2013,7 @@ widget.Owner.TextInput method
 widget.Owner.TickAll method
 widget.Owner.TickerCount method
 widget.Owner.TickersActive method
+widget.Owner.TopModal method
 widget.Owner.Tray method
 widget.Owner.WakeLock method
 widget.Owner.WebView method
