@@ -13,6 +13,8 @@ import (
 
 	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/doug/gophics/internal/cli/capscan"
@@ -349,31 +351,78 @@ func pickSimulator() (udid, name string, err error) {
 		return "", "", fmt.Errorf("simctl list: %w", err)
 	}
 	var data struct {
-		Devices map[string][]struct {
-			UDID, Name, State string
-		}
+		Devices map[string][]simDevice
 	}
 	if err := json.Unmarshal(out, &data); err != nil {
 		return "", "", fmt.Errorf("parse simctl output: %w", err)
 	}
+	udid, name, ok := pickFromSimulators(data.Devices)
+	if !ok {
+		return "", "", fmt.Errorf("no iPhone simulator available (add one in Xcode > Settings > Platforms)")
+	}
+	return udid, name, nil
+}
+
+type simDevice struct {
+	UDID, Name, State string
+}
+
+// pickFromSimulators chooses among simctl's devices, which it lists per
+// runtime: a booted iPhone wins, else the first iPhone of the newest runtime.
+//
+// The runtimes are sorted first because they arrive as a map, and Go
+// randomises map iteration: with nothing booted, `gophics run -p ios` used to
+// boot a different simulator on every invocation.
+func pickFromSimulators(devices map[string][]simDevice) (udid, name string, ok bool) {
+	runtimes := make([]string, 0, len(devices))
+	for r := range devices {
+		runtimes = append(runtimes, r)
+	}
+	sort.Slice(runtimes, func(i, j int) bool { return runtimeNewer(runtimes[i], runtimes[j]) })
 	var firstU, firstN string
-	for _, devs := range data.Devices {
-		for _, d := range devs {
+	for _, r := range runtimes {
+		for _, d := range devices[r] {
 			if !strings.Contains(d.Name, "iPhone") {
 				continue
 			}
 			if d.State == "Booted" {
-				return d.UDID, d.Name, nil
+				return d.UDID, d.Name, true
 			}
 			if firstU == "" {
 				firstU, firstN = d.UDID, d.Name
 			}
 		}
 	}
-	if firstU == "" {
-		return "", "", fmt.Errorf("no iPhone simulator available (add one in Xcode > Settings > Platforms)")
+	return firstU, firstN, firstU != ""
+}
+
+// runtimeNewer orders "com.apple.CoreSimulator.SimRuntime.iOS-18-0" before
+// "...iOS-17-5". The version is compared numerically, field by field, because
+// as a string "iOS-9-3" sorts after "iOS-18-0".
+func runtimeNewer(a, b string) bool {
+	va, vb := runtimeVersion(a), runtimeVersion(b)
+	for i := 0; i < len(va) && i < len(vb); i++ {
+		if va[i] != vb[i] {
+			return va[i] > vb[i]
+		}
 	}
-	return firstU, firstN, nil
+	if len(va) != len(vb) {
+		return len(va) > len(vb)
+	}
+	return a > b // deterministic, whatever the names are
+}
+
+// runtimeVersion is the numeric fields of a runtime identifier's last
+// component: iOS-18-0 → [18 0]. Non-numeric fields (the "iOS") are skipped.
+func runtimeVersion(r string) []int {
+	tail := r[strings.LastIndex(r, ".")+1:]
+	var out []int
+	for _, f := range strings.Split(tail, "-") {
+		if n, err := strconv.Atoi(f); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // firstScheme returns the project's first shared scheme.
