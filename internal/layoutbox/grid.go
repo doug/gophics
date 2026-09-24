@@ -27,15 +27,28 @@ func (b *AspectRatio) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := b.Skip(cs); ok {
 		return sz
 	}
-	// Prefer the constrained width, derive height from the ratio; clamp.
-	w := cs.Max.W
-	if !cs.BoundedW() {
-		w = cs.Min.W
-	}
-	h := w / b.ratio()
-	if cs.BoundedH() && h > cs.Max.H {
+	var w, h float32
+	switch {
+	case cs.BoundedW():
+		// Fill the width, derive the height; if that overshoots, the height
+		// is the limit instead.
+		w = cs.Max.W
+		h = w / b.ratio()
+		if cs.BoundedH() && h > cs.Max.H {
+			h = cs.Max.H
+			w = h * b.ratio()
+		}
+	case cs.BoundedH():
+		// Unbounded width with a bounded height is what a Row hands its
+		// fixed children (main axis loose, cross axis bounded), so the height
+		// is the constraint and the width follows. Falling back to the
+		// minimum width here laid a 16:9 tile in a Row out as 0×90.
 		h = cs.Max.H
 		w = h * b.ratio()
+	default:
+		// Nothing bounds the box: the smallest size the minimum allows.
+		w = max(cs.Min.W, cs.Min.H*b.ratio())
+		h = w / b.ratio()
 	}
 	size := cs.Constrain(geom.Size{W: w, H: h})
 	if b.Child != nil {

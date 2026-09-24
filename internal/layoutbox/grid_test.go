@@ -19,6 +19,18 @@ func TestAspectRatio(t *testing.T) {
 	if got != sz(80, 40) {
 		t.Fatalf("aspect 2:1 capped at h=40 = %v, want 80x40", got)
 	}
+	// Unbounded width with a bounded height — what a Row gives a fixed
+	// child — must still derive the width from the height, not collapse to
+	// the zero minimum width.
+	got = a.Layout(layout.Constraints{Max: sz(layout.Inf, 40)})
+	if got != sz(80, 40) {
+		t.Fatalf("aspect 2:1 with unbounded width, h<=40 = %v, want 80x40", got)
+	}
+	r := Row(&AspectRatio{Ratio: 16.0 / 9})
+	r.Layout(layout.Loose(sz(500, 90)))
+	if got := r.Children[0].Box.Size(); got != sz(160, 90) {
+		t.Fatalf("16:9 tile in a 500x90 Row = %v, want 160x90", got)
+	}
 }
 
 func TestGrid(t *testing.T) {

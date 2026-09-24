@@ -1,10 +1,11 @@
 package layoutbox
 
 import (
-	"github.com/doug/gophics/layout"
+	"sort"
 	"strings"
 
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 )
 
@@ -66,12 +67,25 @@ func (b *TextBox) ellipsize(line string, maxW float32, force bool) string {
 		return line
 	}
 	runes := []rune(line)
-	for len(runes) > 0 {
-		trimmed := strings.TrimRight(string(runes), " ")
-		if b.Painter.MeasureWidthIn(b.Font, trimmed+"…", b.TextSize) <= maxW {
-			return trimmed + "…"
+	fits := func(n int) (string, bool) {
+		s := strings.TrimRight(string(runes[:n]), " ") + "…"
+		return s, b.Painter.MeasureWidthIn(b.Font, s, b.TextSize) <= maxW
+	}
+	// Binary search for the longest prefix that fits with the ellipsis. Each
+	// probe is a shape of a string no cache has seen, so walking down one
+	// rune at a time cost a shape per removed rune — quadratic work for a
+	// long label squeezed into a narrow column. Width grows with the prefix,
+	// give or take a pixel of kerning or a ligature, so the answer is checked
+	// and shortened if a boundary was misjudged.
+	n := sort.Search(len(runes)+1, func(i int) bool {
+		_, ok := fits(i)
+		return !ok
+	})
+	for n > 0 {
+		if s, ok := fits(n - 1); ok {
+			return s
 		}
-		runes = runes[:len(runes)-1]
+		n--
 	}
 	return "…"
 }

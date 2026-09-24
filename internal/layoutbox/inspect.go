@@ -113,38 +113,10 @@ func DebugPaint(root layout.Box, c paint.Canvas) {
 
 // debugHue maps [0,1) to a saturated color wheel for outline tinting.
 func debugHue(h float32) paint.Color {
-	r, g, b := hsv(h*360, 0.8, 0.95)
-	return paint.Color{R: r, G: g, B: b, A: 0.7}
+	col := paint.HSV(h*360, 0.8, 0.95)
+	col.A = 0.7
+	return col
 }
-
-func hsv(h, s, v float32) (r, g, bl float32) {
-	c := v * s
-	x := c * (1 - absf(mod(h/60, 2)-1))
-	m := v - c
-	switch {
-	case h < 60:
-		r, g, bl = c, x, 0
-	case h < 120:
-		r, g, bl = x, c, 0
-	case h < 180:
-		r, g, bl = 0, c, x
-	case h < 240:
-		r, g, bl = 0, x, c
-	case h < 300:
-		r, g, bl = x, 0, c
-	default:
-		r, g, bl = c, 0, x
-	}
-	return r + m, g + m, bl + m
-}
-
-func absf(v float32) float32 {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-func mod(a, b float32) float32 { return a - b*float32(int(a/b)) }
 
 // String renders an InspectNode as an indented tree line.
 func (n InspectNode) String() string {
