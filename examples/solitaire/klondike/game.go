@@ -76,6 +76,8 @@ func (g *Game) Foundation(i int) []Card { return g.found[i] }
 func (g *Game) Tableau(i int) []Card    { return g.tab[i] }
 func (g *Game) MoveCount() int          { return len(g.history) }
 
+// pile resolves an address, or nil for one that names no pile — an unknown
+// Kind or an Index off the end, which a restored save can carry.
 func (g *Game) pile(p Pile) *[]Card {
 	switch p.Kind {
 	case Stock:
@@ -83,9 +85,13 @@ func (g *Game) pile(p Pile) *[]Card {
 	case Waste:
 		return &g.waste
 	case Foundation:
-		return &g.found[p.Index]
+		if p.Index >= 0 && p.Index < len(g.found) {
+			return &g.found[p.Index]
+		}
 	case Tableau:
-		return &g.tab[p.Index]
+		if p.Index >= 0 && p.Index < len(g.tab) {
+			return &g.tab[p.Index]
+		}
 	}
 	return nil
 }
@@ -224,6 +230,14 @@ func (g *Game) Undo() bool {
 		return false
 	}
 	m := g.history[len(g.history)-1]
+	if !g.canUndo(m) {
+		// The move does not fit the piles, so it was never made against them:
+		// the history came from a tampered or version-skewed save. Nothing in
+		// it can be trusted, and the game is still perfectly playable without
+		// it — which beats indexing waste[-1].
+		g.history = nil
+		return false
+	}
 	g.history = g.history[:len(g.history)-1]
 	switch {
 	case m.Recycle:
@@ -254,6 +268,20 @@ func (g *Game) Undo() bool {
 		*src = append(*src, run...)
 	}
 	return true
+}
+
+// canUndo reports whether m can be reversed against the current piles: the
+// cards it says it moved are actually there to move back.
+func (g *Game) canUndo(m Move) bool {
+	switch {
+	case m.Recycle:
+		return true
+	case m.Draw > 0:
+		return m.Draw <= len(g.waste)
+	default:
+		src, dst := g.pile(m.From), g.pile(m.To)
+		return src != nil && dst != nil && m.Count > 0 && m.Count <= len(*dst)
+	}
 }
 
 // Won reports whether all 52 cards have reached the foundations.

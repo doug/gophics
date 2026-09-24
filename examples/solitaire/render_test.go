@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/app"
+	"github.com/doug/gophics/apptest"
 	"github.com/doug/gophics/examples/solitaire/klondike"
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/shell"
@@ -14,15 +16,28 @@ import (
 
 var testSize = geom.Size{W: 800, H: 600}
 
-// memStore is an in-memory save slot, so tests never touch the real config dir.
-type memStore struct{ data []byte }
+// prefsWindow is the least shell that carries a Preferences capability: the
+// embedded Window is nil and never called, only type-asserted past.
+type prefsWindow struct {
+	shell.Window
+	p shell.Preferences
+}
 
-func (m *memStore) save(d []byte)        { m.data = append([]byte(nil), d...) }
-func (m *memStore) load() ([]byte, bool) { return m.data, m.data != nil }
+func (w prefsWindow) Preferences() shell.Preferences { return w.p }
 
+// wirePrefs publishes p to a mounted tree the way a real shell does — after
+// Init and the first Build have already run — and rebuilds, as app's
+// wireWindow does on the first frame. The headless runner never wires
+// capabilities itself, so a test without this has no store at all and plays a
+// fresh deal that is never saved.
+func wirePrefs(h *app.Headless, p shell.Preferences) {
+	h.Owner().WireCapabilities(prefsWindow{p: p})
+	h.Owner().RebuildAll()
+}
+
+// mount starts a game with no preference store: a fresh, deterministic deal.
 func mount(t *testing.T, seed int64) (*app.Headless, *gameState) {
 	t.Helper()
-	makeStore = func(shell.Preferences) store { return &memStore{} } // fresh slot → deterministic new deal
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }
 	defer func() { stateHook = nil }()
@@ -191,14 +206,15 @@ func TestSnapBackSettles(t *testing.T) {
 	}
 }
 
+// TestPersistResume covers autosave through the real Preferences path, with
+// the capability arriving when it does on every shell: after the tree has
+// mounted. Reading it once in Init saw nil and never saved anything, and a
+// harness that handed the state a store directly could not tell.
 func TestPersistResume(t *testing.T) {
-	shared := &memStore{}
-	makeStore = func(shell.Preferences) store { return shared }
-	t.Cleanup(func() { makeStore = newPrefsStore })
-
+	prefs := apptest.NewPrefs(nil)
 	cfg := app.Config{Size: testSize, Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}
 
-	// Session 1: draw a card (autosaves to the shared store).
+	// Session 1: mount, then the shell wires Preferences; draw a card.
 	var st1 *gameState
 	stateHook = func(s *gameState) { st1 = s }
 	h1, err := app.NewHeadless(Solitaire{Seed: 1}, cfg, 1)
@@ -206,6 +222,8 @@ func TestPersistResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	h1.Render()
+	wirePrefs(h1, prefs)
 	h1.Render()
 	for i := 0; i < 60 && st1.dealing; i++ { // let the deal finish before interacting
 		h1.Step(0.05)
@@ -216,17 +234,62 @@ func TestPersistResume(t *testing.T) {
 	if len(st1.g.Waste()) != 1 {
 		t.Fatalf("session 1: expected a drawn card, got waste=%d", len(st1.g.Waste()))
 	}
+	if _, ok := prefs.Get(prefKey); !ok {
+		t.Fatalf("the draw was not autosaved; keys written: %v", prefs.Keys())
+	}
 
 	// Session 2 with the same store resumes the drawn state, not a fresh deal.
 	var st2 *gameState
 	stateHook = func(s *gameState) { st2 = s }
-	_, err = app.NewHeadless(Solitaire{Seed: 1}, cfg, 1)
+	h2, err := app.NewHeadless(Solitaire{Seed: 1}, cfg, 1)
 	stateHook = nil
 	if err != nil {
 		t.Fatal(err)
 	}
+	h2.Render()
+	wirePrefs(h2, prefs)
+	h2.Render()
 	if len(st2.g.Waste()) != 1 || st2.g.MoveCount() != 1 {
 		t.Fatalf("session 2 did not resume: waste=%d moves=%d", len(st2.g.Waste()), st2.g.MoveCount())
+	}
+	if st2.dealing {
+		t.Error("a resumed game is dealing in cards it already has on the table")
+	}
+}
+
+// TestCorruptHistoryDoesNotCrashUndo: the save lives in a store every demo on
+// the site shares, so it can be edited or written by another version. A save
+// with 52 cards but a history that does not fit them passed the deck check and
+// then panicked inside Undo.
+func TestCorruptHistoryDoesNotCrashUndo(t *testing.T) {
+	prefs := apptest.NewPrefs(nil)
+	snap := klondike.New(1, 1).Save()
+	snap.History = []klondike.Move{{Draw: 1}} // claims a draw; the waste is empty
+	data, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prefs.Set(prefKey, string(data)); err != nil {
+		t.Fatal(err)
+	}
+
+	var st *gameState
+	stateHook = func(s *gameState) { st = s }
+	h, err := app.NewHeadless(Solitaire{Seed: 1}, app.Config{Size: testSize, Font: goregular.TTF,
+		FontFamilies: map[string][]byte{"bold": gobold.TTF}}, 1)
+	stateHook = nil
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+	wirePrefs(h, prefs)
+	h.Render()
+	if st.g.CardTotal() != 52 {
+		t.Fatalf("the save should have been resumed: %d cards", st.g.CardTotal())
+	}
+	st.undo() // must not panic
+	if st.g.MoveCount() != 0 || st.g.CardTotal() != 52 {
+		t.Errorf("after undo: moves=%d cards=%d", st.g.MoveCount(), st.g.CardTotal())
 	}
 }
 
@@ -268,7 +331,6 @@ func TestWinCascade(t *testing.T) {
 }
 
 func TestDealAnimates(t *testing.T) {
-	makeStore = func(shell.Preferences) store { return &memStore{} }
 	var st *gameState
 	stateHook = func(s *gameState) { st = s }
 	cfg := app.Config{Size: testSize, Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF}}

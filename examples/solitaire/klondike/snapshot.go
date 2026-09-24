@@ -29,7 +29,26 @@ func (g *Game) Save() Snapshot {
 }
 
 // Restore rebuilds a game from a Snapshot.
+//
+// The history is checked by undoing a copy of the game all the way back. A
+// save is plain JSON in a store every demo on the site shares, so it can be
+// edited, truncated, or written by another version of this game; a history
+// that does not fit the piles is dropped rather than left for the first Undo
+// tap to trip over. The cards themselves are the caller's to validate (see
+// CardTotal).
 func Restore(s Snapshot) *Game {
+	g := restore(s)
+	trial := restore(s)
+	for range trial.history {
+		if !trial.Undo() {
+			g.history = nil
+			break
+		}
+	}
+	return g
+}
+
+func restore(s Snapshot) *Game {
 	g := &Game{drawN: s.DrawN}
 	if g.drawN != 3 {
 		g.drawN = 1

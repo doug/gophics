@@ -10,6 +10,7 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
+	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -86,10 +87,7 @@ type launchItem struct {
 func (s *gameState) Init(ctx widget.Ctx) {
 	s.ctx = ctx
 	s.deal = s.W().Seed
-	s.store = makeStore(ctx.Preferences())
-	g, resumed := s.loadOrNew()
-	s.g = g
-	s.won = s.g.Won()
+	s.g = klondike.New(s.deal, 1)
 	s.snapCtrl = &anim.Controller{Duration: 170 * time.Millisecond, Curve: anim.EaseOut, OnChange: func() {
 		s.SetState(nil)
 		// Finalize on completion (Value hits 1) — not on the initial Jump(0),
@@ -109,7 +107,10 @@ func (s *gameState) Init(ctx widget.Ctx) {
 	s.rng = rand.New(rand.NewSource(s.deal + 1))
 	s.cascadeTick = &cascadeAnim{s}
 	ctx.AddTicker(s.cascadeTick)
-	if !resumed {
+	// Preferences is nil here on every real platform (see resume), so this
+	// resumes only under a harness that wired it before mount; the first Build
+	// is where a saved game normally comes back.
+	if !s.resume(ctx.Preferences()) {
 		s.startDeal() // animate a fresh deal, but not a resumed game
 	}
 	if stateHook != nil {
@@ -236,20 +237,51 @@ func (a *cascadeAnim) Tick(dt float64) bool {
 	return a.s.cascading
 }
 
-// loadOrNew resumes the saved game (resumed=true), or deals a fresh one if
-// there's no valid save.
-func (s *gameState) loadOrNew() (g *klondike.Game, resumed bool) {
-	if s.store != nil {
-		if data, ok := s.store.load(); ok {
-			var snap klondike.Snapshot
-			if json.Unmarshal(data, &snap) == nil {
-				if g := klondike.Restore(snap); fullDeck(g) {
-					return g, true
-				}
-			}
-		}
+// resume attaches the save slot the first time Preferences is available and,
+// if it holds a game the player has not started playing over, swaps it in.
+// Reports whether a saved game was resumed.
+//
+// It is called from Init and from Build, and does its work on the first call
+// that sees the capability. Capabilities are nil while the tree mounts: Init
+// and the first Build run before the shell exists to wire them, and the runner
+// rebuilds the tree once they arrive (app's wireWindow). Reading Preferences
+// once in Init therefore never found it on any real platform, and autosave was
+// silently off everywhere except in tests that supplied a store directly.
+func (s *gameState) resume(p shell.Preferences) bool {
+	if s.store != nil || p == nil {
+		return false
 	}
-	return klondike.New(s.deal, 1), false
+	s.store = newPrefsStore(p)
+	if s.g.MoveCount() > 0 {
+		return false // the player is already into this deal; keep it
+	}
+	g, ok := s.load()
+	if !ok {
+		return false
+	}
+	s.g, s.won = g, g.Won()
+	s.dealing = false // a resumed game is already on the table, not dealt in
+	return true
+}
+
+// load returns the saved game, if the store holds a complete one.
+func (s *gameState) load() (*klondike.Game, bool) {
+	if s.store == nil {
+		return nil, false
+	}
+	data, ok := s.store.load()
+	if !ok {
+		return nil, false
+	}
+	var snap klondike.Snapshot
+	if json.Unmarshal(data, &snap) != nil {
+		return nil, false
+	}
+	g := klondike.Restore(snap)
+	if !fullDeck(g) {
+		return nil, false
+	}
+	return g, true
 }
 
 // persist autosaves the current game (called after every state change).
@@ -263,6 +295,7 @@ func (s *gameState) persist() {
 }
 
 func (s *gameState) Build(ctx widget.Ctx) widget.Widget {
+	s.resume(ctx.Preferences())
 	board := widget.Interactive{
 		Gestures: widget.Gestures{
 			OnPress: func(p geom.Pt) {

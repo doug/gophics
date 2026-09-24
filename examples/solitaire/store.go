@@ -13,13 +13,13 @@ import (
 // on every platform gophics runs on, mobile included. An app writing that split
 // itself is reimplementing a capability the framework ships.
 //
-// makeStore is a var so tests can substitute an in-memory slot.
+// Tests substitute a slot the same way a shell does — by wiring an in-memory
+// shell.Preferences into the Owner after mount — rather than through a hook
+// here, so that they cover the moment the capability actually arrives.
 type store interface {
 	save(data []byte)
 	load() ([]byte, bool)
 }
-
-var makeStore = newPrefsStore
 
 // prefKey names this game's save. The app name is part of the key because the
 // shell's own prefix ("gophics.pref.") namespaces the framework, not the app,

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/apptest"
-
+	"github.com/doug/gophics/examples/solitaire/klondike"
 	"github.com/doug/gophics/shell"
 )
 
@@ -39,16 +39,19 @@ func TestPrefsStoreRoundTrip(t *testing.T) {
 
 // No preference store means no persistence, not a crash. Preferences() is nil
 // wherever the platform cannot persist at all (a sandboxed browser context),
-// and the game has to stay playable there: loadOrNew and persist both treat a
-// nil store as "just deal".
+// and the game has to stay playable there: resume, load and persist all treat
+// a nil store as "just deal".
 func TestNoPreferencesStillPlays(t *testing.T) {
 	var p shell.Preferences // nil
 	if s := newPrefsStore(p); s != nil {
 		t.Fatalf("newPrefsStore(nil) = %v, want a nil store", s)
 	}
-	s := &gameState{}
-	if g, resumed := s.loadOrNew(); resumed || g == nil {
-		t.Errorf("loadOrNew with no store: resumed=%v, want a fresh deal", resumed)
+	s := &gameState{g: klondike.New(1, 1)}
+	if s.resume(p) {
+		t.Error("resume with no Preferences reported a resumed game")
+	}
+	if g, ok := s.load(); ok || g != nil {
+		t.Errorf("load with no store = %v, %v; want nothing", g, ok)
 	}
 	s.persist() // must not panic
 }
