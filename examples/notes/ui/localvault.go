@@ -10,12 +10,16 @@ import (
 // terminal backing, and what LoadVault opens.
 type osStore struct{ dir string }
 
-func (s *osStore) Write(name, body string) (Note, error) {
+func (s *osStore) Create(name, body string) (Note, error) {
 	path := filepath.Join(s.dir, name+".md")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		return Note{}, err
 	}
 	return Note{Path: path, Name: name, Body: body}, nil
+}
+
+func (s *osStore) Write(n Note, body string) error {
+	return os.WriteFile(n.Path, []byte(body), 0o644)
 }
 
 func (s *osStore) Remove(n Note) error { return os.Remove(n.Path) }

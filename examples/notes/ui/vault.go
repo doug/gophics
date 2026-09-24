@@ -14,17 +14,24 @@ type Note struct {
 }
 
 // store persists a vault's notes. A local directory backs it on desktop
-// (store_os.go); a folder the user picked backs it anywhere the FolderPicker
+// (localvault.go); a folder the user picked backs it anywhere the FolderPicker
 // capability exists (folderstore.go). Everything else about a Vault is pure
 // in-memory logic that works identically on every platform.
 //
 // Loading is not part of this. Both backings already produce their notes while
 // opening — one reads a directory, the other is handed a folder — so a List
 // method here would have been a second way to do it that only one caller used.
+//
+// Create and Write are separate because only a new note gets to choose its
+// file name. An existing note is written to its own Path: loading accepts any
+// case of ".md", so rebuilding the name as name+".md" would send "Foo.MD" to
+// "Foo.md" — a second file on a case-sensitive disk, and two "Foo" notes at the
+// next launch.
 type store interface {
-	Write(name, body string) (Note, error) // create or overwrite; returns the note with its Path
-	Remove(n Note) error                   // delete the note's file
-	Label() string                         // folder path/name, for display
+	Create(name, body string) (Note, error) // write a new note named name; returns it with its Path
+	Write(n Note, body string) error        // overwrite the note's own file
+	Remove(n Note) error                    // delete the note's file
+	Label() string                          // folder path/name, for display
 }
 
 // Vault is a folder of .md notes — the app's whole data model, held in memory
@@ -74,7 +81,7 @@ func (v *Vault) Save(path, body string) error {
 	if !ok {
 		return errors.New("note not found")
 	}
-	if _, err := v.store.Write(n.Name, body); err != nil {
+	if err := v.store.Write(n, body); err != nil {
 		return err
 	}
 	for i := range v.Notes {
@@ -103,7 +110,7 @@ func (v *Vault) Create(name string) (Note, error) {
 	if v.store == nil {
 		return Note{}, errors.New("no folder open")
 	}
-	n, err := v.store.Write(name, "# "+name+"\n\n")
+	n, err := v.store.Create(name, "# "+name+"\n\n")
 	if err != nil {
 		return Note{}, err
 	}

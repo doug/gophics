@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -299,5 +300,204 @@ func TestNotesCreateAndDelete(t *testing.T) {
 	}
 	if st.OpenPath != "" {
 		t.Errorf("pane should clear after delete, OpenPath=%q", st.OpenPath)
+	}
+}
+
+// readOnly makes dir and every file in it unwritable for the rest of the test,
+// so a save or delete fails the way a locked or full disk does. The skips are
+// capability guards, not defects: root ignores mode bits, and Windows has no
+// read-only directory to chmod into.
+func readOnly(t *testing.T, dir string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("capability: root bypasses directory permissions, the vault cannot be made read-only")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("capability: chmod cannot make a Windows directory read-only")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		if err := os.Chmod(p, 0o400); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+}
+
+// editing opens path and puts the workspace in edit mode with draft typed.
+func editing(t *testing.T, h *app.Headless, st *workspaceState, path, draft string) {
+	t.Helper()
+	st.open(path)
+	note, ok := st.W().Vault.Get(path)
+	if !ok {
+		t.Fatalf("%s not in vault", path)
+	}
+	st.startEdit(note)
+	st.SetState(func() { st.Draft = draft })
+	h.Render()
+}
+
+// A save that fails must not look like one that worked. It used to: the error
+// was dropped, edit mode closed, and the next Edit reseeded the draft from the
+// body still on disk — the edits were gone without a word.
+func TestNotesFailedSaveKeepsDraft(t *testing.T) {
+	dir := t.TempDir()
+	path := writeNote(t, dir, "Note.md", "# Note\n\noriginal")
+	h, st := mountNotes(t, dir)
+	editing(t, h, st, path, "# Note\n\nhours of edits")
+	readOnly(t, dir)
+
+	st.save(st.W().Vault)
+	h.Render()
+
+	if got, _ := os.ReadFile(path); strings.Contains(string(got), "hours of edits") {
+		t.Skip("capability: this filesystem ignores mode bits, the write went through")
+	}
+	if !st.Editing {
+		t.Error("edit mode closed after a failed save")
+	}
+	if !strings.Contains(st.Draft, "hours of edits") {
+		t.Errorf("draft lost after a failed save: %q", st.Draft)
+	}
+	if n, _ := st.W().Vault.Get(path); n.Body != "# Note\n\noriginal" {
+		t.Errorf("vault body became %q although the write failed", n.Body)
+	}
+	if !hasLabel(h, "Could not save") {
+		t.Errorf("the failure is not shown; labels=%v", labels(h))
+	}
+}
+
+// Navigating away mid-edit saves the draft rather than dropping it. The route
+// driven here is the one easiest to hit by accident: a [[wikilink]] in the
+// editor's own live preview.
+func TestNotesNavigationSavesDraft(t *testing.T) {
+	dir := t.TempDir()
+	a := writeNote(t, dir, "A.md", "# A\n\nsee [[B]]")
+	b := writeNote(t, dir, "B.md", "# B Heading\n")
+	h, st := mountNotes(t, dir)
+	editing(t, h, st, a, "# A\n\nunsaved [[B]]")
+
+	st.followNote(st.W().Vault, "B")
+	h.Render()
+
+	if st.OpenPath != b {
+		t.Fatalf("link did not open B; OpenPath=%q Editing=%v", st.OpenPath, st.Editing)
+	}
+	if got, _ := os.ReadFile(a); !strings.Contains(string(got), "unsaved") {
+		t.Errorf("A's draft was not saved before navigating; disk=%q", got)
+	}
+	if !hasLabel(h, "B Heading") {
+		t.Errorf("B not rendered; labels=%v", labels(h))
+	}
+}
+
+// When the draft cannot be saved the navigation is refused: the editor stays
+// where it is, draft intact, with the reason shown. Silently moving on would
+// be the data loss the save was meant to prevent.
+func TestNotesNavigationRefusedWhenSaveFails(t *testing.T) {
+	dir := t.TempDir()
+	a := writeNote(t, dir, "A.md", "# A\n\nsee [[B]]")
+	writeNote(t, dir, "B.md", "# B\n")
+	h, st := mountNotes(t, dir)
+	editing(t, h, st, a, "# A\n\nunsaved [[B]]")
+	readOnly(t, dir)
+
+	st.followNote(st.W().Vault, "B")
+	h.Render()
+
+	if got, _ := os.ReadFile(a); strings.Contains(string(got), "unsaved") {
+		t.Skip("capability: this filesystem ignores mode bits, the write went through")
+	}
+	if st.OpenPath != a || !st.Editing {
+		t.Errorf("navigated away from a draft that could not be saved; OpenPath=%q Editing=%v", st.OpenPath, st.Editing)
+	}
+	if !strings.Contains(st.Draft, "unsaved") {
+		t.Errorf("draft lost: %q", st.Draft)
+	}
+	if !hasLabel(h, "Could not save") {
+		t.Errorf("the failure is not shown; labels=%v", labels(h))
+	}
+}
+
+// A delete that fails leaves the note where it is and says so, rather than
+// clearing the pane over a file the next launch will list again.
+func TestNotesFailedDeleteKeepsNote(t *testing.T) {
+	dir := t.TempDir()
+	path := writeNote(t, dir, "Note.md", "# Note\n")
+	h, st := mountNotes(t, dir)
+	st.open(path)
+	h.Render()
+	readOnly(t, dir)
+
+	st.SetState(func() { st.confirmDelete = true })
+	st.deleteNote(st.W().Vault)
+	h.Render()
+
+	if _, err := os.Stat(path); err != nil {
+		t.Skip("capability: this filesystem ignores mode bits, the delete went through")
+	}
+	if st.OpenPath != path {
+		t.Errorf("pane cleared although the file is still there; OpenPath=%q", st.OpenPath)
+	}
+	if _, ok := st.W().Vault.Get(path); !ok {
+		t.Error("note dropped from the vault although the file is still there")
+	}
+	if !hasLabel(h, "Could not delete") {
+		t.Errorf("the failure is not shown; labels=%v", labels(h))
+	}
+}
+
+// A store error is rendered with a folder open. That is where a late write
+// failure on web arrives, and the no-folder prompt — the only place it used
+// to be drawn — is long gone by then.
+func TestNotesStoreErrorShownWithFolderOpen(t *testing.T) {
+	dir := t.TempDir()
+	writeNote(t, dir, "Note.md", "# Note\n")
+	h, st := mountNotes(t, dir)
+	if !st.W().Vault.HasStore() {
+		t.Fatal("folder not open")
+	}
+	st.SetState(func() { st.storeErr = "Could not save to that folder." })
+	h.Render()
+	if !hasLabel(h, "Could not save to that folder.") {
+		t.Errorf("store error not shown with a folder open; labels=%v", labels(h))
+	}
+}
+
+// A note found as Foo.MD is saved back to Foo.MD. Rebuilding the name as
+// Foo.md wrote a second file on a case-sensitive disk and left the original
+// untouched, so the next launch listed two "Foo" notes.
+func TestNotesSaveKeepsUpperCaseExtension(t *testing.T) {
+	dir := t.TempDir()
+	writeNote(t, dir, "Foo.MD", "# Foo\n")
+	v, err := LoadVault(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := v.Notes[0]
+	if err := v.Save(n.Path, "# Foo\n\nedited"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "Foo.MD" {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("files after save = %v, want [Foo.MD]", names)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "Foo.MD")); !strings.Contains(string(got), "edited") {
+		t.Errorf("Foo.MD not updated: %q", got)
 	}
 }

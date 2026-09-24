@@ -154,15 +154,23 @@ func TestFolderStoreWritesThrough(t *testing.T) {
 	f := newFakeFolder(map[string][]byte{})
 	s := newFolderStore(f, nil)
 
-	n, err := s.Write("Alpha", "# Alpha\n")
+	n, err := s.Create("Alpha", "# Alpha\n")
 	if err != nil {
-		t.Fatalf("Write: %v", err)
+		t.Fatalf("Create: %v", err)
 	}
 	if n.Path != "Alpha.md" || n.Name != "Alpha" {
-		t.Errorf("Write returned %+v, want Path Alpha.md and Name Alpha", n)
+		t.Errorf("Create returned %+v, want Path Alpha.md and Name Alpha", n)
 	}
 	if string(f.files["Alpha.md"]) != "# Alpha\n" {
 		t.Errorf("folder holds %q, want the body", f.files["Alpha.md"])
+	}
+	// An existing note is addressed by its own Path, whatever case the
+	// extension was found in — not by rebuilding the file name.
+	if err := s.Write(Note{Path: "Beta.MD", Name: "Beta"}, "edited"); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if string(f.files["Beta.MD"]) != "edited" {
+		t.Errorf("Write went to %v, want Beta.MD", f.files)
 	}
 }
 
@@ -189,8 +197,8 @@ func TestFolderStoreReportsLateWriteFailure(t *testing.T) {
 	var got error
 	s := newFolderStore(f, func(err error) { got = err })
 
-	if _, err := s.Write("Alpha", "body"); err != nil {
-		t.Fatalf("Write returned %v; it reports success and surfaces failures through onErr", err)
+	if _, err := s.Create("Alpha", "body"); err != nil {
+		t.Fatalf("Create returned %v; it reports success and surfaces failures through onErr", err)
 	}
 	if got == nil {
 		t.Fatal("a failed write was never reported")

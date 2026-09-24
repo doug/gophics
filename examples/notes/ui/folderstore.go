@@ -34,7 +34,8 @@ func newFolderStore(f shell.Folder, onErr func(error)) *folderStore {
 
 func (s *folderStore) Label() string { return s.f.Name() }
 
-// Write saves the note and reports it as written before the bytes have landed.
+// Create writes a new note and reports it as written before the bytes have
+// landed.
 //
 // The vault is the in-memory model and the file is the write-through, so the
 // editor cannot wait for a round trip on every keystroke pause — and on web
@@ -42,10 +43,17 @@ func (s *folderStore) Label() string { return s.f.Name() }
 // cannot come back through the return value; it arrives later through onErr,
 // which is strictly more than the code this replaces did. That one awaited the
 // real error and handed it to a caller that wrote `_ =`.
-func (s *folderStore) Write(name, body string) (Note, error) {
+func (s *folderStore) Create(name, body string) (Note, error) {
 	file := name + ".md"
 	s.f.Write(file, []byte(body), s.report)
 	return Note{Path: file, Name: name, Body: body}, nil
+}
+
+// Write overwrites an existing note's file, with the same late error reporting
+// as Create.
+func (s *folderStore) Write(n Note, body string) error {
+	s.f.Write(n.Path, []byte(body), s.report)
+	return nil
 }
 
 func (s *folderStore) Remove(n Note) error {

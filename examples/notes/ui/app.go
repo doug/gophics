@@ -76,7 +76,8 @@ type workspaceState struct {
 	creating      bool   // the new-note name input is showing
 	newName       string // name being typed for a new note
 	confirmDelete bool   // delete is armed (second click confirms)
-	storeErr      string // last folder-open error (web), shown in the sidebar
+	storeErr      string // last folder error (open, or a late write on web), shown in the sidebar
+	paneErr       string // last failed save/delete/create, shown in the pane until the next succeeds
 	// reopen is set when the remembered folder is still there but the browser
 	// has dropped the permission, which only a user gesture can restore. It
 	// turns the prompt into "reopen the one you had" rather than "find it
@@ -144,6 +145,12 @@ func (s *workspaceState) sidebar(ctx widget.Ctx, th theme.Theme, v *Vault) widge
 		Placeholder: "Search notes…",
 		OnChange:    func(t string) { s.SetState(func() { s.Query = t }) },
 	}})
+	// A folder error belongs here whether or not a folder is open: on web a
+	// failed write reports late, through the store, long after the prompt
+	// that used to be the only place this was rendered has gone.
+	if s.storeErr != "" {
+		items = append(items, errorLine(th, s.storeErr))
+	}
 
 	for _, n := range v.Search(s.Query) {
 		bg := th.Bg
@@ -185,12 +192,18 @@ func (s *workspaceState) folderPrompt(ctx widget.Ctx, th theme.Theme) widget.Wid
 					Size: th.Type.Caption, Color: th.Muted, Wrap: true}})
 	}
 	if s.storeErr != "" {
-		items = append(items, widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
-			Child: widget.Text{Value: s.storeErr, Size: th.Type.Caption, Color: th.Danger, Wrap: true}})
+		items = append(items, errorLine(th, s.storeErr))
 	}
 	col := widget.Column(items...)
 	col.CrossAlign = layout.CrossStart
 	return widget.Decorated{Color: th.Bg, Child: col}
+}
+
+// errorLine is a wrapped caption in the danger colour, for a failure the user
+// has to act on.
+func errorLine(th theme.Theme, msg string) widget.Widget {
+	return widget.Padding{Insets: geom.InsetsSymmetric(16, 6),
+		Child: widget.Text{Value: msg, Size: th.Type.Caption, Color: th.Danger, Wrap: true}}
 }
 
 func (s *workspaceState) pane(ctx widget.Ctx, th theme.Theme, v *Vault) widget.Widget {
@@ -200,7 +213,12 @@ func (s *workspaceState) pane(ctx widget.Ctx, th theme.Theme, v *Vault) widget.W
 		if !v.HasStore() {
 			msg = "Open a folder to start"
 		}
-		return widget.Fill{Color: th.Surface, Child: widget.Center(widget.Text{Value: msg, Color: th.Muted})}
+		empty := widget.Column(widget.Text{Value: msg, Color: th.Muted})
+		if s.paneErr != "" {
+			empty.Children = append(empty.Children, errorLine(th, s.paneErr))
+		}
+		empty.CrossAlign = layout.CrossCenter
+		return widget.Fill{Color: th.Surface, Child: widget.Center(empty)}
 	}
 
 	var action, body widget.Widget
@@ -224,8 +242,15 @@ func (s *workspaceState) pane(ctx widget.Ctx, th theme.Theme, v *Vault) widget.W
 	content := widget.Column(
 		widget.Padding{Insets: geom.InsetsSymmetric(20, 12), Child: bar},
 		widget.Sized{H: 1, Child: widget.Decorated{Color: th.Border}},
-		widget.Expand(body),
 	)
+	if s.paneErr != "" {
+		// Under the title, where the Save button that failed is. A failed save
+		// that says nothing looks exactly like one that worked.
+		content.Children = append(content.Children,
+			widget.Decorated{Color: th.Bg, Child: errorLine(th, s.paneErr)},
+			widget.Sized{H: 1, Child: widget.Decorated{Color: th.Border}})
+	}
+	content.Children = append(content.Children, widget.Expand(body))
 	content.CrossAlign = layout.CrossStretch
 	return widget.Decorated{Color: th.Surface, Child: content}
 }
@@ -321,17 +346,57 @@ func scrollPad(child widget.Widget) widget.Widget {
 	return widget.Scroll{Child: widget.Padding{Insets: geom.InsetsSymmetric(20, 12), Child: child}}
 }
 
+// open shows the note at path in read mode, saving the current draft first.
+//
+// Every route here is a single click — a sidebar row, a backlink, and a
+// [[wikilink]] in the editor's own live preview — so leaving the buffer
+// behind on navigation meant one mis-click lost the edits. It saves rather
+// than asks because the file already is the note (the vault is a write-through
+// of the folder, and the editor a view of it), so a draft has nowhere else to
+// be; and because on web a write reports success before the bytes land, which
+// leaves a confirm dialog nothing truthful to ask. A save that fails refuses
+// the navigation and shows why, so the draft stays on screen.
 func (s *workspaceState) open(path string) {
-	s.SetState(func() { s.OpenPath, s.Editing, s.Draft, s.confirmDelete = path, false, "", false })
+	if !s.flushDraft() {
+		return
+	}
+	s.SetState(func() {
+		s.OpenPath, s.Editing, s.Draft, s.confirmDelete, s.paneErr = path, false, "", false, ""
+	})
+}
+
+// flushDraft saves an edited draft and reports whether the pane may move on.
+// A draft identical to the saved body is nothing to save; a failed save is
+// shown and keeps the editor where it is.
+func (s *workspaceState) flushDraft() bool {
+	if !s.Editing {
+		return true
+	}
+	v := s.W().Vault
+	n, ok := v.Get(s.OpenPath)
+	if !ok || s.Draft == n.Body {
+		return true
+	}
+	if err := v.Save(s.OpenPath, s.Draft); err != nil {
+		s.SetState(func() { s.paneErr = "Could not save " + n.Name + ": " + err.Error() })
+		return false
+	}
+	return true
 }
 
 func (s *workspaceState) startEdit(n Note) {
 	s.SetState(func() { s.Editing, s.Draft = true, n.Body })
 }
 
+// save writes the draft. On failure edit mode stays open: leaving it would
+// seed the next Edit from the body still on disk, and the draft — the only
+// copy of the edits — would be gone with nothing having said so.
 func (s *workspaceState) save(v *Vault) {
-	_ = v.Save(s.OpenPath, s.Draft)
-	s.SetState(func() { s.Editing = false })
+	if err := v.Save(s.OpenPath, s.Draft); err != nil {
+		s.SetState(func() { s.paneErr = "Could not save: " + err.Error() })
+		return
+	}
+	s.SetState(func() { s.Editing, s.paneErr = false, "" })
 }
 
 func (s *workspaceState) onLink(ctx widget.Ctx, v *Vault, url string) {
@@ -350,21 +415,36 @@ func (s *workspaceState) followNote(v *Vault, name string) {
 }
 
 // createNote creates the note named in the new-note input and opens it in edit
-// mode; a blank name just cancels.
+// mode; a blank name just cancels. Opening the new note is a navigation, so
+// the draft of the note being left is saved first, exactly as open does.
 func (s *workspaceState) createNote(v *Vault) {
+	if strings.TrimSpace(s.newName) == "" {
+		s.SetState(func() { s.creating, s.newName = false, "" })
+		return
+	}
+	if !s.flushDraft() {
+		return
+	}
 	n, err := v.Create(s.newName)
 	s.SetState(func() {
 		s.creating, s.newName = false, ""
-		if err == nil {
-			s.OpenPath, s.Editing, s.Draft, s.confirmDelete = n.Path, true, n.Body, false
+		if err != nil {
+			s.paneErr = "Could not create note: " + err.Error()
+			return
 		}
+		s.OpenPath, s.Editing, s.Draft, s.confirmDelete, s.paneErr = n.Path, true, n.Body, false, ""
 	})
 }
 
-// deleteNote deletes the open note from disk and clears the pane.
+// deleteNote deletes the open note from disk and clears the pane. If the file
+// will not go, the note stays — a pane cleared over a file still on disk would
+// show the note as gone until the next launch brought it back.
 func (s *workspaceState) deleteNote(v *Vault) {
-	_ = v.Delete(s.OpenPath)
-	s.SetState(func() { s.OpenPath, s.Editing, s.Draft, s.confirmDelete = "", false, "", false })
+	if err := v.Delete(s.OpenPath); err != nil {
+		s.SetState(func() { s.confirmDelete, s.paneErr = false, "Could not delete: "+err.Error() })
+		return
+	}
+	s.SetState(func() { s.OpenPath, s.Editing, s.Draft, s.confirmDelete, s.paneErr = "", false, "", false, "" })
 }
 
 func (s *workspaceState) button(th theme.Theme, label string, onTap func()) widget.Widget {
