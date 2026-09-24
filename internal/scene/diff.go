@@ -41,35 +41,99 @@ func (l *List) Diff(prev *List, m Measurer) (geom.Rect, bool) {
 		jb--
 	}
 
+	// A backdrop blur later in the frame reads what was painted under it, so
+	// a change beneath one reaches further than its own bounds: the blur
+	// spreads it by the radius, and a partial replay would blur the stale,
+	// already-tinted pixels outside the damage clip back into the panel. Any
+	// blur whose sampling footprint (its rect grown by the radius) a change
+	// touches is repainted whole. Blurs in the common prefix precede every
+	// change and cannot be affected.
+	blurs := blursFrom(b, i)
+
 	var damage geom.Rect
 	unbounded := false
-	add := func(ops []op, lo, hi int) {
+	add := func(ops []op, lo, hi int, pos func(k int) int) {
 		for k := lo; k < hi; k++ {
+			var r geom.Rect
 			switch ops[k].kind {
 			case opClear, opPushClip, opPushClipRRect, opPopClip,
 				opPushTransform, opPopTransform:
 				// Structural change: damage everything.
 				unbounded = true
+				continue
 			case opPushOpacity:
 				// A changed/added/removed group boundary: the whole group's
 				// content is (re)composited, so damage its content bounds.
-				damage = damage.Union(groupBounds(ops, k, +1, m, &unbounded))
+				r = groupBounds(ops, k, +1, m, &unbounded)
 			case opPopOpacity:
-				damage = damage.Union(groupBounds(ops, k, -1, m, &unbounded))
+				r = groupBounds(ops, k, -1, m, &unbounded)
 			default:
-				damage = damage.Union(opBounds(&ops[k], m))
+				r = opBounds(&ops[k], m)
 			}
+			damage = damage.Union(r)
+			blurs.touch(r, pos(k))
 		}
 	}
-	add(a, i, ja)
-	add(b, i, jb)
+	// A removed op has no position in b; it precedes everything after the
+	// common prefix, so every blur there may have sampled it.
+	add(a, i, ja, func(int) int { return i - 1 })
+	add(b, i, jb, func(k int) int { return k })
 	if unbounded {
 		return geom.Rect{Max: geom.Pt{X: layoutInf, Y: layoutInf}}, true
 	}
-	return damage, true
+	return blurs.extend(damage), true
 }
 
 var layoutInf = float32(1 << 30)
+
+// blurSet is the backdrop blurs a diff has to account for, in list order.
+type blurSet []blurRef
+
+type blurRef struct {
+	idx       int       // position in the current list
+	rect      geom.Rect // the blurred panel
+	footprint geom.Rect // rect grown by the radius: what the blur samples
+	dirty     bool      // something it samples changed
+}
+
+// blursFrom collects the backdrop blurs in ops at index from onwards.
+func blursFrom(ops []op, from int) blurSet {
+	var s blurSet
+	for k := from; k < len(ops); k++ {
+		if o := &ops[k]; o.kind == opBackdropBlur {
+			g := o.f1 + 1
+			s = append(s, blurRef{idx: k, rect: o.r, footprint: geom.Rect{
+				Min: geom.Pt{X: o.r.Min.X - g, Y: o.r.Min.Y - g},
+				Max: geom.Pt{X: o.r.Max.X + g, Y: o.r.Max.Y + g},
+			}})
+		}
+	}
+	return s
+}
+
+// touch marks every blur painted after position pos whose footprint the
+// changed rect r overlaps.
+func (s blurSet) touch(r geom.Rect, pos int) {
+	for k := range s {
+		if s[k].idx > pos && !s[k].footprint.Intersect(r).IsEmpty() {
+			s[k].dirty = true
+		}
+	}
+}
+
+// extend adds the panel of every dirty blur to damage. A repainted panel is
+// itself a change that a later blur may sample, so the walk is in list order
+// and each repainted panel touches the blurs after it.
+func (s blurSet) extend(damage geom.Rect) geom.Rect {
+	for k := range s {
+		if !s[k].dirty {
+			continue
+		}
+		damage = damage.Union(s[k].rect)
+		s[k+1:].touch(s[k].rect, s[k].idx)
+	}
+	return damage
+}
 
 // groupBounds returns the union of the content bounds of the opacity group
 // whose push (dir=+1) or pop (dir=-1) sits at ops[k], scanning toward the
