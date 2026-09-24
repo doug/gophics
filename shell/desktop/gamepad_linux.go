@@ -13,6 +13,14 @@
 // device keeps the running state its events have built up and Poll() snapshots
 // it. Reads are non-blocking: Poll must never stall a frame because nobody
 // touched the controller.
+//
+// The descriptors are raw ints read with unix.Read, not *os.File. An os.File
+// opened with O_NONBLOCK is registered with the runtime poller, and
+// os.File.Read answers EAGAIN by parking in the poller until data arrives —
+// which is a blocking read by another name, and it stalled the frame loop
+// until the controller was touched. Calling Fd() for the ioctls made it
+// worse, since that puts the descriptor back into blocking mode. The raw
+// syscall returns EAGAIN and nothing else can intervene.
 
 package desktop
 
@@ -90,6 +98,19 @@ func (g *linuxGamepads) Poll() []shell.Gamepad {
 	return out
 }
 
+// openInput opens an event node the way every read here needs it: read-only,
+// non-blocking, and closed on exec so a spawned file chooser does not inherit
+// the controller.
+func openInput(path string) (int, error) {
+	for {
+		fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+		if err == unix.EINTR {
+			continue
+		}
+		return fd, err
+	}
+}
+
 // findGamepads lists the event devices that advertise BTN_SOUTH, which is how
 // a gamepad distinguishes itself from the keyboards, mice, lid switches and
 // power buttons that share this directory.
@@ -105,12 +126,12 @@ func findGamepads() []string {
 			continue
 		}
 		path := filepath.Join(devInputDir, name)
-		f, err := os.OpenFile(path, os.O_RDONLY|unix.O_NONBLOCK, 0)
+		fd, err := openInput(path)
 		if err != nil {
 			continue // no permission, most likely: user not in the input group
 		}
-		ok := hasGamepadButton(f.Fd())
-		f.Close()
+		ok := hasGamepadButton(uintptr(fd))
+		unix.Close(fd)
 		if ok {
 			out = append(out, path)
 		}
@@ -141,7 +162,7 @@ type absInfo struct {
 }
 
 type evdevDevice struct {
-	f    *os.File
+	fd   int
 	id   string
 	buf  []byte
 	rng  map[uint16]absInfo // axis code → range, for normalisation
@@ -153,18 +174,19 @@ type evdevDevice struct {
 }
 
 func openEvdev(path string) (*evdevDevice, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY|unix.O_NONBLOCK, 0)
+	fd, err := openInput(path)
 	if err != nil {
 		return nil, err
 	}
 	d := &evdevDevice{
-		f: f, buf: make([]byte, inputEventSize*64),
+		fd: fd, buf: make([]byte, inputEventSize*64),
 		rng: map[uint16]absInfo{}, btn: map[uint16]float32{}, axis: map[uint16]float32{},
 	}
-	d.id = deviceName(f.Fd())
+	ufd := uintptr(fd)
+	d.id = deviceName(ufd)
 
 	keyBits := make([]byte, keyMaxBit/8+1)
-	if err := ioctlPtr(f.Fd(), ioR('E', 0x20+evKey, uintptr(len(keyBits))), unsafe.Pointer(&keyBits[0])); err == nil {
+	if err := ioctlPtr(ufd, ioR('E', 0x20+evKey, uintptr(len(keyBits))), unsafe.Pointer(&keyBits[0])); err == nil {
 		for c := btnSouth; c <= btnLast; c++ {
 			if bitSet(keyBits, c) {
 				d.btnCodes = append(d.btnCodes, uint16(c))
@@ -173,7 +195,7 @@ func openEvdev(path string) (*evdevDevice, error) {
 		}
 	}
 	absBits := make([]byte, absLast/8+1)
-	if err := ioctlPtr(f.Fd(), ioR('E', 0x20+evAbs, uintptr(len(absBits))), unsafe.Pointer(&absBits[0])); err == nil {
+	if err := ioctlPtr(ufd, ioR('E', 0x20+evAbs, uintptr(len(absBits))), unsafe.Pointer(&absBits[0])); err == nil {
 		for c := 0; c <= absLast; c++ {
 			if !bitSet(absBits, c) {
 				continue
@@ -181,7 +203,7 @@ func openEvdev(path string) (*evdevDevice, error) {
 			d.axisCodes = append(d.axisCodes, uint16(c))
 			d.axis[uint16(c)] = 0
 			var info absInfo
-			if err := ioctlPtr(f.Fd(), ioR('E', 0x40+c, unsafe.Sizeof(info)), unsafe.Pointer(&info)); err == nil {
+			if err := ioctlPtr(ufd, ioR('E', 0x40+c, unsafe.Sizeof(info)), unsafe.Pointer(&info)); err == nil {
 				d.rng[uint16(c)] = info
 				d.axis[uint16(c)] = normalizeAxis(info, info.Value)
 			}
@@ -190,23 +212,28 @@ func openEvdev(path string) (*evdevDevice, error) {
 	return d, nil
 }
 
-func (d *evdevDevice) Close() { d.f.Close() }
+func (d *evdevDevice) Close() {
+	if d.fd >= 0 {
+		unix.Close(d.fd)
+		d.fd = -1
+	}
+}
 
 // drain reads whatever the kernel has buffered and folds it into the state.
 // EAGAIN means "nothing new", which is the common case and not an error.
 func (d *evdevDevice) drain() error {
 	for {
-		n, err := d.f.Read(d.buf)
+		n, err := unix.Read(d.fd, d.buf)
 		if err != nil {
-			if err == unix.EAGAIN || os.IsTimeout(err) {
-				return nil
-			}
-			if pe, ok := err.(*os.PathError); ok && pe.Err == unix.EAGAIN {
+			switch err {
+			case unix.EINTR:
+				continue
+			case unix.EAGAIN:
 				return nil
 			}
 			return err
 		}
-		if n == 0 {
+		if n <= 0 {
 			return nil
 		}
 		d.apply(d.buf[:n])

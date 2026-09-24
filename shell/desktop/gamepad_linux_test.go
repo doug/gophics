@@ -4,7 +4,12 @@ package desktop
 
 import (
 	"encoding/binary"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // event builds one struct input_event as the kernel would write it.
@@ -22,6 +27,7 @@ func event(typ, code uint16, value int32) []byte {
 // way a real controller reports.
 func newTestDevice() *evdevDevice {
 	d := &evdevDevice{
+		fd:   -1, // no descriptor; the zero value would name stdin
 		rng:  map[uint16]absInfo{},
 		btn:  map[uint16]float32{},
 		axis: map[uint16]float32{},
@@ -161,6 +167,60 @@ func TestFindGamepadsWithoutDevInput(t *testing.T) {
 	t.Cleanup(func() { devInputDir = old })
 	if got := findGamepads(); len(got) != 0 {
 		t.Errorf("findGamepads() = %v on an empty tree", got)
+	}
+}
+
+// Poll runs every frame, and a controller that nobody is touching is the
+// common case. The device is opened non-blocking so that reads return EAGAIN
+// then — but an *os.File opened with O_NONBLOCK is pollable, and its Read
+// turns EAGAIN into a wait in the runtime poller, so drain blocked the frame
+// loop until the controller emitted an event. A FIFO opened by the same code
+// path as an event node shows the difference: with a writer attached and
+// nothing written, a correct drain returns at once.
+func TestDrainReturnsAtOnceWithNothingPending(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "event0")
+	if err := unix.Mkfifo(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The real open: ioctls fail with ENOTTY on a FIFO, so the device comes
+	// back with no advertised buttons, which is fine — the read path is what
+	// is under test.
+	d, err := openEvdev(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(d.Close)
+	// A writer has to exist or every read reports EOF rather than "nothing
+	// yet"; opening it blocks until the reader above is open, which it is.
+	w, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	done := make(chan error, 1)
+	go func() { done <- d.drain() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("drain reported %v with nothing pending; EAGAIN is not an error", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain blocked for 2s on a device with nothing to read — " +
+			"every frame would wait for the controller to be touched")
+	}
+
+	// And events that are pending are folded in on the next drain.
+	d.btnCodes = []uint16{btnSouth}
+	d.btn[btnSouth] = 0
+	if _, err := w.Write(event(evKey, btnSouth, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.drain(); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.snapshot().Buttons[0]; got != 1 {
+		t.Errorf("after a pending press, button = %v, want 1", got)
 	}
 }
 
