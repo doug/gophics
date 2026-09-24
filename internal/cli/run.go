@@ -9,8 +9,10 @@ func cmdRun(args []string) error {
 	var o buildOpts
 	var platName string
 	var port int
+	var bind string
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web server port (web platform)")
+	fs.StringVar(&bind, "bind", defaultBind, "web server interface (web platform); 0.0.0.0 to reach it from other devices")
 	fs.StringVar(&o.host, "host", "", "mobile host project dir (default: sibling ios/ or android/ of the package)")
 	fs.BoolVar(&o.device, "device", false, "run on a connected device rather than a simulator (ios)")
 	fs.StringVar(&o.serial, "serial", "", "adb serial to target when several Android devices are attached")
@@ -30,15 +32,15 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	return launch(o, out, port)
+	return launch(o, out, bind, port)
 }
 
 // launch runs the freshly built artifact: serve the web dir or exec a native
 // binary. (Mobile is handled earlier by runMobile.)
-func launch(o buildOpts, out string, port int) error {
+func launch(o buildOpts, out, bind string, port int) error {
 	switch o.platform.name {
 	case "web":
-		return serve(out, port, nil)
+		return serve(out, bind, port, nil)
 	default: // desktop, terminal — hand the terminal to the app
 		return run("", o.rendererEnv(), out)
 	}

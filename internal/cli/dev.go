@@ -16,8 +16,10 @@ func cmdDev(args []string) error {
 	var o buildOpts
 	var platName string
 	var port int
+	var bind string
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web dev-server port")
+	fs.StringVar(&bind, "bind", defaultBind, "web dev-server interface; 0.0.0.0 to reach it from other devices")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
@@ -26,7 +28,7 @@ func cmdDev(args []string) error {
 	}
 	switch o.platform.name {
 	case "web":
-		return devWeb(o, port)
+		return devWeb(o, bind, port)
 	case "ios", "android":
 		return fmt.Errorf("dev hot reload isn't supported for %s; iterate on web/desktop and use `build` for device tests", o.platform.name)
 	default:
@@ -36,7 +38,7 @@ func cmdDev(args []string) error {
 
 // devWeb rebuilds the wasm on every source change and live-reloads the browser
 // over SSE — the fastest iteration loop (Flutter-web-like).
-func devWeb(o buildOpts, port int) error {
+func devWeb(o buildOpts, bind string, port int) error {
 	if _, err := buildWeb(o); err != nil {
 		return err
 	}
@@ -54,7 +56,7 @@ func devWeb(o buildOpts, port int) error {
 		}
 	}()
 	fmt.Fprintln(os.Stderr, "gophics: web dev — edit & save to live-reload (Ctrl-C to stop)")
-	return serve(outDir(o), port, b)
+	return serve(outDir(o), bind, port, b)
 }
 
 // devRestart rebuilds and relaunches the native binary on every change — hot
