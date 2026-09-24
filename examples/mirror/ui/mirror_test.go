@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"math"
@@ -323,5 +324,80 @@ func TestStopReleasesEverything(t *testing.T) {
 	m.stop()
 	if m.frames != nil || m.mon != nil {
 		t.Error("handles survived stop")
+	}
+}
+
+// fakeMonitor is a microphone monitor that records whether it was released.
+type fakeMonitor struct{ stopped bool }
+
+func (f *fakeMonitor) Level() float32            { return 0 }
+func (f *fakeMonitor) Bands(dst []float32) int   { return 0 }
+func (f *fakeMonitor) Samples(dst []float32) int { return 0 }
+func (f *fakeMonitor) WindowSize() int           { return 0 }
+func (f *fakeMonitor) SampleRate() int           { return 0 }
+func (f *fakeMonitor) Stop()                     { f.stopped = true }
+
+// The camera and the microphone open in parallel and answer in either order.
+// A camera that fails after the mic succeeded used to leave the monitor open
+// — the app back on its idle screen with the capture indicator lit — and the
+// next Start opened a second monitor over it.
+func TestCameraFailureReleasesTheMic(t *testing.T) {
+	_, m := newApp(t, nil)
+	m.starting = true
+	mon := &fakeMonitor{}
+	m.micStarted(mon, nil)
+	if m.mon != mon {
+		t.Fatal("monitor not adopted while a start is in flight")
+	}
+
+	m.cameraStarted(nil, errors.New("no camera"))
+	if !mon.stopped || m.mon != nil {
+		t.Error("the microphone stayed open after the camera failed")
+	}
+	if m.starting || m.err == "" {
+		t.Errorf("start not concluded: starting=%v err=%q", m.starting, m.err)
+	}
+}
+
+// The other order: a monitor that lands after the camera has already failed
+// is released on arrival rather than held by an app that is not running.
+func TestMicArrivingAfterCameraFailureIsReleased(t *testing.T) {
+	_, m := newApp(t, nil)
+	m.starting = true
+	m.cameraStarted(nil, errors.New("no camera"))
+
+	mon := &fakeMonitor{}
+	m.micStarted(mon, nil)
+	if !mon.stopped || m.mon != nil {
+		t.Error("a monitor arriving after the camera failed was kept")
+	}
+}
+
+// Two answers to Listen must never leave two monitors open: the earlier one
+// is stopped when the later one is adopted.
+func TestMicIsNeverHeldTwice(t *testing.T) {
+	_, m := newApp(t, nil)
+	m.starting = true
+	first, second := &fakeMonitor{}, &fakeMonitor{}
+	m.micStarted(first, nil)
+	m.micStarted(second, nil)
+	if !first.stopped {
+		t.Error("the first monitor leaked when the second arrived")
+	}
+	if m.mon != second || second.stopped {
+		t.Error("the second monitor was not the one kept")
+	}
+}
+
+// Idle, the mirror has nothing to poll and must not keep the frame loop
+// awake; only a start in flight, or a running capture, wants more frames.
+func TestIdleMirrorLetsTheFrameLoopSleep(t *testing.T) {
+	h, m := newApp(t, nil)
+	if h.Step(1.0 / 60) {
+		t.Error("the idle screen keeps ticking")
+	}
+	m.starting = true
+	if !h.Step(1.0 / 60) {
+		t.Error("a start in flight stopped ticking before the camera answered")
 	}
 }

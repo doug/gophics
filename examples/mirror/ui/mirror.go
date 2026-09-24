@@ -144,6 +144,7 @@ func (m *mirror) autostart() {
 func (m *mirror) Dispose() { m.stop() }
 
 func (m *mirror) stop() {
+	m.starting = false
 	if m.frames != nil {
 		m.frames.Stop()
 		m.frames = nil
@@ -174,17 +175,7 @@ func (m *mirror) start() {
 	}
 	m.SetState(func() { m.starting, m.err = true, "" })
 
-	m.ctx.CameraPreview().Start(shell.PreviewOptions{Facing: shell.FacingFront, Width: 640},
-		func(f shell.Frames, err error) {
-			m.SetState(func() {
-				m.starting = false
-				if err != nil {
-					m.err = "camera: " + err.Error()
-					return
-				}
-				m.frames = f
-			})
-		})
+	m.ctx.CameraPreview().Start(shell.PreviewOptions{Facing: shell.FacingFront, Width: 640}, m.cameraStarted)
 
 	mic := m.ctx.Microphone()
 	if mic == nil {
@@ -203,23 +194,66 @@ func (m *mirror) start() {
 			m.SetState(func() { m.err = "microphone: permission denied" })
 			return
 		}
-		mic.Listen(func(mon shell.Monitor, err error) {
-			m.SetState(func() {
-				if err != nil {
-					// A mirror with no microphone is still a mirror; it just
-					// sits still. Losing the camera is fatal, the mic is not.
-					m.err = "microphone: " + err.Error()
-					return
-				}
-				m.mon = mon
-			})
-		})
+		mic.Listen(m.micStarted)
+	})
+}
+
+// cameraStarted is the camera's answer to start. The two streams open in
+// parallel and answer in either order, so a camera that fails has to release
+// a microphone that already succeeded: otherwise the app is back on its idle
+// screen — running() is about frames — with the capture indicator lit, and
+// the next press opens a second monitor over the first.
+func (m *mirror) cameraStarted(f shell.Frames, err error) {
+	m.SetState(func() {
+		if !m.starting {
+			// Stopped while the camera was opening. Nothing wants the stream.
+			if f != nil {
+				f.Stop()
+			}
+			return
+		}
+		m.starting = false
+		if err != nil {
+			m.err = "camera: " + err.Error()
+			m.stop()
+			return
+		}
+		m.frames = f
+	})
+}
+
+// micStarted is the microphone's answer. A monitor is adopted only while a
+// start is in flight or the camera is up; one that lands after the camera has
+// failed is released, and one that lands over an earlier monitor replaces it
+// rather than leaking it.
+func (m *mirror) micStarted(mon shell.Monitor, err error) {
+	m.SetState(func() {
+		if err != nil {
+			// A mirror with no microphone is still a mirror; it just sits
+			// still. Losing the camera is fatal, the mic is not.
+			m.err = "microphone: " + err.Error()
+			return
+		}
+		if !m.starting && m.frames == nil {
+			mon.Stop()
+			return
+		}
+		if m.mon != nil {
+			m.mon.Stop()
+		}
+		m.mon = mon
 	})
 }
 
 // Tick pulls a frame and a spectrum, warps one into the other, and asks for a
 // repaint. Everything here is polled rather than pushed: nothing is captured
 // for a frame the app was never going to draw.
+//
+// Idle, it reports false so the frame loop can sleep: there is nothing to
+// poll, and a ticker that said true here kept a phone awake at full rate
+// showing a static screen. Reporting false does not unregister it — a press
+// calls SetState, that requests a frame, and the frame ticks this again, as
+// does the frame the shell schedules when capabilities arrive.
 func (m *mirror) Tick(dt float64) bool {
 	if dt > 0.1 {
 		dt = 0.1
@@ -230,7 +264,7 @@ func (m *mirror) Tick(dt float64) bool {
 	}
 	m.autostart()
 	if !m.running() {
-		return true
+		return m.starting
 	}
 
 	m.readAudio()

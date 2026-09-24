@@ -28,7 +28,7 @@ import mirrormobile.Mirrormobile
 import mobile.Bridge
 
 /**
- * Thin host for the gophics HN app (M9 embedding model): the Go side owns
+ * Thin host for the gophics Mirror app (M9 embedding model): the Go side owns
  * the UI; this activity owns the surface, vsync, input, IME, and intents.
  */
 // One bridge per process, at file scope because MainActivity and GophicsView
