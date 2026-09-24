@@ -48,7 +48,31 @@ func (deviceCamera) Authorize(done func(shell.Permission)) {
 	}
 }
 
+// capture is what Start and Capture need from an open camera. An interface
+// rather than *camera.Capture so the wait for the first frame can be tested
+// with a fake, on machines that have no camera.
+type capture interface {
+	Frame() *image.RGBA
+	Stop()
+}
+
+// openCamera is camera.Open behind the interface; a test substitutes it.
+var openCamera = func(o camera.Options) (capture, error) {
+	c, err := camera.Open(o)
+	if err != nil {
+		return nil, err // not the typed nil, which would be a non-nil capture
+	}
+	return c, nil
+}
+
 // Start opens the camera and hands back a frame source.
+//
+// The open and the wait run on their own goroutine, as every other slow
+// desktop capability's work does (the file pickers, folder I/O, the
+// notifiers). Start is reached through the generated Posted wrapper on the UI
+// goroutine, and the wrapper marshals done back there — so doing this work
+// inline froze the whole app for the camera's warm-up, and for the full
+// timeout when the camera never delivered.
 func (deviceCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error)) {
 	if done == nil {
 		return
@@ -57,28 +81,32 @@ func (deviceCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error)
 	if o.Facing == shell.FacingBack {
 		facing = camera.FacingBack
 	}
-	c, err := camera.Open(camera.Options{Facing: facing, Width: o.Width})
-	if err != nil {
-		done(nil, err)
-		return
-	}
-	// Wait for the first frame before reporting success.
-	//
-	// Opening proves almost nothing: a camera that has been unplugged or handed
-	// to a virtual machine still enumerates, still reports itself connected and
-	// not in use, and still starts a session — it simply never delivers. An app
-	// that trusted Open then shows a black rectangle forever with nothing to
-	// tell the user, which is exactly what this machine did once its only
-	// camera was passed through to a VM.
-	//
-	// The cost is one frame of latency on the path that works, in exchange for
-	// the guarantee that a Frames handed to an app has already produced one.
-	if !waitForFrame(c, firstFrameTimeout) {
-		c.Stop()
-		done(nil, camera.ErrNoFrames)
-		return
-	}
-	done(deviceFrames{c}, nil)
+	go func() {
+		c, err := openCamera(camera.Options{Facing: facing, Width: o.Width})
+		if err != nil {
+			done(nil, err)
+			return
+		}
+		// Wait for the first frame before reporting success.
+		//
+		// Opening proves almost nothing: a camera that has been unplugged or
+		// handed to a virtual machine still enumerates, still reports itself
+		// connected and not in use, and still starts a session — it simply
+		// never delivers. An app that trusted Open then shows a black
+		// rectangle forever with nothing to tell the user, which is exactly
+		// what this machine did once its only camera was passed through to a
+		// VM.
+		//
+		// The cost is one frame of latency on the path that works, in exchange
+		// for the guarantee that a Frames handed to an app has already
+		// produced one.
+		if !waitForFrame(c, firstFrameTimeout) {
+			c.Stop()
+			done(nil, camera.ErrNoFrames)
+			return
+		}
+		done(deviceFrames{c}, nil)
+	}()
 }
 
 // firstFrameTimeout bounds that wait. Cameras take a moment to expose and
@@ -87,7 +115,7 @@ func (deviceCamera) Start(o shell.PreviewOptions, done func(shell.Frames, error)
 // hang.
 const firstFrameTimeout = 3 * time.Second
 
-func waitForFrame(c *camera.Capture, within time.Duration) bool {
+func waitForFrame(c capture, within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
 		if c.Frame() != nil {
@@ -98,7 +126,7 @@ func waitForFrame(c *camera.Capture, within time.Duration) bool {
 	return c.Frame() != nil
 }
 
-type deviceFrames struct{ c *camera.Capture }
+type deviceFrames struct{ c capture }
 
 func (f deviceFrames) Frame() *image.RGBA { return f.c.Frame() }
 
@@ -122,6 +150,9 @@ func (deviceStill) Authorize(done func(shell.Permission)) { deviceCamera{}.Autho
 // would otherwise hang the callback forever.
 const captureTimeout = 5 * time.Second
 
+// Capture opens the camera, takes the first frame it delivers, and closes it.
+// Off the caller's goroutine for the same reason as Start: this is reached
+// from the UI goroutine and can take seconds.
 func (deviceStill) Capture(o shell.CaptureOptions, done func(image.Image, error)) {
 	if done == nil {
 		return
@@ -130,27 +161,23 @@ func (deviceStill) Capture(o shell.CaptureOptions, done func(image.Image, error)
 	if o.Facing == shell.FacingBack {
 		facing = camera.FacingBack
 	}
-	c, err := camera.Open(camera.Options{Facing: facing, Width: o.MaxDim})
-	if err != nil {
-		done(nil, err)
-		return
-	}
-	defer c.Stop()
-
-	deadline := time.Now().Add(captureTimeout)
-	for {
-		if f := c.Frame(); f != nil {
-			// Copied because the capture reuses its pool: the caller keeps
-			// this image, and the next frame would otherwise overwrite it.
-			out := image.NewRGBA(f.Rect)
-			copy(out.Pix, f.Pix)
-			done(out, nil)
+	go func() {
+		c, err := openCamera(camera.Options{Facing: facing, Width: o.MaxDim})
+		if err != nil {
+			done(nil, err)
 			return
 		}
-		if time.Now().After(deadline) {
+		defer c.Stop()
+
+		if !waitForFrame(c, captureTimeout) {
 			done(nil, errors.New("devmedia: no frame within 5s"))
 			return
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		f := c.Frame()
+		// Copied because the capture reuses its pool: the caller keeps this
+		// image, and the next frame would otherwise overwrite it.
+		out := image.NewRGBA(f.Rect)
+		copy(out.Pix, f.Pix)
+		done(out, nil)
+	}()
 }

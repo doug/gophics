@@ -25,12 +25,7 @@ func TestDesktopCameraDeliversFrames(t *testing.T) {
 		t.Skip("camera access denied on this machine")
 	}
 
-	var (
-		frames shell.Frames
-		err    error
-	)
-	deviceCamera{}.Start(shell.PreviewOptions{Facing: shell.FacingFront, Width: 640},
-		func(f shell.Frames, e error) { frames, err = f, e })
+	frames, err := startCamera(t, shell.PreviewOptions{Facing: shell.FacingFront, Width: 640})
 	if err != nil {
 		t.Skipf("no camera available: %v", err)
 	}
@@ -77,12 +72,31 @@ func TestDesktopCameraDeliversFrames(t *testing.T) {
 // Stop must be safe to call twice: a widget that stops on dispose and again on
 // an error path is ordinary, and the second call must not take the process down.
 func TestDesktopCameraStopIsIdempotent(t *testing.T) {
-	var frames shell.Frames
-	var err error
-	deviceCamera{}.Start(shell.PreviewOptions{}, func(f shell.Frames, e error) { frames, err = f, e })
+	frames, err := startCamera(t, shell.PreviewOptions{})
 	if err != nil || frames == nil {
 		t.Skipf("no camera available: %v", err)
 	}
 	frames.Stop()
 	frames.Stop()
+}
+
+// startCamera runs Start and waits for its answer. Start reports off the
+// caller's goroutine — the open and the first-frame wait take seconds on a
+// cold device — so a test has to wait for done the way the Posted wrapper
+// would deliver it.
+func startCamera(t *testing.T, o shell.PreviewOptions) (shell.Frames, error) {
+	t.Helper()
+	type result struct {
+		frames shell.Frames
+		err    error
+	}
+	got := make(chan result, 1)
+	deviceCamera{}.Start(o, func(f shell.Frames, e error) { got <- result{f, e} })
+	select {
+	case r := <-got:
+		return r.frames, r.err
+	case <-time.After(firstFrameTimeout + 5*time.Second):
+		t.Fatal("Start never reported")
+		return nil, nil
+	}
 }

@@ -6,14 +6,14 @@ import "github.com/doug/gophics/shell"
 
 // CameraPreview reports that live camera preview is unavailable here.
 //
-// shell.LiveMediaWindow pairs the preview with the microphone, but they are
-// independent capabilities and a platform may have one without the other —
-// which is the case on Linux and Windows today, where the microphone is
-// implemented and the camera is not. Linux wants V4L2 and Windows Media
-// Foundation; nil is the contract's way of saying so, and an app hides the
+// This is the fallback for the BSDs: macOS, Linux and Windows all have a
+// camera backend in internal/camera (AVFoundation, V4L2, Media Foundation),
+// and the microphone is implemented on all of them too. The preview and the
+// microphone are independent capabilities, so a platform may have one without
+// the other; nil is the contract's way of saying so, and an app hides the
 // affordance rather than failing.
 func CameraPreview() shell.CameraPreview { return nil }
 
-// Camera returns nil: still capture follows the preview, and the preview is
-// macOS-only until the V4L2 and Media Foundation paths land.
+// Camera returns nil: still capture follows the preview, and there is no
+// preview here.
 func Camera() shell.Camera { return nil }

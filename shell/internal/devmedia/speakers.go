@@ -39,9 +39,6 @@ func Speakers() shell.Speakers { return deviceSpeakers{} }
 
 type deviceSpeakers struct{}
 
-// chunkSamples bounds how often the audio thread allocates.
-//
-
 // --- playback ----------------------------------------------------------------
 
 // One output context for the process, opened on first use.

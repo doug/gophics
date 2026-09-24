@@ -50,17 +50,24 @@ func (deviceMic) Authorize(cb func(shell.Permission)) {
 	}
 }
 
+// defaultCapture is audio.DefaultCapture; a test substitutes a fake to check
+// that every failure path after Open releases the device.
+var defaultCapture = audio.DefaultCapture
+
 func (deviceMic) Listen(done func(shell.Monitor, error)) {
 	if done == nil {
 		return
 	}
-	cap := audio.DefaultCapture()
+	cap := defaultCapture()
 	rate, err := cap.Open(44100)
 	if err != nil {
 		done(nil, err)
 		return
 	}
 	if rate <= 0 {
+		// Opened, so it has to be closed: Record did and this did not, which
+		// left the device — and the recording indicator — on.
+		cap.Close()
 		done(nil, errors.New("devmedia: capture device reported no sample rate"))
 		return
 	}
@@ -144,7 +151,7 @@ func (deviceMic) Record(_ shell.RecordOptions, done func(shell.Recorder, error))
 	if done == nil {
 		return
 	}
-	cap := audio.DefaultCapture()
+	cap := defaultCapture()
 	rate, err := cap.Open(recordRate)
 	if err != nil {
 		done(nil, err)
