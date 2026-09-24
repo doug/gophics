@@ -187,10 +187,12 @@ class GophicsPreview(
     }
 
     private fun pickCamera(mgr: CameraManager, facing: Int): String? {
+        // facing is shell.Facing: 0 back, 1 front — the same encoding
+        // capturePhoto receives.
         val want = if (facing == 1) {
-            CameraCharacteristics.LENS_FACING_BACK
-        } else {
             CameraCharacteristics.LENS_FACING_FRONT
+        } else {
+            CameraCharacteristics.LENS_FACING_BACK
         }
         var fallback: String? = null
         for (id in mgr.cameraIdList) {

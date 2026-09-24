@@ -109,7 +109,8 @@ dependency, and AVFoundation on iOS. Register with
 app hides the affordance.
 
 Go → native (you implement): `AuthorizeCamera`, `StartPreview`(reqID, facing,
-width), `StopPreview`.
+width), `StopPreview`. `facing` is `shell.Facing` — 0 back, 1 front — the same
+encoding `CapturePhoto` receives.
 
 Native → Go: `DeliverPermission`, `DeliverPreviewReady`(reqID) /
 `FailPreview`(reqID, msg), then `DeliverPreviewFrame`(reqID, **RGBA8888**, w, h)

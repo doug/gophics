@@ -29,12 +29,18 @@ func (b *Bridge) Camera() shell.Camera {
 type mobileCamera struct{ m *mediaBridge }
 
 func (c *mobileCamera) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return // the nil rule in shell/shell.go: nothing to deliver to
+	}
 	id := c.m.newReq()
 	c.m.perm[id] = cb
 	c.m.host.AuthorizeCamera(id)
 }
 
 func (c *mobileCamera) Capture(opts shell.CaptureOptions, done func(image.Image, error)) {
+	if done == nil {
+		return // opening the camera for a photo nobody will receive
+	}
 	id := c.m.newReq()
 	c.m.photo[id] = done
 	c.m.host.CapturePhoto(id, int(opts.Facing))
@@ -64,9 +70,9 @@ func (b *Bridge) FailCapture(reqID int, msg string) {
 
 // CameraPreview returns live camera preview, or nil until a PreviewHost is set.
 //
-// shell.LiveMediaWindow pairs the preview with the microphone, but the two are
-// independent capabilities and a platform may have one without the other — a
-// host can register either, both, or neither.
+// The preview and the microphone are independent capabilities served by
+// separate hosts — a platform may have one without the other, so a host can
+// register either, both, or neither, and an app hides whichever is nil.
 func (b *Bridge) CameraPreview() shell.CameraPreview {
 	b.prevMu.Lock()
 	defer b.prevMu.Unlock()
@@ -99,7 +105,9 @@ type PreviewHost interface {
 	// AuthorizeCamera requests camera permission. → DeliverPermission(reqID, granted)
 	AuthorizeCamera(reqID int)
 	// StartPreview opens the camera and begins streaming frames.
-	// facing is 0 for front, 1 for back; width is a hint the host may ignore.
+	// facing is int(shell.Facing) — 0 for the back camera, 1 for the front —
+	// the same encoding MediaHost.CapturePhoto receives, so a host that
+	// implements both never translates. width is a hint the host may ignore.
 	// → DeliverPreviewReady(reqID) | FailPreview(reqID, msg), then
 	// DeliverPreviewFrame(reqID, rgba, w, h) repeatedly until stopped.
 	StartPreview(reqID, facing, width int)
@@ -111,7 +119,6 @@ type PreviewHost interface {
 // CameraPreview() returns nil and an app hides the affordance.
 func (b *Bridge) SetPreviewHost(h PreviewHost) {
 	b.prevMu.Lock()
-	defer b.prevMu.Unlock()
 	b.prevHost = h
 	if b.previews == nil {
 		b.previews = map[int]*mobilePreview{}
@@ -119,11 +126,18 @@ func (b *Bridge) SetPreviewHost(h PreviewHost) {
 	if b.prevCb == nil {
 		b.prevCb = map[int]func(shell.Frames, error){}
 	}
+	b.prevMu.Unlock()
+	// Outside the lock: the runtime answers CapabilitiesChanged by calling
+	// CameraPreview(), which takes prevMu again.
+	b.capabilitiesChanged()
 }
 
 type mobileCameraPreview struct{ b *Bridge }
 
 func (c *mobileCameraPreview) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return // the nil rule in shell/shell.go: nothing to deliver to
+	}
 	b := c.b
 	b.prevMu.Lock()
 	host := b.prevHost
@@ -138,6 +152,9 @@ func (c *mobileCameraPreview) Authorize(cb func(shell.Permission)) {
 }
 
 func (c *mobileCameraPreview) Start(o shell.PreviewOptions, done func(shell.Frames, error)) {
+	if done == nil {
+		return // a Frames nobody receives is a lit camera nothing can stop
+	}
 	b := c.b
 	b.prevMu.Lock()
 	host := b.prevHost
@@ -150,11 +167,7 @@ func (c *mobileCameraPreview) Start(o shell.PreviewOptions, done func(shell.Fram
 	b.prevCb[id] = done
 	b.prevMu.Unlock()
 
-	facing := 0
-	if o.Facing == shell.FacingBack {
-		facing = 1
-	}
-	host.StartPreview(id, facing, o.Width)
+	host.StartPreview(id, int(o.Facing), o.Width)
 }
 
 // mobilePreview holds the frames arriving from the host.

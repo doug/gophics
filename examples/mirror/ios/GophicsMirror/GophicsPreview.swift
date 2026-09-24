@@ -82,7 +82,9 @@ extension GophicsPreview: MobilePreviewHostProtocol {
     private func open(_ reqID: Int, facing: Int, width: Int) {
         // Any camera beats none: a device with only a back camera should still
         // show something when the app asked for the front one.
-        let want: AVCaptureDevice.Position = facing == 1 ? .back : .front
+        // facing is shell.Facing: 0 back, 1 front — the same encoding
+        // capturePhoto receives.
+        let want: AVCaptureDevice.Position = facing == 1 ? .front : .back
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera],
             mediaType: .video,

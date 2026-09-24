@@ -67,8 +67,10 @@ func TestPreviewDeliversFrames(t *testing.T) {
 		t.Fatalf("the host was asked to start %d times, want 1", len(host.started))
 	}
 	id := host.started[0]
-	if host.facing != 1 {
-		t.Errorf("facing reached the host as %d, want 1 (back)", host.facing)
+	// The shell's encoding, unchanged: 0 back, 1 front — the same number
+	// MediaHost.CapturePhoto gets, so a host implementing both never flips one.
+	if host.facing != int(shell.FacingBack) {
+		t.Errorf("facing reached the host as %d, want %d (back)", host.facing, shell.FacingBack)
 	}
 	if host.width != 640 {
 		t.Errorf("width reached the host as %d, want 640", host.width)

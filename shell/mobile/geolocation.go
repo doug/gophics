@@ -38,26 +38,32 @@ func (b *Bridge) Geolocation() shell.Geolocation {
 type mobileGeo struct{ b *Bridge }
 
 func (g mobileGeo) Current(done func(lat, lon, accuracy float64, err error)) {
+	if done == nil {
+		// The nil rule in shell/shell.go. DeliverLocation only stops a
+		// one-shot request that has a callback, so a request started with
+		// none would leave the location hardware running with no one to
+		// tell it to stop.
+		return
+	}
 	b := g.b
 	id := b.newReq()
-	if done != nil {
-		if b.locOnce == nil {
-			b.locOnce = map[int]func(float64, float64, float64, error){}
-		}
-		b.locOnce[id] = done
+	if b.locOnce == nil {
+		b.locOnce = map[int]func(float64, float64, float64, error){}
 	}
+	b.locOnce[id] = done
 	b.locHost.StartLocation(id, false)
 }
 
 func (g mobileGeo) Watch(fn func(lat, lon, accuracy float64)) (cancel func()) {
+	if fn == nil {
+		return func() {} // nothing subscribed, so nothing was started
+	}
 	b := g.b
 	id := b.newReq()
-	if fn != nil {
-		if b.locWatch == nil {
-			b.locWatch = map[int]func(float64, float64, float64){}
-		}
-		b.locWatch[id] = fn
+	if b.locWatch == nil {
+		b.locWatch = map[int]func(float64, float64, float64){}
 	}
+	b.locWatch[id] = fn
 	b.locHost.StartLocation(id, true)
 	return func() {
 		if _, live := b.locWatch[id]; !live {

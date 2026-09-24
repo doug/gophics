@@ -50,8 +50,11 @@ type MonitorHost interface {
 // Microphone() returns nil and the app degrades to no input.
 func (b *Bridge) SetMonitorHost(h MonitorHost) {
 	b.monMu.Lock()
-	defer b.monMu.Unlock()
 	b.monHost = h
+	b.monMu.Unlock()
+	// Outside the lock: the runtime answers CapabilitiesChanged by calling
+	// Microphone(), which takes monMu again.
+	b.capabilitiesChanged()
 }
 
 // Microphone returns audio input, or nil until a host that can provide it is
@@ -78,6 +81,9 @@ type mobileMicrophone struct {
 }
 
 func (m *mobileMicrophone) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return // the nil rule in shell/shell.go: nothing to deliver to
+	}
 	b := m.b
 	b.monMu.Lock()
 	host := b.monHost
@@ -97,6 +103,9 @@ func (m *mobileMicrophone) Authorize(cb func(shell.Permission)) {
 }
 
 func (m *mobileMicrophone) Listen(done func(shell.Monitor, error)) {
+	if done == nil {
+		return // a Monitor nobody receives is a microphone nothing can stop
+	}
 	b := m.b
 	b.monMu.Lock()
 	host := b.monHost
@@ -257,6 +266,12 @@ func (b *Bridge) DeliverMonitorFloat32(reqID int, data []byte) {
 type mobileRecording struct{ m *mediaBridge }
 
 func (a *mobileRecording) Record(_ shell.RecordOptions, done func(shell.Recorder, error)) {
+	if done == nil {
+		// This is the case the package doc in shell/shell.go names: a Record
+		// with no Recorder handle is a live microphone nothing can stop, so
+		// the host is never asked.
+		return
+	}
 	if a.m == nil || a.m.host == nil {
 		done(nil, errors.New("recording is not available on this device"))
 		return

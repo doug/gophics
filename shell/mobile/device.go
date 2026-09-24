@@ -90,14 +90,15 @@ func (b *Bridge) Photos() shell.Photos {
 type mobilePhotos struct{ b *Bridge }
 
 func (p mobilePhotos) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return // the nil rule in shell/shell.go: nothing to deliver to
+	}
 	b := p.b
 	id := b.newReq()
-	if cb != nil {
-		if b.photoPermCb == nil {
-			b.photoPermCb = map[int]func(shell.Permission){}
-		}
-		b.photoPermCb[id] = cb
+	if b.photoPermCb == nil {
+		b.photoPermCb = map[int]func(shell.Permission){}
 	}
+	b.photoPermCb[id] = cb
 	b.deviceHost.AuthorizePhotos(id)
 }
 
@@ -162,14 +163,15 @@ func (m mobileBiometric) Available() shell.BiometricKind {
 }
 
 func (m mobileBiometric) Authenticate(reason string, allowFallback bool, done func(bool, error)) {
+	if done == nil {
+		return // a prompt whose answer nobody reads is only an interruption
+	}
 	b := m.b
 	id := b.newReq()
-	if done != nil {
-		if b.authCb == nil {
-			b.authCb = map[int]func(bool, error){}
-		}
-		b.authCb[id] = done
+	if b.authCb == nil {
+		b.authCb = map[int]func(bool, error){}
 	}
+	b.authCb[id] = done
 	b.deviceHost.Authenticate(id, reason, allowFallback)
 }
 

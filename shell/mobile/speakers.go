@@ -22,6 +22,11 @@ func (b *Bridge) Speakers() shell.Speakers {
 type mobileSpeakers struct{ m *mediaBridge }
 
 func (a *mobileSpeakers) Play(clip shell.Clip, done func(shell.Playback, error)) {
+	if done == nil {
+		// The nil rule in shell/shell.go, and what the desktop backend does:
+		// a Playback nobody receives is audio nothing can stop.
+		return
+	}
 	id := a.m.newReq()
 	a.m.playCb[id] = done
 	a.m.plays[id] = &mobilePlayback{m: a.m, id: id, duration: clip.Duration}

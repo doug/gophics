@@ -25,6 +25,7 @@ type mobileGPU struct {
 	device  *wgpu.Device
 	surface *wgpu.Surface
 	ggc     *ggcanvas.Canvas
+	held    gpuHandles // everything release tears down, in order
 	format  gputypes.TextureFormat
 	alpha   gputypes.CompositeAlphaMode
 	present gputypes.PresentMode
@@ -109,16 +110,29 @@ func (b *Bridge) ClearSurface() {
 // color, resolve target, and viewport all matched at an aligned size.
 func alignSurface(px int) int { return px &^ 7 }
 
-func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobileGPU, error) {
+func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (g *mobileGPU, err error) {
 	wPx, hPx = alignSurface(wPx), alignSurface(hPx)
+	g = &mobileGPU{pw: wPx, ph: hPx, scale: scale}
+	// A build that fails halfway has already taken an instance, a surface, a
+	// device — the same handles a completed one holds — and SetSurface retries
+	// on every rotation. Tear down whatever exists on the way out, so a device
+	// that cannot configure its swapchain does not leak a device per attempt.
+	defer func() {
+		if err != nil {
+			g.release()
+			g = nil
+		}
+	}()
 	inst, err := wgpu.CreateInstance(&wgpu.InstanceDescriptor{Backends: gputypes.BackendsPrimary})
 	if err != nil {
 		return nil, err
 	}
+	g.held.instance = inst
 	surface, err := inst.CreateSurface(display, window)
 	if err != nil {
 		return nil, err
 	}
+	g.surface, g.held.surface = surface, surface
 	adapter, err := inst.RequestAdapter(&wgpu.RequestAdapterOptions{
 		PowerPreference:   gputypes.PowerPreferenceHighPerformance,
 		CompatibleSurface: surface,
@@ -126,6 +140,7 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	if err != nil {
 		return nil, err
 	}
+	g.held.adapter = adapter
 	// Request the adapter's own limits rather than the spec defaults. Several
 	// compute passes in the vector renderer bind more storage buffers per stage
 	// than the default 8 allows (vello_coarse binds 9), and with default limits
@@ -138,26 +153,23 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	if err != nil {
 		return nil, err
 	}
-	format, alpha, present := negotiateSurface(adapter, surface)
-	g := &mobileGPU{
-		device:  device,
-		surface: surface,
-		format:  format,
-		alpha:   alpha,
-		present: present,
-		pw:      wPx,
-		ph:      hPx,
-		scale:   scale,
-	}
+	g.device, g.held.device = device, device
+	g.format, g.alpha, g.present = negotiateSurface(adapter, surface)
 	// A surface that fails to configure never yields a texture, so every frame
 	// would die in RenderGPU with "surface is not configured" and the host would
 	// show nothing at all. Fail here instead so GPUActive stays false and the
 	// host presents the CPU blit — a slow picture beats a blank screen.
-	if err := g.configure(); err != nil {
+	if err = g.configure(); err != nil {
 		return nil, err
 	}
 
 	provider := &mobileProvider{device: device, queue: device.Queue(), adapter: adapter, format: g.format}
+	// NewWithScale hands this device to the process-wide gg accelerator, which
+	// builds its compute pipelines on it. Those have to go before the device
+	// does, so the accelerator is part of what release tears down.
+	if a := gg.Accelerator(); a != nil {
+		g.held.accel = a
+	}
 	// gg renders in logical points; the surface is physical-sized with a device
 	// scale so 1 point maps to `scale` device pixels.
 	lw, lh := logicalDim(wPx, scale), logicalDim(hPx, scale)
@@ -169,7 +181,7 @@ func newMobileGPU(display, window uintptr, wPx, hPx int, scale float64) (*mobile
 	// where most desktop parts prefer BGRA8Unorm); the MSAA attachment has to
 	// match it or nothing resolves.
 	c.SetSurfaceFormat(g.format)
-	g.ggc = c
+	g.ggc, g.held.canvas = c, c
 	// Force the render-pass pipeline (the compute rasterizer reads back to a CPU
 	// pixmap and never reaches the surface — the same fix as the web GPU path).
 	if pma, ok := gg.Accelerator().(gg.PipelineModeAware); ok {
@@ -264,9 +276,53 @@ func (g *mobileGPU) resize(wPx, hPx int, scale float64) {
 	}
 }
 
+// gpuHandles is everything a mobileGPU has to give back, as the narrowest
+// interfaces that can say so. Interfaces rather than the concrete wgpu types so
+// release can be tested with fakes on a machine with no GPU: what it must do is
+// call each of these exactly once, in this order, and a test can check that.
+type gpuHandles struct {
+	canvas   interface{ Close() error } // the ggcanvas: MSAA targets, glyph atlas, gg context
+	accel    interface{ Close() }       // the gg accelerator's pipelines, built on device
+	surface  interface{ Release() }
+	device   interface{ Release() }
+	adapter  interface{ Release() }
+	instance interface{ Release() }
+}
+
+// release gives back the GPU. It used to release only the surface, and every
+// orientation flip rebuilds through here (see Bridge.Resize), so each rotation
+// and each background/foreground cycle leaked a device, an adapter, an
+// instance and a canvas full of textures.
+//
+// Order matters: the canvas and the accelerator hold resources created on the
+// device, so they close first; the surface is retired before the device that
+// configured it; the adapter and instance go last. It is idempotent — the
+// handles are taken before anything is called — so a Bridge that clears twice
+// does not double-free.
 func (g *mobileGPU) release() {
-	if g.surface != nil {
-		g.surface.Release()
+	h := g.held
+	g.held = gpuHandles{}
+	g.ggc, g.surface, g.device = nil, nil, nil
+	if h.canvas != nil {
+		_ = h.canvas.Close()
+	}
+	if h.accel != nil {
+		// Drops the pipelines the accelerator built on this device while the
+		// device can still destroy them. The next build's NewWithScale hands
+		// the accelerator the new device and it rebuilds them.
+		h.accel.Close()
+	}
+	if h.surface != nil {
+		h.surface.Release()
+	}
+	if h.device != nil {
+		h.device.Release()
+	}
+	if h.adapter != nil {
+		h.adapter.Release()
+	}
+	if h.instance != nil {
+		h.instance.Release()
 	}
 }
 

@@ -46,14 +46,15 @@ func (b *Bridge) FilePicker() shell.FilePicker {
 type mobileFilePicker struct{ b *Bridge }
 
 func (f mobileFilePicker) Open(opts shell.OpenOptions, done func([]shell.PickedFile, error)) {
+	if done == nil {
+		return // the nil rule in shell/shell.go: a dialog with nobody to answer to
+	}
 	b := f.b
 	id := b.newReq()
-	if done != nil {
-		if b.pickCb == nil {
-			b.pickCb = map[int]func([]shell.PickedFile, error){}
-		}
-		b.pickCb[id] = done
+	if b.pickCb == nil {
+		b.pickCb = map[int]func([]shell.PickedFile, error){}
 	}
+	b.pickCb[id] = done
 	b.fileHost.PickFiles(id, joinAccept(opts.Accept), opts.Multiple)
 }
 

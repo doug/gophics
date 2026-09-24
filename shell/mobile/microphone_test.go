@@ -69,8 +69,8 @@ func TestMicrophoneAvailableWithHost(t *testing.T) {
 	if b.Microphone() == nil {
 		t.Fatal("Microphone() is nil after SetMonitorHost")
 	}
-	// CameraPreview is deliberately unimplemented; it must say so rather than
-	// panicking, since LiveMediaWindow pairs the two.
+	// The preview has its own host; registering the microphone's must not
+	// make a camera appear.
 	if b.CameraPreview() != nil {
 		t.Error("CameraPreview() should report unavailable")
 	}

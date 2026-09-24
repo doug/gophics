@@ -94,14 +94,15 @@ func (b *Bridge) Notifier() shell.Notifier {
 type mobileNotifier struct{ b *Bridge }
 
 func (n mobileNotifier) Authorize(cb func(shell.Permission)) {
+	if cb == nil {
+		return // the nil rule in shell/shell.go: nothing to deliver to
+	}
 	b := n.b
 	id := b.newReq()
-	if cb != nil {
-		if b.notifyCb == nil {
-			b.notifyCb = map[int]func(shell.Permission){}
-		}
-		b.notifyCb[id] = cb
+	if b.notifyCb == nil {
+		b.notifyCb = map[int]func(shell.Permission){}
 	}
+	b.notifyCb[id] = cb
 	b.notifyHost.AuthorizeNotify(id)
 }
 

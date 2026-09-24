@@ -21,9 +21,13 @@ import (
 // Recording delivers raw PCM (16-bit little-endian mono) plus its sample rate;
 // Go encodes the portable WAV Clip with wav.Encode, so the format matches
 // the web shell exactly. Playback is given that WAV via PlayClip.
+//
+// facing, wherever it appears, is the shell's encoding — int(shell.Facing):
+// 0 for the back camera, 1 for the front. PreviewHost uses the same one, so a
+// host that implements both never has to translate.
 type MediaHost interface {
 	AuthorizeCamera(reqID int)          // → DeliverPermission(reqID, granted)
-	CapturePhoto(reqID int, facing int) // → DeliverPhoto(reqID, jpeg) | FailCapture(reqID, msg)
+	CapturePhoto(reqID int, facing int) // → DeliverPhoto(reqID, jpeg) | FailCapture(reqID, msg); facing: 0 back, 1 front
 	AuthorizeMic(reqID int)             // → DeliverPermission(reqID, granted)
 	StartRecording(reqID int)           // → DeliverRecorderReady(reqID) | FailRecording(reqID, msg); SetAudioLevel while live
 	StopRecording(reqID int)            // → DeliverPCM(reqID, pcm, sampleRate, durationMs)
@@ -33,8 +37,14 @@ type MediaHost interface {
 }
 
 // SetMediaHost registers the native media backend. Until it is set,
-// Camera()/Audio() return nil (the app degrades to text-only).
-func (b *Bridge) SetMediaHost(h MediaHost) { b.media.host = h }
+// Camera()/Speakers() return nil (the app degrades to text-only) and
+// Microphone() has no recording half.
+//
+// It announces the change like every other host setter: the runtime reads
+// what a Window offers once, so a host that registers media after the first
+// frame would otherwise leave the camera and speakers nil for the life of the
+// window.
+func (b *Bridge) SetMediaHost(h MediaHost) { b.media.host = h; b.capabilitiesChanged() }
 
 // mediaBridge holds the pending-request bookkeeping for media capture.
 type mediaBridge struct {
