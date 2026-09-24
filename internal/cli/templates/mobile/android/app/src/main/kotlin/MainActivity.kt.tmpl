@@ -14,6 +14,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.Choreographer
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -31,7 +32,7 @@ import {{.MobilePkg}}.{{.Framework}}
 import mobile.Bridge
 
 /**
- * Thin host for the gophics HN app (M9 embedding model): the Go side owns
+ * Thin Android host for {{.Name}} (the M9 embedding model): the Go side owns
  * the UI; this activity owns the surface, vsync, input, IME, and intents.
  */
 // One bridge per process, at file scope because MainActivity and the surface
@@ -98,14 +99,26 @@ class MainActivity : Activity() {
         platform?.stopObserving()
     }
 
+    // Run states, matching shell.AppState: 0 active, 1 inactive, 2 background.
+    // onPause means "no longer frontmost" — a dialog over the app counts —
+    // while onStop means "not visible", which is the one worth persisting on.
+    // Lifecycle is always published on the Go side, so without these calls
+    // ctx.Lifecycle() would report a state that never changes.
     override fun onPause() {
         super.onPause()
         bridge.focused(false)
+        bridge.setAppState(1)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        bridge.setAppState(2)
     }
 
     override fun onResume() {
         super.onResume()
         bridge.focused(true)
+        bridge.setAppState(0)
         // Whether there is text to paste — from the description, never the clip
         // itself. The clipboard can change while another app is frontmost, so
         // the Go side has to be told on the way in, but since Android 12
@@ -141,6 +154,7 @@ class GophicsView(private val activity: Activity) :
         holder.addCallback(this)
         isFocusable = true
         isFocusableInTouchMode = true
+        isHapticFeedbackEnabled = true
     }
 
     // --- IME: the view is a text editor whose InputConnection forwards
@@ -218,6 +232,9 @@ class GophicsView(private val activity: Activity) :
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
                 repeat(beforeLength) { bridge.key(2, true) } // KeyBackspace
+                // Forward deletion too: an IME removing a suggestion span after
+                // the caret asks for it here, and ignoring it left the span.
+                repeat(afterLength) { bridge.key(3, true) } // KeyDelete
                 return true
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
@@ -354,6 +371,14 @@ class GophicsView(private val activity: Activity) :
             if (url.isEmpty()) break
             activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
+        // Haptics are always published on the Go side — the bridge queues
+        // them — so a host that never drains the queue makes ctx.Haptic().Play
+        // a silent no-op rather than a nil an app could check for.
+        while (true) {
+            val h = bridge.takeHaptic().toInt()
+            if (h < 0) break
+            playHaptic(h)
+        }
         // Copy: the app wrote to the clipboard and the system has not caught up.
         val copied = bridge.takeClipboardWrite()
         if (copied.isNotEmpty()) {
@@ -366,6 +391,24 @@ class GophicsView(private val activity: Activity) :
             if (msg.isEmpty()) break
             announceForAccessibility(msg)
         }
+    }
+
+    // playHaptic maps a gophics shell.HapticKind (drained from the bridge) to the
+    // closest Android performHapticFeedback constant. FLAG_IGNORE_VIEW_SETTING
+    // fires it even if the view's own haptic flag is off; the system "touch
+    // feedback" setting still gates it, which is the behaviour we want.
+    private fun playHaptic(kind: Int) {
+        val effect = when (kind) {
+            0 -> HapticFeedbackConstants.CLOCK_TICK    // selection — light tick
+            1 -> HapticFeedbackConstants.KEYBOARD_TAP  // light impact
+            2 -> HapticFeedbackConstants.CONTEXT_CLICK // medium impact
+            3 -> HapticFeedbackConstants.LONG_PRESS    // heavy impact
+            4 -> HapticFeedbackConstants.CONFIRM       // success
+            5 -> HapticFeedbackConstants.REJECT        // warning
+            6 -> HapticFeedbackConstants.REJECT        // error
+            else -> HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        performHapticFeedback(effect, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
 
     private val clipboard: ClipboardManager

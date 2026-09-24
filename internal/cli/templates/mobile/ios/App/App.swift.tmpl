@@ -58,10 +58,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    func applicationWillResignActive(_ application: UIApplication) { bridge.focused(false) }
+    // Run states, matching shell.AppState: 0 active, 1 inactive, 2 background.
+    // Lifecycle is always published on the Go side, so without these calls
+    // ctx.Lifecycle() would report a state that never changes — and the
+    // "persist before you are stopped" moment it exists for would never come.
+    func applicationWillResignActive(_ application: UIApplication) {
+        bridge.focused(false)
+        bridge.setAppState(1)
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) { bridge.setAppState(2) }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         bridge.focused(true)
+        bridge.setAppState(0)
         // hasStrings, never .string. The pasteboard can change while another app
         // is frontmost, so the Go side has to be told on the way in — but since
         // iOS 16 *reading* the pasteboard is what raises the system "would like

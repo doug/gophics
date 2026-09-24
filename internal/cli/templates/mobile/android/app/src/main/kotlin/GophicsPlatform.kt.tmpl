@@ -552,14 +552,20 @@ class GophicsPlatform(
     /** Begins reporting reachability and battery. Call once after registering. */
     fun observe() {
         val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+        // Kept so stopObserving can unregister it. A callback left registered
+        // holds this Activity, and each recreation — every rotation — added
+        // another; ConnectivityManager throws TooManyRequestsException at 100
+        // per process.
+        val nc = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 activity.runOnUiThread { bridge.setOnline(true) }
             }
             override fun onLost(network: Network) {
                 activity.runOnUiThread { bridge.setOnline(false) }
             }
-        })
+        }
+        networkCallback = nc
+        cm.registerDefaultNetworkCallback(nc)
         // The callback only fires on a *change*, so the current state has to be
         // reported once or an app that starts online is told nothing.
         bridge.setOnline(cm.activeNetwork != null)
@@ -627,11 +633,17 @@ class GophicsPlatform(
         bridge.setLocale(activity.resources.configuration.locales[0].toLanguageTag())
     }
 
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var batteryReceiver: BroadcastReceiver? = null
     private var localeCallbacks: ComponentCallbacks? = null
 
-    /** Stops the battery and locale observers. Call from the activity's onDestroy. */
+    /** Stops the network, battery and locale observers. Call from the activity's onDestroy. */
     fun stopObserving() {
+        networkCallback?.let {
+            val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.unregisterNetworkCallback(it)
+        }
+        networkCallback = null
         batteryReceiver?.let { activity.unregisterReceiver(it) }
         batteryReceiver = null
         localeCallbacks?.let { activity.application.unregisterComponentCallbacks(it) }
