@@ -139,3 +139,40 @@ func TestDialogEscapeClosesTopmostOnly(t *testing.T) {
 		t.Fatal("second Escape did not close the outer dialog")
 	}
 }
+
+// A suggestion list open inside a dialog is the innermost thing to escape
+// from: the first Escape closes the list and leaves the dialog up, the second
+// closes the dialog. Before the list claimed the key, one Escape took the
+// dialog down with the list still showing inside it.
+func TestDialogEscapeClosesTheSuggestionListFirst(t *testing.T) {
+	a := escapeHarness(t, func(ctx widget.Ctx) {
+		theme.ShowDialog(ctx, widget.Column(
+			theme.Body("Dialog body"),
+			widget.Sized{W: 200, Child: widget.Autocomplete{
+				Placeholder: "City",
+				Suggest:     func(string) []string { return []string{"Paris", "Prague"} },
+			}},
+		))
+	})
+	a.TapLabel("Open")
+	settle(a)
+	a.TapLabel("City")
+	a.Key(shell.KeyDown) // moving into the list opens it
+	settle(a)
+	if !a.HasText("Paris") {
+		t.Fatal("the suggestion list did not open")
+	}
+	a.Key(shell.KeyEscape)
+	settle(a)
+	if a.HasText("Paris") {
+		t.Fatal("Escape did not close the suggestion list")
+	}
+	if !a.HasText("Dialog body") {
+		t.Fatal("Escape closed the dialog instead of the list inside it")
+	}
+	a.Key(shell.KeyEscape)
+	settle(a)
+	if a.HasText("Dialog body") {
+		t.Fatal("second Escape did not close the dialog")
+	}
+}

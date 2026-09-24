@@ -77,12 +77,22 @@ func (s *autocompleteState) Build(ctx Ctx) Widget {
 	}
 
 	rows := []Widget{field}
-	if s.open && len(list) > 0 {
+	showing := s.open && len(list) > 0
+	if showing {
 		for i, sug := range list {
 			rows = append(rows, s.row(i, sug))
 		}
 	}
-	return Column(rows...)
+	// While the list shows, Escape closes it before it reaches whatever is
+	// stacked around the field — a dialog's Escape would otherwise take the
+	// dialog down with the list still open inside it. The Modal stays
+	// mounted either way, declining the key when there is nothing to close,
+	// so opening the list never remounts the field.
+	var onEscape func()
+	if showing {
+		onEscape = func() { s.SetState(func() { s.open, s.highlight = false, -1 }) }
+	}
+	return Modal{OnEscape: onEscape, Child: Column(rows...)}
 }
 
 // visible is the suggestion list as shown, already capped.

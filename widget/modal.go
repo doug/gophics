@@ -24,8 +24,13 @@ package widget
 // innermost layer and takes the key first.
 type Modal struct {
 	// OnEscape runs when Escape is pressed while this is the innermost
-	// modal. Nil lets the key through to the focused widget, so a layer
-	// that cannot be escaped from is spelled as a Modal with a no-op.
+	// modal that wants it. Nil declines the key: the next modal out gets
+	// it, and with none left the focused widget does. A layer that cannot
+	// be escaped from is spelled as a Modal with a no-op. Declining is how
+	// a widget that is sometimes modal — a suggestion list that is only
+	// showing some of the time — stays mounted as one Modal and claims the
+	// key only while it has something to close, instead of wrapping and
+	// unwrapping itself, which would remount its subtree.
 	OnEscape func()
 	Child    Widget
 }
@@ -55,12 +60,14 @@ func (s *modalState) Dispose() {
 
 func (s *modalState) Build(Ctx) Widget { return s.W().Child }
 
-// TopModal returns the Escape handler of the innermost mounted Modal, or nil
-// when no modal layer is up or the innermost one declines the key. The app
-// runner calls it before dispatching Escape to the keyboard target.
+// TopModal returns the Escape handler of the innermost mounted Modal that
+// has one, or nil when no modal layer wants the key. The app runner calls it
+// before dispatching Escape to the keyboard target.
 func (o *Owner) TopModal() func() {
-	if n := len(o.modals); n > 0 {
-		return o.modals[n-1].W().OnEscape
+	for i := len(o.modals) - 1; i >= 0; i-- {
+		if f := o.modals[i].W().OnEscape; f != nil {
+			return f
+		}
 	}
 	return nil
 }

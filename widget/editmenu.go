@@ -3,7 +3,6 @@ package widget
 import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/shell"
 )
 
 // The text edit menu — Cut, Copy, Paste, Select All — raised by a long press.
@@ -142,20 +141,16 @@ type editMenuScrim struct {
 }
 
 func (m editMenuScrim) Build(Ctx) Widget {
-	return Stack{Children: []Widget{
+	// Escape arrives through the modal layer, not the scrim's own OnKey: the
+	// field that raised the menu keeps the keyboard focus, so the scrim
+	// would never see the key itself.
+	return Modal{OnEscape: m.OnDismiss, Child: Stack{Children: []Widget{
 		Interactive{
-			Gestures: Gestures{
-				OnTap: m.OnDismiss,
-				OnKey: func(k shell.Key) {
-					if k.Kind == shell.KeyPress && k.Code == shell.KeyEscape {
-						m.OnDismiss()
-					}
-				},
-			},
-			Child: Fill{}, // transparent, but full-bleed so the tap lands anywhere
+			Gestures: Gestures{OnTap: m.OnDismiss},
+			Child:    Fill{}, // transparent, but full-bleed so the tap lands anywhere
 		},
 		m.Child,
-	}}
+	}}}
 }
 
 // editActionsFor builds the standard menu for a selection.

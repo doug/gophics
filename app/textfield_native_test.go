@@ -281,3 +281,38 @@ func TestDisabledFieldIsNotFocusable(t *testing.T) {
 		t.Errorf("typing reached a disabled field: %q", st.value)
 	}
 }
+
+// Escape closes an open edit menu and nothing else: the selection the menu
+// was raised for stays, so a second Escape can collapse it the usual way.
+// The field keeps keyboard focus while the menu is up, so the menu's scrim
+// never sees the key itself; it arrives through the modal layer.
+func TestEscapeClosesTheEditMenuAndKeepsTheSelection(t *testing.T) {
+	h, _ := nativeField(t, widget.TextField{Value: "alpha beta"}, pcKeys)
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 20, Y: 30}, Button: 1})
+	h.Render()
+	menu := func() bool {
+		for _, n := range h.Semantics() {
+			if n.Label == "Copy" {
+				return true
+			}
+		}
+		return false
+	}
+	if !menu() {
+		t.Fatal("no edit menu after a right click")
+	}
+	key(h, shell.KeyEscape, 0)
+	if menu() {
+		t.Fatal("Escape did not close the edit menu")
+	}
+	key(h, shell.KeyC, shell.ModCtrl)
+	if got := h.Clipboard().S; got != "alpha" {
+		t.Errorf("closing the menu should keep the selection; copied %q", got)
+	}
+	key(h, shell.KeyEscape, 0)
+	h.Clipboard().S = ""
+	key(h, shell.KeyC, shell.ModCtrl)
+	if got := h.Clipboard().S; got != "" {
+		t.Errorf("a second Escape should collapse the selection; copied %q", got)
+	}
+}
