@@ -80,7 +80,45 @@ func genDungeon(w, h, maxRooms int, rng *rand.Rand) *Dungeon {
 		sx, sy := d.rooms[n-1].center()
 		d.set(sx, sy, CellStairs)
 	}
+	d.placeDoors()
 	return d
+}
+
+// inRoom reports whether (x, y) lies inside one of the carved rooms.
+func (d *Dungeon) inRoom(x, y int) bool {
+	for _, r := range d.rooms {
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			return true
+		}
+	}
+	return false
+}
+
+// placeDoors marks the cell where a corridor enters a room: a corridor cell
+// with the room on one side, more corridor on the other, and wall across the
+// passage. A corridor running along a room's wall or cutting through it gets
+// none, which keeps a room's edge from sprouting a door at every step. Doors
+// are open — walkable and see-through — so they change how the map reads,
+// not how it plays: a threshold is where standing to fight one thing at a
+// time becomes an obvious move.
+func (d *Dungeon) placeDoors() {
+	for y := range d.H {
+		for x := range d.W {
+			if d.at(x, y) != CellFloor || d.inRoom(x, y) {
+				continue
+			}
+			ns := d.inRoom(x, y-1) != d.inRoom(x, y+1) &&
+				d.walkable(x, y-1) && d.walkable(x, y+1) && !d.walkable(x-1, y) && !d.walkable(x+1, y)
+			ew := d.inRoom(x-1, y) != d.inRoom(x+1, y) &&
+				d.walkable(x-1, y) && d.walkable(x+1, y) && !d.walkable(x, y-1) && !d.walkable(x, y+1)
+			// Two rooms a single cell apart would get a door each, back to
+			// back; the first one in scan order is threshold enough.
+			adjacent := d.at(x-1, y) == CellDoor || d.at(x, y-1) == CellDoor
+			if (ns || ew) && !adjacent {
+				d.set(x, y, CellDoor)
+			}
+		}
+	}
 }
 
 func (d *Dungeon) carveCorridor(x0, y0, x1, y1 int, rng *rand.Rand) {

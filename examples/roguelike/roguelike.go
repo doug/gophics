@@ -192,6 +192,16 @@ func (s *gameState) key(c shell.KeyCode) {
 		s.step(0, -1)
 	case shell.KeyDown, shell.KeyS:
 		s.step(0, 1)
+	// The vi diagonals. Monsters step diagonally and a tap already can, so
+	// without these a keyboard player could neither cut a corner nor dodge.
+	case shell.KeyY:
+		s.step(-1, -1)
+	case shell.KeyU:
+		s.step(1, -1)
+	case shell.KeyB:
+		s.step(-1, 1)
+	case shell.KeyN:
+		s.step(1, 1)
 	case shell.KeyQ:
 		s.g.Quaff()
 		s.after()
@@ -456,7 +466,7 @@ func (s *gameState) drawHUD(c paint.Canvas, size geom.Size) {
 	stat("POTIONS", fmt.Sprintf("%d", g.potions), potionColor(g.potions))
 
 	// Controls, so the game explains itself without a manual.
-	c.TextIn("", "move ←↑↓→ / wasd    Q quaff    space wait",
+	c.TextIn("", "move ←↑↓→ wasd · yubn diagonal · Q quaff · space wait",
 		geom.Pt{X: size.W - 300, Y: y + 2}, 11, colDim)
 	c.TextIn("", fmt.Sprintf("Amulet · depth %d", maxDepth),
 		geom.Pt{X: size.W - 300, Y: y + 20}, 12, colDim)

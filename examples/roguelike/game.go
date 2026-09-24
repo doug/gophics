@@ -245,6 +245,13 @@ func (g *Game) Move(dx, dy int) {
 	}
 	g.player.X, g.player.Y = nx, ny
 	g.pickup()
+	if g.won {
+		// The run is over; the monsters do not get a last swing. Letting the
+		// turn end here meant an adjacent brute could kill the player on the
+		// winning step, and draw checks dead first — so the win showed "You
+		// died".
+		return
+	}
 	if g.d.at(nx, ny) == CellStairs {
 		g.descend()
 		return
