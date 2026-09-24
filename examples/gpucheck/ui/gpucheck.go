@@ -18,6 +18,7 @@ import (
 	"image/color"
 	"math"
 
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/doug/gophics/app"
@@ -30,13 +31,19 @@ import (
 func Root() widget.Widget     { return Check{} }
 func Background() paint.Color { return paint.RGB(0.06, 0.07, 0.10) }
 
-// Config is the bring-up scene's own configuration, so a mobile build can swap
-// this in for the real app's without either side hand-rolling an app.Config.
+// Config is the scene's one configuration: the desktop command, the render
+// tests and the mobile bind all use it, so a device screenshot is compared
+// against a reference drawn with the same fonts. The headings draw in the
+// "bold" family; a build that registered only Font fell through to the
+// regular face there, and the comparison the package exists for could not
+// match.
 func Config() app.Config {
 	return app.Config{
-		Title:      "gophics · gpucheck",
-		Background: Background(),
-		Font:       goregular.TTF,
+		Title:        "gophics · gpucheck",
+		Size:         geom.Size{W: 440, H: 660},
+		Background:   Background(),
+		Font:         goregular.TTF,
+		FontFamilies: map[string][]byte{"bold": gobold.TTF},
 	}
 }
 

@@ -7,12 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/goregular"
-
 	"github.com/doug/gophics/app"
 	gpucheck "github.com/doug/gophics/examples/gpucheck/ui"
-	"github.com/doug/gophics/geom"
 )
 
 // TestGPUReference renders the scene through the real GPU rasterizer (Metal on
@@ -24,10 +20,7 @@ func TestGPUReference(t *testing.T) {
 	if out == "" {
 		t.Skip("set GPUCHECK_GPU=<path>")
 	}
-	h, err := app.NewHeadless(gpucheck.Root(), app.Config{
-		Size: geom.Size{W: 440, H: 660}, Background: gpucheck.Background(),
-		Font: goregular.TTF, FontFamilies: map[string][]byte{"bold": gobold.TTF},
-	}, 2)
+	h, err := app.NewHeadless(gpucheck.Root(), gpucheck.Config(), 2)
 	if err != nil {
 		t.Fatal(err)
 	}
