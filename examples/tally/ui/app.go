@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,10 @@ type state struct {
 
 	loaded       bool
 	prefsChecked bool
+
+	// showProblems switches the body to the list of what the engine could not
+	// make sense of in the ledger (see problemsBanner).
+	showProblems bool
 
 	// view selects the top-level screen; a non-empty account overrides it with
 	// the register drill-down.
@@ -116,7 +121,7 @@ func (s *state) loadWith(p shell.Preferences) {
 			if b, err := book.Open(path); err == nil {
 				if tr, err := b.Tree(); err == nil {
 					s.book, s.tree, s.err = b, tr, nil
-					s.loaded, s.seriesReady = true, false
+					s.loaded, s.seriesReady, s.showProblems = true, false, false
 					return
 				}
 			}
@@ -185,6 +190,8 @@ func (s *state) screen(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget 
 		body = widget.Padding{All: 24, Child: widget.Text{
 			Value: "Couldn't open the ledger: " + s.err.Error(), Color: th.Danger, Wrap: true,
 		}}
+	case s.showProblems && len(s.problems()) > 0:
+		body = s.problemsView(th)
 	case s.account != "":
 		body = s.registerView(th)
 	case s.view == viewOverview:
@@ -480,9 +487,72 @@ func (s *state) header(th theme.Theme, ctx widget.Ctx, wide bool) widget.Widget 
 	if wide {
 		panel = s.addPanel(th, false)
 	}
-	head := widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}}, panel)
+	head := widget.Column(bar, widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}}, s.problemsBanner(th), panel)
 	head.CrossAlign = layout.CrossStretch
 	return head
+}
+
+// problems is everything the engine reported about the loaded ledger: lines it
+// could not parse, includes it could not read, transactions that do not
+// balance, assertions that fail. The engine keeps going past all of these so
+// the data still shows — which is only defensible if the reader is told.
+func (s *state) problems() []error {
+	if s.book == nil {
+		return nil
+	}
+	return s.book.Problems()
+}
+
+// problemsBanner is the strip under the header that says how much of the
+// ledger the engine had to work around, with the first problem as a sample
+// and a toggle for the full list. It is absent from a clean ledger.
+func (s *state) problemsBanner(th theme.Theme) widget.Widget {
+	probs := s.problems()
+	if len(probs) == 0 {
+		return widget.Sized{}
+	}
+	label := "Show"
+	if s.showProblems {
+		label = "Hide"
+	}
+	row := widget.Row(
+		widget.Expand(widget.Text{
+			Value: pluralize(len(probs), "problem") + " in this ledger — " + probs[0].Error(),
+			Size:  th.Type.Label, Color: th.Danger, Ellipsis: true, MaxLines: 1,
+		}),
+		widget.Sized{W: 12},
+		theme.Button{Label: label, OnTap: func() {
+			s.SetState(func() { s.showProblems = !s.showProblems })
+		}},
+	)
+	row.CrossAlign = layout.CrossCenter
+	return widget.Column(
+		widget.Padding{Insets: geom.Insets{Left: 16, Right: 16, Top: 6, Bottom: 6}, Child: row},
+		widget.Fill{Color: th.Border, Child: widget.Sized{H: 1}},
+	)
+}
+
+// problemsView lists every problem in full, one per row, where the banner
+// could show only the first.
+func (s *state) problemsView(th theme.Theme) widget.Widget {
+	probs := s.problems()
+	rows := make([]widget.Widget, 0, len(probs)+2)
+	rows = append(rows,
+		widget.Text{Value: pluralize(len(probs), "problem"), Font: theme.FontBold,
+			Size: th.Type.Heading, Color: th.Text},
+		widget.Sized{H: 8})
+	for _, p := range probs {
+		rows = append(rows, widget.Padding{
+			Insets: geom.Insets{Top: 5, Bottom: 5},
+			Child:  widget.Text{Value: p.Error(), Size: th.Type.Body, Color: th.Text, Wrap: true},
+		})
+	}
+	col := widget.Column(rows...)
+	col.CrossAlign = layout.CrossStretch
+	return widget.Expand(widget.Scroll{Child: widget.Padding{
+		Insets: geom.Insets{Left: 16, Right: 16, Top: 12, Bottom: 24},
+		Child:  col,
+	}})
 }
 
 // tab is one top-level nav item: the selected one is emphasized, the rest are
@@ -586,7 +656,7 @@ func (s *state) load(f shell.PickedFile) {
 			return
 		}
 		s.book, s.tree = b, tr
-		s.seriesReady = false
+		s.seriesReady, s.showProblems = false, false
 		s.account, s.entries, s.selected, s.filter = "", nil, -1, ""
 	})
 }
@@ -639,7 +709,7 @@ func lastSegment(account string) string {
 }
 
 func pluralize(n int, word string) string {
-	s := itoa(n) + " " + word
+	s := locale.Number(strconv.Itoa(n)) + " " + word
 	if n != 1 {
 		s += "s"
 	}
@@ -656,28 +726,6 @@ func total(rows []book.Entry, currency string) string {
 		sum = sum.Add(e.Amount)
 	}
 	return "   ·   net " + fmtMoney(sum) + " " + currency
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }
 
 // locale decides how numbers and dates are punctuated. Resolved once at startup

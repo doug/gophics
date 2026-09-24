@@ -2,7 +2,10 @@ package book
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,7 +29,10 @@ type NewEntry struct {
 	Currency string
 }
 
-// Validate reports what is missing or wrong, in the order a form should complain.
+// Validate reports what is missing or wrong, in the order a form should
+// complain. known is the ledger's account list: an entry to an account that is
+// not in it is refused, because beancount would otherwise create the account
+// on the spot and a typo would become a new account without anyone noticing.
 func (e NewEntry) Validate(known []string) error {
 	switch {
 	case e.Date.IsZero():
@@ -37,6 +43,10 @@ func (e NewEntry) Validate(known []string) error {
 		return errors.New("choose the account the money goes to")
 	case e.From == e.To:
 		return errors.New("the two accounts must differ")
+	case !slices.Contains(known, e.From):
+		return fmt.Errorf("%s is not an account in this ledger", e.From)
+	case !slices.Contains(known, e.To):
+		return fmt.Errorf("%s is not an account in this ledger", e.To)
 	case e.Amount.IsZero():
 		return errors.New("enter an amount")
 	case e.Amount.IsNegative():
@@ -64,6 +74,14 @@ type AddResult struct {
 // Add inserts a transaction and, when the ledger came from a real file, writes it
 // back. The in-memory ledger is reprocessed either way, so the UI reflects the
 // change immediately.
+//
+// The file is written before the in-memory ledger is swapped, and the text is
+// put back as it was if the write fails: an entry that reached memory but not
+// disk would show as added, and pressing Save again would insert it twice.
+// The write itself goes through a temporary file and a rename, so a crash
+// mid-write cannot leave the ledger truncated, and it is refused when the
+// file has changed on disk since it was opened rather than overwriting an
+// edit made elsewhere.
 func (b *Book) Add(e NewEntry) (AddResult, error) {
 	var res AddResult
 	if b.src == nil {
@@ -71,6 +89,11 @@ func (b *Book) Add(e NewEntry) (AddResult, error) {
 	}
 	if err := e.Validate(b.AccountNames()); err != nil {
 		return res, err
+	}
+	if b.file {
+		if err := b.unchangedOnDisk(); err != nil {
+			return res, err
+		}
 	}
 
 	d := bean.NewDate(e.Date)
@@ -83,22 +106,73 @@ func (b *Book) Add(e NewEntry) (AddResult, error) {
 	)
 
 	before := b.assertionFailures()
+	prev := b.src.Clone()
 	res.Line = b.src.Insert(txn, bean.FormatOptions{})
 
+	// The text already had whatever problems it had; only a ledger that cannot
+	// be processed at all is a reason to refuse the edit.
 	led, err := b.src.Ledger()
-	if err != nil {
+	if led == nil {
+		b.src = prev
 		return res, err
 	}
-	b.led = led
-	res.Invalidated = newFailures(before, b.assertionFailures())
 
-	if b.writable() {
-		if err := os.WriteFile(b.Path, b.src.Bytes(), 0o644); err != nil {
+	if b.file {
+		if err := b.writeFile(); err != nil {
+			b.src = prev
 			return res, err
 		}
 		res.Saved = true
 	}
+	b.led = led
+	res.Invalidated = newFailures(before, b.assertionFailures())
 	return res, nil
+}
+
+// unchangedOnDisk reports an error when the file's modification time is not
+// the one this Book last read or wrote.
+func (b *Book) unchangedOnDisk() error {
+	info, err := os.Stat(b.Path)
+	if err != nil {
+		return err
+	}
+	if !b.modTime.IsZero() && !info.ModTime().Equal(b.modTime) {
+		return errors.New("the ledger file changed on disk since it was opened; reopen it before adding to it")
+	}
+	return nil
+}
+
+// writeFile replaces the ledger file with the current text atomically: the
+// new text goes to a temporary file beside it, which is then renamed over the
+// original, so a crash between the two leaves either the old file or the new
+// one, never a truncated one.
+func (b *Book) writeFile() error {
+	dir := filepath.Dir(b.Path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(b.Path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	cleanup := func() { _ = os.Remove(tmp.Name()) }
+	if _, err := tmp.Write(b.src.Bytes()); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if info, err := os.Stat(b.Path); err == nil {
+		_ = os.Chmod(tmp.Name(), info.Mode().Perm()) // keep the user's permissions
+	}
+	if err := os.Rename(tmp.Name(), b.Path); err != nil {
+		cleanup()
+		return err
+	}
+	if info, err := os.Stat(b.Path); err == nil {
+		b.modTime = info.ModTime()
+	}
+	return nil
 }
 
 // CanEdit reports whether this ledger can be added to at all (an embedded demo
@@ -106,13 +180,7 @@ func (b *Book) Add(e NewEntry) (AddResult, error) {
 func (b *Book) CanEdit() bool { return b.src != nil }
 
 // writable reports whether the ledger came from a real file we can write back to.
-func (b *Book) writable() bool {
-	if b.Path == "" {
-		return false
-	}
-	_, err := os.Stat(b.Path)
-	return err == nil
-}
+func (b *Book) writable() bool { return b.file }
 
 // Writable reports whether saving is possible, for the UI to label its button.
 func (b *Book) Writable() bool { return b.src != nil && b.writable() }

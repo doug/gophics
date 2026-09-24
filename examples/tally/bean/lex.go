@@ -42,10 +42,17 @@ type line struct {
 	toks   []token
 	text   string // the raw line, comment stripped, for error messages
 	blank  bool   // nothing but whitespace or a comment
+	// err is why the line could not be tokenized. The line is then treated as
+	// blank: one stray byte — a '|' in an org-mode heading, an unmatched quote
+	// in a comment-like line — costs that line, not the file.
+	err error
 }
 
-// scan splits src into lines and tokenizes each.
-func scan(src string) ([]line, error) {
+// scan splits src into lines and tokenizes each. A line that fails to
+// tokenize is recorded on the line itself rather than aborting the scan, which
+// is what makes Parse's error tolerance hold at the lexical level as well as
+// the syntactic one.
+func scan(src string) []line {
 	var out []line
 	for i, raw := range strings.Split(src, "\n") {
 		raw = strings.TrimRight(raw, "\r")
@@ -64,13 +71,15 @@ func scan(src string) ([]line, error) {
 		}
 		toks, err := tokenize(body, indent, i+1)
 		if err != nil {
-			return nil, err
+			ln.err, ln.blank = err, true
+			out = append(out, ln)
+			continue
 		}
 		ln.toks = toks
 		ln.blank = len(toks) == 0
 		out = append(out, ln)
 	}
-	return out, nil
+	return out
 }
 
 // stripIndent splits leading whitespace from a line, counting a tab as one.

@@ -176,9 +176,11 @@ func monthEnds(first, last time.Time) []time.Time {
 	for {
 		// Day 0 of the next month is the last day of this one.
 		end := time.Date(y, m+1, 0, 0, 0, 0, 0, time.UTC)
-		if end.After(last) {
-			// Always include a final point at the ledger's last date, so the
-			// series ends on real data rather than a future month boundary.
+		if !end.Before(last) {
+			// Always end on the ledger's last date, so the series ends on real
+			// data rather than a future month boundary — and end there once:
+			// a last transaction on a month end used to produce the point
+			// twice.
 			out = append(out, last)
 			return out
 		}

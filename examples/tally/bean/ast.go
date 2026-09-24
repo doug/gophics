@@ -2,6 +2,7 @@ package bean
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -330,14 +331,12 @@ func (f *File) Sorted() []Directive {
 	return out
 }
 
-// stableSortByDate is an insertion sort: ledgers are usually already in date
-// order, which this handles in a single pass, and it is stable by construction.
+// stableSortByDate orders directives by date, keeping source order within a
+// date. This was an insertion sort on the grounds that ledgers are usually
+// already in date order; a ledger kept newest-first — a common convention —
+// made it quadratic, and 20,000 transactions took most of a second to open.
 func stableSortByDate(ds []Directive) {
-	for i := 1; i < len(ds); i++ {
-		for j := i; j > 0 && ds[j].When().Before(ds[j-1].When()); j-- {
-			ds[j], ds[j-1] = ds[j-1], ds[j]
-		}
-	}
+	slices.SortStableFunc(ds, func(a, b Directive) int { return a.When().Compare(b.When()) })
 }
 
 // monthOf converts a 1-based month number to a time.Month.

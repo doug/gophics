@@ -1,6 +1,7 @@
 package bean
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/doug/tally/decimal"
@@ -167,7 +168,27 @@ func (l *Ledger) insertPad(pad *Pad, b *Assertion, diff decimal.Decimal) {
 		},
 	}
 	l.Directives = append(l.Directives, txn)
-	l.post(txn)
+	l.postInOrder(txn)
+}
+
+// postInOrder files a transaction that is dated earlier than postings already
+// recorded — a pad's, which is only known once its balance assertion has been
+// reached, after every transaction in between has posted. Postings are
+// documented as being in date order and the register's running balance is
+// computed in slice order, so the pad has to go where its date puts it, not on
+// the end.
+func (l *Ledger) postInOrder(t *Transaction) {
+	for _, p := range t.Postings {
+		if p.Amount == nil {
+			continue
+		}
+		a := l.account(p.Account)
+		i := len(a.Postings)
+		for i > 0 && t.When().Before(a.Postings[i-1].Txn.When()) {
+			i--
+		}
+		a.Postings = slices.Insert(a.Postings, i, PostingRef{Txn: t, Posting: p})
+	}
 }
 
 // account returns the record for name, creating it on first use so that posting

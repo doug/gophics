@@ -12,11 +12,16 @@ import (
 // and the rest of the file still parses. A ledger is a user's data — one bad line
 // should not make the whole thing unopenable.
 func Parse(path, src string) (*File, error) {
-	lines, err := scan(src)
-	if err != nil {
-		return nil, err
-	}
+	lines := scan(src)
 	p := &parser{path: path, lines: lines}
+	for _, ln := range lines {
+		if ln.err != nil {
+			if se, ok := ln.err.(*SyntaxError); ok {
+				se.File = path
+			}
+			p.errs = append(p.errs, ln.err)
+		}
+	}
 	f := p.file()
 	return f, p.errs.Err()
 }
@@ -448,6 +453,12 @@ func (p *parser) balance(b base, toks []token, ln line) Directive {
 	if len(rest) >= 2 && rest[0].kind == tokPunct && rest[0].text == "~" {
 		if tol, err := decimal.NewFromString(cleanNumber(rest[1].raw)); err == nil {
 			d.Tolerance = &tol
+		}
+		// The currency follows the tolerance ("100.00 ~ 0.01 USD"), so
+		// parseAmount stopped short of it: an assertion read without it
+		// compared against the empty commodity and always failed.
+		if len(rest) >= 3 && rest[2].kind == tokWord && isCurrency(rest[2].text) {
+			d.Amount.Currency = rest[2].text
 		}
 	}
 	d.Meta = p.indentedMeta()

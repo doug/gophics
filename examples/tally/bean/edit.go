@@ -20,6 +20,11 @@ type Source struct {
 	Path  string
 	lines []string
 	file  *File
+	// eol is the file's own line ending, so that an inserted entry matches its
+	// neighbours: a ledger kept in a Windows editor is CRLF throughout, and
+	// writing LF lines into it parses fine but leaves a mixed-ending file that
+	// diffs badly and confuses editors.
+	eol string
 }
 
 // NewSource parses text and returns it ready for editing.
@@ -28,14 +33,25 @@ func NewSource(path, src string) (*Source, error) {
 	if f == nil {
 		return nil, err
 	}
-	return &Source{Path: path, lines: splitLines(src), file: f}, err
+	eol := "\n"
+	if strings.Contains(src, "\r\n") {
+		eol = "\r\n"
+	}
+	return &Source{Path: path, lines: splitLines(src), file: f, eol: eol}, err
+}
+
+// Clone returns an independent copy of the text, so an edit can be undone by
+// putting the copy back — the parsed view is shared until the next edit
+// replaces it, so this costs one slice copy.
+func (s *Source) Clone() *Source {
+	return &Source{Path: s.Path, lines: append([]string(nil), s.lines...), file: s.file, eol: s.eol}
 }
 
 // Directives returns the parsed entries, in source order.
 func (s *Source) Directives() []Directive { return s.file.Directives }
 
-// String renders the current text.
-func (s *Source) String() string { return strings.Join(s.lines, "\n") }
+// String renders the current text, in the file's own line ending.
+func (s *Source) String() string { return strings.Join(s.lines, s.eol) }
 
 // Bytes renders the current text as bytes.
 func (s *Source) Bytes() []byte { return []byte(s.String()) }
@@ -118,7 +134,15 @@ func (s *Source) reparse() {
 	}
 }
 
-func splitLines(s string) []string { return strings.Split(s, "\n") }
+// splitLines splits on LF and drops a trailing CR from each line, so a CRLF
+// file's lines carry no stray '\r' into edits; String puts the ending back.
+func splitLines(s string) []string {
+	out := strings.Split(s, "\n")
+	for i, l := range out {
+		out[i] = strings.TrimSuffix(l, "\r")
+	}
+	return out
+}
 
 // NewTransaction builds a transaction for insertion. Callers outside this package
 // cannot set the embedded position, so this is how a UI constructs an entry.

@@ -9,6 +9,7 @@ package book
 
 import (
 	"os"
+	"time"
 
 	"github.com/doug/tally/bean"
 )
@@ -20,6 +21,16 @@ type Book struct {
 
 	src *bean.Source
 	led *bean.Ledger
+
+	// file is set only by Open: the ledger came from a real file that Add may
+	// write back to. It used to be inferred by stat'ing Path, and the embedded
+	// demo's Path is the bare name "example.beancount" — so a file of that name
+	// in the working directory was silently overwritten with the whole demo.
+	file bool
+	// modTime is the file's modification time as last read or written, so a
+	// save can notice the file changed underneath it — an edit made in another
+	// editor since the ledger was opened would otherwise be clobbered.
+	modTime time.Time
 
 	// ProcessErr holds any error from loading (a missing include, a syntax error).
 	// The ledger stays usable for display when this is non-nil — a file with one
@@ -39,10 +50,13 @@ func Open(path string) (*Book, error) {
 	if led == nil {
 		return nil, err
 	}
-	b := &Book{Path: path, led: led, ProcessErr: err}
+	b := &Book{Path: path, led: led, ProcessErr: err, file: true}
 	if raw, rerr := os.ReadFile(path); rerr == nil {
 		if src, serr := bean.NewSource(path, string(raw)); src != nil && serr == nil {
 			b.src = src
+		}
+		if info, err := os.Stat(path); err == nil {
+			b.modTime = info.ModTime()
 		}
 	}
 	return b, nil
