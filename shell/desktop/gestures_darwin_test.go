@@ -30,3 +30,13 @@ func TestMacDoubleClickIntervalIsTheSystemsSetting(t *testing.T) {
 		t.Errorf("double-click interval %v is not a plausible number of seconds", got)
 	}
 }
+
+// A native Mac app edits text with Cmd and Option. The provider used to rely
+// on the iOS defaults for this and they did not carry it, so the field was
+// false on the one desktop where it matters.
+func TestMacProviderSelectsMacKeys(t *testing.T) {
+	if !(&window{}).GestureTuning().MacKeys {
+		t.Error("GestureTuning().MacKeys is false on macOS: Option+arrow would not " +
+			"move by word and Cmd+arrow would not reach the line ends")
+	}
+}

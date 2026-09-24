@@ -38,12 +38,18 @@ type GestureTuning struct {
 	MacKeys bool
 }
 
-// IOSGestureTuning is UIKit's documented defaults.
+// IOSGestureTuning is UIKit's documented defaults, with Apple's key
+// conventions: a hardware keyboard on an iPad is a Mac keyboard, and the
+// macOS desktop shell starts from these values too. It did not set MacKeys
+// for a while, and only the web shell did, so a native Mac app and an iPad
+// with a keyboard got Ctrl-and-Home/End editing while the same app in Safari
+// got Cmd-and-Option.
 func IOSGestureTuning() GestureTuning {
-	return GestureTuning{TouchSlop: 10, LongPress: 0.5, DoubleTap: 0.3}
+	return GestureTuning{TouchSlop: 10, LongPress: 0.5, DoubleTap: 0.3, MacKeys: true}
 }
 
-// AndroidGestureTuning is ViewConfiguration's defaults, as measured.
+// AndroidGestureTuning is ViewConfiguration's defaults, as measured. A
+// keyboard on Android is a PC keyboard, so MacKeys stays false.
 func AndroidGestureTuning() GestureTuning {
 	return GestureTuning{TouchSlop: 8, LongPress: 0.4, DoubleTap: 0.3}
 }
