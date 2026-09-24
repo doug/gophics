@@ -1,6 +1,10 @@
 package com.gophics.tally
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -30,6 +34,11 @@ import mobile.Bridge
 /**
  * Thin host for the Tally app (M9 embedding model): the Go side owns
  * the UI; this activity owns the surface, vsync, input, IME, and intents.
+ *
+ * This is the CLI's stock host (internal/cli/templates/mobile) with Tally's
+ * two departures kept: haptics are played from the frame loop, and the
+ * keyboard's height is reported apart from the system bars (see onCreate).
+ * When the template changes, diff against it rather than starting over.
  */
 // One bridge per process, at file scope because MainActivity and the surface
 // view are separate classes and both drive it. gomobile assumes one anyway:
@@ -38,10 +47,27 @@ private lateinit var bridge: Bridge
 
 class MainActivity : Activity() {
     private var view: GophicsView? = null
+    private var platform: GophicsPlatform? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         bridge = Tallymobile.start()
+        // The platform capabilities Tally uses: the file picker (the "Open
+        // ledger…" button exists only when it is registered), the clipboard
+        // (pasting into a field), and the device facts observe() pushes. A
+        // capability whose host is not registered reads as nil in Go, which is
+        // how a widget knows to hide its affordance — so share, notifications,
+        // the keystore and location, which Tally has no use for, stay off.
+        val pf = GophicsPlatform(bridge, this)
+        platform = pf
+        bridge.setFileHost(pf)
+        bridge.setDeviceHost(pf)
+        bridge.setClipboardHost(pf) // reads the clip only when the user pastes
+        pf.observe() // reachability, battery, locale — pushed as they change
+        // Preferences needs somewhere to write; Go cannot ask, because HOME is
+        // not reliably set on Android. Without this the remembered ledger path
+        // has nowhere to live and every launch opens the demo.
+        bridge.setFilesDir(filesDir.absolutePath)
         val v = GophicsView(this)
         view = v
         setContentView(v)
@@ -61,6 +87,37 @@ class MainActivity : Activity() {
         }
     }
 
+    // The file picker reports back to the Activity, not to whoever asked, so
+    // it has to be forwarded or the Go callback never fires and the app waits
+    // forever on a choice already made.
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        platform?.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        platform?.onRequestPermissionsResult(requestCode, grantResults)
+    }
+
+    // uiMode is in the manifest's configChanges, so a dark-mode switch arrives
+    // here instead of recreating the activity — and has to be passed on, or the
+    // app keeps the scheme it launched with until the next launch.
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        bridge.setDarkMode(
+            (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        platform?.stopObserving()
+    }
+
     override fun onPause() {
         super.onPause()
         bridge.focused(false)
@@ -69,6 +126,18 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         bridge.focused(true)
+        // Whether there is text to paste — from the description, never the clip
+        // itself. The clipboard can change while another app is frontmost, so
+        // the Go side has to be told on the way in, but since Android 12
+        // *reading* another app's clip shows a "pasted from your clipboard"
+        // toast, and doing it here showed one on every foreground for an app
+        // that had never pasted. The description is metadata and costs nothing.
+        // The text is read on demand, in GophicsPlatform.clipboardText().
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        bridge.setClipboardHasText(
+            cm.hasPrimaryClip() &&
+                cm.primaryClipDescription?.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) == true
+        )
     }
 }
 
@@ -96,14 +165,65 @@ class GophicsView(private val activity: Activity) :
     }
 
     // --- IME: the view is a text editor whose InputConnection forwards
-    // committed and composing text into the bridge. ---
+    // committed and composing text into the bridge, and answers the IME's
+    // questions about the document from it. ---
+    //
+    // The read half matters as much as the write half and is easy to leave out,
+    // because leaving it out looks like it works: typing lands correctly and
+    // only autocorrect, predictive text and "replace the word behind the
+    // cursor" quietly operate on nothing. An IME that cannot see the document
+    // guesses from its own history instead.
 
     override fun onCheckIsTextEditor(): Boolean = true
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        outAttrs.inputType = EditorInfo.TYPE_CLASS_TEXT
+        outAttrs.inputType = when (bridge.textInputKind().toInt()) {
+            1 -> EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            2 -> EditorInfo.TYPE_CLASS_NUMBER // the Amount field asks for this
+            3 -> EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_URI
+            4 -> EditorInfo.TYPE_CLASS_TEXT
+            else -> EditorInfo.TYPE_CLASS_TEXT
+        }
+        if (bridge.textInputSecure()) {
+            // A password field: the password keyboard, and never a suggestion
+            // — a secret in the predictive bar is a secret on screen.
+            outAttrs.inputType = EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_PASSWORD or
+                EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        } else if (!bridge.textInputAutocorrect()) {
+            outAttrs.inputType = outAttrs.inputType or EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN
+        // Tell the IME where the caret is to begin with, so its first
+        // suggestion is not made blind.
+        outAttrs.initialSelStart = bridge.textInputSelStart().toInt()
+        outAttrs.initialSelEnd = bridge.textInputSelEnd().toInt()
         return object : BaseInputConnection(this, false) {
+            // The read half: the document, as the Go side sees it.
+            private fun doc() = bridge.textInputText()
+            private fun selStart() = bridge.textInputSelStart().toInt().coerceIn(0, doc().length)
+            private fun selEnd() = bridge.textInputSelEnd().toInt().coerceIn(0, doc().length)
+
+            override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence {
+                val end = minOf(selStart(), selEnd())
+                return doc().substring(maxOf(0, end - n), end)
+            }
+
+            override fun getTextAfterCursor(n: Int, flags: Int): CharSequence {
+                val d = doc()
+                val start = maxOf(selStart(), selEnd())
+                return d.substring(start, minOf(d.length, start + n))
+            }
+
+            override fun getSelectedText(flags: Int): CharSequence? {
+                val a = minOf(selStart(), selEnd())
+                val b = maxOf(selStart(), selEnd())
+                if (a == b) return null // null, not "": the IME reads them differently
+                return doc().substring(a, b)
+            }
+
+            override fun getCursorCapsMode(reqModes: Int): Int =
+                android.text.TextUtils.getCapsMode(doc(), minOf(selStart(), selEnd()), reqModes)
+
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
                 bridge.composition(2, "", 0, "") // end any preedit
                 bridge.text(text.toString())
@@ -137,8 +257,25 @@ class GophicsView(private val activity: Activity) :
         }
     }
 
+    // The IME caches the selection it was last told about; a caret that moves
+    // for any other reason — a tap, an edit, a dragged handle — has to be
+    // reported or autocorrect replaces the wrong span. The revision is what
+    // makes this affordable to check every frame.
+    private var imeRevision = -1
+
+    private fun syncIMESelection() {
+        val rev = bridge.textInputRevision().toInt()
+        if (rev == imeRevision) return
+        imeRevision = rev
+        val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.updateSelection(this, bridge.textInputSelStart().toInt(), bridge.textInputSelEnd().toInt(), -1, -1)
+    }
+
     private fun syncIME() {
         val want = bridge.textInputActive()
+        if (want) {
+            syncIMESelection() // cheap: guarded by the revision
+        }
         if (want == imeShown) return
         imeShown = want
         val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -221,20 +358,42 @@ class GophicsView(private val activity: Activity) :
                 frameCount = 0
                 frameTimeSum = 0.0
             }
-            while (true) {
-                val url = bridge.takeOpenedURL()
-                if (url.isEmpty()) break
-                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            }
-            while (true) {
-                val h = bridge.takeHaptic().toInt()
-                if (h < 0) break
-                playHaptic(h)
-            }
+            drainHostWork()
         }
         syncIME()
         Choreographer.getInstance().postFrameCallback(this)
     }
+
+    // Everything the Go side has queued for the platform, drained once per
+    // rendered frame. Each is a request the UI made that only Android can carry
+    // out; polling is how the bridge stays free of callbacks into Kotlin.
+    private fun drainHostWork() {
+        while (true) {
+            val url = bridge.takeOpenedURL()
+            if (url.isEmpty()) break
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+        while (true) {
+            val h = bridge.takeHaptic().toInt()
+            if (h < 0) break
+            playHaptic(h)
+        }
+        // Copy: the app wrote to the clipboard and the system has not caught up.
+        val copied = bridge.takeClipboardWrite()
+        if (copied.isNotEmpty()) {
+            clipboard.setPrimaryClip(ClipData.newPlainText(null, copied))
+        }
+        // Live-region speech. TalkBack drops these when it is not running, so
+        // this costs nothing when it is off.
+        while (true) {
+            val msg = bridge.takeAnnouncement()
+            if (msg.isEmpty()) break
+            announceForAccessibility(msg)
+        }
+    }
+
+    private val clipboard: ClipboardManager
+        get() = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     // playHaptic maps a gophics shell.HapticKind (drained from the bridge) to the
     // closest Android performHapticFeedback constant. FLAG_IGNORE_VIEW_SETTING
@@ -349,7 +508,7 @@ class GophicsView(private val activity: Activity) :
             MotionEvent.ACTION_UP -> 2L
             else -> 3L
         }
-        bridge.touch(phase, e.x.toFloat(), e.y.toFloat())
+        bridge.touch(phase, e.x, e.y)
         return true
     }
 

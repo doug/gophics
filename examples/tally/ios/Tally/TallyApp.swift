@@ -1,7 +1,15 @@
-// Thin iOS host for Tally (M9 embedding model): the Go side
+// Thin iOS host for Tally (the M9 embedding model): the Go side
 // (Tallymobile.xcframework, built by gomobile bind) owns the UI; this host
-// owns the layer, display link, touch, keyboard, and URL opening —
+// owns the layer, display link, touch, keyboard, clipboard and URL opening —
 // mirroring the Android host.
+//
+// This is the CLI's stock host (internal/cli/templates/mobile), registering
+// only the capabilities Tally uses. When the template changes, diff against
+// it rather than starting over.
+//
+// Everything below talks to MobileBridge directly. The CLI binds
+// gophics/shell/mobile alongside the app's package, so every bridge method is
+// callable from here and this file declares no passthrough wrappers of its own.
 import UIKit
 import Tallymobile
 
@@ -13,26 +21,59 @@ private var bridge: MobileBridge!
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
+    /// Retained for the lifetime of the app: the bridge holds its host
+    /// interfaces weakly across the bind boundary.
+    private var platform: GophicsPlatform?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Start is a package-level Go function, so gomobile emits it as a C function
-        // rather than a method — Swift does not translate its NSError** into `throws`,
-        // and the pointer is passed by hand.
+        // Start is a package-level Go function, so gomobile emits it as a C
+        // function rather than a method — which means Swift does not translate
+        // its NSError** into `throws`, and the pointer is passed by hand.
         var err: NSError?
         guard let b = TallymobileStart(&err) else {
             fatalError("gophics start: \(err?.localizedDescription ?? "unknown")")
         }
         bridge = b
+
         let w = UIWindow(frame: UIScreen.main.bounds)
-        w.rootViewController = GophicsViewController()
+        let vc = GophicsViewController()
+        w.rootViewController = vc
         w.makeKeyAndVisible()
         window = w
+
+        // The platform capabilities Tally uses: the file picker (the "Open
+        // ledger…" button exists only when it is registered), the clipboard
+        // (pasting into a field), and the device facts observe() pushes. A
+        // capability whose host is not registered reads as nil in Go, which is
+        // how a widget knows to hide its affordance — so share, notifications,
+        // the keychain and location, which Tally has no use for and would need
+        // purpose strings for, stay off.
+        let p = GophicsPlatform(bridge: b, present: vc)
+        platform = p
+        b.setFileHost(p)
+        b.setDeviceHost(p)
+        b.setClipboardHost(p) // reads the pasteboard only when the user pastes
+        p.observe() // reachability, battery, locale — pushed as they change
+        // Preferences needs somewhere to write, and Go cannot ask for it.
+        // Without this the remembered ledger path has nowhere to live.
+        b.setFilesDir(NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? "")
         return true
     }
 
     func applicationWillResignActive(_ application: UIApplication) { bridge.focused(false) }
-    func applicationDidBecomeActive(_ application: UIApplication) { bridge.focused(true) }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        bridge.focused(true)
+        // hasStrings, never .string. The pasteboard can change while another app
+        // is frontmost, so the Go side has to be told on the way in — but since
+        // iOS 16 *reading* the pasteboard is what raises the system "would like
+        // to paste" prompt, and doing it here raised it on every launch and
+        // every foreground, before the user had asked for anything. hasStrings
+        // answers the only question the edit menu asks and prompts for nothing;
+        // the text itself is read on demand, in clipboardText() below.
+        bridge.setClipboardHasText(UIPasteboard.general.hasStrings)
+    }
 }
 
 class GophicsViewController: UIViewController {
@@ -40,11 +81,18 @@ class GophicsViewController: UIViewController {
     override var prefersStatusBarHidden: Bool { false }
 }
 
-class GophicsView: UIView, UIKeyInput {
+class GophicsView: UIView, UITextInput {
     private var displayLink: CADisplayLink?
     private var lastTime: CFTimeInterval = 0
     private var keyboardVisible = false
     private var surfaceSet = false
+    private var imeRevision = -1
+
+    // Required by UITextInput. The delegate is UIKit's; the tokenizer answers
+    // word/line queries and the stock one over this view is correct because the
+    // document it walks is the one text(in:) returns.
+    var inputDelegate: UITextInputDelegate?
+    lazy var tokenizer: UITextInputTokenizer = UITextInputStringTokenizer(textInput: self)
 
     // CPU present fallback: when the GPU surface cannot be created, or is
     // created and then cannot present, the Go side rasterizes each frame on the
@@ -70,10 +118,20 @@ class GophicsView: UIView, UIKeyInput {
             layer.addSublayer(cpuLayer)
         }
         bridge.setDarkMode(traitCollection.userInterfaceStyle == .dark)
+        bridge.setClipboardHasText(UIPasteboard.general.hasStrings)
         observeKeyboard()
         let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
+    }
+
+    // The scheme is read once when the view lands in a window; a switch while
+    // the app is running arrives here and has to be passed on too.
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle {
+            bridge.setDarkMode(traitCollection.userInterfaceStyle == .dark)
+        }
     }
 
     override func layoutSubviews() {
@@ -101,15 +159,45 @@ class GophicsView: UIView, UIKeyInput {
         bridge.setInsets(Float(i.top * scale), rightPx: Float(i.right * scale), bottomPx: Float(i.bottom * scale), leftPx: Float(i.left * scale))
     }
 
+    // The Go side draws every pixel, so nothing moves out from under the
+    // keyboard unless we say how tall it is. UIKeyboardWillChangeFrame covers
+    // show, hide, and the height changes a floating or split keyboard makes.
+    private func observeKeyboard() {
+        let nc = NotificationCenter.default
+        nc.addObserver(self, selector: #selector(keyboardFrameChanged(_:)),
+                       name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        nc.addObserver(self, selector: #selector(keyboardWillHide(_:)),
+                       name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+
+    @objc private func keyboardFrameChanged(_ note: Notification) {
+        guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let win = window else { return }
+        let scale = win.screen.scale
+        let overlap = max(0, bounds.maxY - convert(end, from: win.screen.coordinateSpace).minY)
+        bridge.setKeyboardHeight(Float(overlap * scale))
+    }
+
+    @objc private func keyboardWillHide(_ note: Notification) {
+        bridge.setKeyboardHeight(0)
+    }
+
     @objc private func frame(_ link: CADisplayLink) {
         let dt = lastTime == 0 ? 1.0 / 60 : link.timestamp - lastTime
         lastTime = link.timestamp
-        guard bridge.needsFrame() else { syncKeyboard(); return }
+        guard bridge.needsFrame() else { drainHostWork(); return }
         if bridge.gpuActive() {
             bridge.renderFrame(dt) // renders on the GPU straight to the CAMetalLayer
         } else {
             presentCPU(dt) // Simulator: rasterize on the CPU and blit
         }
+        drainHostWork()
+    }
+
+    // Everything the Go side has queued for the platform, drained once per
+    // frame. Each of these is a request the UI made that only UIKit can carry
+    // out; polling is how the bridge stays free of callbacks into Swift.
+    private func drainHostWork() {
         while true {
             let url = bridge.takeOpenedURL()
             if url.isEmpty { break }
@@ -119,6 +207,28 @@ class GophicsView: UIView, UIKeyInput {
             let h = bridge.takeHaptic()
             if h < 0 { break }
             playHaptic(h)
+        }
+        // Copy: the app wrote to the clipboard and the system pasteboard has
+        // not caught up yet.
+        let copied = bridge.takeClipboardWrite()
+        if !copied.isEmpty { UIPasteboard.general.string = copied }
+
+        // Live-region speech. VoiceOver ignores announcements when it is not
+        // running, so this costs nothing when it is off.
+        while true {
+            let msg = bridge.takeAnnouncement()
+            if msg.isEmpty { break }
+            // Announcement priority is iOS 17+. Below that the notification
+            // still speaks, it just cannot be marked as interrupting — which is
+            // a graceful loss, unlike failing to build.
+            if #available(iOS 17.0, *) {
+                let priority: UIAccessibilityPriority = bridge.announcementAssertive() ? .high : .default
+                let s = NSAttributedString(string: msg,
+                                           attributes: [.accessibilitySpeechAnnouncementPriority: priority])
+                UIAccessibility.post(notification: .announcement, argument: s)
+            } else {
+                UIAccessibility.post(notification: .announcement, argument: msg)
+            }
         }
         syncKeyboard()
     }
@@ -140,8 +250,8 @@ class GophicsView: UIView, UIKeyInput {
         }
     }
 
-    // presentCPU renders one frame on the CPU (Tallymobile.Snapshot → RGBA8888)
-    // and shows it in cpuLayer. Used only when GPU rendering is unavailable.
+    // presentCPU renders one frame on the CPU (Snapshot → RGBA8888) and shows
+    // it in cpuLayer. Used only when GPU rendering is unavailable.
     private func presentCPU(_ dt: CFTimeInterval) {
         guard let data = bridge.snapshot(dt), !data.isEmpty else { return }
         let w = bridge.frameWidth(), h = bridge.frameHeight()
@@ -158,38 +268,37 @@ class GophicsView: UIView, UIKeyInput {
         CATransaction.commit()
     }
 
-    // The Go side draws every pixel, so nothing moves out from under the keyboard
-    // unless we say how tall it is. UIKeyboardWillChangeFrame covers show, hide,
-    // height changes (predictive bar, emoji switch) and the interactive dismiss
-    // gesture in one notification.
-    private func observeKeyboard() {
-        let nc = NotificationCenter.default
-        nc.addObserver(self, selector: #selector(keyboardFrameChanged(_:)),
-                       name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
-        nc.addObserver(self, selector: #selector(keyboardWillHide(_:)),
-                       name: UIResponder.keyboardWillHideNotification, object: nil)
-    }
-
-    @objc private func keyboardFrameChanged(_ note: Notification) {
-        guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
-              let window = window else { return }
-        // The notification frame is in screen coordinates; the overlap with this
-        // view is what actually covers content.
-        let inView = convert(end, from: window.screen.coordinateSpace)
-        let overlap = max(0, bounds.maxY - inView.minY)
-        let scale = window.screen.scale
-        bridge.setKeyboardHeight(Float(overlap * scale))
-    }
-
-    @objc private func keyboardWillHide(_ note: Notification) {
-        bridge.setKeyboardHeight(0)
-    }
-
     private func syncKeyboard() {
         let want = bridge.textInputActive()
-        guard want != keyboardVisible else { return }
-        keyboardVisible = want
-        if want { becomeFirstResponder() } else { resignFirstResponder() }
+        if want != keyboardVisible {
+            keyboardVisible = want
+            if want { becomeFirstResponder() } else { resignFirstResponder() }
+        }
+        // The keyboard layout the focused field asked for. Only re-read when the
+        // Go side says something changed: reloadInputViews is not free, and
+        // calling it every frame makes the keyboard flicker.
+        let rev = bridge.textInputRevision()
+        guard want, rev != imeRevision else { return }
+        imeRevision = rev
+        let kind = bridge.textInputKind()
+        let want_kb: UIKeyboardType
+        switch kind {
+        case 1: want_kb = .emailAddress
+        case 2: want_kb = .numberPad
+        case 3: want_kb = .URL
+        case 4: want_kb = .webSearch
+        default: want_kb = .default
+        }
+        let want_ac: UITextAutocorrectionType = bridge.textInputAutocorrect() ? .yes : .no
+        // A password field gets the secure keyboard: no predictive bar, no
+        // learning, and the system's own bullet glyph handling.
+        let want_secure = bridge.textInputSecure()
+        if keyboardType != want_kb || autocorrectionType != want_ac || isSecureTextEntry != want_secure {
+            keyboardType = want_kb
+            autocorrectionType = want_ac
+            isSecureTextEntry = want_secure
+            reloadInputViews()
+        }
     }
 
     // --- Touch ---
@@ -216,7 +325,10 @@ class GophicsView: UIView, UIKeyInput {
     // --- UIKeyInput: the on-screen keyboard commits through here ---
 
     override var canBecomeFirstResponder: Bool { true }
-    var hasText: Bool { true }
+    var keyboardType: UIKeyboardType = .default
+    var autocorrectionType: UITextAutocorrectionType = .default
+    var isSecureTextEntry: Bool = false
+    var hasText: Bool { !bridge.textInputText().isEmpty }
     func insertText(_ text: String) {
         if text == "\n" { bridge.key(1, pressed: true) } else { bridge.text(text) }
     }
@@ -225,7 +337,7 @@ class GophicsView: UIView, UIKeyInput {
     // --- VoiceOver: expose gophics's semantics tree as a flat list of
     // virtual accessibility elements (the Go side owns the pixels, so there
     // are no real subviews). Mirrors the Android AccessibilityNodeProvider,
-    // consuming the same Tallymobile.A11y* surface. ---
+    // consuming the same A11y* surface. ---
 
     override var isAccessibilityElement: Bool {
         get { false }
@@ -270,4 +382,220 @@ final class GophicsA11yElement: UIAccessibilityElement {
         bridge.a11yActivate(nodeID)
         return true
     }
+}
+
+// MARK: - UITextInput
+//
+// The protocol that makes autocorrect, predictive text and multi-stage IME
+// input work. UIKeyInput alone delivers keystrokes and nothing else: the
+// keyboard types correctly and every feature that needs to *read* the document
+// — correcting the word behind the caret, predicting the next one, replacing a
+// selection — has nothing to read and silently does nothing.
+//
+// The Go side owns the text. Everything here is a view onto what the bridge
+// publishes (textInputText, textInputSelStart/End) plus edits pushed back
+// through it, so there is exactly one copy of the document and no state to keep
+// in step.
+//
+// Offsets are the one real hazard. Go counts runes (Unicode scalars); UIKit
+// counts UTF-16 code units. They agree until the first emoji or CJK character
+// and then diverge silently, corrupting every subsequent edit — so the two
+// conversions below are used at every boundary rather than trusting Int to mean
+// one thing.
+
+/// A position in the document, in UTF-16 code units — UIKit's unit.
+final class GophicsTextPosition: UITextPosition {
+    let offset: Int
+    init(_ offset: Int) { self.offset = offset }
+}
+
+final class GophicsTextRange: UITextRange {
+    let from: GophicsTextPosition
+    let to: GophicsTextPosition
+    init(_ a: Int, _ b: Int) {
+        from = GophicsTextPosition(min(a, b))
+        to = GophicsTextPosition(max(a, b))
+    }
+    override var start: UITextPosition { from }
+    override var end: UITextPosition { to }
+    override var isEmpty: Bool { from.offset == to.offset }
+}
+
+extension GophicsView {
+    private var doc: String { bridge.textInputText() }
+
+    /// UTF-16 offset for a rune offset. Go's rune is a Unicode scalar, which is
+    /// what Swift's unicodeScalars view counts.
+    private func utf16Offset(rune: Int) -> Int {
+        let scalars = doc.unicodeScalars
+        let clamped = max(0, min(rune, scalars.count))
+        let idx = scalars.index(scalars.startIndex, offsetBy: clamped)
+        return doc.utf16.distance(from: doc.utf16.startIndex, to: idx.samePosition(in: doc.utf16) ?? doc.utf16.startIndex)
+    }
+
+    /// Rune offset for a UTF-16 offset — the inverse, used on everything UIKit
+    /// hands in.
+    private func runeOffset(utf16 off: Int) -> Int {
+        let units = doc.utf16
+        let clamped = max(0, min(off, units.count))
+        let idx = units.index(units.startIndex, offsetBy: clamped)
+        guard let s = idx.samePosition(in: doc.unicodeScalars) else {
+            // Mid-surrogate: round down to the scalar that contains it rather
+            // than splitting a character in half.
+            return max(0, runeOffset(utf16: clamped - 1))
+        }
+        return doc.unicodeScalars.distance(from: doc.unicodeScalars.startIndex, to: s)
+    }
+
+    private func substring(_ r: GophicsTextRange) -> String {
+        let units = doc.utf16
+        let a = units.index(units.startIndex, offsetBy: max(0, min(r.from.offset, units.count)))
+        let b = units.index(units.startIndex, offsetBy: max(0, min(r.to.offset, units.count)))
+        return String(doc[a..<b])
+    }
+
+    // MARK: Document
+
+    var beginningOfDocument: UITextPosition { GophicsTextPosition(0) }
+    var endOfDocument: UITextPosition { GophicsTextPosition(doc.utf16.count) }
+
+    var selectedTextRange: UITextRange? {
+        get {
+            GophicsTextRange(utf16Offset(rune: bridge.textInputSelStart()),
+                             utf16Offset(rune: bridge.textInputSelEnd()))
+        }
+        set {
+            // The Go editor owns the selection and moves it from touches and
+            // its own edits. Accepting UIKit's is not wired: it would need a
+            // set-selection call on the bridge, and nothing in the IME path
+            // requires it — corrections arrive as replace(_:withText:), which
+            // carries its own range.
+        }
+    }
+
+    func text(in range: UITextRange) -> String? {
+        guard let r = range as? GophicsTextRange else { return nil }
+        return substring(r)
+    }
+
+    func replace(_ range: UITextRange, withText text: String) {
+        guard let r = range as? GophicsTextRange else { return }
+        // This is autocorrect. UIKit asks for a span to be replaced, which is
+        // not an insertion and cannot be expressed as one.
+        bridge.replaceText(runeOffset(utf16: r.from.offset),
+                           endRune: runeOffset(utf16: r.to.offset),
+                           s: text)
+    }
+
+    // MARK: Marked (composing) text
+    //
+    // Forwarded to the same composition events the Android host sends, so CJK
+    // and accent input take one path on both platforms.
+
+    var markedTextRange: UITextRange? { nil }
+    var markedTextStyle: [NSAttributedString.Key: Any]? {
+        get { nil }
+        set {}
+    }
+
+    func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
+        let s = markedText ?? ""
+        bridge.composition(1, preedit: s, cursor: selectedRange.location, committed: "")
+    }
+
+    func unmarkText() {
+        bridge.composition(2, preedit: "", cursor: 0, committed: "")
+    }
+
+    // MARK: Positions and ranges
+
+    func textRange(from fromPosition: UITextPosition, to toPosition: UITextPosition) -> UITextRange? {
+        guard let a = fromPosition as? GophicsTextPosition,
+              let b = toPosition as? GophicsTextPosition else { return nil }
+        return GophicsTextRange(a.offset, b.offset)
+    }
+
+    func position(from position: UITextPosition, offset: Int) -> UITextPosition? {
+        guard let p = position as? GophicsTextPosition else { return nil }
+        let n = p.offset + offset
+        guard n >= 0, n <= doc.utf16.count else { return nil } // nil, not clamped: UIKit reads it as "no such position"
+        return GophicsTextPosition(n)
+    }
+
+    func position(from position: UITextPosition, in direction: UITextLayoutDirection, offset: Int) -> UITextPosition? {
+        switch direction {
+        case .left, .up: return self.position(from: position, offset: -offset)
+        default: return self.position(from: position, offset: offset)
+        }
+    }
+
+    func compare(_ position: UITextPosition, to other: UITextPosition) -> ComparisonResult {
+        guard let a = position as? GophicsTextPosition,
+              let b = other as? GophicsTextPosition else { return .orderedSame }
+        if a.offset < b.offset { return .orderedAscending }
+        if a.offset > b.offset { return .orderedDescending }
+        return .orderedSame
+    }
+
+    func offset(from: UITextPosition, to toPosition: UITextPosition) -> Int {
+        guard let a = from as? GophicsTextPosition,
+              let b = toPosition as? GophicsTextPosition else { return 0 }
+        return b.offset - a.offset
+    }
+
+    func position(within range: UITextRange, farthestIn direction: UITextLayoutDirection) -> UITextPosition? {
+        guard let r = range as? GophicsTextRange else { return nil }
+        switch direction {
+        case .left, .up: return r.start
+        default: return r.end
+        }
+    }
+
+    func characterRange(byExtending position: UITextPosition, in direction: UITextLayoutDirection) -> UITextRange? {
+        guard let p = position as? GophicsTextPosition else { return nil }
+        switch direction {
+        case .left, .up: return GophicsTextRange(max(0, p.offset - 1), p.offset)
+        default: return GophicsTextRange(p.offset, min(doc.utf16.count, p.offset + 1))
+        }
+    }
+
+    // MARK: Writing direction
+    //
+    // Left-to-right only for now; the editor has no bidi model, and claiming
+    // otherwise would make UIKit place carets the editor cannot honour.
+
+    func baseWritingDirection(for position: UITextPosition, in direction: UITextStorageDirection) -> NSWritingDirection {
+        .leftToRight
+    }
+    func setBaseWritingDirection(_ writingDirection: NSWritingDirection, for range: UITextRange) {}
+
+    // MARK: Geometry
+    //
+    // gophics draws its own caret, selection, grips and edit menu, so UIKit does
+    // not position any selection UI from these. They are answered plausibly
+    // rather than exactly — a degenerate rect makes UIKit misbehave, and an
+    // exact one would need per-glyph metrics across the bind boundary for no
+    // visible gain.
+
+    func firstRect(for range: UITextRange) -> CGRect {
+        CGRect(x: 0, y: 0, width: bounds.width, height: 20)
+    }
+
+    func caretRect(for position: UITextPosition) -> CGRect {
+        CGRect(x: 0, y: 0, width: 2, height: 20)
+    }
+
+    func selectionRects(for range: UITextRange) -> [UITextSelectionRect] { [] }
+
+    func closestPosition(to point: CGPoint) -> UITextPosition? {
+        // Touches reach the Go side directly and move the caret there; UIKit
+        // only asks this for its own selection UI, which is not in use.
+        GophicsTextPosition(utf16Offset(rune: bridge.textInputSelEnd()))
+    }
+
+    func closestPosition(to point: CGPoint, within range: UITextRange) -> UITextPosition? {
+        range.start
+    }
+
+    func characterRange(at point: CGPoint) -> UITextRange? { nil }
 }

@@ -1,0 +1,641 @@
+// Reference Android host for the platform capabilities: share sheet, local
+// notifications, keystore-backed storage, file picker and location.
+//
+// Copy this into your app and register it once, after Start:
+//
+//     val platform = GophicsPlatform(bridge, this)   // `this` = the Activity
+//     bridge.setShareHost(platform)
+//     bridge.setClipboardHost(platform)
+//     bridge.setNotifyHost(platform)
+//     bridge.setSecureHost(platform)
+//     bridge.setFileHost(platform)
+//     bridge.setLocationHost(platform)
+//     bridge.setFilesDir(filesDir.absolutePath)
+//
+// Register only what you use: a capability whose host is not set reads as nil
+// in Go, which is how an app knows to hide the affordance.
+//
+// The activity must forward two things, because Android delivers them to the
+// Activity rather than to us:
+//
+//     override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
+//         super.onActivityResult(rc, res, data)
+//         platform.onActivityResult(rc, res, data)
+//     }
+//     override fun onRequestPermissionsResult(rc: Int, p: Array<String>, g: IntArray) {
+//         super.onRequestPermissionsResult(rc, p, g)
+//         platform.onRequestPermissionsResult(rc, g)
+//     }
+//
+// Manifest permissions: POST_NOTIFICATIONS (API 33+) for notify, and
+// ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION for location. `gophics run`
+// syncs these from the capabilities your Go code actually uses.
+package com.gophics.tally
+
+import android.Manifest
+import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.content.BroadcastReceiver
+import android.content.ComponentCallbacks
+import android.content.res.Configuration
+import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.Uri
+import android.os.BatteryManager
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import android.provider.MediaStore
+import android.view.WindowManager
+import mobile.Bridge
+import mobile.ClipboardHost
+import mobile.DeviceHost
+import mobile.FileHost
+import mobile.LocationHost
+import mobile.NotifyHost
+import mobile.SecureHost
+import mobile.ShareHost
+
+class GophicsPlatform(
+    private val bridge: Bridge,
+    private val activity: Activity,
+) : ShareHost, NotifyHost, SecureHost, FileHost, LocationHost, DeviceHost, ClipboardHost {
+
+    private companion object {
+        const val CHANNEL_ID = "gophics"
+        const val PREFS = "gophics_secure"
+        const val KEY_ALIAS = "gophics_secure_key"
+        const val GCM_TAG_BITS = 128
+        const val IV_BYTES = 12
+
+        // Request codes. Android hands results back by int, and the reqID from
+        // Go is unbounded, so the code is an index into pending maps rather than
+        // the reqID itself.
+        const val RC_PICK = 0x6001
+        const val RC_SAVE = 0x6002
+        const val RC_NOTIFY_PERM = 0x6003
+        const val RC_LOCATION_PERM = 0x6004
+        const val RC_PHOTOS_PERM = 0x6005
+    }
+
+    // ---- Share ----
+
+    override fun share(
+        reqID: Long, title: String?, text: String?, url: String?,
+        fileName: String?, fileData: ByteArray?,
+    ) {
+        val body = listOfNotNull(text?.takeIf { it.isNotEmpty() }, url?.takeIf { it.isNotEmpty() })
+            .joinToString("\n")
+        if (body.isEmpty() && fileData == null) {
+            bridge.deliverShareResult(reqID, "nothing to share")
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            if (!title.isNullOrEmpty()) putExtra(Intent.EXTRA_SUBJECT, title)
+            if (body.isNotEmpty()) putExtra(Intent.EXTRA_TEXT, body)
+        }
+        // A file needs a content:// URI from a FileProvider to be readable by the
+        // receiving app; a file:// URI throws FileUriExposedException since N.
+        // Apps that share files should declare a provider and extend this.
+        try {
+            activity.startActivity(Intent.createChooser(intent, title ?: ""))
+            // ACTION_SEND reports nothing back, and a chooser dismissal is
+            // indistinguishable from a completed share — the same ambiguity iOS
+            // has, resolved the same way.
+            bridge.deliverShareResult(reqID, "")
+        } catch (e: Exception) {
+            bridge.deliverShareResult(reqID, e.message ?: "share failed")
+        }
+    }
+
+    // ---- Local notifications ----
+
+    private var notifyReq: Long = -1
+
+    override fun authorizeNotify(reqID: Long) {
+        // Before API 33 there is no runtime permission: posting is allowed
+        // unless the user turned the app's notifications off, which
+        // areNotificationsEnabled reports.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            val mgr = activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            bridge.deliverNotifyPermission(reqID, mgr.areNotificationsEnabled())
+            return
+        }
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            bridge.deliverNotifyPermission(reqID, true)
+            return
+        }
+        notifyReq = reqID
+        ActivityCompat.requestPermissions(
+            activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), RC_NOTIFY_PERM,
+        )
+    }
+
+    override fun notify(title: String?, body: String?, tag: String?) {
+        // Every host method runs as a JNI callback from Go, and an exception
+        // thrown out of one does not become a Go error — it aborts the process.
+        // "Invalid notification (no valid small icon)" took the whole app down
+        // exactly that way. So the platform call is guarded, and a failure is
+        // reported rather than raised.
+        try {
+            val mgr = activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                mgr.getNotificationChannel(CHANNEL_ID) == null
+            ) {
+                mgr.createNotificationChannel(
+                    NotificationChannel(CHANNEL_ID, "Notifications", NotificationManager.IMPORTANCE_DEFAULT),
+                )
+            }
+            val n = NotificationCompat.Builder(activity, CHANNEL_ID)
+                .setContentTitle(title ?: "")
+                .setContentText(body ?: "")
+                // A system drawable, not applicationInfo.icon. The launcher
+                // icon is usually adaptive, which Android rejects here — and it
+                // rejects it by throwing, from a callback where throwing is
+                // fatal. Replace this with your own monochrome notification
+                // icon; the platform expects a white silhouette on transparent,
+                // not the app icon.
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setAutoCancel(true)
+                .build()
+            // A non-empty tag coalesces: posting with the same tag replaces
+            // rather than stacking. An empty tag gets a fresh id so each one
+            // stands alone.
+            if (!tag.isNullOrEmpty()) {
+                mgr.notify(tag, 0, n)
+            } else {
+                mgr.notify(System.identityHashCode(n), n)
+            }
+        } catch (e: Exception) {
+            Log.w("gophics", "notify failed: " + (e.message ?: e.toString()))
+        }
+    }
+
+    // ---- Secure storage ----
+    //
+    // Android has no keychain that stores arbitrary strings. The equivalent is
+    // a Keystore-held AES key that never leaves the secure hardware, used to
+    // encrypt values kept in a private SharedPreferences file — which is what
+    // EncryptedSharedPreferences does, reimplemented here so this file has no
+    // dependency beyond androidx.core.
+
+    private val prefs by lazy {
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    private fun secretKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        gen.init(
+            KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build(),
+        )
+        return gen.generateKey()
+    }
+
+    override fun secureGet(key: String?): String {
+        if (key == null) return ""
+        val blob = prefs.getString(key, null) ?: return ""
+        return try {
+            val raw = android.util.Base64.decode(blob, android.util.Base64.NO_WRAP)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(
+                Cipher.DECRYPT_MODE, secretKey(),
+                GCMParameterSpec(GCM_TAG_BITS, raw, 0, IV_BYTES),
+            )
+            String(cipher.doFinal(raw, IV_BYTES, raw.size - IV_BYTES), Charsets.UTF_8)
+        } catch (e: Exception) {
+            "" // an undecryptable value is gone, not a crash
+        }
+    }
+
+    override fun secureHas(key: String?): Boolean =
+        key != null && prefs.contains(key)
+
+    override fun secureSet(key: String?, value: String?): String {
+        if (key == null) return "empty key"
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+            val body = cipher.doFinal((value ?: "").toByteArray(Charsets.UTF_8))
+            val out = cipher.iv + body
+            prefs.edit().putString(key, android.util.Base64.encodeToString(out, android.util.Base64.NO_WRAP)).apply()
+            ""
+        } catch (e: Exception) {
+            e.message ?: "keystore write failed"
+        }
+    }
+
+    override fun secureDelete(key: String?): String {
+        if (key == null) return ""
+        prefs.edit().remove(key).apply()
+        return ""
+    }
+
+    // ---- Files ----
+
+    private var pickReq: Long = -1
+    private var saveReq: Long = -1
+    private var savePending: ByteArray? = null
+
+    private fun mimeOf(accept: String?): Pair<String, Array<String>> {
+        if (accept.isNullOrEmpty()) return "*/*" to emptyArray()
+        val mimes = accept.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith(".") }
+        return if (mimes.isEmpty()) "*/*" to emptyArray() else mimes[0] to mimes.toTypedArray()
+    }
+
+    override fun pickFiles(reqID: Long, accept: String?, multiple: Boolean) {
+        pickReq = reqID
+        val (type, extra) = mimeOf(accept)
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            setType(type)
+            if (extra.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, extra)
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, multiple)
+        }
+        try {
+            activity.startActivityForResult(intent, RC_PICK)
+        } catch (e: Exception) {
+            pickReq = -1
+            bridge.failPick(reqID, e.message ?: "no file picker on this device")
+        }
+    }
+
+    override fun saveFile(reqID: Long, name: String?, accept: String?, data: ByteArray?) {
+        saveReq = reqID
+        savePending = data ?: ByteArray(0)
+        val (type, _) = mimeOf(accept)
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            setType(type)
+            putExtra(Intent.EXTRA_TITLE, if (name.isNullOrEmpty()) "export" else name)
+        }
+        try {
+            activity.startActivityForResult(intent, RC_SAVE)
+        } catch (e: Exception) {
+            saveReq = -1
+            savePending = null
+            bridge.deliverSaveDone(reqID, e.message ?: "no file picker on this device")
+        }
+    }
+
+    /** Forward from the Activity's onActivityResult. */
+    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        when (requestCode) {
+            RC_PICK -> finishPick(resultCode, data)
+            RC_SAVE -> finishSave(resultCode, data)
+        }
+    }
+
+    private fun finishPick(resultCode: Int, data: Intent?) {
+        val reqID = pickReq
+        if (reqID < 0) return
+        pickReq = -1
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            bridge.deliverPickedDone(reqID) // cancel is an empty selection
+            return
+        }
+        val uris = mutableListOf<Uri>()
+        data.clipData?.let { clip -> for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri) }
+        data.data?.let { uris.add(it) }
+        for (uri in uris) {
+            // The content URI is only readable while this grant lasts, which is
+            // why the bytes are read here and not handed to Go as a path.
+            val bytes = try {
+                activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            bridge.deliverPickedFile(reqID, displayName(uri), bytes)
+        }
+        bridge.deliverPickedDone(reqID)
+    }
+
+    private fun finishSave(resultCode: Int, data: Intent?) {
+        val reqID = saveReq
+        val body = savePending
+        if (reqID < 0) return
+        saveReq = -1
+        savePending = null
+        if (resultCode != Activity.RESULT_OK || data?.data == null) {
+            bridge.deliverSaveDone(reqID, "") // cancel is not an error
+            return
+        }
+        try {
+            activity.contentResolver.openOutputStream(data.data!!)?.use { it.write(body ?: ByteArray(0)) }
+            bridge.deliverSaveDone(reqID, "")
+        } catch (e: Exception) {
+            bridge.deliverSaveDone(reqID, e.message ?: "write failed")
+        }
+    }
+
+    private fun displayName(uri: Uri): String {
+        activity.contentResolver.query(uri, null, null, null, null)?.use { c ->
+            val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (i >= 0 && c.moveToFirst()) return c.getString(i)
+        }
+        return uri.lastPathSegment ?: "file"
+    }
+
+    // ---- Location ----
+
+    private val watching = mutableMapOf<Long, Boolean>() // reqID → isWatch
+    private var listener: LocationListener? = null
+
+    override fun startLocation(reqID: Long, watch: Boolean) {
+        watching[reqID] = watch
+        val fine = ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                RC_LOCATION_PERM,
+            )
+            return // the fix follows the grant
+        }
+        beginUpdates()
+    }
+
+    override fun stopLocation(reqID: Long) {
+        watching.remove(reqID)
+        if (watching.isNotEmpty()) return
+        val mgr = activity.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        listener?.let { mgr.removeUpdates(it) }
+        listener = null
+    }
+
+    private fun beginUpdates() {
+        if (listener != null) return
+        val mgr = activity.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val provider = when {
+            mgr.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+            mgr.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+            else -> {
+                failAll("location services are off")
+                return
+            }
+        }
+        val l = object : LocationListener {
+            override fun onLocationChanged(loc: Location) {
+                for (reqID in watching.keys.toList()) {
+                    bridge.deliverLocation(reqID, loc.latitude, loc.longitude, loc.accuracy.toDouble())
+                }
+            }
+
+            override fun onProviderDisabled(p: String) = failAll("location services are off")
+            override fun onProviderEnabled(p: String) {}
+            @Deprecated("required by the interface on older API levels")
+            override fun onStatusChanged(p: String?, status: Int, extras: Bundle?) {}
+        }
+        listener = l
+        try {
+            mgr.requestLocationUpdates(provider, 1000L, 1f, l)
+        } catch (e: SecurityException) {
+            failAll("location permission denied")
+        }
+    }
+
+    private fun failAll(msg: String) {
+        for (reqID in watching.keys.toList()) bridge.failLocation(reqID, msg)
+        watching.clear()
+    }
+
+    /** Forward from the Activity's onRequestPermissionsResult. */
+    fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray) {
+        val granted = grantResults.isNotEmpty() &&
+            grantResults.any { it == PackageManager.PERMISSION_GRANTED }
+        when (requestCode) {
+            RC_NOTIFY_PERM -> {
+                if (notifyReq >= 0) {
+                    bridge.deliverNotifyPermission(notifyReq, granted)
+                    notifyReq = -1
+                }
+            }
+            RC_LOCATION_PERM -> {
+                if (granted) beginUpdates() else failAll("location permission denied")
+            }
+            RC_PHOTOS_PERM -> {
+                if (photosReq >= 0) {
+                    bridge.deliverPhotosPermission(photosReq, granted)
+                    photosReq = -1
+                }
+            }
+        }
+    }
+    // ---- Wake lock ----
+    //
+    // FLAG_KEEP_SCREEN_ON rather than a PowerManager wake lock: it is scoped to
+    // the window, needs no manifest permission, and cannot outlive the activity
+    // — which is the failure mode of a wake lock, and the reason it is a lease
+    // on the Go side. The counting happens there, so this only sees the edges.
+
+    override fun setKeepAwake(on: Boolean) {
+        activity.runOnUiThread {
+            if (on) {
+                activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
+
+    // ---- Photo library ----
+
+    override fun authorizePhotos(reqID: Long) {
+        // Since Android 10 an app writes to the shared library through
+        // MediaStore with no permission at all. Below that it needs the legacy
+        // storage write permission, which is why this is version-split rather
+        // than always granted.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            bridge.deliverPhotosPermission(reqID, true)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            bridge.deliverPhotosPermission(reqID, true)
+            return
+        }
+        photosReq = reqID
+        ActivityCompat.requestPermissions(
+            activity, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), RC_PHOTOS_PERM,
+        )
+    }
+
+    private var photosReq: Long = -1
+
+    override fun savePhoto(reqID: Long, data: ByteArray?, album: String?) {
+        if (data == null || data.isEmpty()) {
+            bridge.deliverPhotoSaved(reqID, "no image data")
+            return
+        }
+        try {
+            val values = android.content.ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "gophics-${System.nanoTime()}.png")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !album.isNullOrEmpty()) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/" + album)
+                }
+            }
+            val uri = activity.contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values,
+            ) ?: run {
+                bridge.deliverPhotoSaved(reqID, "could not create a library entry")
+                return
+            }
+            activity.contentResolver.openOutputStream(uri)?.use { it.write(data) }
+            bridge.deliverPhotoSaved(reqID, "")
+        } catch (e: Exception) {
+            bridge.deliverPhotoSaved(reqID, e.message ?: "save failed")
+        }
+    }
+
+    // ---- Biometrics ----
+    //
+    // Reported as unavailable, on purpose. Presenting a biometric prompt on
+    // Android means androidx.biometric — BiometricPrompt is not in the platform
+    // SDK and the deprecated FingerprintManager cannot do face unlock — and
+    // adding a gradle dependency to every scaffolded app for one capability is
+    // the wrong trade to make on the app's behalf.
+    //
+    // To enable it: add `implementation "androidx.biometric:biometric:1.1.0"`,
+    // then answer biometricKind from BiometricManager.canAuthenticate and
+    // authenticate through BiometricPrompt, calling bridge.deliverAuth from its
+    // callback. ctx.Biometric() stays nil until you do, so an app hides the
+    // affordance rather than offering a button that cannot work.
+
+    override fun biometricKind(): Long = 0L
+
+    override fun authenticate(reqID: Long, reason: String?, allowFallback: Boolean) {
+        bridge.deliverAuth(reqID, false, "biometrics need androidx.biometric; see GophicsPlatform.kt")
+    }
+
+    // ---- Pushed state: connectivity, battery and locale ----
+    //
+    // Neither is a host interface, because neither is a question Go can
+    // usefully ask: the platform knows already and changes the answer on its
+    // own schedule. Both start unknown on the Go side — until this reports
+    // once, ctx.Connectivity() is nil rather than optimistically "online",
+    // which keeps an app from skipping its offline path at launch.
+
+    /** Begins reporting reachability and battery. Call once after registering. */
+    fun observe() {
+        val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                activity.runOnUiThread { bridge.setOnline(true) }
+            }
+            override fun onLost(network: Network) {
+                activity.runOnUiThread { bridge.setOnline(false) }
+            }
+        })
+        // The callback only fires on a *change*, so the current state has to be
+        // reported once or an app that starts online is told nothing.
+        bridge.setOnline(cm.activeNetwork != null)
+
+        batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                val i = intent ?: return
+                val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                if (level < 0 || scale <= 0) return
+                val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+                bridge.setBattery(level.toFloat() / scale.toFloat(), charging)
+            }
+        }
+        // ACTION_BATTERY_CHANGED is sticky, so registering delivers the current
+        // state immediately as well as every later change.
+        activity.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+
+        // Locale is pushed for the same reason, but it is the one of the three
+        // where staying silent is not a neutral default. LC_ALL and LANG do not
+        // exist on Android, so intl.Auto() finds nothing and falls back to
+        // en-US: a device set to German formats money and dates as American,
+        // and nothing anywhere reports a failure, because a fallback that
+        // worked looks exactly like a read that succeeded.
+        reportLocale()
+        localeCallbacks = object : ComponentCallbacks {
+            // Fires when the user changes the system language, which they can
+            // do while the app runs. Android usually recreates the activity
+            // too, but per-app language (API 33+) changes the configuration
+            // without one, so observing is not redundant with the fresh report
+            // above.
+            override fun onConfigurationChanged(newConfig: Configuration) = reportLocale()
+            override fun onLowMemory() {}
+        }
+        activity.application.registerComponentCallbacks(localeCallbacks)
+    }
+
+    // ---- Clipboard ----
+    //
+    // Read on demand, not cached. Since Android 12 reading the primary clip
+    // shows the user a "pasted from your clipboard" toast when the data came
+    // from another app, so filling a cache in onResume meant a toast on every
+    // foreground for an app that had never pasted anything. The same mistake
+    // iOS punishes with a prompt.
+    //
+    // Go asks only when the user actually pastes. Whether to offer Paste at all
+    // is answered from the clip *description*, which is metadata and toasts for
+    // nothing — see MainActivity.onResume.
+
+    override fun clipboardText(): String {
+        val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip ?: return ""
+        if (clip.itemCount == 0) return ""
+        return clip.getItemAt(0).coerceToText(activity).toString()
+    }
+
+    private fun reportLocale() {
+        // locales[0] is the user's first preference, which is what every other
+        // app on the device formats with. toLanguageTag gives BCP-47 ("de-DE");
+        // Locale.toString gives the underscore form, which intl.Lookup does not
+        // recognise and would silently take the en-US fallback path this whole
+        // capability exists to close.
+        bridge.setLocale(activity.resources.configuration.locales[0].toLanguageTag())
+    }
+
+    private var batteryReceiver: BroadcastReceiver? = null
+    private var localeCallbacks: ComponentCallbacks? = null
+
+    /** Stops the battery and locale observers. Call from the activity's onDestroy. */
+    fun stopObserving() {
+        batteryReceiver?.let { activity.unregisterReceiver(it) }
+        batteryReceiver = null
+        localeCallbacks?.let { activity.application.unregisterComponentCallbacks(it) }
+        localeCallbacks = null
+    }
+
+}

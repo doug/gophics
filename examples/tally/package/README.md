@@ -59,9 +59,17 @@ nothing is both easier to review and easier to trust.
 ## iOS
 
 ```sh
-./package/ios.sh                # bind + generate + build for the simulator
-./package/ios.sh --run          # and install/launch it
+./package/ios.sh                # bind + generate + build, install and launch on a simulator
+./package/ios.sh --device       # the same on a connected device (needs a team)
 ```
+
+Both scripts are thin wrappers over `gophics run -p ios .` (run from this
+directory, which is its own Go module). gomobile cannot bind `package main`
+and Tally keeps no `mobile/` package of its own, so the CLI generates the bind
+surface into `build/bind` from `ui.Root` and `ui.Config`, binds it together
+with the shell bridge, and drives xcodegen and xcodebuild over the checked-in
+`ios/` host. `GOPHICS=gophics ./package/ios.sh` uses an installed CLI instead
+of `go run`.
 
 For a device or the App Store, open `ios/Tally.xcodeproj` and set a team, or:
 
@@ -79,9 +87,13 @@ committed — a generated `pbxproj` is a merge-conflict machine.
 ## Android
 
 ```sh
-./package/android.sh            # bind + assembleDebug
+./package/android.sh            # bind + assembleDebug, install and launch
 ./package/android.sh --release  # assembleRelease (needs a keystore)
 ```
+
+The debug path is `gophics run -p android .`; the release path has the CLI
+bind the Go side and then runs the gradle wrapper itself. The CLI ensures the
+NDK and CMake are installed and picks a JDK Gradle 8.9 can read (17–21).
 
 Release signing expects the usual four properties (`storeFile`, `storePassword`,
 `keyAlias`, `keyPassword`) in `~/.gradle/gradle.properties` or the environment;
@@ -94,16 +106,20 @@ they are deliberately not in the repo.
   true, not aspirational: the binary has no networking in it.
 - **Account deletion**: not applicable; there are no accounts.
 - **Purpose strings**: none needed. Tally requests no camera, microphone,
-  location, contacts or notification permission.
+  location, contacts or notification permission. The hosts register only the
+  file picker, clipboard and device hosts of the CLI's `GophicsPlatform`; the
+  share, notification, keychain and location hosts — each of which would want
+  a purpose string — are deliberately not wired.
 - **Accessibility**: the semantics tree is exposed to VoiceOver and TalkBack
   through the bind surface (`A11y*`). This has not been tested with VoiceOver on
   a device.
 
 ## Toolchain notes (found the hard way)
 
-- **Android needs JDK 21.** Gradle 8.9 cannot read classes from a newer JDK
+- **Android needs JDK 17–21.** Gradle 8.9 cannot read classes from a newer JDK
   ("Unsupported class file major version 70" on JDK 26), and macOS may default to
-  one. `package/android.sh` pins JDK 21 when it is installed.
+  one. The CLI finds a usable one (Android Studio's JBR included); set
+  `JAVA_HOME` to override.
 - **`local.properties` is machine-specific** and not committed; the script writes
   it from the standard SDK location when it is missing.
 - **`gomobile bind` needs `golang.org/x/mobile` in the module** (`go get -tool
