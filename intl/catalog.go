@@ -294,12 +294,13 @@ func PluralFor(tag string, n int) Plural {
 			return Other
 		}
 
-	// Romanian: few covers 0 and 2–19.
+	// Romanian: few covers 0 and n%100 in 2–19. The lower bound is 2, not 1:
+	// 101 and 201 are "other", and a bound of 1 put them in few.
 	case "ro":
 		switch {
 		case n == 1:
 			return One
-		case n == 0 || (n%100 >= 1 && n%100 <= 19):
+		case n == 0 || (n%100 >= 2 && n%100 <= 19):
 			return Few
 		default:
 			return Other

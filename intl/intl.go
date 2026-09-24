@@ -140,7 +140,7 @@ func Lookup(tag string) (Locale, bool) {
 	if tag == "" {
 		return Default, false
 	}
-	norm := strings.ReplaceAll(strings.TrimSpace(tag), "_", "-")
+	norm := canonicalTag(tag)
 	if l, ok := locales[norm]; ok {
 		return l, true
 	}
@@ -150,7 +150,6 @@ func Lookup(tag string) (Locale, bool) {
 	if i := strings.IndexByte(norm, '-'); i > 0 {
 		lang = norm[:i]
 	}
-	lang = strings.ToLower(lang)
 	if r, ok := primaryRegion[lang]; ok {
 		if l, ok := locales[lang+"-"+r]; ok {
 			return l, true
@@ -166,6 +165,26 @@ func Lookup(tag string) (Locale, bool) {
 		}
 	}
 	return best, found
+}
+
+// canonicalTag normalises a tag to the shape the table is keyed by: "-"
+// separators, a lower-case language, an upper-case region and a title-case
+// script ("de-ch", "DE_CH" and "de-CH" are all de-CH). BCP-47 tags are
+// case-insensitive, and environments write them every way; matching only the
+// raw spelling sent "de-ch" to the language fallback, which is de-DE.
+func canonicalTag(tag string) string {
+	parts := strings.Split(strings.ReplaceAll(strings.TrimSpace(tag), "_", "-"), "-")
+	for i, p := range parts {
+		switch {
+		case i == 0:
+			parts[i] = strings.ToLower(p)
+		case len(p) == 2:
+			parts[i] = strings.ToUpper(p)
+		case len(p) == 4:
+			parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+		}
+	}
+	return strings.Join(parts, "-")
 }
 
 // Auto determines the locale from the environment (LC_ALL, LC_NUMERIC, LANG),

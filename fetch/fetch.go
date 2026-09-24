@@ -27,6 +27,21 @@
 // Cancellation is the context's: cancelling it aborts the request in flight on
 // both paths. There is no built-in timeout — use context.WithTimeout, so the
 // deadline is visible where the call is made rather than hidden in here.
+//
+// Call Get and Do from a goroutine, never from an event handler. Both block
+// until the response arrives, which on desktop merely stalls the UI for the
+// duration. In the browser it deadlocks the tab: the web shell dispatches
+// input from inside JS event listeners, and Do waits on a promise that can
+// only settle once that listener returns — syscall/js documents exactly this
+// hazard for blocking inside a wrapped func. The right shape is the one
+// NetworkImage uses: start a goroutine, fetch there, and hand the result back
+// through widget.Ctx.Post so the tree is touched on the UI goroutine.
+//
+//	post := ctx.Post() // ctx is the widget.Ctx; take it before leaving the UI goroutine
+//	go func() {
+//	    body, err := fetch.Get(context.Background(), url)
+//	    post(func() { s.SetState(func() { s.body, s.err = body, err }) })
+//	}()
 package fetch
 
 import (

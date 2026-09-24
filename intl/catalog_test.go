@@ -53,6 +53,19 @@ func TestRussianTeensException(t *testing.T) {
 	}
 }
 
+// Romanian's few form is 0 and n%100 in 2..19: 101 and 201 are "other". A
+// lower bound of 1 on the n%100 test put them in few.
+func TestRomanianFewStopsAtHundreds(t *testing.T) {
+	for n, want := range map[int]Plural{
+		0: Few, 1: One, 2: Few, 19: Few, 20: Other,
+		100: Other, 101: Other, 102: Few, 119: Few, 120: Other, 201: Other,
+	} {
+		if got := PluralFor("ro", n); got != want {
+			t.Errorf("PluralFor(ro, %d) = %v, want %v", n, got, want)
+		}
+	}
+}
+
 // French counts zero as singular, which English does not — the commonest way a
 // framework that assumes English gets a Romance language wrong.
 func TestFrenchZeroIsSingular(t *testing.T) {

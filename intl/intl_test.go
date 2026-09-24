@@ -223,6 +223,25 @@ func TestGroupSeparatorIsNonBreaking(t *testing.T) {
 // day-first for an American audience. It reported ok=true while doing it, which
 // is the part that made it hard to see: the caller was told the table knew the
 // place. Found on an iOS simulator reporting en-DE.
+// BCP-47 tags are case-insensitive. A lower-case region used to miss the exact
+// table hit and fall through to the language's primary region, so "de-ch"
+// came back as de-DE and "fr-ca" as fr-FR — both claiming a match.
+func TestLookupIgnoresCase(t *testing.T) {
+	for _, c := range []struct{ tag, want string }{
+		{"de-ch", "de-CH"},
+		{"DE-CH", "de-CH"},
+		{"de_ch", "de-CH"},
+		{"fr-ca", "fr-CA"},
+		{"EN-gb", "en-GB"},
+		{"PT", "pt-BR"},
+	} {
+		got, ok := Lookup(c.tag)
+		if got.Tag != c.want || !ok {
+			t.Errorf("Lookup(%q) = %q, %v; want %q, true", c.tag, got.Tag, ok, c.want)
+		}
+	}
+}
+
 func TestBareLanguageResolvesToItsPrimaryRegion(t *testing.T) {
 	for _, c := range []struct{ tag, want string }{
 		{"en", "en-US"},
