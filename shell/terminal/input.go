@@ -17,17 +17,25 @@ const wheelStep = 48
 // them on events until r returns an error (the tty closes, or an SSH client
 // disconnects). On end-of-input it emits a final Closed so the run loop exits.
 // It runs on its own goroutine and only writes to the channel, never touching
-// the core.
-func readInput(r io.Reader, events chan<- shell.Event, scale func() float32) {
+// the core. Once done is closed nobody drains events any more, so from then
+// on they are dropped rather than sent: a send that blocks forever would keep
+// this goroutine alive past the run loop that owned it.
+func readInput(r io.Reader, events chan<- shell.Event, scale func() float32, done <-chan struct{}) {
+	send := func(e shell.Event) {
+		select {
+		case events <- e:
+		case <-done:
+		}
+	}
 	buf := make([]byte, 4096)
 	var pending []byte
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
-			pending = parse(append(pending, buf[:n]...), events, scale())
+			pending = parse(append(pending, buf[:n]...), send, scale())
 		}
 		if err != nil {
-			events <- shell.Closed{}
+			send(shell.Closed{})
 			return
 		}
 	}
@@ -36,8 +44,7 @@ func readInput(r io.Reader, events chan<- shell.Event, scale func() float32) {
 // parse consumes as many complete input sequences as it can from the front of
 // b, emitting an event for each, and returns the unconsumed tail (a partial
 // sequence awaiting more bytes). A scale of 0 is treated as 1.
-func parse(b []byte, events chan<- shell.Event, scale float32) []byte {
-	send := func(e shell.Event) { events <- e }
+func parse(b []byte, send func(shell.Event), scale float32) []byte {
 	for len(b) > 0 {
 		c := b[0]
 		switch {
@@ -143,7 +150,10 @@ func parseCSI(b []byte, send func(shell.Event)) (consumed int, ok bool) {
 		return 0, false // not yet complete
 	}
 	final := b[i]
-	params := string(b[2:i])
+	// xterm encodes modifiers as a second parameter: ESC [ 1 ; 2 C is
+	// Shift+Right, ESC [ 3 ; 5 ~ is Ctrl+Delete. Without them shift-selection
+	// and word movement — which the editor implements — are unreachable.
+	params, mod, _ := strings.Cut(string(b[2:i]), ";")
 	var code shell.KeyCode
 	switch final {
 	case 'A', 'B', 'C', 'D', 'H', 'F':
@@ -152,9 +162,34 @@ func parseCSI(b []byte, send func(shell.Event)) (consumed int, ok bool) {
 		code = tildeCode(params)
 	}
 	if code != shell.KeyUnknown {
-		send(shell.Key{Kind: shell.KeyPress, Code: code})
+		send(shell.Key{Kind: shell.KeyPress, Code: code, Mods: csiMods(mod)})
 	}
 	return i + 1, true
+}
+
+// csiMods decodes xterm's modifier parameter: 1 plus a bitmask of shift (1),
+// alt (2), ctrl (4) and meta (8). Absent or 1 means none.
+func csiMods(param string) shell.Mods {
+	param, _, _ = strings.Cut(param, ";") // a third parameter, if any, is not a modifier
+	n, err := strconv.Atoi(param)
+	if err != nil || n < 2 {
+		return 0
+	}
+	n--
+	var m shell.Mods
+	if n&1 != 0 {
+		m |= shell.ModShift
+	}
+	if n&2 != 0 {
+		m |= shell.ModAlt
+	}
+	if n&4 != 0 {
+		m |= shell.ModCtrl
+	}
+	if n&8 != 0 {
+		m |= shell.ModSuper
+	}
+	return m
 }
 
 func arrowCode(final byte) shell.KeyCode { return csiFinalCode(final) }

@@ -5,8 +5,10 @@ package terminal
 import (
 	"bytes"
 	"image"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/geom"
@@ -18,15 +20,10 @@ import (
 // collect drains the parser's output for a fixed input into a slice.
 func collect(t *testing.T, in []byte, scale float32) []shell.Event {
 	t.Helper()
-	ch := make(chan shell.Event, 64)
-	rest := parse(in, ch, scale)
+	var out []shell.Event
+	rest := parse(in, func(e shell.Event) { out = append(out, e) }, scale)
 	if len(rest) != 0 {
 		t.Fatalf("unconsumed tail: %q", rest)
-	}
-	close(ch)
-	var out []shell.Event
-	for e := range ch {
-		out = append(out, e)
 	}
 	return out
 }
@@ -100,14 +97,97 @@ func TestParseKeysAndText(t *testing.T) {
 func TestParseHandlesSplitSequence(t *testing.T) {
 	// A mouse report split across two reads: the first half yields nothing and
 	// is returned as the tail; feeding the rest completes it.
-	ch := make(chan shell.Event, 4)
-	tail := parse([]byte("\x1b[<0;10"), ch, 1)
-	if len(ch) != 0 {
+	var got []shell.Event
+	send := func(e shell.Event) { got = append(got, e) }
+	tail := parse([]byte("\x1b[<0;10"), send, 1)
+	if len(got) != 0 {
 		t.Fatalf("partial sequence emitted an event")
 	}
-	tail = parse(append(tail, []byte(";10M")...), ch, 1)
-	if len(tail) != 0 || len(ch) != 1 {
-		t.Fatalf("completed sequence not parsed: tail=%q events=%d", tail, len(ch))
+	tail = parse(append(tail, []byte(";10M")...), send, 1)
+	if len(tail) != 0 || len(got) != 1 {
+		t.Fatalf("completed sequence not parsed: tail=%q events=%d", tail, len(got))
+	}
+}
+
+// xterm carries modifiers as a second CSI parameter. Without them Shift+Arrow
+// selection and Ctrl/Alt word movement never reach the editor from a
+// terminal.
+func TestParseCSIModifiers(t *testing.T) {
+	cases := []struct {
+		in   string
+		code shell.KeyCode
+		mods shell.Mods
+	}{
+		{"\x1b[1;2C", shell.KeyRight, shell.ModShift},
+		{"\x1b[1;5D", shell.KeyLeft, shell.ModCtrl},
+		{"\x1b[1;3D", shell.KeyLeft, shell.ModAlt},
+		{"\x1b[1;6C", shell.KeyRight, shell.ModShift | shell.ModCtrl},
+		{"\x1b[3;5~", shell.KeyDelete, shell.ModCtrl},
+		{"\x1b[1;2H", shell.KeyHome, shell.ModShift},
+		{"\x1b[1;2F", shell.KeyEnd, shell.ModShift},
+		{"\x1b[C", shell.KeyRight, 0},
+		{"\x1b[3~", shell.KeyDelete, 0},
+	}
+	for _, c := range cases {
+		evs := collect(t, []byte(c.in), 1)
+		if len(evs) != 1 {
+			t.Errorf("%q: got %d events, want 1", c.in, len(evs))
+			continue
+		}
+		k, ok := evs[0].(shell.Key)
+		if !ok || k.Kind != shell.KeyPress || k.Code != c.code || k.Mods != c.mods {
+			t.Errorf("%q = %+v, want KeyPress code=%v mods=%v", c.in, evs[0], c.code, c.mods)
+		}
+	}
+}
+
+// eofTTY is a transport whose input has already ended: RunTTY must unwind.
+type eofTTY struct{ io.Writer }
+
+func (eofTTY) Read([]byte) (int, error) { return 0, io.EOF }
+func (eofTTY) Size() (int, int)         { return 320, 200 }
+func (eofTTY) Resize() <-chan struct{}  { return nil }
+
+// recordingHandler keeps the events it is given.
+type recordingHandler struct{ events []shell.Event }
+
+func (*recordingHandler) Frame(shell.Window, shell.Frame, float64) {}
+func (h *recordingHandler) Event(_ shell.Window, e shell.Event)    { h.events = append(h.events, e) }
+
+// shell.Window.Close promises the handler receives Closed; an app saves on
+// quit there, and every way out of RunTTY — transport EOF included — has to
+// deliver it before returning.
+func TestRunTTYDeliversClosed(t *testing.T) {
+	h := &recordingHandler{}
+	if err := RunTTY(h, shell.Config{}, eofTTY{io.Discard}); err != nil {
+		t.Fatal(err)
+	}
+	var closed int
+	for _, e := range h.events {
+		if _, ok := e.(shell.Closed); ok {
+			closed++
+		}
+	}
+	if closed != 1 {
+		t.Fatalf("handler received Closed %d times, want once (events: %+v)", closed, h.events)
+	}
+}
+
+// After the run loop has returned nobody drains the event channel; the reader
+// must drop events rather than block on them forever, and still hit EOF.
+func TestReadInputDoesNotBlockAfterDone(t *testing.T) {
+	events := make(chan shell.Event) // unbuffered: any send without a receiver blocks
+	done := make(chan struct{})
+	close(done)
+	finished := make(chan struct{})
+	go func() {
+		readInput(strings.NewReader(strings.Repeat("\x1b[<35;10;10M", 300)), events, func() float32 { return 1 }, done)
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("readInput is still blocked on a send nobody will receive")
 	}
 }
 

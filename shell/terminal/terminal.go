@@ -152,8 +152,14 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 	win := &window{ts: ts}
 	fr := &frame{ts: ts}
 
+	// done is closed on every way out of this function (Close, Ctrl-Q, EOF, a
+	// terminating signal) so the reader goroutine stops sending: nobody
+	// drains events once this loop has returned, and a burst of mouse motion
+	// after exit would otherwise block it forever — one leaked goroutine per
+	// connection for the SSH use this package documents.
+	defer ts.finish()
 	events := make(chan shell.Event, 128)
-	go readInput(tty, events, ts.contentScale)
+	go readInput(tty, events, ts.contentScale, ts.done)
 
 	resize := tty.Resize()
 	ticker := time.NewTicker(time.Second / 60)
@@ -172,19 +178,24 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 	last := time.Now()
 	var motionLast time.Time
 
+	// Every exit delivers Closed first, as shell.Window.Close promises: an
+	// app that saves on quit has no other moment to do it. window.Close,
+	// Ctrl-C/Ctrl-Q, the transport reaching EOF, and a terminating signal all
+	// arrive here.
 	for {
 		select {
 		case <-ts.done:
+			h.Event(win, shell.Closed{})
 			return nil
 		case <-resize:
 			ts.applySize(tty)
 			h.Event(win, shell.Resize{Size: ts.logicalSize(), Scale: ts.scale})
 			ts.dirty.Store(true)
 		case e := <-events:
+			h.Event(win, e)
 			if _, ok := e.(shell.Closed); ok {
 				return nil // Ctrl-Q or transport EOF
 			}
-			h.Event(win, e)
 			ts.dirty.Store(true) // repaint after input (present dedups no-ops)
 		case <-settle.C:
 			ts.setMotion(false) // motion settled → render a crisp keyframe
@@ -405,12 +416,24 @@ func teardown(out io.Writer, imageID int) {
 // window implements shell.Window against the terminal.
 type window struct{ ts *termState }
 
-func (w *window) Invalidate()                    { w.ts.dirty.Store(true) }
-func (w *window) SetTitle(title string)          { w.ts.setTitle(title) }
-func (w *window) Close()                         { w.ts.finish() }
-func (w *window) DarkMode() bool                 { return true } // terminals are conventionally dark
-func (w *window) OpenURL(string) error           { return nil }
-func (w *window) ClipboardRead() (string, error) { return "", nil }
+func (w *window) Invalidate()           { w.ts.dirty.Store(true) }
+func (w *window) SetTitle(title string) { w.ts.setTitle(title) }
+func (w *window) Close()                { w.ts.finish() }
+func (w *window) DarkMode() bool        { return true } // terminals are conventionally dark
+
+// OpenURL and ClipboardRead report that the terminal cannot do it, rather
+// than succeeding silently: a link that "opened" nowhere and a paste that
+// yielded "" with no error left an app unable to tell the capability was
+// absent. A terminal has no browser to hand a URL to, and reading the
+// clipboard (OSC 52 query) needs a reply parsed out of the input stream that
+// the terminals this backend targets mostly refuse to give for security.
+func (w *window) OpenURL(string) error {
+	return fmt.Errorf("terminal: open url: %w", errors.ErrUnsupported)
+}
+
+func (w *window) ClipboardRead() (string, error) {
+	return "", fmt.Errorf("terminal: clipboard read: %w", errors.ErrUnsupported)
+}
 
 // ClipboardWrite copies text to the system clipboard via OSC 52, which kitty
 // and friends honor even over SSH.

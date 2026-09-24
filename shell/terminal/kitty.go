@@ -1,15 +1,11 @@
-// Package terminal presents a gophics app inside a terminal emulator that
-// supports the kitty graphics protocol (kitty, Ghostty, WezTerm, Konsole). The
-// core renders each frame to a CPU RGBA buffer (no GPU/window); this backend
-// transmits that buffer to the terminal as an image and parses terminal input
-// (SGR-pixel mouse, keyboard) into gophics's event dispatch.
-//
-// Frames are transmitted incrementally: the first frame (and any frame that
-// changes most of the screen) is sent whole with a=T; smaller changes send only
-// the changed bounding box, composited onto the displayed image in place with
-// a=f. Pixel data travels either through a temp file (t=t, for a local terminal
-// sharing the filesystem) or inline as chunked base64 (for a remote transport
-// such as SSH). See https://sw.kovidgoyal.net/kitty/graphics-protocol/.
+// Kitty graphics protocol encoding. Frames are transmitted incrementally: the
+// first frame (and any frame that changes most of the screen) is sent whole
+// with a=T; smaller changes send only the changed bounding box, composited
+// onto the displayed image in place with a=f. Pixel data travels either
+// through a temp file (t=t, for a local terminal sharing the filesystem) or
+// inline as chunked base64 (for a remote transport such as SSH). See
+// https://sw.kovidgoyal.net/kitty/graphics-protocol/.
+
 package terminal
 
 import (
@@ -57,13 +53,12 @@ func subRect(img *image.RGBA, r image.Rectangle) []byte {
 }
 
 // fullFrameCmds builds the commands that transmit a w×h RGBA frame as image id
-// and display it at the cursor (which the caller homes first). Placement id p=1
-// is reused so re-transmits don't accumulate placements.
-// fullFrameCmds transmits a w×h RGBA frame as image id and displays it at the
-// cursor with placement id 1 (reused → in-place replace, no flicker). When cols
-// and rows are given, the image is scaled to fill that many cells (c/r), so the
-// renderer can transmit a capped-resolution image and let the terminal scale it
-// to fill a large window.
+// and display it at the cursor (which the caller homes first). Placement id
+// p=1 is reused so re-transmits replace in place instead of accumulating
+// placements — no flicker. When cols and rows are given, the image is scaled
+// to fill that many cells (c/r), so the renderer can transmit a
+// capped-resolution image and let the terminal scale it to fill a large
+// window.
 func fullFrameCmds(id, w, h, cols, rows int, pixels []byte, dir string) [][]byte {
 	ctrl := fmt.Sprintf("a=T,f=32,s=%d,v=%d,i=%d,p=1,C=1,q=2", w, h, id)
 	if cols > 0 && rows > 0 {

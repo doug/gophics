@@ -4,6 +4,7 @@ package terminal
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,14 +43,27 @@ func Run(h shell.Handler, cfg shell.Config) (err error) {
 }
 
 // localTTY adapts the process terminal to the TTY interface: os.Stdin/os.Stdout
-// for I/O, SIGWINCH for resize, and TIOCGWINSZ for size. Terminating signals
-// close stdin so RunTTY's reader sees EOF and unwinds cleanly (restoring the
-// terminal via Run's defers).
+// for I/O, SIGWINCH for resize, and TIOCGWINSZ for size. A terminating signal
+// ends the input stream (Read returns io.EOF) so RunTTY unwinds cleanly and
+// Run's defers restore the terminal.
+//
+// Stdin is read on its own goroutine and handed over through a channel, so
+// that the signal can end the stream without touching the descriptor. The
+// obvious alternative — closing os.Stdin to wake the reader — does not work:
+// stdin is a blocking descriptor, so Close returns at once while the pending
+// Read keeps it open, and the signal has no effect until the next keypress.
+// When that key finally arrived the descriptor really closed, Read failed,
+// RunTTY returned, and restore() ran its ioctl on a closed fd 0 — leaving the
+// user's shell in raw mode, with no echo and no line editing.
 type localTTY struct {
 	fd     int
 	resize chan struct{}
 	sigs   chan os.Signal
-	stop   chan struct{}
+	stop   chan struct{} // closed by close: the signal goroutine exits
+	quit   chan struct{} // closed on SIGINT/SIGTERM: Read reports EOF
+	chunks chan []byte   // what the stdin goroutine has read
+	rerr   error         // the stdin goroutine's terminal error, once chunks is closed
+	buf    []byte        // unread remainder of the last chunk
 }
 
 func newLocalTTY(fd int) *localTTY {
@@ -58,6 +72,8 @@ func newLocalTTY(fd int) *localTTY {
 		resize: make(chan struct{}, 1),
 		sigs:   make(chan os.Signal, 1),
 		stop:   make(chan struct{}),
+		quit:   make(chan struct{}),
+		chunks: make(chan []byte),
 	}
 	signal.Notify(t.sigs, syscall.SIGWINCH, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -73,8 +89,27 @@ func newLocalTTY(fd int) *localTTY {
 					}
 					continue
 				}
-				// SIGINT/SIGTERM: close stdin → RunTTY's reader hits EOF → exit.
-				_ = os.Stdin.Close()
+				// SIGINT/SIGTERM: end the input stream → RunTTY's reader
+				// sees EOF → the app gets Closed and exits.
+				close(t.quit)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer close(t.chunks)
+		for {
+			b := make([]byte, 4096)
+			n, err := os.Stdin.Read(b)
+			if n > 0 {
+				select {
+				case t.chunks <- b[:n]:
+				case <-t.stop:
+					return
+				}
+			}
+			if err != nil {
+				t.rerr = err
 				return
 			}
 		}
@@ -82,7 +117,29 @@ func newLocalTTY(fd int) *localTTY {
 	return t
 }
 
-func (t *localTTY) Read(p []byte) (int, error)  { return os.Stdin.Read(p) }
+// Read hands out what the stdin goroutine has read, or io.EOF once a
+// terminating signal has arrived. A read blocked in the kernel is left to
+// finish on its own; nothing waits for it.
+func (t *localTTY) Read(p []byte) (int, error) {
+	if len(t.buf) == 0 {
+		select {
+		case <-t.quit:
+			return 0, io.EOF
+		case b, ok := <-t.chunks:
+			if !ok {
+				if t.rerr != nil {
+					return 0, t.rerr
+				}
+				return 0, io.EOF
+			}
+			t.buf = b
+		}
+	}
+	n := copy(p, t.buf)
+	t.buf = t.buf[n:]
+	return n, nil
+}
+
 func (t *localTTY) Write(p []byte) (int, error) { return os.Stdout.Write(p) }
 func (t *localTTY) Resize() <-chan struct{}     { return t.resize }
 
