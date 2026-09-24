@@ -7,6 +7,7 @@
 package desktop
 
 import (
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -33,9 +34,10 @@ type systemPowerStatus struct {
 
 // Sentinels from the Win32 docs: the API reports "I don't know" in-band.
 const (
-	acOnline         = 1
-	batteryFlagNone  = 128 // no system battery
-	batteryUnknownPc = 255 // BatteryLifePercent when unknown
+	acOnline           = 1
+	batteryFlagNone    = 128 // no system battery
+	batteryFlagUnknown = 255 // "unable to read the battery flag information"
+	batteryUnknownPc   = 255 // BatteryLifePercent when unknown
 )
 
 func readPowerStatus() (systemPowerStatus, bool) {
@@ -49,23 +51,50 @@ func readPowerStatus() (systemPowerStatus, bool) {
 // instead of showing a fabricated full charge.
 func (w *window) Battery() shell.Battery {
 	s, ok := readPowerStatus()
-	if !ok || s.BatteryFlag == batteryFlagNone {
+	if !ok || !batteryPresent(s) {
 		return nil
 	}
-	return &windowsBattery{}
+	return &windowsBattery{last: 1}
+}
+
+// batteryPresent reads the flag the way the docs mean it: 128 is "no system
+// battery" and 255 is "unknown status", and a driver that cannot say whether
+// there is a battery must not be published as one — the capability's nil is
+// how an app learns there is nothing to show.
+func batteryPresent(s systemPowerStatus) bool {
+	return s.BatteryFlag != batteryFlagNone && s.BatteryFlag != batteryFlagUnknown
 }
 
 type windowsBattery struct {
 	batteryWatcher
+
+	mu   sync.Mutex
+	last float32 // the last level Windows actually knew; see Level
 }
 
-// Level is the charge fraction, or 0 when Windows reports it as unknown.
+// Level is the charge fraction. When Windows reports the percentage as
+// unknown, this returns the last value it did know rather than 0: an unknown
+// used to read as an empty battery, which is the fabricated reading the file
+// exists to avoid, and the watcher would have announced a drop to 0% on every
+// blip. Before any reading, it is a full battery — the answer that raises no
+// alarm, matching Charging's reasoning that a battery on mains is not a worry.
 func (b *windowsBattery) Level() float32 {
 	s, ok := readPowerStatus()
-	if !ok || s.BatteryLifePercent == batteryUnknownPc {
-		return 0
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if lvl, known := levelOf(s); ok && known {
+		b.last = lvl
 	}
-	return float32(min(s.BatteryLifePercent, 100)) / 100
+	return b.last
+}
+
+// levelOf converts the raw percentage, reporting false for the in-band
+// "unknown" so the caller can keep what it had.
+func levelOf(s systemPowerStatus) (float32, bool) {
+	if s.BatteryLifePercent == batteryUnknownPc {
+		return 0, false
+	}
+	return float32(min(s.BatteryLifePercent, 100)) / 100, true
 }
 
 // Charging reports mains power rather than current-into-the-cell, matching the

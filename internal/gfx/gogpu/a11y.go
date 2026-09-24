@@ -39,6 +39,21 @@ func (a *App) SetAccessibilityTree(nodes []A11yNode, activate func(id int)) bool
 	return true
 }
 
+// A11ySupported reports whether SetAccessibilityTree would publish, without
+// publishing anything. It is the probe for a caller deciding whether to offer
+// accessibility at all: calling SetAccessibilityTree(nil, nil) to find out
+// also removes whatever tree was published, which is fine at start-up and
+// blanks the screen reader's view any later time.
+func (a *App) A11ySupported() bool {
+	if a == nil {
+		return false
+	}
+	if _, ok := a.platWindow.(platform.A11yWindow); !ok {
+		return false
+	}
+	return a11yAvailable(a.platWindow)
+}
+
 // a11yAvailable asks a platform that can lose its bridge at run time — Linux,
 // whose AT-SPI bus exists only when the desktop has accessibility enabled —
 // whether it has one right now. Platforms that do not implement the probe are

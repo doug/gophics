@@ -45,7 +45,7 @@ func TestBatteryMatchesWMI(t *testing.T) {
 	if !ok {
 		t.Fatal("GetSystemPowerStatus failed")
 	}
-	hasBattery := s.BatteryFlag != batteryFlagNone
+	hasBattery := batteryPresent(s)
 
 	if wmi == "NONE" || wmi == "" {
 		if hasBattery {
@@ -84,12 +84,52 @@ func TestChargingFollowsACLine(t *testing.T) {
 	if !ok {
 		t.Fatal("GetSystemPowerStatus failed")
 	}
-	if s.BatteryFlag == batteryFlagNone {
+	if !batteryPresent(s) {
 		t.Skip("no battery on this machine")
 	}
 	b := &windowsBattery{}
 	if got, want := b.Charging(), s.ACLineStatus == acOnline; got != want {
 		t.Errorf("Charging() = %v, ACLineStatus = %d", got, s.ACLineStatus)
+	}
+}
+
+// The API reports "I don't know" in band, twice over, and both used to be
+// read as facts: flag 255 (unknown status) was published as a battery, and
+// percent 255 (unknown) was reported as 0% — a fabricated empty battery on
+// exactly the machine whose driver could not say.
+func TestUnknownIsNotAReading(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		flag    byte
+		present bool
+	}{
+		{"high", 1, true},
+		{"low", 2, true},
+		{"critical", 4, true},
+		{"charging", 8, true},
+		{"no battery", batteryFlagNone, false},
+		{"unknown status", batteryFlagUnknown, false},
+	} {
+		if got := batteryPresent(systemPowerStatus{BatteryFlag: tc.flag}); got != tc.present {
+			t.Errorf("batteryPresent(flag %d %s) = %v, want %v", tc.flag, tc.name, got, tc.present)
+		}
+	}
+
+	for _, tc := range []struct {
+		pct   byte
+		want  float32
+		known bool
+	}{
+		{0, 0, true},
+		{57, 0.57, true},
+		{100, 1, true},
+		{120, 1, true}, // out of range clamps rather than exceeding full
+		{batteryUnknownPc, 0, false},
+	} {
+		got, known := levelOf(systemPowerStatus{BatteryLifePercent: tc.pct})
+		if known != tc.known || (known && (got-tc.want > 0.001 || tc.want-got > 0.001)) {
+			t.Errorf("levelOf(%d) = %v, %v; want %v, %v", tc.pct, got, known, tc.want, tc.known)
+		}
 	}
 }
 

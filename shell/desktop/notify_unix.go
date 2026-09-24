@@ -24,6 +24,17 @@ func (w *window) Notifier() shell.Notifier {
 type unixNotifier struct {
 	mu  sync.Mutex
 	ids map[string]string // Notification.Tag -> daemon id, for -r replacement
+	// run executes notify-send with args and returns its stdout. nil means
+	// the real binary; a test substitutes a recorder, which is the only way
+	// to see the -p/-r pairing without a notification daemon.
+	run func(args ...string) ([]byte, error)
+}
+
+func (n *unixNotifier) exec(args ...string) ([]byte, error) {
+	if n.run != nil {
+		return n.run(args...)
+	}
+	return exec.Command("notify-send", args...).Output()
 }
 
 func (n *unixNotifier) Authorize(cb func(shell.Permission)) {
@@ -39,29 +50,32 @@ func (n *unixNotifier) Authorize(cb func(shell.Permission)) {
 // retry without them means the notification still appears — stacked, which is
 // the same degradation the macOS backend documents.
 func (n *unixNotifier) Notify(note shell.Notification) {
-	go func() {
-		args := []string{}
-		if note.Tag != "" {
+	go n.post(note)
+}
+
+// post is Notify's body, synchronous so a test can call it and look.
+func (n *unixNotifier) post(note shell.Notification) {
+	args := []string{}
+	if note.Tag != "" {
+		n.mu.Lock()
+		prev := n.ids[note.Tag]
+		n.mu.Unlock()
+		args = append(args, "-p")
+		if prev != "" {
+			args = append(args, "-r", prev)
+		}
+	}
+	args = append(args, note.Title, note.Body)
+	out, err := n.exec(args...)
+	if err != nil && note.Tag != "" {
+		_, _ = n.exec(note.Title, note.Body)
+		return
+	}
+	if note.Tag != "" {
+		if id := strings.TrimSpace(string(out)); id != "" {
 			n.mu.Lock()
-			prev := n.ids[note.Tag]
+			n.ids[note.Tag] = id
 			n.mu.Unlock()
-			args = append(args, "-p")
-			if prev != "" {
-				args = append(args, "-r", prev)
-			}
 		}
-		args = append(args, note.Title, note.Body)
-		out, err := exec.Command("notify-send", args...).Output()
-		if err != nil && note.Tag != "" {
-			_ = exec.Command("notify-send", note.Title, note.Body).Run()
-			return
-		}
-		if note.Tag != "" {
-			if id := strings.TrimSpace(string(out)); id != "" {
-				n.mu.Lock()
-				n.ids[note.Tag] = id
-				n.mu.Unlock()
-			}
-		}
-	}()
+	}
 }

@@ -67,6 +67,13 @@ var desktopExempt = map[string]string{
 	"Biometric": "TouchID exists on Mac laptops via LocalAuthentication, but no " +
 		"desktop consumer has needed it and Windows Hello / Linux have no common " +
 		"story; not yet, and nil is detectable",
+	"Connectivity": "not yet: it was published with Online() hard-wired to true " +
+		"and an OnChange that never fired, which is the hollow shape the " +
+		"invariant forbids — an app could not tell 'online' from 'this build " +
+		"cannot tell', so it skipped its offline path on desktop unconditionally. " +
+		"nil until a real reachability source is wired: SCNetworkReachability " +
+		"on macOS, NetworkManager over D-Bus on Linux, INetworkListManager on " +
+		"Windows, each through the zero-CGo FFI",
 	"Haptic": "NSHapticFeedbackManager can buzz a trackpad; Linux and Windows " +
 		"desktops have nothing comparable, so apps must treat haptics as " +
 		"optional anyway — nil until a consumer justifies the objc bridge work",

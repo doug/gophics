@@ -186,7 +186,7 @@ does.
 | `Biometric` | — | — | yes | — |
 | `Camera` | yes | yes | yes | — |
 | `CameraPreview` | yes | yes | yes | — |
-| `Connectivity` | yes | yes | yes | — |
+| `Connectivity` | — | yes | yes | — |
 | `FilePicker` | yes | yes | yes | — |
 | `FolderPicker` | yes | yes | — | — |
 | `Gamepads` | yes | yes | — | — |
@@ -238,7 +238,9 @@ the way it does is judgment, so it stays here by hand:
   there because there is no running-app deep-link channel to subscribe to.
 - **WindowControl** — rides gogpu. Tray and native menus are deliberately
   excluded from mobile rather than merely unimplemented.
-- **Connectivity** — desktop is best-effort and reports `online = true`.
+- **Connectivity** — nil on desktop until a reachability source is wired. It
+  used to report `online = true` unconditionally, which is the hollow shape
+  the nil convention exists to prevent.
 - **Gamepads** — poll-style, and empty without hardware attached.
 - **TextInput** — web raises the keyboard with a focus-driven hidden input.
   Mobile does not route the platform IME's committed text through the capability

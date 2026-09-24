@@ -28,14 +28,12 @@ func (w *window) Accessibility() shell.Accessibility {
 	return desktopA11y{w: w}
 }
 
-// a11ySupported probes the windowing layer without publishing anything: an
-// empty tree is a no-op on a platform that has a bridge and reports false on
-// one that does not.
+// a11ySupported asks the windowing layer whether it has a bridge, without
+// touching what is published. It used to probe by publishing an empty tree,
+// which the windowing layer documents as "removes the description" — harmless
+// at wire time, and a blanked VoiceOver tree on any re-wire after that.
 func a11ySupported(app *gogpu.App) bool {
-	if app == nil {
-		return false
-	}
-	return app.SetAccessibilityTree(nil, nil)
+	return app != nil && app.A11ySupported()
 }
 
 type desktopA11y struct{ w *window }
