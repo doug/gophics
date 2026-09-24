@@ -18,8 +18,15 @@ import (
 // work, ticks, build, layout, record, replay, present) and window wiring.
 
 type shellHandler struct {
-	core   *core
-	window shell.Window
+	core *core
+	// window is the shell window the handler last saw, kept for the
+	// RequestFrame hook. It is read from any goroutine — Post calls
+	// RequestFrameThreadSafe from wherever a NetworkImage finished or a
+	// signal arrived — while Frame and Event set it on the UI goroutine, so
+	// it is atomic: an interface is two words, and the first nil→window
+	// write racing a background Post was observed torn by the race detector.
+	// Stored only when it changes, which is once.
+	window atomic.Pointer[shell.Window]
 	// wired is the window whose hooks/capabilities are currently published to
 	// the Owner; wireWindow re-wires only when the shell hands us another one.
 	wired shell.Window
@@ -40,6 +47,25 @@ type shellHandler struct {
 	devStatePath string
 	devQuit      atomic.Bool
 	devSaved     bool
+}
+
+// setWindow records the window the shell is driving the handler with, for
+// requestFrame. Same window, no store: the shell hands the same one to every
+// Frame and Event, and a store per call would allocate for nothing.
+func (h *shellHandler) setWindow(w shell.Window) {
+	if cur := h.window.Load(); cur != nil && *cur == w {
+		return
+	}
+	h.window.Store(&w)
+}
+
+// requestFrame is the Owner.RequestFrame hook: invalidate the window, if the
+// shell has handed us one yet. Callable from any goroutine, as a shell's
+// Invalidate must be.
+func (h *shellHandler) requestFrame() {
+	if w := h.window.Load(); w != nil {
+		(*w).Invalidate()
+	}
 }
 
 // writeDevSnapshot serializes snap to path via a temp file + rename, so the
@@ -82,7 +108,7 @@ func (h *shellHandler) A11yHitTest(x, y int, scale float32) int {
 }
 
 func (h *shellHandler) Frame(w shell.Window, f shell.Frame, dt float64) {
-	h.window = w
+	h.setWindow(w)
 	// Dev hot-restart: a restart signal arrived. Snapshot UI state on the UI
 	// goroutine (safe here — no frame is mid-flight), hand it to the successor
 	// process, and ask the shell to close. Guarded so it runs once.
@@ -202,7 +228,7 @@ func (c *core) framePanic(r any) {
 }
 
 func (h *shellHandler) Event(w shell.Window, e shell.Event) {
-	h.window = w
+	h.setWindow(w)
 	h.wireWindow(w)
 	switch e := e.(type) {
 	case shell.Pointer:

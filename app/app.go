@@ -550,11 +550,7 @@ func NewHandler(root widget.Widget, cfg Config) (shell.Handler, error) {
 		return nil, err
 	}
 	h := &shellHandler{core: core}
-	core.Owner.RequestFrame = func() {
-		if h.window != nil {
-			h.window.Invalidate()
-		}
-	}
+	core.Owner.RequestFrame = h.requestFrame
 	core.mount() // hooks wired above; safe to mount (may launch Posters)
 	return h, nil
 }

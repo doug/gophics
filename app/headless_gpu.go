@@ -26,7 +26,13 @@ type gpuRenderer struct {
 func (h *Headless) RenderGPU() image.Image {
 	h.core.drainPosted()
 	h.core.Layout(h.size)
-	h.core.RecordScene(h.size, h.scale) // record; the GPU replays the full scene
+	// The GPU variant, as the shell handler uses for a GPU target: it marks
+	// the painter's CPU surface stale, so a Render that follows repaints the
+	// whole surface instead of diffing against a frame the CPU pixmap never
+	// held. Recording through the CPU variant here swapped prev to a frame
+	// only the GPU had drawn, and the next Render saw "unchanged" and
+	// returned the image cached from before the state change.
+	h.core.RecordSceneGPU(h.size, h.scale)
 
 	pw, ph := int(h.size.W*h.scale), int(h.size.H*h.scale)
 	if pw <= 0 || ph <= 0 {
