@@ -47,7 +47,7 @@ const (
 )
 
 func main() {
-	g := &game{}
+	g := newGame()
 	root := overlay.UI{M: g}
 
 	h, err := app.NewHandler(root, app.Config{
@@ -81,23 +81,42 @@ type game struct {
 	frame   *hostFrame
 	t       float64
 
-	speed  float32
-	paused bool
-	clip   string // the host owns the clipboard; here, a process-local one
+	speed   float32
+	paused  bool
+	closing bool   // set by Close; Update ends the game on the next tick
+	clip    string // the host owns the clipboard; here, a process-local one
 
 	// Input state, diffed each tick into shell events.
 	lastX, lastY int
 	lastDown     bool
 }
 
+// newGame starts the clock at normal speed. The overlay's readout is this
+// clock, and a game whose speed began at zero showed a readout that never
+// moved — the "broken UI" the README warns about, with nothing broken in
+// the UI.
+func newGame() *game { return &game{speed: 1} }
+
 func (g *game) Layout(int, int) (int, int) { return winW, winH }
 
 func (g *game) Update() error {
+	if g.closing {
+		// shell.Window.Close promises the handler a Closed event, and Ebiten
+		// ends a game by having Update return Termination — so a close asked
+		// for by the UI is honoured here, on the loop, rather than in Close.
+		g.h.Event(g, shell.Closed{})
+		return ebiten.Termination
+	}
+	g.advance()
+	g.pumpInput()
+	return nil
+}
+
+// advance moves the game clock one tick.
+func (g *game) advance() {
 	if !g.paused {
 		g.t += float64(g.speed) / 60
 	}
-	g.pumpInput()
-	return nil
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
@@ -173,7 +192,7 @@ func (g *game) SetSpeed(s float32) { g.speed = s }
 
 func (g *game) Invalidate()       {} // Ebiten redraws every tick; nothing to schedule
 func (g *game) SetTitle(t string) { ebiten.SetWindowTitle(t) }
-func (g *game) Close()            { ebiten.SetWindowClosingHandled(false) }
+func (g *game) Close()            { g.closing = true } // see Update
 
 func (g *game) ClipboardRead() (string, error) { return g.clip, nil }
 func (g *game) ClipboardWrite(s string) error  { g.clip = s; return nil }
