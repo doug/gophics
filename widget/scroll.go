@@ -263,6 +263,7 @@ func (s *scrollState) barDrag(delta float32) {
 		return
 	}
 	s.fling.active = false
+	s.glide.Stop()
 	next := barOffsetFor(s.offset, delta, maxOff, s.barTrackLen)
 	s.SetState(func() { s.offset = next })
 	s.barFade = 1 // keep the bar visible for the whole drag
@@ -850,6 +851,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			DragAxis: dragAxis, // so a cross-axis swipe (Dismissible) can nest
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
+				s.glide.Stop()
 				if s.overSpring.active || s.overscroll != 0 {
 					s.overSpring.active = false
 					s.overRaw = 0
@@ -860,6 +862,11 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			OnPress: func(geom.Pt) {
 				s.fling.active = false      // grab stops the fling
 				s.overSpring.active = false // ...and any in-flight bounce
+				// ...and a programmatic glide (AnimateTo), which would
+				// otherwise keep rewriting the offset under the finger, and
+				// override a wheel scroll on its next tick. The same stop is
+				// in OnScroll and barDrag: every way the user takes hold.
+				s.glide.Stop()
 				// ...and the indicator's retraction, which would otherwise
 				// keep writing overscroll under the drag's own setOverscroll.
 				// While a refresh is held the band is not the drag's to move
