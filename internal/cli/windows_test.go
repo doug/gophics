@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -19,6 +20,19 @@ func TestExeNameAddsExeOnWindows(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
 		if got := exeName(goos, "app"); got != "app" {
 			t.Errorf("exeName(%s) = %q, want app", goos, got)
+		}
+	}
+}
+
+func TestTargetGOOSHonoursTheEnvironment(t *testing.T) {
+	t.Setenv("GOOS", "")
+	if got := targetGOOS(); got != runtime.GOOS {
+		t.Errorf("targetGOOS() with no GOOS = %q, want the host %q", got, runtime.GOOS)
+	}
+	for _, goos := range []string{"windows", "linux"} {
+		t.Setenv("GOOS", goos)
+		if got := targetGOOS(); got != goos {
+			t.Errorf("targetGOOS() with GOOS=%s = %q; go build honours the variable, so the name must too", goos, got)
 		}
 	}
 }

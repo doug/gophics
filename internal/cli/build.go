@@ -52,7 +52,7 @@ func buildNative(o buildOpts) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	bin := filepath.Join(dir, exeName(runtime.GOOS, "app"))
+	bin := filepath.Join(dir, exeName(targetGOOS(), "app"))
 	args := []string{"build", "-o", bin}
 	if t := tagList(o.platform, o.tags); t != "" {
 		args = append(args, "-tags", t)
@@ -76,6 +76,18 @@ func exeName(goos, name string) string {
 		return name + ".exe"
 	}
 	return name
+}
+
+// targetGOOS is the OS `go build` will compile for: GOOS from the
+// environment when set, which is how this repo's own notes cross-build for
+// the Windows VM, and the host otherwise. Keying the binary's name on the
+// host gave `GOOS=windows gophics build` an extension-less binary Windows
+// cannot start, and a `GOOS=linux` build on Windows a spurious .exe.
+func targetGOOS() string {
+	if goos := os.Getenv("GOOS"); goos != "" {
+		return goos
+	}
+	return runtime.GOOS
 }
 
 // buildWeb compiles the wasm, copies the toolchain-matched wasm_exec.js, and
