@@ -398,20 +398,22 @@ func (ts *termState) writeCmds(prefix []byte, cmds [][]byte) {
 }
 
 // setup switches to the alternate screen, hides the cursor, and enables
-// full-motion SGR-pixel mouse reporting.
+// full-motion SGR-pixel mouse reporting and bracketed paste.
 func setup(out io.Writer) {
 	io.WriteString(out, "\x1b[?1049h"+ // alternate screen buffer
 		"\x1b[?25l"+ // hide cursor
 		"\x1b[2J"+ // clear
 		"\x1b[?1003h"+ // report all mouse motion + buttons
 		"\x1b[?1006h"+ // SGR mouse encoding
-		"\x1b[?1016h") // SGR-Pixels: report mouse position in pixels
+		"\x1b[?1016h"+ // SGR-Pixels: report mouse position in pixels
+		"\x1b[?2004h") // bracketed paste: a paste arrives as one Text, not keystrokes
 }
 
 // teardown reverses setup and frees the transmitted image.
 func teardown(out io.Writer, imageID int) {
 	out.Write(deleteImageCmd(imageID))
-	io.WriteString(out, "\x1b[?1016l\x1b[?1006l\x1b[?1003l"+ // mouse off
+	io.WriteString(out, "\x1b[?2004l"+ // bracketed paste off
+		"\x1b[?1016l\x1b[?1006l\x1b[?1003l"+ // mouse off
 		"\x1b[?25h"+ // show cursor
 		"\x1b[?1049l") // leave alternate screen
 }
