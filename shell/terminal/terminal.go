@@ -131,7 +131,7 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 	// by every terminal (e.g. Ghostty renders nothing). Opt in with
 	// GOPHICS_TERM_TMPFILE=1 on terminals that support it (kitty).
 	if ft, ok := tty.(FileTransport); ok && os.Getenv("GOPHICS_TERM_TMPFILE") != "" {
-		ts.dir = ft.TempDir()
+		ts.enc.dir = ft.TempDir()
 	}
 	// Default to whole-frame transmits (a=T), which every kitty-graphics terminal
 	// supports. a=f region-compose partial updates are opt-in (GOPHICS_TERM_COMPOSE=1):
@@ -141,9 +141,10 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 
 	ts.applySize(tty)
 	dbg("start phys=%dx%d cells=%dx%d content=%.2f render=%.2f tempfile=%v compose=%v",
-		ts.pw, ts.ph, ts.cols, ts.rows, ts.scale, ts.renderFull, ts.dir != "", !ts.full)
+		ts.pw, ts.ph, ts.cols, ts.rows, ts.scale, ts.renderFull, ts.enc.dir != "", !ts.full)
 
 	setup(tty)
+	defer ts.enc.reap() // after teardown: the last frame's files are read by then
 	defer teardown(tty, ts.imageID)
 	if cfg.Title != "" {
 		ts.setTitle(cfg.Title)
@@ -229,8 +230,8 @@ type termState struct {
 	prefs     *prefs.Store
 	scale     float32 // content scale: logical = physical/scale; pointer coords /scale
 	imageID   int
-	dir       string // temp-file transfer dir; "" → inline base64
-	full      bool   // GOPHICS_TERM_FULLFRAME: always send whole frames
+	enc       encoder // how pixels travel: temp files in enc.dir, or inline
+	full      bool    // GOPHICS_TERM_FULLFRAME: always send whole frames
 
 	dirty atomic.Bool
 
@@ -348,10 +349,11 @@ func (ts *termState) present(img *image.RGBA) {
 		if area*100 >= w*h*fullFramePct {
 			full = true // change is widespread; a whole-frame send is cheaper
 		} else {
+			ts.enc.reap() // the previous frame's temp files have been read
 			var cmds [][]byte
 			for _, r := range tiles {
-				cmds = append(cmds, composeCmds(ts.imageID, r.Min.X, r.Min.Y, r.Dx(), r.Dy(),
-					subRect(img, r), ts.dir)...)
+				cmds = append(cmds, ts.enc.compose(ts.imageID, r.Min.X, r.Min.Y, r.Dx(), r.Dy(),
+					subRect(img, r))...)
 			}
 			ts.writeCmds(nil, cmds)
 			ts.saveFrame(img.Pix, w, h, stride)
@@ -365,7 +367,8 @@ func (ts *termState) present(img *image.RGBA) {
 	cols, rows := ts.cols, ts.rows
 	ts.mu.Unlock()
 	t0 := time.Now()
-	cmds := fullFrameCmds(ts.imageID, w, h, cols, rows, tightPixels(img), ts.dir)
+	ts.enc.reap()
+	cmds := ts.enc.fullFrame(ts.imageID, w, h, cols, rows, tightPixels(img))
 	encMS := float64(time.Since(t0).Microseconds()) / 1000
 	ts.writeCmds(homeCursor(), cmds)
 	ts.saveFrame(img.Pix, w, h, stride)

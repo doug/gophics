@@ -25,6 +25,11 @@ type kittyTerm struct {
 	pendKeys map[string]string
 	pendData []byte
 	pending  bool
+
+	// violations records commands a spec-following terminal would misread.
+	// apply fails the test on any; a test probing the decoder itself can
+	// call command directly and inspect them.
+	violations []string
 }
 
 func (k *kittyTerm) apply(t *testing.T, data []byte) {
@@ -33,15 +38,18 @@ func (k *kittyTerm) apply(t *testing.T, data []byte) {
 	for {
 		i := strings.Index(s, "\x1b_G")
 		if i < 0 {
-			return
+			break
 		}
 		rest := s[i+3:]
 		before, after, ok := strings.Cut(rest, "\x1b\\")
 		if !ok {
-			return
+			break
 		}
 		k.command(t, before)
 		s = after
+	}
+	if len(k.violations) > 0 {
+		t.Fatalf("kitty protocol violations: %v", k.violations)
 	}
 }
 
@@ -52,30 +60,39 @@ func (k *kittyTerm) command(t *testing.T, body string) {
 	}
 	keys := parseKeys(ctrl)
 
-	if _, isStart := keys["a"]; isStart {
-		if keys["t"] == "t" { // temp-file transfer: payload is the base64 path
-			fdata, err := os.ReadFile(string(mustB64(t, payload)))
-			if err != nil {
-				t.Fatalf("kitty t=t: read file: %v", err)
-			}
-			k.process(t, keys, fdata)
-			return
+	if k.pending {
+		// A continuation chunk. The protocol keeps a=f on every chunk of
+		// frame data ("subsequent chunks must also specify the a=f key"); a
+		// bare m= continuation mid-frame is taken by a real terminal as part
+		// of an ordinary transmission, so it is a violation here.
+		if k.pendKeys["a"] == "f" && keys["a"] != "f" {
+			k.violations = append(k.violations, "bare continuation chunk during an a=f frame transfer: "+ctrl)
 		}
-		data := mustB64(t, payload)
-		if keys["m"] == "1" { // more chunks follow
-			k.pendKeys, k.pendData, k.pending = keys, data, true
-			return
-		}
-		k.finish(t, keys, data)
-		return
-	}
-	if k.pending { // continuation chunk (only m=… present)
 		k.pendData = append(k.pendData, mustB64(t, payload)...)
-		if keys["m"] == "0" {
+		if keys["m"] != "1" {
 			k.pending = false
 			k.finish(t, k.pendKeys, k.pendData)
 		}
+		return
 	}
+	if _, isStart := keys["a"]; !isStart {
+		k.violations = append(k.violations, "continuation chunk with no transfer pending: "+ctrl)
+		return
+	}
+	if keys["t"] == "t" { // temp-file transfer: payload is the base64 path
+		fdata, err := os.ReadFile(string(mustB64(t, payload)))
+		if err != nil {
+			t.Fatalf("kitty t=t: read file: %v", err)
+		}
+		k.process(t, keys, fdata)
+		return
+	}
+	data := mustB64(t, payload)
+	if keys["m"] == "1" { // more chunks follow
+		k.pendKeys, k.pendData, k.pending = keys, data, true
+		return
+	}
+	k.finish(t, keys, data)
 }
 
 // finish decompresses the accumulated payload when o=z, then applies it.
@@ -157,7 +174,7 @@ func TestPartialUpdateReconstructs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			ts := &termState{out: &out, imageID: 1, dir: tc.dir}
+			ts := &termState{out: &out, imageID: 1, enc: encoder{dir: tc.dir}}
 			term := &kittyTerm{}
 			for i, f := range frames {
 				out.Reset()
