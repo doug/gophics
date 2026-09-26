@@ -46,14 +46,7 @@
 <span class="t-kw">func</span> (s *counterState) <span class="t-fn">Init</span>(widget.Ctx) { s.n = s.<span class="t-fn">W</span>().Start }
 
 <span class="t-kw">func</span> (s *counterState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
-	<span class="t-com">// Pinned to the light theme rather than following the system setting.</span>
-	<span class="t-com">//</span>
-	<span class="t-com">// Most apps should follow it — theme.Of does that by default, and the</span>
-	<span class="t-com">// other examples rely on it. This one is the figure on the home page,</span>
-	<span class="t-com">// shown beside a still of itself, and a screenshot cannot follow anybody&#39;s</span>
-	<span class="t-com">// colour scheme. Pinning both to light keeps the pair honest; the</span>
-	<span class="t-com">// alternative is shipping two stills and picking between them, which is a</span>
-	<span class="t-com">// lot of machinery for a counter.</span>
+	<span class="t-com">// Pinned to light so the still beside it matches (see the package doc).</span>
 	th := theme.<span class="t-fn">Light</span>()
 	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
 		Child: widget.<span class="t-fn">Center</span>(widget.<span class="t-fn">Column</span>(

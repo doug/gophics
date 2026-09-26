@@ -5,6 +5,13 @@
 // in CI and its screenshot is generated from this exact source — a sample that
 // only exists as HTML drifts from the API, and this one already had.
 //
+// It is pinned to the light theme rather than following the system setting.
+// Most apps should follow it — theme.Of does that by default, and the other
+// examples rely on it. This one is the figure on the home page, shown beside
+// a still of itself, and a screenshot cannot follow anybody's colour scheme.
+// Pinning both to light keeps the pair honest; the alternative is shipping two
+// stills and picking between them, which is a lot of machinery for a counter.
+//
 // The whole program:
 //
 //	go run ./examples/counter          # a window
@@ -39,14 +46,7 @@ type counterState struct {
 func (s *counterState) Init(widget.Ctx) { s.n = s.W().Start }
 
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
-	// Pinned to the light theme rather than following the system setting.
-	//
-	// Most apps should follow it — theme.Of does that by default, and the
-	// other examples rely on it. This one is the figure on the home page,
-	// shown beside a still of itself, and a screenshot cannot follow anybody's
-	// colour scheme. Pinning both to light keeps the pair honest; the
-	// alternative is shipping two stills and picking between them, which is a
-	// lot of machinery for a counter.
+	// Pinned to light so the still beside it matches (see the package doc).
 	th := theme.Light()
 	return widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
 		Child: widget.Center(widget.Column(
