@@ -4,5 +4,7 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "{{.Name}}"
+// The identifier, not the display name: gradle reserves / \ : < > " ? * |
+// in a project name, and the label users see comes from the manifest.
+rootProject.name = "{{.ProjectName}}"
 include ':app'

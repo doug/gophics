@@ -8,8 +8,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
+	"unicode"
 )
 
 // mobileTemplates holds the iOS + Android host projects and the gomobile-bind
@@ -36,6 +38,9 @@ func cmdCreate(args []string) error {
 		return err
 	}
 	name := fs.Arg(0)
+	if err := checkName(name); err != nil {
+		return err
+	}
 	if module == "" {
 		module = name
 	}
@@ -173,6 +178,24 @@ func parsePlatforms(s string) (map[string]bool, error) {
 	return set, nil
 }
 
+// checkName rejects a display name no template can quote.
+//
+// The name is escaped for each syntax it lands in — see templateFuncs — so
+// punctuation is fine, but a control character has no place in a comment or
+// a README, and a newline in particular splits a YAML scalar and a Go
+// comment whatever escaping the string literals get.
+func checkName(name string) error {
+	if name == "" {
+		return fmt.Errorf("the app name is empty")
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("the app name %q contains a control character", name)
+		}
+	}
+	return nil
+}
+
 // sanitizeIdent lowercases and strips a name to [a-z0-9] for use in package,
 // bundle-id, and identifier positions.
 func sanitizeIdent(s string) string {
@@ -195,11 +218,30 @@ func titleFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// templateFuncs are the per-syntax escapes a template applies to the display
+// name. The name is what the user typed — "Tom & Jerry: Pro" is a fine app
+// name — and it lands in XML (the plist, the manifest), in YAML (project.yml)
+// and in Go string literals, each of which reserves different characters.
+// Substituting it raw produced host projects that did not parse, after a
+// create that reported success.
+//
+//   - html (built in): XML character references, for element text and
+//     attribute values in the plist and the manifest.
+//   - esc: the body of a double-quoted string in Go, and equally in a YAML
+//     double-quoted scalar, whose escape syntax is the same for everything a
+//     name that passed checkName can contain (`\"` and `\\`).
+var templateFuncs = template.FuncMap{
+	"esc": func(s string) string {
+		q := strconv.Quote(s)
+		return q[1 : len(q)-1]
+	},
+}
+
 func writeTemplate(path, tmpl string, data any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	t, err := template.New(path).Parse(tmpl)
+	t, err := template.New(path).Funcs(templateFuncs).Parse(tmpl)
 	if err != nil {
 		return err
 	}
@@ -290,7 +332,7 @@ var (
 // desktop build cannot drift apart.
 func Config() app.Config {
 	return app.Config{
-		Title: "{{.Name}}",
+		Title: "{{esc .Name}}",
 		Size:  geom.Size{W: 480, H: 720},
 		Font:  goregular.TTF,
 	}
@@ -315,7 +357,7 @@ type counterState struct {
 
 func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 	nav := ctx.MustOf[widget.Nav]()
-	return screen("{{.Name}}", widget.Column(
+	return screen("{{esc .Name}}", widget.Column(
 		widget.Text{Value: fmt.Sprintf("Count: %d", s.Count), Size: 28, Color: colText},
 		widget.Sized{H: 16},
 		button("Increment", func() { s.SetState(func() { s.Count++ }) }),

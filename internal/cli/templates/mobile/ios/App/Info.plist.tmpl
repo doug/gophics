@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>{{.Name}}</string>
+	<string>{{html .Name}}</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -40,15 +40,15 @@
 	     (see shell/mobile/native/GophicsMedia.swift); until it does,
 	     ctx.Camera() and ctx.Microphone() are nil. -->
 	<key>NSCameraUsageDescription</key>
-	<string>TODO: say why {{.Name}} needs the camera.</string>
+	<string>TODO: say why {{html .Name}} needs the camera.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TODO: say why {{.Name}} needs the microphone.</string>
+	<string>TODO: say why {{html .Name}} needs the microphone.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>TODO: say why {{.Name}} needs your location.</string>
+	<string>TODO: say why {{html .Name}} needs your location.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>TODO: say why {{.Name}} saves pictures to your library.</string>
+	<string>TODO: say why {{html .Name}} saves pictures to your library.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>TODO: say why {{.Name}} uses Face ID.</string>
+	<string>TODO: say why {{html .Name}} uses Face ID.</string>
 	<!-- Local networking (mirrors project.yml, which xcodegen regenerates this
 	     file from): ATS allows private ranges and .local names, and iOS 14+
 	     shows NSLocalNetworkUsageDescription before the first such connection.
@@ -61,7 +61,7 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>TODO: say why {{.Name}} connects to devices on your local network.</string>
+	<string>TODO: say why {{html .Name}} connects to devices on your local network.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

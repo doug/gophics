@@ -15,7 +15,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: {{.Name}}
+        CFBundleDisplayName: "{{esc .Name}}"
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -32,7 +32,7 @@ targets:
           # Uncomment only if the app must reach plain-http hosts that are not
           # on the local network (a user-typed server URL, say). App Review
           # asks for a justification; https hosts never need it.
-        NSLocalNetworkUsageDescription: "TODO: say why {{.Name}} connects to devices on your local network."
+        NSLocalNetworkUsageDescription: "TODO: say why {{esc .Name}} connects to devices on your local network."
         # Usage strings for the permission-gated capabilities. iOS terminates
         # an app that reaches one of these without a string — a crash, not a
         # refusal — and `gophics run` refuses to build earlier than that.
@@ -56,11 +56,11 @@ targets:
         # app registers itself (see shell/mobile/native/GophicsMedia.swift);
         # until it does, ctx.Camera() and ctx.Microphone() are nil and these
         # two strings describe nothing.
-        NSCameraUsageDescription: "TODO: say why {{.Name}} needs the camera."
-        NSMicrophoneUsageDescription: "TODO: say why {{.Name}} needs the microphone."
-        NSLocationWhenInUseUsageDescription: "TODO: say why {{.Name}} needs your location."
-        NSPhotoLibraryAddUsageDescription: "TODO: say why {{.Name}} saves pictures to your library."
-        NSFaceIDUsageDescription: "TODO: say why {{.Name}} uses Face ID."
+        NSCameraUsageDescription: "TODO: say why {{esc .Name}} needs the camera."
+        NSMicrophoneUsageDescription: "TODO: say why {{esc .Name}} needs the microphone."
+        NSLocationWhenInUseUsageDescription: "TODO: say why {{esc .Name}} needs your location."
+        NSPhotoLibraryAddUsageDescription: "TODO: say why {{esc .Name}} saves pictures to your library."
+        NSFaceIDUsageDescription: "TODO: say why {{esc .Name}} uses Face ID."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{.BundleID}}

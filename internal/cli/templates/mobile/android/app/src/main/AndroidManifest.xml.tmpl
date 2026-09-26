@@ -13,7 +13,7 @@
          ranges; https hosts never need either. syncAndroidPermissions rewrites
          only the gophics:permissions block above, so an edit here survives
          regeneration. -->
-    <application android:label="{{.Name}}" android:theme="@android:style/Theme.NoTitleBar">
+    <application android:label="{{html .Name}}" android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".MainActivity" android:exported="true"
                   android:configChanges="orientation|screenSize|uiMode">
             <intent-filter>

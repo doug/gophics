@@ -31,10 +31,9 @@ import java.nio.ByteBuffer
 import {{.MobilePkg}}.{{.Framework}}
 import mobile.Bridge
 
-/**
- * Thin Android host for {{.Name}} (the M9 embedding model): the Go side owns
- * the UI; this activity owns the surface, vsync, input, IME, and intents.
- */
+// Thin Android host for {{.Name}} (the M9 embedding model): the Go side owns
+// the UI; this activity owns the surface, vsync, input, IME, and intents.
+//
 // One bridge per process, at file scope because MainActivity and the surface
 // view are separate classes and both drive it. gomobile assumes one anyway:
 // Start builds the app once.
