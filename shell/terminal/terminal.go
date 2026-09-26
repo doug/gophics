@@ -102,19 +102,20 @@ func maxImageLong() int {
 }
 
 // contentScaleFor returns the logical→physical content scale: the
-// GOPHICS_TERM_SCALE override if set, else one that targets ~targetLogicalW
-// logical pixels wide (so hidpi terminals don't render microscopically).
-func contentScaleFor(pw int) float32 {
+// GOPHICS_TERM_SCALE override if set (overridden reports which), else one
+// that targets ~targetLogicalW logical pixels wide (so hidpi terminals don't
+// render microscopically).
+func contentScaleFor(pw int) (scale float32, overridden bool) {
 	if v := os.Getenv("GOPHICS_TERM_SCALE"); v != "" {
 		if f, err := strconv.ParseFloat(v, 32); err == nil && f > 0 {
-			return float32(f)
+			return float32(f), true
 		}
 	}
 	s := float32(pw) / targetLogicalW
 	if s < 1 {
 		s = 1
 	}
-	return s
+	return s, false
 }
 
 // RunTTY presents handler h over the terminal transport tty, blocking until the
@@ -171,13 +172,12 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 	// stops, settle fires a full-resolution "keyframe". Disable with
 	// GOPHICS_TERM_NODYNAMIC.
 	dynamic := os.Getenv("GOPHICS_TERM_NODYNAMIC") == ""
-	const motionGap = 130 * time.Millisecond
-	const settleDelay = 180 * time.Millisecond
 	settle := time.NewTimer(time.Hour)
 	settle.Stop()
 	defer settle.Stop()
 	last := time.Now()
-	var motionLast time.Time
+	var motion motionTracker
+	var lastInput time.Time // the last pointer event, so a frame knows what caused it
 
 	// Every exit delivers Closed first, as shell.Window.Close promises: an
 	// app that saves on quit has no other moment to do it. window.Close,
@@ -197,6 +197,9 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 			if _, ok := e.(shell.Closed); ok {
 				return nil // Ctrl-Q or transport EOF
 			}
+			if _, ok := e.(shell.Pointer); ok {
+				lastInput = time.Now()
+			}
 			ts.dirty.Store(true) // repaint after input (present dedups no-ops)
 		case <-settle.C:
 			ts.setMotion(false) // motion settled → render a crisp keyframe
@@ -205,9 +208,8 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 			if ts.dirty.Swap(false) {
 				now := time.Now()
 				dt := now.Sub(last).Seconds()
+				moving := dynamic && motion.frame(now, lastInput.After(last))
 				last = now
-				moving := dynamic && !motionLast.IsZero() && now.Sub(motionLast) < motionGap
-				motionLast = now
 				ts.setMotion(moving)
 				t0 := time.Now()
 				h.Frame(win, fr, dt)
@@ -218,6 +220,35 @@ func RunTTY(h shell.Handler, cfg shell.Config, tty TTY) error {
 			}
 		}
 	}
+}
+
+// motionGap is the frame spacing under which consecutive input-driven frames
+// count as motion; settleDelay is how long after the last motion frame the
+// crisp keyframe is rendered.
+const (
+	motionGap   = 130 * time.Millisecond
+	settleDelay = 180 * time.Millisecond
+)
+
+// motionTracker decides whether a frame is an inter frame — rendered at the
+// reduced motion resolution — from the spacing of the frames the *pointer*
+// caused. Only those: an app that invalidates on a timer (a spinner, a clock)
+// paints at a steady rate without anything moving under the pointer, and
+// counting its frames as motion kept it at half resolution for good, with
+// the settle timer reset by every tick before it could fire.
+type motionTracker struct {
+	last time.Time // the previous input-caused frame
+}
+
+// frame records a frame at now and reports whether it should render at motion
+// resolution. inputCaused says pointer input arrived since the previous frame.
+func (m *motionTracker) frame(now time.Time, inputCaused bool) (moving bool) {
+	if !inputCaused {
+		return false
+	}
+	moving = !m.last.IsZero() && now.Sub(m.last) < motionGap
+	m.last = now
+	return moving
 }
 
 // termState is the shared backend state: output sink, current pixel size, the
@@ -265,13 +296,22 @@ func (ts *termState) applySize(tty TTY) {
 	if cg, ok := tty.(CellGrid); ok {
 		cols, rows = cg.CellGrid()
 	}
-	cs := contentScaleFor(pw)
+	cs, overridden := contentScaleFor(pw)
 	long := float32(max(pw, ph))
 	logicalLong := long / cs
-	full := clampScale(min(long, float32(maxImageLong()))/logicalLong, 1, 8)
+	// The render floor of 1 is for the auto-derived content scale, which
+	// never puts more logical pixels on the long edge than the image cap.
+	// An override can: GOPHICS_TERM_SCALE=1 on a 5000 px terminal wants
+	// 2000/5000 = 0.4, and a floor of 1 there silently rendered the full
+	// physical resolution the cap exists to avoid.
+	lo := float32(1)
+	if overridden {
+		lo = 0.25
+	}
+	full := clampScale(min(long, float32(maxImageLong()))/logicalLong, lo, 8)
 	// Motion frames render at ~half the long edge (¼ the pixels) — the
 	// low-detail "inter frame"; the keyframe restores full when motion settles.
-	motion := clampScale(min(long, float32(maxImageLong())/2)/logicalLong, 0.5, 8)
+	motion := clampScale(min(long, float32(maxImageLong())/2)/logicalLong, lo/2, 8)
 
 	ts.mu.Lock()
 	ts.pw, ts.ph, ts.cols, ts.rows = pw, ph, cols, rows
