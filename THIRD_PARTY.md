@@ -34,9 +34,15 @@ un-premultiplies premultiplied buffers when it samples them, so a
 semi-transparent image edge is no longer darkened twice and the CPU and GPU
 paths agree on tinted sprites; and `backdrop.go` exports `BackdropBlurReach`,
 the distance its three-pass box blur actually reads from, so the scene differ
-can inflate damage by the kernel's real reach instead of a guess. Each is
-covered by tests in its own package; the licences and copyright notices are
-unchanged.
+can inflate damage by the kernel's real reach instead of a guess. A
+concurrency fix completes `SetGPUDisabled` in `context.go` and `text.go`: every
+GPU entry point falls back to the process-global accelerator when the context
+has no `GPURenderContext` of its own, and a context that opted out never gets
+one — so the opt-out was routing exactly the CPU-only contexts to the shared
+accelerator, whose single pending queue two of them then mutated from different
+goroutines. The new `Context.accel` returns nil for a disabled context and
+every fallback goes through it. Each is covered by tests in its own package;
+the licences and copyright notices are unchanged.
 
 These packages are `internal/` on purpose: they are gophics's private
 implementation substrate, not a public API. The rationale is that gomobile ignores go.work, so a multi-module layout

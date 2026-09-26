@@ -109,6 +109,70 @@ func TestContextCloseFlushesGPU(t *testing.T) {
 	}
 }
 
+// TestGPUDisabledContextNeverTouchesGlobalAccelerator: a context that opted
+// out with SetGPUDisabled must not reach the process-global accelerator at
+// all, not even through the "no per-context GPURenderContext" fallbacks.
+//
+// The fallbacks used to call Accelerator() directly, and ensureGPUCtx
+// deliberately gives a disabled context no render context — so every CPU-only
+// context took the fallback and drove the one accelerator everybody shares.
+// Two of them rendering on different goroutines (several offscreen painters in
+// one process) wrote its pending command queue concurrently, which -race
+// caught in the framework's headless tests, and a single one flushed shapes
+// another context had queued into its own pixmap.
+func TestGPUDisabledContextNeverTouchesGlobalAccelerator(t *testing.T) {
+	resetAccelerator()
+	defer resetAccelerator()
+
+	tracker := &flushTrackingAccelerator{}
+	if err := RegisterAccelerator(tracker); err != nil {
+		t.Fatalf("RegisterAccelerator: %v", err)
+	}
+
+	dc := NewContext(64, 64)
+	dc.SetGPUDisabled(true)
+
+	// A rect fill and a circle fill: the first reaches the CPU renderer
+	// through doFill's flush, the second is the shape the SDF fast path
+	// would otherwise claim.
+	dc.SetColor(Red.Color())
+	dc.DrawRectangle(8, 8, 32, 32)
+	if err := dc.Fill(); err != nil {
+		t.Fatalf("Fill(rect) = %v", err)
+	}
+	dc.DrawCircle(32, 32, 12)
+	if err := dc.Fill(); err != nil {
+		t.Fatalf("Fill(circle) = %v", err)
+	}
+	dc.SetLineWidth(2)
+	dc.DrawCircle(32, 32, 20)
+	if err := dc.Stroke(); err != nil {
+		t.Fatalf("Stroke() = %v", err)
+	}
+	if err := dc.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	if tracker.flushCt != 0 {
+		t.Errorf("Flush called %d times on the global accelerator by a GPU-disabled context, want 0", tracker.flushCt)
+	}
+	if tracker.fillShapeCt != 0 || tracker.fillPathCt != 0 {
+		t.Errorf("fill reached the global accelerator: FillShape=%d FillPath=%d, want 0/0",
+			tracker.fillShapeCt, tracker.fillPathCt)
+	}
+	if tracker.strokeShapeCt != 0 || tracker.strokePathCt != 0 {
+		t.Errorf("stroke reached the global accelerator: StrokeShape=%d StrokePath=%d, want 0/0",
+			tracker.strokeShapeCt, tracker.strokePathCt)
+	}
+
+	// The drawing still landed on the CPU pixmap.
+	if _, _, _, a := dc.pixmap.At(24, 24).RGBA(); a == 0 {
+		t.Error("GPU-disabled fill produced a transparent pixel; CPU raster did not run")
+	}
+}
+
 func TestContextCloseWithoutAccelerator(t *testing.T) {
 	resetAccelerator()
 

@@ -182,7 +182,7 @@ func (c *Context) DrawShapedGlyphs(glyphs []text.ShapedGlyph, face text.Face, x,
 		}
 	}
 
-	a := Accelerator()
+	a := c.accel()
 	if a != nil {
 		if sta, ok := a.(GPUShapedTextAccelerator); ok {
 			if sta.DrawShapedGlyphMaskText(target, face, glyphs, x, y, col, c.totalMatrix(), c.deviceScale) == nil {
@@ -259,7 +259,7 @@ func (c *Context) tryGPUText(s string, x, y float64) bool {
 	if rc := c.gpuCtxOps(); rc != nil {
 		return rc.DrawText(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
 	}
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return false
 	}
@@ -295,7 +295,7 @@ func (c *Context) tryGPUGlyphMaskText(s string, x, y float64) bool {
 	if rc := c.gpuCtxOps(); rc != nil {
 		return rc.DrawGlyphMaskText(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
 	}
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return false
 	}
@@ -316,7 +316,7 @@ func (c *Context) tryGPUGlyphMaskTextAliased(s string, x, y float64) bool {
 	if rc := c.gpuCtxOps(); rc != nil {
 		return rc.DrawGlyphMaskTextAliased(target, c.face, s, x, y, col, c.totalMatrix(), c.deviceScale) == nil
 	}
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return false
 	}

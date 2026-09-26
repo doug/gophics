@@ -295,7 +295,7 @@ func (c *Context) SetPipelineMode(mode PipelineMode) {
 	c.pipelineMode = mode
 	if rc := c.gpuCtxOps(); rc != nil {
 		rc.SetPipelineMode(mode)
-	} else if a := Accelerator(); a != nil {
+	} else if a := c.accel(); a != nil {
 		if pma, ok := a.(PipelineModeAware); ok {
 			pma.SetPipelineMode(mode)
 		}
@@ -380,7 +380,7 @@ func (c *Context) TextMode() TextMode {
 //
 // The setting is per-Context. Call this before drawing text.
 func (c *Context) SetLCDLayout(layout LCDLayout) {
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return
 	}
@@ -1403,7 +1403,7 @@ func (c *Context) FlushGPU() error {
 	if rc := c.gpuCtxOps(); rc != nil {
 		return rc.Flush(t)
 	}
-	if a := Accelerator(); a != nil {
+	if a := c.accel(); a != nil {
 		c.warnGPUFallback("FlushGPU")
 		return a.Flush(t)
 	}
@@ -1436,7 +1436,7 @@ func (c *Context) FlushGPUWithView(view gpucontext.TextureView, width, height ui
 	if rc != nil {
 		return rc.Flush(t)
 	}
-	if a := Accelerator(); a != nil {
+	if a := c.accel(); a != nil {
 		c.warnGPUFallback("FlushGPUWithView")
 		return a.Flush(t)
 	}
@@ -1473,7 +1473,7 @@ func (c *Context) FlushGPUWithViewDamage(view gpucontext.TextureView, width, hei
 	if rc := c.gpuCtxOps(); rc != nil {
 		return rc.Flush(t)
 	}
-	if a := Accelerator(); a != nil {
+	if a := c.accel(); a != nil {
 		c.warnGPUFallback("FlushGPUWithViewDamage")
 		return a.Flush(t)
 	}
@@ -1497,7 +1497,7 @@ func (c *Context) FlushGPUWithViewDamageRects(view gpucontext.TextureView, width
 	if rc := c.gpuCtxOps(); rc != nil {
 		return rc.Flush(t)
 	}
-	if a := Accelerator(); a != nil {
+	if a := c.accel(); a != nil {
 		c.warnGPUFallback("FlushGPUWithViewDamageRects")
 		return a.Flush(t)
 	}
@@ -1582,6 +1582,32 @@ func (c *Context) gpuCtxOps() gpuContextOps {
 	return c.gpuCtx
 }
 
+// accel returns the process-global accelerator for *this context's* GPU paths,
+// or nil when the context has opted out with SetGPUDisabled.
+//
+// Every GPU entry point below is written as "use the per-context
+// GPURenderContext, else fall back to the global accelerator". The fallback is
+// a backward-compatibility path for accelerators that predate
+// GPURenderContextProvider, and it is only ever correct for a context that
+// wants a GPU at all: ensureGPUCtx deliberately gives a disabled context no
+// render context, so a bare Accelerator() in a fallback hands the shared
+// accelerator to exactly the contexts that asked not to have one. That is not
+// merely wasteful, it is unsound. The global accelerator carries one pending
+// command queue, so a CPU-only context reaching it flushes whatever another
+// context queued into its own pixmap — and two CPU-only contexts rendering on
+// different goroutines (a process with several offscreen painters) mutate that
+// one queue concurrently, which is a data race with no lock that could fix it,
+// because the shapes were never theirs to flush.
+//
+// Use this, not Accelerator(), anywhere the accelerator stands in for a
+// missing per-context GPURenderContext.
+func (c *Context) accel() GPUAccelerator {
+	if c.gpuDisabled {
+		return nil
+	}
+	return Accelerator()
+}
+
 // gpuRenderTarget returns the current context's pixel buffer as a GPU render target.
 func (c *Context) gpuRenderTarget() GPURenderTarget {
 	return GPURenderTarget{
@@ -1609,7 +1635,7 @@ func (c *Context) flushGPUAccelerator() {
 		_ = rc.Flush(c.gpuRenderTarget())
 		return
 	}
-	if a := Accelerator(); a != nil {
+	if a := c.accel(); a != nil {
 		c.warnGPUFallback("flushGPUAccelerator")
 		_ = a.Flush(c.gpuRenderTarget())
 	}
@@ -1630,7 +1656,7 @@ func (c *Context) tryGPUFill() error {
 	if rc := c.gpuCtxOps(); rc != nil {
 		return c.tryGPUOpRC(rc.FillShape, rc.FillPath)
 	}
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return ErrFallbackToCPU
 	}
@@ -1653,7 +1679,7 @@ func (c *Context) tryGPUStroke() error {
 	if rc := c.gpuCtxOps(); rc != nil {
 		return c.tryGPUOpRC(rc.StrokeShape, rc.StrokePath)
 	}
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return ErrFallbackToCPU
 	}
@@ -1667,7 +1693,7 @@ func (c *Context) setupGPUMask() (func(), error) {
 	if c.mask == nil {
 		return func() {}, nil
 	}
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return func() {}, nil
 	}
@@ -2045,7 +2071,7 @@ func (c *Context) setGPUClipRect() func() {
 	}
 
 	// Fallback: global accelerator (backward compat for mock accelerators)
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return func() {}
 	}
@@ -2146,7 +2172,7 @@ func (c *Context) tryGPUStrokeWithMode(mode RasterizerMode) (bool, RasterizerMod
 
 // setForceSDF enables/disables forced SDF on the registered accelerator.
 func (c *Context) setForceSDF(force bool) {
-	a := Accelerator()
+	a := c.accel()
 	if a == nil {
 		return
 	}
