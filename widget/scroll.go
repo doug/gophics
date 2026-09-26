@@ -852,7 +852,11 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 			OnScroll: func(d geom.Pt) {
 				s.fling.active = false
 				s.glide.Stop()
-				if s.overSpring.active || s.overscroll != 0 {
+				// A held refresh band is not the wheel's to collapse, as it
+				// is not a drag's (dragMain leaves it alone): the spinner
+				// vanished while Refreshing was still true and went on
+				// invalidating every frame with nothing to draw.
+				if !s.refreshing && (s.overSpring.active || s.overscroll != 0) {
 					s.overSpring.active = false
 					s.overRaw = 0
 					s.setOverscroll(0)
