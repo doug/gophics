@@ -2,10 +2,43 @@ package ui
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// oneDeadAPI fails a single id and serves the rest.
+type oneDeadAPI struct {
+	fakeAPI
+	dead int
+}
+
+func (o oneDeadAPI) Item(ctx context.Context, id int) (Item, error) {
+	if id == o.dead {
+		return Item{}, errors.New("item: 502")
+	}
+	return o.fakeAPI.Item(ctx, id)
+}
+
+// A failed item is reported beside the ones that loaded, not folded into an
+// empty result: the caller can tell a page with a hole from a network that
+// dropped, which is what lets a refresh keep the list it was replacing.
+func TestFetchItemsReportsAFailedItem(t *testing.T) {
+	api := oneDeadAPI{fakeAPI: fakeAPI{stories: 10}, dead: 1_000_003}
+	ids := []int{1_000_001, 1_000_002, 1_000_003, 1_000_004}
+	got, err := fetchItems(context.Background(), api, ids, nil)
+	if err == nil || !strings.Contains(err.Error(), "502") {
+		t.Errorf("err = %v, want the item's failure", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("loaded %d items, want the 3 that succeeded", len(got))
+	}
+	if got, err := fetchItems(context.Background(), api, ids[:2], nil); err != nil || len(got) != 2 {
+		t.Errorf("a page with no failures reported err=%v, %d items", err, len(got))
+	}
+}
 
 // slowAPI blocks each Item call long enough that a serial loader is obvious in
 // wall-clock, and records how many calls were ever in flight at once.
@@ -56,7 +89,7 @@ func TestFetchItemsRunsConcurrently(t *testing.T) {
 	}
 
 	start := time.Now()
-	got := fetchItems(context.Background(), api, ids, nil)
+	got, _ := fetchItems(context.Background(), api, ids, nil)
 	elapsed := time.Since(start)
 
 	if len(got) != len(ids) {
@@ -79,7 +112,7 @@ func TestFetchItemsRunsConcurrently(t *testing.T) {
 func TestFetchItemsPreservesRequestOrder(t *testing.T) {
 	api := &slowAPI{fakeAPI: fakeAPI{stories: 100, commentsPer: 0}, delay: time.Millisecond}
 	ids := []int{1_000_005, 1_000_001, 1_000_009, 1_000_003}
-	got := fetchItems(context.Background(), api, ids, nil)
+	got, _ := fetchItems(context.Background(), api, ids, nil)
 	if len(got) != len(ids) {
 		t.Fatalf("loaded %d, want %d", len(got), len(ids))
 	}

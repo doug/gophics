@@ -97,7 +97,9 @@ func streamComments(ctx context.Context, api API, story Item, limit int, onProgr
 	var out []Comment
 
 	for len(frontier) > 0 && ctx.Err() == nil {
-		items := fetchItems(ctx, api, frontier, nil)
+		// A comment that fails to load is a hole in the tree, not a failed
+		// thread: its siblings still read.
+		items, _ := fetchItems(ctx, api, frontier, nil)
 
 		var next []int
 		for _, it := range items {

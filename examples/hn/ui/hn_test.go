@@ -98,16 +98,22 @@ func slowHarness(t *testing.T, api API, stories int) (*app.Headless, *feedState)
 	return h, st
 }
 
-// awaitFeed renders until the feed's current load is done.
+// awaitFeed renders until the feed's newest load has run to its end. It waits
+// on the load generation, not on refreshing: a stale load used to clear that
+// flag while the live one was still in flight, and a test waiting on it
+// passed with the bug live.
 func awaitFeed(t *testing.T, h *app.Headless, st *feedState) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
-	for (!st.feed.done || st.refreshing) && time.Now().Before(deadline) {
+	for st.loaded != st.gen && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 		h.Render()
 	}
-	if !st.feed.done || st.refreshing {
+	if st.loaded != st.gen {
 		t.Fatal("feed never finished loading")
+	}
+	if st.refreshing {
+		t.Fatal("load finished with the refresh spinner still up")
 	}
 }
 
@@ -159,14 +165,14 @@ func TestRefreshKeepsTheListUntilTheNewPageLands(t *testing.T) {
 	}
 	listGone := false
 	deadline := time.Now().Add(10 * time.Second)
-	for st.refreshing && time.Now().Before(deadline) {
+	for st.loaded != st.gen && time.Now().Before(deadline) {
 		time.Sleep(2 * time.Millisecond)
 		h.Render()
 		if !hasLabel(h, "Story number") {
 			listGone = true
 		}
 	}
-	if st.refreshing {
+	if st.loaded != st.gen || st.refreshing {
 		t.Fatal("refresh never finished")
 	}
 	if listGone {
@@ -174,6 +180,143 @@ func TestRefreshKeepsTheListUntilTheNewPageLands(t *testing.T) {
 	}
 	if len(st.feed.items) != 40 {
 		t.Errorf("refreshed to %d stories, want 40", len(st.feed.items))
+	}
+}
+
+// gatedAPI serves each TopStories call its own page of ids, and once the first
+// four stories of a page are in, holds the rest behind a gate the test opens.
+// Two loads can then overlap and finish in the order the test chooses, which
+// a slow API cannot promise on a loaded machine. Items past the fourth are not
+// held until the first four are in because the fetch runs eight at a time:
+// eight held items would fill that and starve the four the test waits for.
+type gatedAPI struct {
+	fakeAPI
+	mu    sync.Mutex
+	pages int
+	gates map[int]chan struct{} // by page
+	front map[int]int           // of the first four items, how many returned, by page
+	done  map[int]int           // items returned, by page
+}
+
+func newGatedAPI() *gatedAPI {
+	return &gatedAPI{fakeAPI: fakeAPI{stories: 40},
+		gates: map[int]chan struct{}{}, front: map[int]int{}, done: map[int]int{}}
+}
+
+func (g *gatedAPI) TopStories(context.Context) ([]int, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.pages++
+	g.gates[g.pages] = make(chan struct{})
+	ids := make([]int, g.stories)
+	for i := range ids {
+		ids[i] = g.pages*1_000_000 + i
+	}
+	return ids, nil
+}
+
+func (g *gatedAPI) Item(ctx context.Context, id int) (Item, error) {
+	page, i := id/1_000_000, id%1_000_000
+	g.mu.Lock()
+	gate, held := g.gates[page], g.front[page] == 4
+	g.mu.Unlock()
+	if i >= 4 && held {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return Item{}, ctx.Err()
+		}
+	}
+	defer func() {
+		g.mu.Lock()
+		if i < 4 {
+			g.front[page]++
+		}
+		g.done[page]++
+		g.mu.Unlock()
+	}()
+	return g.fakeAPI.Item(ctx, id)
+}
+
+func (g *gatedAPI) open(page int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	close(g.gates[page])
+}
+
+func (g *gatedAPI) returned(page int) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.done[page]
+}
+
+// A pull while the first page is still streaming in. Two loads are then in
+// flight, and the first one's end used to be taken for the refresh's: it
+// cleared the spinner, and the refresh's next partial — no longer held back —
+// replaced the full list with a shorter one, which is the shrink the refresh
+// guard exists to prevent.
+func TestRefreshDuringInitialLoadNeverShrinksTheList(t *testing.T) {
+	api := newGatedAPI()
+	h, st := slowHarness(t, api, 40)
+
+	// The first stories land and the rest wait at the gate.
+	deadline := time.Now().Add(10 * time.Second)
+	for len(st.feed.items) < 4 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		h.Render()
+	}
+	if len(st.feed.items) < 4 || st.feed.done {
+		t.Fatalf("before the pull: %d stories, done=%v; want a partial page", len(st.feed.items), st.feed.done)
+	}
+	st.refresh()
+	h.Render()
+	if !st.refreshing || st.gen != 2 {
+		t.Fatalf("refresh did not start: refreshing=%v gen=%d", st.refreshing, st.gen)
+	}
+
+	shown, shrank, retracted := len(st.feed.items), 0, false
+	observe := func() {
+		if n := len(st.feed.items); n < shown {
+			shrank++
+		}
+		shown = len(st.feed.items)
+		if !st.refreshing && st.loaded != st.gen {
+			retracted = true
+		}
+	}
+	// Let the first load run to its end while the refresh is still held.
+	api.open(1)
+	for api.returned(1) < 40 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		h.Render()
+		observe()
+	}
+	for range 20 { // and let its result reach the feed, if it is going to
+		time.Sleep(time.Millisecond)
+		h.Render()
+		observe()
+	}
+	// Now the refresh.
+	api.open(2)
+	for st.loaded != st.gen && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		h.Render()
+		observe()
+	}
+	if st.loaded != st.gen {
+		t.Fatal("the refresh never finished")
+	}
+	if shrank > 0 {
+		t.Errorf("the list shrank %d times after the pull — a superseded load wrote the feed", shrank)
+	}
+	if retracted {
+		t.Error("the refresh spinner went down before the refresh finished — a superseded load cleared it")
+	}
+	if len(st.feed.items) != 40 || st.refreshing {
+		t.Errorf("after the refresh: %d stories, refreshing=%v; want 40 and idle", len(st.feed.items), st.refreshing)
+	}
+	if st.feed.items[0].ID != 2_000_000 {
+		t.Errorf("the feed shows page %d, want the refreshed one", st.feed.items[0].ID/1_000_000)
 	}
 }
 
@@ -196,8 +339,10 @@ func (f *failingTopAPI) TopStories(ctx context.Context) ([]int, error) {
 	return f.fakeAPI.TopStories(ctx)
 }
 
-// A refresh that fails leaves the stories it was replacing on screen. They
-// are still stories; the error has nothing better to offer than them.
+// A refresh that fails leaves the stories it was replacing on screen, and says
+// so above them. They are still stories; the error has nothing better to offer
+// than them, but a pull that changed nothing and said nothing would look like
+// a front page that has not moved.
 func TestRefreshFailureKeepsTheList(t *testing.T) {
 	api := &failingTopAPI{fakeAPI: fakeAPI{stories: 12}}
 	h, st := slowHarness(t, api, 12)
@@ -208,8 +353,72 @@ func TestRefreshFailureKeepsTheList(t *testing.T) {
 	if len(st.feed.items) != 12 || !hasLabel(h, "Story number") {
 		t.Errorf("a failed refresh dropped the list: %d items, err=%v", len(st.feed.items), st.feed.err)
 	}
-	if hasLabel(h, "connection reset") {
-		t.Error("the error replaced the list")
+	if !hasLabel(h, "connection reset") {
+		t.Errorf("the failure is not shown; labels=%v", semLabels(h))
+	}
+}
+
+// itemFailAPI serves the id list but, from the second page on, no items — a
+// network that drops after the cheap request and before the expensive ones.
+// The optional first-page failure covers a launch into a dead network.
+type itemFailAPI struct {
+	fakeAPI
+	failFrom int // the TopStories call from which items fail, 1-based
+	mu       sync.Mutex
+	tops     int
+}
+
+func (f *itemFailAPI) TopStories(ctx context.Context) ([]int, error) {
+	f.mu.Lock()
+	f.tops++
+	f.mu.Unlock()
+	return f.fakeAPI.TopStories(ctx)
+}
+
+func (f *itemFailAPI) Item(ctx context.Context, id int) (Item, error) {
+	f.mu.Lock()
+	n := f.tops
+	f.mu.Unlock()
+	if n >= f.failFrom {
+		return Item{}, fmt.Errorf("item %d: connection reset", id)
+	}
+	return f.fakeAPI.Item(ctx, id)
+}
+
+// The id list loads and then every item fails. That used to complete as an
+// empty page with no error: the refresh replaced twelve stories with nothing
+// and no message, and the first load drew a blank page instead of the error.
+func TestRefreshWithFailingItemsKeepsTheList(t *testing.T) {
+	api := &itemFailAPI{fakeAPI: fakeAPI{stories: 12}, failFrom: 2}
+	h, st := slowHarness(t, api, 12)
+	awaitFeed(t, h, st)
+
+	st.refresh()
+	awaitFeed(t, h, st)
+	if len(st.feed.items) != 12 || !hasLabel(h, "Story number") {
+		t.Errorf("a refresh whose items failed dropped the list: %d items", len(st.feed.items))
+	}
+	if !hasLabel(h, "connection reset") {
+		t.Errorf("the failure is not shown; labels=%v", semLabels(h))
+	}
+	if hasLabel(h, "loading") {
+		t.Error("the loading placeholder came back over a loaded list")
+	}
+}
+
+func TestFirstLoadWithFailingItemsShowsTheError(t *testing.T) {
+	api := &itemFailAPI{fakeAPI: fakeAPI{stories: 12}, failFrom: 1}
+	h, st := slowHarness(t, api, 12)
+	awaitFeed(t, h, st)
+
+	if st.feed.err == nil {
+		t.Error("a page with no stories in it completed without an error")
+	}
+	if !hasLabel(h, "connection reset") {
+		t.Errorf("the failure is not shown; labels=%v", semLabels(h))
+	}
+	if hasLabel(h, "loading") {
+		t.Error("still showing the loading placeholder after the load failed")
 	}
 }
 

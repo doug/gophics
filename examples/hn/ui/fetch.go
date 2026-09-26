@@ -24,13 +24,20 @@ const fetchConcurrency = 8
 // first stories while the tail is still in flight. Reporting on *any*
 // completion instead would let item 20 appear above item 3 and then jump when
 // 3 landed; a prefix only grows, so the list only ever appends.
-func fetchItems(ctx context.Context, api API, ids []int, onPrefix func([]Item)) []Item {
+//
+// The error is the first item that failed, returned beside whatever did load.
+// A page missing one dead id is still a page, and a page missing every id is
+// not; the caller decides, because only it knows whether it has an older list
+// to keep instead. Without this a network that dropped mid-page came back as
+// an empty page and nil, indistinguishable from a front page with no stories.
+func fetchItems(ctx context.Context, api API, ids []int, onPrefix func([]Item)) ([]Item, error) {
 	var (
 		mu       sync.Mutex
 		out      = make([]Item, len(ids))
 		ok       = make([]bool, len(ids)) // loaded successfully
 		resolved = make([]bool, len(ids)) // request finished, either way
 		sent     int                      // length of the prefix already reported
+		firstErr error
 	)
 
 	// collect must be called with mu held.
@@ -71,6 +78,8 @@ func fetchItems(ctx context.Context, api API, ids []int, onPrefix func([]Item)) 
 			resolved[i] = true
 			if err == nil {
 				out[i], ok[i] = it, true
+			} else if firstErr == nil {
+				firstErr = err
 			}
 			// A failed item still advances the prefix — otherwise one dead id
 			// holds every story behind it off the screen.
@@ -88,5 +97,5 @@ func fetchItems(ctx context.Context, api API, ids []int, onPrefix func([]Item)) 
 
 	mu.Lock()
 	defer mu.Unlock()
-	return collect(len(ids))
+	return collect(len(ids)), firstErr
 }

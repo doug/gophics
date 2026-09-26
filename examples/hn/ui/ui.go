@@ -156,6 +156,20 @@ type feedState struct {
 	// refreshing is presentation, not result: it says the load was triggered by
 	// a pull rather than by opening the page, and so shows a different spinner.
 	refreshing bool
+	// notice is a load that failed beside a list worth keeping — a refresh, or
+	// a first page with holes in it. It is not part of feed because feed.err
+	// is what shows instead of the list, and this is what shows above it.
+	notice string
+	// gen numbers the loads. A pull while the first page is still streaming
+	// starts a second load with the first still landing, and every result is
+	// posted with the generation that produced it: a result from any but the
+	// newest load is dropped, so a superseded load can neither shrink the list
+	// under the reader nor retract the spinner of the refresh that replaced it.
+	gen int
+	// loaded is the generation of the last load that ran to its end, page or
+	// error. gen == loaded means the feed is idle; tests wait on that rather
+	// than on refreshing, which a stale load could clear while a live one ran.
+	loaded int
 }
 
 // stateHook lets tests observe the mounted feed state.
@@ -171,7 +185,7 @@ func (s *feedState) Init(ctx widget.Ctx) {
 
 // refresh reloads the page behind the list that is already showing.
 func (s *feedState) refresh() {
-	s.SetState(func() { s.refreshing = true })
+	s.SetState(func() { s.refreshing, s.notice = true, "" })
 	s.fetch()
 }
 
@@ -182,21 +196,24 @@ func (s *feedState) refresh() {
 // per-item walk below is the expensive part, and without cancellation a feed
 // that is closed a moment after opening keeps fetching every one of them.
 func (s *feedState) fetch() {
+	s.gen++
+	gen := s.gen
 	lifetime := s.ctx.Lifetime()
 	api := s.ctx.MustOf[API]()
 	n := s.W().N
+	// post applies a result of this load on the UI goroutine — unless a newer
+	// load has started since, in which case the result is nobody's.
+	post := func(apply func()) {
+		s.PostState(func() {
+			if gen == s.gen {
+				apply()
+			}
+		})
+	}
 	go func() {
 		ids, err := api.TopStories(lifetime)
 		if err != nil {
-			s.PostState(func() {
-				// A refresh that fails leaves the list it was replacing; the
-				// stories on screen are still stories. Only a first load has
-				// nothing better to show than the error.
-				if !s.refreshing {
-					s.feed = feed{err: err, done: true}
-				}
-				s.refreshing = false
-			})
+			post(func() { s.fail(err) })
 			return
 		}
 		if len(ids) > n {
@@ -205,32 +222,60 @@ func (s *feedState) fetch() {
 		// Concurrent, and streamed: each time the run of resolved items from
 		// the top grows, show it. The list is ranked, so it fills in from the
 		// first story down and never reorders under the reader.
-		show := func(items []Item, done bool) {
-			keep := items[:0]
-			for _, it := range items {
-				if it.Title != "" {
-					keep = append(keep, it)
-				}
-			}
-			s.PostState(func() {
-				// During a refresh the old list stays up until the new one is
-				// whole. Swapping a growing prefix in would shrink the list
-				// under the reader and unmount the rows they were looking at.
-				if s.refreshing && !done {
-					return
-				}
-				s.feed = feed{items: keep, done: done}
-				if done {
-					s.refreshing = false
-				}
-			})
-		}
-		items := fetchItems(lifetime, api, ids, func(partial []Item) { show(partial, false) })
+		items, err := fetchItems(lifetime, api, ids, func(partial []Item) {
+			post(func() { s.show(partial, false) })
+		})
 		if lifetime.Err() != nil {
 			return // the feed is gone; nothing wants these
 		}
-		show(items, true)
+		post(func() {
+			switch {
+			case err != nil && (s.refreshing || len(items) == 0):
+				// A refresh with holes in it is not worth the list it would
+				// replace, and a first page with nothing in it is an error,
+				// not an empty front page.
+				s.fail(err)
+			case err != nil:
+				s.show(items, true)
+				s.notice = "Some stories did not load: " + err.Error()
+			default:
+				s.show(items, true)
+			}
+		})
 	}()
+}
+
+// show puts a loaded prefix — or, when done, the whole page — on screen.
+func (s *feedState) show(items []Item, done bool) {
+	keep := items[:0]
+	for _, it := range items {
+		if it.Title != "" {
+			keep = append(keep, it)
+		}
+	}
+	// During a refresh the old list stays up until the new one is whole.
+	// Swapping a growing prefix in would shrink the list under the reader
+	// and unmount the rows they were looking at.
+	if s.refreshing && !done {
+		return
+	}
+	s.feed = feed{items: keep, done: done}
+	if done {
+		s.refreshing, s.notice, s.loaded = false, "", s.gen
+	}
+}
+
+// fail ends the current load with an error instead of a page. A refresh that
+// fails leaves the list it was replacing and says so above it; the stories on
+// screen are still stories. Only a first load has nothing better to show than
+// the error.
+func (s *feedState) fail(err error) {
+	if s.refreshing {
+		s.notice = "Could not refresh: " + err.Error()
+	} else {
+		s.feed = feed{err: err, done: true}
+	}
+	s.refreshing, s.loaded = false, s.gen
 }
 
 func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
@@ -253,6 +298,18 @@ func (s *feedState) Build(ctx widget.Ctx) widget.Widget {
 			Build:           func(i int) widget.Widget { return s.storyRow(th, nav, i) },
 			Refreshing:      s.refreshing,
 			OnRefresh:       s.refresh,
+		}
+		if s.notice != "" {
+			// A failed refresh is reported over the list it left in place,
+			// not instead of it: the stories are still worth reading, and a
+			// dialog would sit between the reader and them.
+			col := widget.Column(
+				widget.Decorated{Color: th.Surface, Child: widget.Padding{Insets: geom.InsetsSymmetric(12, 8),
+					Child: widget.Text{Value: s.notice, Wrap: true, Size: th.Type.Caption, Color: th.Danger}}},
+				widget.Expand(body),
+			)
+			col.CrossAlign = layout.CrossStretch
+			body = col
 		}
 	}
 	return page(ctx, header(th, "Hacker News", nil), body)
