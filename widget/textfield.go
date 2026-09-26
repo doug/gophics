@@ -785,6 +785,17 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	}
 
 	onComposition := func(c shell.Composition) {
+		if !f.editable() {
+			// A read-only field is focusable, and a desktop IME composes
+			// into whatever is focused without asking: the preedit was
+			// spliced into the field and the commit inserted, past the
+			// guard typed text goes through in onText.
+			if s.preedit != "" {
+				s.preedit, s.preeditCursor = "", 0
+				s.SetState(nil)
+			}
+			return
+		}
 		switch c.Kind {
 		case shell.CompositionStart:
 			s.preedit, s.preeditCursor = "", 0
@@ -792,8 +803,16 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 			s.preedit, s.preeditCursor = c.Preedit, c.Cursor
 		case shell.CompositionEnd:
 			s.preedit, s.preeditCursor = "", 0
-			if c.Committed != "" {
-				s.ed.Insert(sanitize(c.Committed))
+			t := c.Committed
+			if f.Multiline {
+				t = sanitizeMultiline(t)
+			} else {
+				t = sanitize(t)
+			}
+			// Capped like typed text: MaxLength promises that IME commits
+			// which would exceed it are truncated.
+			if t = s.fit(t); t != "" {
+				s.ed.Insert(t)
 				s.change(ctx)
 				return
 			}
@@ -1057,6 +1076,9 @@ func (s *textFieldState) softKeyboard(
 		// callback mobile uses: replacing a span cannot be expressed as an
 		// insertion, and it is what the IME does every time it fixes a word.
 		OnReplace: func(start, end int, t string) {
+			if !s.W().editable() {
+				return // the field turned read-only under a live IME session
+			}
 			n := len([]rune(s.ed.Text()))
 			if start < 0 || end > n || start > end {
 				return // the IME's view lagged behind an edit; drop it
@@ -1068,6 +1090,9 @@ func (s *textFieldState) softKeyboard(
 			} else {
 				t = sanitize(t)
 			}
+			// After the selection is set, so the span being replaced counts
+			// as room: MaxLength caps a replacement like an insertion.
+			t = s.fit(t)
 			s.ed.Insert(t)
 			s.revealPending = true
 			s.change(ctx)
