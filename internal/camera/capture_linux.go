@@ -247,8 +247,11 @@ func Open(o Options) (*Capture, error) {
 		unix.Close(fd)
 		return nil, err
 	}
+	// release rather than Close: mapBuffers appends each mapping before the
+	// QBUF or the next QUERYBUF that can fail, and closing the fd does not
+	// undo a MAP_SHARED mapping.
 	if err := c.mapBuffers(); err != nil {
-		unix.Close(fd)
+		c.release()
 		return nil, err
 	}
 	typ := int32(bufTypeVideoCapture)
