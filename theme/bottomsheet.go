@@ -7,7 +7,6 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -122,16 +121,12 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 		width := cs.Max.W
 		ty := (1-v)*h + s.drag
 
+		// Tap only: an Escape OnKey here would be unreachable behind the Modal
+		// and would make the scrim focusable — a Tab stop that takes keyboard
+		// focus at mount — as it did in modalScrim.
 		scrim := widget.Interactive{
-			Gestures: widget.Gestures{
-				OnTap: s.close,
-				OnKey: func(k shell.Key) {
-					if k.Kind == shell.KeyPress && k.Code == shell.KeyEscape {
-						s.close()
-					}
-				},
-			},
-			Child: widget.Fill{Color: paint.Color{A: 0.45 * v}},
+			Gestures: widget.Gestures{OnTap: s.close},
+			Child:    widget.Fill{Color: paint.Color{A: 0.45 * v}},
 		}
 
 		bottomSafe := s.ctx.SafeInsets().Bottom
@@ -167,8 +162,8 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 
 		sheet := widget.Align{X: 0.5, Y: 1,
 			Child: widget.Transform{T: paint.Transform{TY: ty}, Child: draggable}}
-		// The Modal is what makes Escape dismiss when a field in the sheet
-		// holds focus; the scrim's OnKey only sees it while the scrim does.
+		// The Modal is what makes Escape dismiss, whether a field in the sheet
+		// holds focus or one beneath the scrim does.
 		//
 		// Once the exit slide is running the sheet is on its way out, and a
 		// nil handler lets the layer decline the key. Otherwise the entry

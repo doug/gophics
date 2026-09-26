@@ -4,7 +4,6 @@ import (
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
-	"github.com/doug/gophics/shell"
 	"github.com/doug/gophics/widget"
 )
 
@@ -104,21 +103,17 @@ type modalScrim struct {
 }
 
 func (m modalScrim) Build(widget.Ctx) widget.Widget {
+	// The scrim handles the tap only. It used to carry an Escape OnKey as
+	// well, which the Modal below made unreachable (the app dispatches Escape
+	// to the modal first) and which was not free: OnKey makes an Interactive
+	// focusable, so the scrim took keyboard focus at mount and was a Tab stop.
 	scrim := widget.Interactive{
-		Gestures: widget.Gestures{
-			OnTap: m.OnDismiss,
-			OnKey: func(k shell.Key) {
-				if k.Kind == shell.KeyPress && k.Code == shell.KeyEscape {
-					m.OnDismiss()
-				}
-			},
-		},
-		Child: widget.Fill{Color: scrimColor(m.Clear)},
+		Gestures: widget.Gestures{OnTap: m.OnDismiss},
+		Child:    widget.Fill{Color: scrimColor(m.Clear)},
 	}
 	// Scrim below, content above; content taps don't reach the scrim. The
-	// scrim's own OnKey only sees Escape while the scrim is focused, which it
-	// is not once a field inside the content takes focus; the Modal is what
-	// makes Escape dismiss regardless (the app routes it there first).
+	// Modal is what makes Escape dismiss, whether a field inside the content
+	// holds focus or one beneath the scrim does.
 	return widget.Modal{
 		OnEscape: m.OnDismiss,
 		Child:    widget.Stack{Children: []widget.Widget{scrim, m.Child}},
