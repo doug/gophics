@@ -41,16 +41,68 @@ import (
 // timeval, two u16 and an s32.
 const inputEventSize = 24
 
-// evdev event types and the code ranges we care about (linux/input-event-codes.h).
+// evdev event types and the codes we care about (linux/input-event-codes.h).
+//
+// The button names are the kernel's, and two of them are traps: BTN_NORTH is
+// an alias of BTN_X and BTN_WEST of BTN_Y, so on an Xbox-style pad the
+// physically-left X button reports as BTN_NORTH. The standard layout below is
+// keyed by label (A, B, X, Y), which is what the macOS and Windows backends
+// report, so the aliases are named for the labels here.
 const (
 	evKey = 0x01
 	evAbs = 0x03
 
-	btnSouth  = 0x130 // BTN_GAMEPAD — the marker that a device is a gamepad
-	btnLast   = 0x13e // BTN_THUMBR
-	absLast   = 0x11  // ABS_HAT0Y
-	keyMaxBit = 0x2ff
+	btnSouth   = 0x130 // BTN_GAMEPAD / BTN_A — the marker that a device is a gamepad
+	btnEast    = 0x131 // BTN_B
+	btnX       = 0x133 // BTN_NORTH
+	btnY       = 0x134 // BTN_WEST
+	btnTL      = 0x136
+	btnTR      = 0x137
+	btnTL2     = 0x138
+	btnTR2     = 0x139
+	btnSelect  = 0x13a
+	btnStart   = 0x13b
+	btnThumbL  = 0x13d
+	btnThumbR  = 0x13e
+	btnLast    = 0x13e // BTN_THUMBR
+	btnDpadUp  = 0x220
+	btnDpadDn  = 0x221
+	btnDpadL   = 0x222
+	btnDpadR   = 0x223
+	absX       = 0x00
+	absY       = 0x01
+	absZ       = 0x02 // left trigger on xpad and hid-playstation
+	absRX      = 0x03
+	absRY      = 0x04
+	absRZ      = 0x05 // right trigger, likewise
+	absHat0X   = 0x10
+	absHat0Y   = 0x11
+	absHat2X   = 0x14 // right trigger in the kernel's documented gamepad layout
+	absHat2Y   = 0x15 // left trigger, likewise
+	absLast    = 0x15
+	keyMaxBit  = 0x2ff
+	stdButtons = 16
+	stdAxes    = 4
 )
+
+// stdButtonCodes is the evdev code behind each slot of the standard layout
+// (shell/gamepad.go) up to the thumb clicks; the d-pad slots 12..15 are
+// composed from the hat and the BTN_DPAD_* keys in snapshot, and the trigger
+// slots 6 and 7 also take an analog axis when the driver has one.
+var stdButtonCodes = [12]uint16{
+	btnSouth, btnEast, btnX, btnY,
+	btnTL, btnTR, btnTL2, btnTR2,
+	btnSelect, btnStart, btnThumbL, btnThumbR,
+}
+
+// stdAxisCodes follows the kernel's documented gamepad layout
+// (Documentation/input/gamepad.rst): ABS_X/ABS_Y left stick, ABS_RX/ABS_RY
+// right stick, with Y positive downwards as the standard layout wants. xpad,
+// hid-playstation, hid-nintendo and hid-steam all report this way; hid-sony's
+// older DualShock 4 support predates the document and swaps the right stick
+// with the triggers, which is the driver's divergence and what a mapping
+// database (SDL's) exists to paper over.
+var stdAxisCodes = [stdAxes]uint16{absX, absY, absRX, absRY}
 
 // devInputDir is a var so tests can point discovery at a fake tree.
 var devInputDir = "/dev/input"
@@ -162,15 +214,17 @@ type absInfo struct {
 }
 
 type evdevDevice struct {
-	fd   int
-	id   string
-	buf  []byte
-	rng  map[uint16]absInfo // axis code → range, for normalisation
+	fd  int
+	id  string
+	buf []byte
+	rng map[uint16]absInfo // axis code → range, for normalisation
+	// btn and axis hold the running state for every code the device
+	// advertised; apply ignores codes that are not in them. snapshot reads
+	// them through the fixed standard layout rather than in code order, so
+	// Buttons[3] is Y whether or not the pad has a BTN_C, and a pad without
+	// some button reports a zero in its slot rather than shifting the rest.
 	btn  map[uint16]float32
 	axis map[uint16]float32
-	// codes fix the reported order, so Buttons[3] means the same thing on
-	// every poll rather than moving as a map iterates.
-	btnCodes, axisCodes []uint16
 }
 
 func openEvdev(path string) (*evdevDevice, error) {
@@ -189,7 +243,11 @@ func openEvdev(path string) (*evdevDevice, error) {
 	if err := ioctlPtr(ufd, ioR('E', 0x20+evKey, uintptr(len(keyBits))), unsafe.Pointer(&keyBits[0])); err == nil {
 		for c := btnSouth; c <= btnLast; c++ {
 			if bitSet(keyBits, c) {
-				d.btnCodes = append(d.btnCodes, uint16(c))
+				d.btn[uint16(c)] = 0
+			}
+		}
+		for c := btnDpadUp; c <= btnDpadR; c++ {
+			if bitSet(keyBits, c) {
 				d.btn[uint16(c)] = 0
 			}
 		}
@@ -200,7 +258,6 @@ func openEvdev(path string) (*evdevDevice, error) {
 			if !bitSet(absBits, c) {
 				continue
 			}
-			d.axisCodes = append(d.axisCodes, uint16(c))
 			d.axis[uint16(c)] = 0
 			var info absInfo
 			if err := ioctlPtr(ufd, ioR('E', 0x40+c, unsafe.Sizeof(info)), unsafe.Pointer(&info)); err == nil {
@@ -294,15 +351,46 @@ func clamp1(v float32) float32 {
 	return v
 }
 
+// snapshot reads the running state out through the standard layout. A map
+// miss is a code the device never advertised, and reads as zero — the slot
+// is still there, so a widget reading Buttons[9] for Start finds Start.
 func (d *evdevDevice) snapshot() shell.Gamepad {
-	g := shell.Gamepad{ID: d.id, Connected: true}
-	for _, c := range d.btnCodes {
-		g.Buttons = append(g.Buttons, d.btn[c])
+	g := shell.Gamepad{
+		ID: d.id, Connected: true,
+		Buttons: make([]float32, stdButtons),
+		Axes:    make([]float32, stdAxes),
 	}
-	for _, c := range d.axisCodes {
-		g.Axes = append(g.Axes, d.axis[c])
+	for i, c := range stdButtonCodes {
+		g.Buttons[i] = d.btn[c]
+	}
+	// Triggers: a digital BTN_TL2/TR2, an analog ABS_Z/RZ, or the documented
+	// ABS_HAT2Y/HAT2X — whichever the driver has, and the largest if several,
+	// so an XInput-style pad reports the pull as a value the way the Windows
+	// backend does.
+	g.Buttons[6] = max(g.Buttons[6], d.unipolar(absZ), d.unipolar(absHat2Y))
+	g.Buttons[7] = max(g.Buttons[7], d.unipolar(absRZ), d.unipolar(absHat2X))
+	// D-pad: a hat reports -1/0/1 per axis, and some pads have the four keys
+	// instead (or as well).
+	hx, hy := d.axis[absHat0X], d.axis[absHat0Y]
+	g.Buttons[12] = max(d.btn[btnDpadUp], clamp1(-hy))
+	g.Buttons[13] = max(d.btn[btnDpadDn], hy)
+	g.Buttons[14] = max(d.btn[btnDpadL], clamp1(-hx))
+	g.Buttons[15] = max(d.btn[btnDpadR], hx)
+	for i, c := range stdAxisCodes {
+		g.Axes[i] = d.axis[c]
 	}
 	return g
+}
+
+// unipolar reads a trigger axis as 0..1. The axis was normalised to -1..1
+// from the driver's range, so rest (the range's minimum) is -1 and full pull
+// is 1; an axis the device does not have reads as its rest value.
+func (d *evdevDevice) unipolar(code uint16) float32 {
+	v, ok := d.axis[code]
+	if !ok {
+		return 0
+	}
+	return (v + 1) / 2
 }
 
 // deviceName reads EVIOCGNAME, falling back to the device path's basename.

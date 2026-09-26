@@ -32,12 +32,100 @@ func newTestDevice() *evdevDevice {
 		btn:  map[uint16]float32{},
 		axis: map[uint16]float32{},
 	}
-	d.btnCodes = []uint16{btnSouth}
 	d.btn[btnSouth] = 0
-	d.axisCodes = []uint16{0} // ABS_X
-	d.axis[0] = 0
-	d.rng[0] = absInfo{Minimum: -32768, Maximum: 32767}
+	d.axis[absX] = 0
+	d.rng[absX] = absInfo{Minimum: -32768, Maximum: 32767}
 	return d
+}
+
+// Every backend promises the standard layout, so a widget reading Buttons[9]
+// gets Start on every platform. Linux reported codes in the order the device
+// advertised them: Buttons[2] was BTN_C on a pad that has one and X on one
+// that does not, Buttons[6] was Back rather than the left trigger, and
+// Axes[2] was a trigger rather than the right stick.
+func TestSnapshotFollowsTheStandardLayout(t *testing.T) {
+	// An xpad-shaped device: no BTN_TL2/TR2 (triggers are ABS_Z/RZ), a hat
+	// for the d-pad, and a BTN_C in the middle of the face buttons.
+	d := newTestDevice()
+	for _, c := range []uint16{btnEast, 0x132, btnX, btnY, btnTL, btnTR, btnSelect, btnStart, btnThumbL, btnThumbR} {
+		d.btn[c] = 0
+	}
+	for _, c := range []uint16{absY, absRX, absRY, absHat0X, absHat0Y} {
+		d.axis[c] = 0
+	}
+	for _, c := range []uint16{absY, absRX, absRY} {
+		d.rng[c] = absInfo{Minimum: -32768, Maximum: 32767}
+	}
+	for _, c := range []uint16{absZ, absRZ} {
+		d.axis[c] = -1 // rest, once normalised from 0..255
+		d.rng[c] = absInfo{Minimum: 0, Maximum: 255}
+	}
+
+	s := d.snapshot()
+	if len(s.Buttons) != stdButtons || len(s.Axes) != stdAxes {
+		t.Fatalf("snapshot has %d buttons and %d axes, want %d and %d",
+			len(s.Buttons), len(s.Axes), stdButtons, stdAxes)
+	}
+
+	var buf []byte
+	buf = append(buf, event(evKey, btnX, 1)...)      // X → slot 2, past BTN_C
+	buf = append(buf, event(evKey, btnStart, 1)...)  // Start → slot 9
+	buf = append(buf, event(evAbs, absZ, 255)...)    // left trigger → slot 6
+	buf = append(buf, event(evAbs, absHat0Y, -1)...) // up → slot 12
+	buf = append(buf, event(evAbs, absHat0X, 1)...)  // right → slot 15
+	buf = append(buf, event(evAbs, absRX, 32767)...) // right stick X → axis 2
+	d.apply(buf)
+	s = d.snapshot()
+
+	want := map[int]float32{2: 1, 9: 1, 6: 1, 12: 1, 15: 1}
+	for i, v := range s.Buttons {
+		if got, exp := v, want[i]; got != exp {
+			t.Errorf("Buttons[%d] = %v, want %v", i, got, exp)
+		}
+	}
+	for i, exp := range []float32{0, 0, 1, 0} {
+		if diff := s.Axes[i] - exp; diff > 0.001 || diff < -0.001 {
+			t.Errorf("Axes[%d] = %v, want %v", i, s.Axes[i], exp)
+		}
+	}
+}
+
+// A pad missing a button still has that button's slot, holding zero, so the
+// ones after it do not shift.
+func TestSnapshotKeepsSlotsForAbsentButtons(t *testing.T) {
+	d := newTestDevice()
+	d.btn[btnStart] = 0 // no B, X, Y, shoulders, Back
+	d.apply(event(evKey, btnStart, 1))
+	s := d.snapshot()
+	if len(s.Buttons) != stdButtons {
+		t.Fatalf("%d buttons, want %d", len(s.Buttons), stdButtons)
+	}
+	if s.Buttons[9] != 1 {
+		t.Errorf("Start landed at %v, want Buttons[9] = 1", s.Buttons)
+	}
+	if s.Buttons[1] != 0 {
+		t.Errorf("an absent B reads %v, want 0", s.Buttons[1])
+	}
+}
+
+// Digital d-pad keys and digital triggers fill the same slots the hat and
+// the analog axes do, so a widget never has to know which kind the pad has.
+func TestSnapshotDigitalDpadAndTriggers(t *testing.T) {
+	d := newTestDevice()
+	for _, c := range []uint16{btnTL2, btnDpadL} {
+		d.btn[c] = 0
+	}
+	var buf []byte
+	buf = append(buf, event(evKey, btnTL2, 1)...)
+	buf = append(buf, event(evKey, btnDpadL, 1)...)
+	d.apply(buf)
+	s := d.snapshot()
+	if s.Buttons[6] != 1 {
+		t.Errorf("BTN_TL2 reads %v in Buttons[6], want 1", s.Buttons[6])
+	}
+	if s.Buttons[14] != 1 {
+		t.Errorf("BTN_DPAD_LEFT reads %v in Buttons[14], want 1", s.Buttons[14])
+	}
 }
 
 func TestApplyButtonPressAndRelease(t *testing.T) {
@@ -90,11 +178,13 @@ func TestAxisNormalisation(t *testing.T) {
 // value passes through rather than being divided by a zero span.
 func TestAxisWithoutRangePassesThrough(t *testing.T) {
 	d := newTestDevice()
-	d.axisCodes = append(d.axisCodes, 0x10) // ABS_HAT0X
-	d.axis[0x10] = 0
-	d.apply(event(evAbs, 0x10, -1))
-	if got := d.snapshot().Axes[1]; got != -1 {
+	d.axis[absHat0X] = 0
+	d.apply(event(evAbs, absHat0X, -1))
+	if got := d.axis[absHat0X]; got != -1 {
 		t.Errorf("hat axis = %v, want -1", got)
+	}
+	if got := d.snapshot().Buttons[14]; got != 1 {
+		t.Errorf("hat left reads %v in Buttons[14], want 1", got)
 	}
 }
 
@@ -125,15 +215,18 @@ func TestApplyMultipleEventsInOneBuffer(t *testing.T) {
 	}
 }
 
-// Codes the device never advertised must be ignored rather than growing the
-// state and shifting every index in the reported slice.
+// Codes the device never advertised must be ignored rather than entering the
+// state: a stray event for a button the pad does not have is noise.
 func TestApplyIgnoresUnknownCodes(t *testing.T) {
 	d := newTestDevice()
-	d.apply(event(evKey, 0x131, 1)) // BTN_EAST, not advertised
-	d.apply(event(evAbs, 5, 100))   // ABS_RZ, not advertised
+	d.apply(event(evKey, btnEast, 1)) // not advertised
+	d.apply(event(evAbs, absRZ, 100)) // not advertised
+	if len(d.btn) != 1 || len(d.axis) != 1 {
+		t.Errorf("state grew: %d buttons, %d axes, want 1 and 1", len(d.btn), len(d.axis))
+	}
 	s := d.snapshot()
-	if len(s.Buttons) != 1 || len(s.Axes) != 1 {
-		t.Errorf("state grew: %d buttons, %d axes, want 1 and 1", len(s.Buttons), len(s.Axes))
+	if s.Buttons[1] != 0 || s.Buttons[7] != 0 {
+		t.Errorf("unadvertised codes reached the snapshot: %v", s.Buttons)
 	}
 }
 
@@ -211,7 +304,6 @@ func TestDrainReturnsAtOnceWithNothingPending(t *testing.T) {
 	}
 
 	// And events that are pending are folded in on the next drain.
-	d.btnCodes = []uint16{btnSouth}
 	d.btn[btnSouth] = 0
 	if _, err := w.Write(event(evKey, btnSouth, 1)); err != nil {
 		t.Fatal(err)

@@ -2,7 +2,16 @@ package shell
 
 // Gamepad input. A Window exposes it by implementing GamepadWindow; callers
 // reach it through the widget layer (ctx.Gamepads()), which returns nil when the
-// running platform can't provide one. Only the web shell implements it today.
+// running platform can't provide one. The web shell (browser Gamepad API) and
+// the three desktop backends (GameController on macOS, evdev on Linux, XInput
+// on Windows) implement it; mobile, the terminal and the BSDs return nil.
+//
+// Every backend reports the browser's "standard" layout — 16 buttons in the
+// order A, B, X, Y, LB, RB, LT, RT, Back, Start, L3, R3, up, down, left,
+// right; 4 axes as left X/Y then right X/Y, up and left negative — with zeros
+// for anything the controller lacks, so Buttons[0] means the same thing on
+// every platform. The one exception is a controller the browser cannot map,
+// which the web shell passes through as the browser reports it.
 //
 // Unlike the media/file capabilities, gamepad input is poll-style, matching the
 // input package (input.State): there are no callbacks. Read the current state
@@ -34,9 +43,11 @@ type Gamepad struct {
 	// ID identifies the controller (make/model string, platform-defined).
 	ID string
 	// Buttons holds each button's analog value in 0..1 (1 = fully pressed;
-	// digital buttons report 0 or 1). Layout is platform/controller-defined.
+	// digital buttons report 0 or 1), in the standard layout described in
+	// the package comment.
 	Buttons []float32
-	// Axes holds each analog axis in -1..1 (sticks, triggers-as-axes).
+	// Axes holds each analog axis in -1..1: left stick X and Y, then right
+	// stick X and Y. Triggers are Buttons[6] and [7], not axes.
 	Axes []float32
 	// Connected reports whether this controller is currently attached.
 	Connected bool
