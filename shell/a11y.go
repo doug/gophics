@@ -12,12 +12,21 @@ package shell
 //   - web — complete. Announce speaks through an aria-live region; SetTree
 //     maintains an explorable ARIA DOM mirror over the canvas.
 //   - macOS — SetTree publishes NSAccessibilityElements on the content view,
-//     so VoiceOver can explore and activate the UI. Announce is not wired yet
-//     (AppKit routes live-region speech through a C function rather than an
-//     Objective-C method); see the gogpu darwin bridge for the detail.
-//   - Linux, Windows, iOS, Android — not implemented. Accessibility() returns
-//     nil there rather than a sink that silently discards, so a caller can
-//     tell the difference.
+//     so VoiceOver can explore and activate the UI; Announce posts through
+//     NSAccessibility's announcement notification.
+//   - Linux — SetTree and Announce go over AT-SPI on the accessibility D-Bus.
+//     The capability is published only when that bus is reachable (a desktop
+//     with assistive technology enabled); otherwise Accessibility() is nil,
+//     rather than a sink that silently discards, so a caller can tell.
+//   - Windows — SetTree publishes a UI Automation provider, answered through
+//     WM_GETOBJECT when a client such as Narrator attaches. Announce is not
+//     wired yet (it needs UiaRaiseNotificationEvent against a live client)
+//     and is a silent no-op.
+//   - iOS, Android — the platforms pull the tree: UIAccessibility and
+//     AccessibilityNodeProvider query the host, which answers from the
+//     Bridge's A11y* accessors, so SetTree is a no-op there. Announce queues
+//     a message the host drains with TakeAnnouncement and posts.
+//   - terminal — nil; a text surface is already accessible.
 //
 // Every bridge consumes the same A11yNode slice; see
 // internal/capgen/README.md.

@@ -1,15 +1,17 @@
 # Native host reference (iOS / Android)
 
 There are **two** host interfaces, matching the two independent capabilities:
-`MediaHost` for one-shot capture (`shell.Camera` / `shell.Audio`) and
-`MonitorHost` for live microphone streaming (`shell.Microphone`). A host can
-provide either, both, or neither. See [MonitorHost](#monitorhost-live-microphone)
-below; the rest of this file covers `MediaHost`.
+`MediaHost` for one-shot capture and playback (`shell.Camera`,
+`shell.Microphone.Record`, `shell.Speakers`) and `MonitorHost` for live
+microphone streaming (`shell.Microphone.Listen`). A host can provide either,
+both, or neither. See [MonitorHost](#monitorhost-live-microphone) below; the
+rest of this file covers `MediaHost`.
 
 # MediaHost (one-shot capture)
 
-The gophics mobile media capabilities (`shell.Camera` / `shell.Audio`) are pure
-Go in `shell/mobile` and fully tested headless (`media_test.go`). The only
+The gophics mobile media capabilities (`shell.Camera`, `shell.Microphone`,
+`shell.Speakers`) are pure Go in `shell/mobile` and fully tested headless
+(`media_test.go`). The only
 platform-specific part is a thin **native `MediaHost`** that the host project
 registers on the Bridge: Go calls it to start captures; the host reports results
 back via the Bridge's `Deliver*` / `Set*` / `Fail*` methods, correlating by
@@ -32,8 +34,8 @@ rate + durationMs), `DeliverPlaybackReady`, `SetPlaybackPosition`(ms),
 `PlaybackEnded`.
 
 Recording delivers **raw PCM**; Go encodes the portable WAV `Clip` with
-`shell.EncodeWAV`, so the clip is byte-identical in shape to the web shell's.
-Playback receives that WAV via `PlayClip`.
+`internal/wav.Encode`, so the clip is byte-identical in shape to the web
+shell's. Playback receives that WAV via `PlayClip`.
 
 **Threading:** every `Deliver*`/`Set*`/`Fail*` call must be on the host UI thread
 (it runs app callbacks that mutate the widget tree). Marshal background capture
@@ -81,7 +83,7 @@ harmonic structure that pitch analysis reads. Android: prefer
 `AudioSource.UNPROCESSED`, then `VOICE_RECOGNITION`, then `MIC`. iOS: set the
 audio session to `.measurement` mode.
 
-Everything above the device is shared Go: `internal/mic` provides the ring
+Everything above the device is shared Go: `internal/dsp` provides the ring
 buffer, level, and FFT bands, so an Android monitor and a macOS one answer
 `shell.Monitor` identically.
 
@@ -204,22 +206,29 @@ at launch, which is when it matters.
   `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`. `gophics run` syncs these
   from the capabilities your Go code actually reaches.
 
-## GPU rendering (optional, recommended)
+## GPU rendering
 
-By default the Bridge returns CPU-rasterized pixels each frame (`RenderFrame` →
-bytes) and the host blits them. To render on the GPU instead — the same path as
-web/desktop — the host hands the Bridge a **native render surface**; the Bridge
-then rasterizes straight to it (no CPU readback, no per-frame upload). It's
-backward-compatible: a host that never calls `SetSurface` stays on the CPU blit.
+The Bridge renders on the GPU — the same path as web/desktop — to a **native
+render surface** the host hands it; it rasterizes straight to the surface (no
+CPU readback, no per-frame upload). There are two frame entry points:
+
+- `bridge.RenderFrame(dt)` runs one frame and presents it to the surface. It
+  returns nothing; before a surface is set it is a no-op.
+- `bridge.Snapshot(dt)` runs one frame on the CPU and returns the RGBA8888
+  pixels (`FrameWidth` × `FrameHeight` × 4). This is the fallback present path
+  for hosts where the GPU surface cannot be created — `bridge.GPUActive()` is
+  false (the iOS Simulator, some emulators) — and the host then calls it each
+  vsync while `NeedsFrame` and blits the pixels itself. It is also what
+  headless tests and screenshots use.
 
 Contract:
 - `bridge.SetSurface(displayHandle, windowHandle, widthPx, heightPx, scale)` —
   hand over the surface (see per-platform handles below). Call again on
   resize/rotation; `bridge.ClearSurface()` when the surface is destroyed
-  (backgrounding). On any GPU-setup failure the Bridge silently stays on CPU.
-- In GPU mode **`RenderFrame` returns nil** (it presented directly to the
-  surface) — the host must skip its blit when the result is nil. The existing
-  CPU host loops already `guard`/null-check the frame, so they keep working.
+  (backgrounding). On any GPU-setup failure `GPUActive()` stays false and the
+  host should drive `Snapshot` instead.
+- Each vsync, while `NeedsFrame()`: if `GPUActive()`, call `RenderFrame`;
+  otherwise call `Snapshot` and blit what it returns.
 
 ### iOS (Metal)
 Back the view with a `CAMetalLayer` (or use an `MTKView`/`CAMetalLayer`-backed
@@ -232,8 +241,9 @@ bridge.setSurface(0, windowHandle: ptr,
                   widthPx: Int(bounds.width * scale), heightPx: Int(bounds.height * scale),
                   scale: Float(scale))
 ```
-In the `CADisplayLink` loop, `RenderFrame(dt)` now presents to the layer and
-returns nil — drop the `CGImage` blit path when it does.
+In the `CADisplayLink` loop, `RenderFrame(dt)` presents to the layer; keep a
+`Snapshot` + `CGImage` blit only for the `GPUActive() == false` case (the
+Simulator).
 
 ### Android (Vulkan)
 Use a `SurfaceView`; in `surfaceCreated`, get the `ANativeWindow*` from the
@@ -253,11 +263,12 @@ override fun surfaceCreated(holder: SurfaceHolder) {
 }
 override fun surfaceDestroyed(holder: SurfaceHolder) { bridge.clearSurface() }
 ```
-In the `Choreographer` loop, when `RenderFrame` returns null the GPU already
-presented — skip `copyPixelsFromBuffer`/`drawBitmap`.
+In the `Choreographer` loop, `RenderFrame` presents to the surface; the
+`copyPixelsFromBuffer`/`drawBitmap` path is only for `gpuActive() == false`,
+fed by `snapshot`.
 
-**Status:** the Go side is built and API-validated on host (it compiles against
-the real wgpu/ggcanvas). On-device GPU is **unverified** — it depends on gogpu's
-Metal (iOS) / Vulkan+ANativeWindow (Android) HALs under gomobile, and needs a
-device to prove. The CPU blit path remains the guaranteed fallback.
+**Status:** the GPU path runs on real hardware. Android has been verified on a
+Pixel 10 Pro (Vulkan), in both orientations; the surface is rounded to an
+8-pixel multiple for PowerVR's MSAA resolve — see `alignSurface` in `gpu.go`.
+The iOS Simulator has no usable Metal surface and takes the `Snapshot` path.
 

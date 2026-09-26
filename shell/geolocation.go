@@ -2,10 +2,12 @@ package shell
 
 // Geolocation capability. A Window exposes it by implementing GeolocationWindow;
 // callers reach it through the widget layer (ctx.Geolocation()), which returns
-// nil when the running platform can't provide it. Only the web shell implements
-// it today; the same interface is the contract the mobile (CoreLocation /
-// FusedLocationProvider) and desktop (CoreLocation / geoclue / Win32) shells
-// will satisfy. All callbacks fire on the UI goroutine.
+// nil when the running platform can't provide it. The web shell implements it
+// over the browser Geolocation API, and the mobile shell over whatever
+// LocationHost the native host registers (CoreLocation on iOS,
+// FusedLocationProvider on Android) — nil until one is registered. Desktop
+// has no backend yet (CoreLocation / geoclue / Win32 would satisfy the same
+// interface) and returns nil. All callbacks fire on the UI goroutine.
 //
 // A location fix may prompt the user for permission the first time it is
 // requested; the platform owns that flow, and a denial surfaces as an error to
