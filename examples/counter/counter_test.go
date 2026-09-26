@@ -3,19 +3,15 @@ package main
 import (
 	"testing"
 
-	"golang.org/x/image/font/gofont/goregular"
-
-	"github.com/doug/gophics/app"
 	"github.com/doug/gophics/apptest"
-	"github.com/doug/gophics/geom"
 )
 
 // TestCounter drives the whole app with no window, no GPU and no display —
-// the same renderer that draws it on screen, running under `go test`.
+// the same renderer that draws it on screen, running under `go test`. It
+// runs main's own config(), so the frame it checks is the one the app shows.
 func TestCounter(t *testing.T) {
-	a := apptest.New(t, Counter{Start: 3}, apptest.WithConfig(app.Config{
-		Size: geom.Size{W: 320, H: 220}, Font: goregular.TTF,
-	}), apptest.Tol(apptest.AntiAliased))
+	a := apptest.New(t, Counter{Start: 3}, apptest.WithConfig(config()),
+		apptest.Tol(apptest.AntiAliased))
 
 	// Tap the button the way a screen reader would find it, rather than
 	// hardcoding a pixel that moves the moment the layout changes.

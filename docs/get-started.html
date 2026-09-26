@@ -102,7 +102,16 @@ go run ./examples/hn       # a HackerNews client: feed → comments, scroll, lin
 }
 
 <span class="t-kw">func</span> <span class="t-fn">main</span>() {
-	err := app.<span class="t-fn">Run</span>(Counter{Start: <span class="t-num">3</span>}, app.Config{
+	<span class="t-kw">if</span> err := app.<span class="t-fn">Run</span>(Counter{Start: <span class="t-num">3</span>}, <span class="t-fn">config</span>()); err != <span class="t-typ">nil</span> {
+		log.<span class="t-fn">Fatal</span>(err)
+	}
+}
+
+<span class="t-com">// config is shared with the test, so the golden it checks and the still on</span>
+<span class="t-com">// the home page are the same picture: the count draws in the bold face, and a</span>
+<span class="t-com">// test config that registered only Font would have drawn it regular.</span>
+<span class="t-kw">func</span> <span class="t-fn">config</span>() app.Config {
+	<span class="t-kw">return</span> app.Config{
 		Title: <span class="t-str">&#34;counter&#34;</span>,
 		Size:  geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">220</span>},
 		<span class="t-com">// Light in both schemes, matching the pinned theme above.</span>
@@ -111,9 +120,6 @@ go run ./examples/hn       # a HackerNews client: feed → comments, scroll, lin
 		FontFamilies: <span class="t-kw">map</span>[<span class="t-typ">string</span>][]<span class="t-typ">byte</span>{
 			theme.FontBold: gobold.TTF,
 		},
-	})
-	<span class="t-kw">if</span> err != <span class="t-typ">nil</span> {
-		log.<span class="t-fn">Fatal</span>(err)
 	}
 }
 </code></pre>
@@ -138,19 +144,15 @@ gophics doctor                              # check the toolchain per platform</
 <span class="t-kw">import</span> (
 	<span class="t-str">&#34;testing&#34;</span>
 
-	<span class="t-str">&#34;golang.org/x/image/font/gofont/goregular&#34;</span>
-
-	<span class="t-str">&#34;github.com/doug/gophics/app&#34;</span>
 	<span class="t-str">&#34;github.com/doug/gophics/apptest&#34;</span>
-	<span class="t-str">&#34;github.com/doug/gophics/geom&#34;</span>
 )
 
 <span class="t-com">// TestCounter drives the whole app with no window, no GPU and no display —</span>
-<span class="t-com">// the same renderer that draws it on screen, running under `go test`.</span>
+<span class="t-com">// the same renderer that draws it on screen, running under `go test`. It</span>
+<span class="t-com">// runs main&#39;s own config(), so the frame it checks is the one the app shows.</span>
 <span class="t-kw">func</span> <span class="t-fn">TestCounter</span>(t *testing.T) {
-	a := apptest.<span class="t-fn">New</span>(t, Counter{Start: <span class="t-num">3</span>}, apptest.<span class="t-fn">WithConfig</span>(app.Config{
-		Size: geom.Size{W: <span class="t-num">320</span>, H: <span class="t-num">220</span>}, Font: goregular.TTF,
-	}), apptest.<span class="t-fn">Tol</span>(apptest.AntiAliased))
+	a := apptest.<span class="t-fn">New</span>(t, Counter{Start: <span class="t-num">3</span>}, apptest.<span class="t-fn">WithConfig</span>(<span class="t-fn">config</span>()),
+		apptest.<span class="t-fn">Tol</span>(apptest.AntiAliased))
 
 	<span class="t-com">// Tap the button the way a screen reader would find it, rather than</span>
 	<span class="t-com">// hardcoding a pixel that moves the moment the layout changes.</span>

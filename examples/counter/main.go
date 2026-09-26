@@ -68,7 +68,16 @@ func (s *counterState) Build(ctx widget.Ctx) widget.Widget {
 }
 
 func main() {
-	err := app.Run(Counter{Start: 3}, app.Config{
+	if err := app.Run(Counter{Start: 3}, config()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// config is shared with the test, so the golden it checks and the still on
+// the home page are the same picture: the count draws in the bold face, and a
+// test config that registered only Font would have drawn it regular.
+func config() app.Config {
+	return app.Config{
 		Title: "counter",
 		Size:  geom.Size{W: 320, H: 220},
 		// Light in both schemes, matching the pinned theme above.
@@ -77,8 +86,5 @@ func main() {
 		FontFamilies: map[string][]byte{
 			theme.FontBold: gobold.TTF,
 		},
-	})
-	if err != nil {
-		log.Fatal(err)
 	}
 }
