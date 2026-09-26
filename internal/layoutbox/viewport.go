@@ -39,6 +39,10 @@ func (v *Viewport) MaxOffset() float32 {
 
 func (v *Viewport) Layout(cs layout.Constraints) geom.Size {
 	if sz, ok := v.Skip(cs); ok {
+		// Offset may have been written since the last layout; the clamp is
+		// part of this method's contract whether or not the child is
+		// re-laid, or a direct user could scroll past the end.
+		v.Offset = clamp(v.Offset, 0, v.MaxOffset())
 		return sz
 	}
 	inner := cs.Loosen()
