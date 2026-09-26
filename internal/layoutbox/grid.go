@@ -209,7 +209,15 @@ func (b *Grid) Layout(cs layout.Constraints) geom.Size {
 	cols := b.cols()
 	width := cs.Max.W
 	if !cs.BoundedW() {
-		width = cs.Min.W
+		// Nothing to divide into columns: shrink-wrap to the widest child's
+		// intrinsic width, as Wrap does. Taking cs.Min.W here gave every
+		// cell a width of zero inside a Row or a horizontal Scroll, and the
+		// grid vanished without a word.
+		var widest float32
+		for _, ch := range b.Children {
+			widest = max(widest, ch.Layout(layout.Unbounded()).W)
+		}
+		width = max(cs.Min.W, widest*float32(cols)+b.Spacing*float32(cols-1))
 	}
 	cellW := (width - b.Spacing*float32(cols-1)) / float32(cols)
 	if cellW < 0 {

@@ -110,9 +110,10 @@ func (f *Flex) Layout(cs layout.Constraints) geom.Size {
 	}
 
 	// Pass 2: flexed children split the remainder tightly.
+	var per float32
 	if totalFlex > 0 && boundedMain {
 		remaining := max0(maxMain - usedMain)
-		per := remaining / float32(totalFlex)
+		per = remaining / float32(totalFlex)
 		for _, c := range f.Children {
 			if c.Flex == 0 {
 				continue
@@ -126,6 +127,28 @@ func (f *Flex) Layout(cs layout.Constraints) geom.Size {
 			if cc := f.cross(s); cc > maxChildCross {
 				maxChildCross = cc
 			}
+		}
+	}
+
+	// Pass 3: with an unbounded cross axis there was nothing to stretch to
+	// until the children were measured. The flex's cross extent is the
+	// widest child, so re-lay the others tightly to it; otherwise a
+	// stretched Column inside a horizontal scroll silently degraded to
+	// layout.CrossStart, with children of different widths.
+	if f.CrossAlign == layout.CrossStretch && maxCross == layout.Inf {
+		usedMain = 0
+		for _, c := range f.Children {
+			s := c.Box.Size()
+			if f.cross(s) != maxChildCross {
+				ccs := layout.Constraints{Min: f.size(0, maxChildCross), Max: f.size(layout.Inf, maxChildCross)}
+				if c.Flex > 0 && boundedMain {
+					share := per * float32(c.Flex)
+					ccs.Min = f.size(share, maxChildCross)
+					ccs.Max = f.size(share, maxChildCross)
+				}
+				s = c.Box.Layout(ccs)
+			}
+			usedMain += f.main(s)
 		}
 	}
 
