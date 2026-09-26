@@ -51,11 +51,23 @@ func (c *Context) BackdropBlur(x, y, w, h, radius float64) {
 	blurPixmapRegion(pm.data, pm.width, pm.height, x0, y0, x1-x0, y1-y0, r)
 }
 
-// blurPixmapRegion applies a 3-pass separable box blur (a close, fast
-// approximation of a Gaussian) to the [x,y,w,h] region of a premultiplied-RGBA
-// pixmap. It reads neighbouring pixels up to the kernel radius — clamped to the
-// pixmap, and padded beyond the region — so the region's edges blend with the
-// surrounding backdrop instead of darkening.
+// backdropBlurPasses is how many box-blur passes approximate the Gaussian.
+// Each pass reads one radius further, so a blurred pixel depends on backdrop
+// up to backdropBlurPasses radii away — see BackdropBlurReach.
+const backdropBlurPasses = 3
+
+// BackdropBlurReach is how far, in the units of radius, a backdrop blur of
+// that radius reads from each pixel it writes. Anything that repaints the
+// backdrop within this distance of a blurred panel changes the panel, so
+// damage tracking has to repaint the panel too; taking the reach from here
+// keeps that in step with the kernel.
+func BackdropBlurReach(radius float64) float64 { return radius * backdropBlurPasses }
+
+// blurPixmapRegion applies a separable box blur of backdropBlurPasses passes
+// (a close, fast approximation of a Gaussian) to the [x,y,w,h] region of a
+// premultiplied-RGBA pixmap. It reads neighbouring pixels up to the kernel
+// radius — clamped to the pixmap, and padded beyond the region — so the
+// region's edges blend with the surrounding backdrop instead of darkening.
 func blurPixmapRegion(data []uint8, W, H, x, y, w, h, radius int) {
 	if radius < 1 {
 		return
@@ -65,9 +77,9 @@ func blurPixmapRegion(data []uint8, W, H, x, y, w, h, radius int) {
 	if x1 <= x0 || y1 <= y0 {
 		return
 	}
-	// Working buffer: the region padded by 3*radius (enough for three box
-	// passes), clamped to the pixmap, so edge pixels average real backdrop.
-	pad := radius * 3
+	// Working buffer: the region padded by the kernel's reach (one radius per
+	// pass), clamped to the pixmap, so edge pixels average real backdrop.
+	pad := radius * backdropBlurPasses
 	bx0, by0 := blurClamp(x0-pad, 0, W), blurClamp(y0-pad, 0, H)
 	bx1, by1 := blurClamp(x1+pad, 0, W), blurClamp(y1+pad, 0, H)
 	bw, bh := bx1-bx0, by1-by0
@@ -77,7 +89,7 @@ func blurPixmapRegion(data []uint8, W, H, x, y, w, h, radius int) {
 		copy(buf[row*bw*4:(row+1)*bw*4], data[src:src+bw*4])
 	}
 	tmp := make([]uint8, len(buf))
-	for i := 0; i < 3; i++ {
+	for range backdropBlurPasses {
 		boxBlurH(buf, tmp, bw, bh, radius)
 		buf, tmp = tmp, buf
 		boxBlurV(buf, tmp, bw, bh, radius)

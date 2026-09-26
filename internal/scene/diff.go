@@ -1,7 +1,10 @@
 package scene
 
 import (
+	"math"
+
 	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/internal/gfx/gg"
 	"github.com/doug/gophics/paint"
 )
 
@@ -44,11 +47,11 @@ func (l *List) Diff(prev *List, m Measurer) (geom.Rect, bool) {
 
 	// A backdrop blur later in the frame reads what was painted under it, so
 	// a change beneath one reaches further than its own bounds: the blur
-	// spreads it by the radius, and a partial replay would blur the stale,
-	// already-tinted pixels outside the damage clip back into the panel. Any
-	// blur whose sampling footprint (its rect grown by the radius) a change
-	// touches is repainted whole. Blurs in the common prefix precede every
-	// change and cannot be affected.
+	// spreads it by the kernel's reach, and a partial replay would blur the
+	// stale, already-tinted pixels outside the damage clip back into the
+	// panel. Any blur whose sampling footprint (its rect grown by that reach)
+	// a change touches is repainted whole. Blurs in the common prefix precede
+	// every change and cannot be affected.
 	blurs := blursFrom(b, i)
 
 	var damage geom.Rect
@@ -93,7 +96,7 @@ type blurSet []blurRef
 type blurRef struct {
 	idx       int       // position in the current list
 	rect      geom.Rect // the blurred panel
-	footprint geom.Rect // rect grown by the radius: what the blur samples
+	footprint geom.Rect // rect grown by the kernel's reach: what the blur samples
 	dirty     bool      // something it samples changed
 }
 
@@ -102,7 +105,12 @@ func blursFrom(ops []op, from int) blurSet {
 	var s blurSet
 	for k := from; k < len(ops); k++ {
 		if o := &ops[k]; o.kind == opBackdropBlur {
-			g := o.f1 + 1
+			// The CPU blur is several box passes of the radius, so a panel
+			// pixel depends on backdrop well beyond one radius; growing by
+			// the radius alone left a change between one and three radii
+			// out repainted on its own, with the panel keeping a blur of the
+			// old colour. The reach comes from gg so the two cannot drift.
+			g := float32(gg.BackdropBlurReach(float64(o.f1))) + 1
 			s = append(s, blurRef{idx: k, rect: o.r, footprint: geom.Rect{
 				Min: geom.Pt{X: o.r.Min.X - g, Y: o.r.Min.Y - g},
 				Max: geom.Pt{X: o.r.Max.X + g, Y: o.r.Max.Y + g},
@@ -268,7 +276,7 @@ func opBounds(o *op, m Measurer) geom.Rect {
 		}
 		return inflate(r, o.f1)
 	case opSprite:
-		return o.sprite.Dst
+		return spriteBounds(o.sprite)
 	case opMarks:
 		return inflate(o.r, 1) // recorded bounds; +1px for edge AA
 	case opFillPath:
@@ -293,6 +301,26 @@ func opBounds(o *op, m Measurer) geom.Rect {
 		return inflate(r, 2)
 	}
 	return geom.Rect{}
+}
+
+// spriteBounds is where a sprite paints. DrawSprite rotates about Dst's
+// centre, so a rotated sprite's corners lie outside Dst: its bounds are the
+// axis-aligned box of the rotated rectangle, plus an AA pixel. Damage taken
+// from Dst alone left the corners stale on a partial replay, and ReplayDamage
+// could cull the sprite entirely.
+func spriteBounds(s paint.Sprite) geom.Rect {
+	if s.Rotation == 0 {
+		return s.Dst
+	}
+	c := float32(math.Abs(math.Cos(float64(s.Rotation))))
+	sn := float32(math.Abs(math.Sin(float64(s.Rotation))))
+	hw, hh := s.Dst.Dx()/2, s.Dst.Dy()/2
+	rw, rh := hw*c+hh*sn, hw*sn+hh*c
+	cx, cy := s.Dst.Min.X+hw, s.Dst.Min.Y+hh
+	return inflate(geom.Rect{
+		Min: geom.Pt{X: cx - rw, Y: cy - rh},
+		Max: geom.Pt{X: cx + rw, Y: cy + rh},
+	}, 0)
 }
 
 // inflate grows r by half the stroke width plus an AA pixel on every side.

@@ -46,8 +46,8 @@ func TestDiffChangeUnderBackdropBlurDamagesThePanel(t *testing.T) {
 		t.Fatalf("damage for a change above the blur = %v, want just %v", damage, content)
 	}
 
-	// A change outside the blur's reach (further than the radius from the
-	// panel) leaves the panel alone.
+	// A change outside the blur's reach (further than the kernel reads from
+	// the panel) leaves the panel alone.
 	far := geom.RectXYWH(300, 300, 10, 10)
 	farOff := func(c paint.Canvas, col paint.Color) {
 		c.FillRect(far, col)
