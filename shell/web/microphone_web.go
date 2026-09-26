@@ -88,16 +88,13 @@ func (m *webMicrophone) Record(_ shell.RecordOptions, done func(shell.Recorder, 
 	if done == nil {
 		return // result-only: recording without the Recorder handle leaks a live mic
 	}
-	promise := mediaDevices().Call("getUserMedia", map[string]any{"audio": true})
-	go func() {
-		stream, err := await(promise)
+	requestStream(map[string]any{"audio": true}, func(stream js.Value, err error) {
 		if err != nil {
 			done(nil, err)
 			return
 		}
-		r := newWebRecorder(stream)
-		done(r, nil)
-	}()
+		done(newWebRecorder(stream), nil)
+	})
 }
 
 func (m *webMicrophone) Listen(done func(shell.Monitor, error)) {
