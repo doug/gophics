@@ -916,15 +916,31 @@ func checkIOSPermissions(o buildOpts, host string) error {
 	if len(missing) == 0 {
 		return nil
 	}
+	return errors.New(missingUsageMessage(plist, filepath.Join(host, "project.yml"), missing))
+}
+
+// missingUsageMessage says where to add the keys, which depends on who owns
+// the plist. With a project.yml, xcodegen rewrites Info.plist from it on
+// every run, so a key added to the plist — what the message used to ask for
+// — is gone by the next `gophics run`, and the same error prints again with
+// nothing to say why.
+func missingUsageMessage(plist, projectYML string, missing []capscan.MissingIOSKey) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s is missing usage descriptions iOS requires:\n", plist)
 	for _, m := range missing {
 		fmt.Fprintf(&b, "  %s — needed by %s\n", m.Key, strings.Join(m.Capabilities, ", "))
 	}
-	b.WriteString("\nAdd each as a <key>/<string> pair saying why the app needs it.\n")
+	if fileExists(projectYML) {
+		fmt.Fprintf(&b, "\nAdd each under targets.<name>.info.properties in %s, as\n", projectYML)
+		b.WriteString("  NSxxxUsageDescription: \"why the app needs it\"\n")
+		b.WriteString("not in Info.plist: xcodegen regenerates that file from project.yml on every run,\n")
+		b.WriteString("so a key added there is gone by the next one.\n")
+	} else {
+		b.WriteString("\nAdd each as a <key>/<string> pair saying why the app needs it.\n")
+	}
 	b.WriteString("The text is shown to the user in the permission prompt and read at App Review,\n")
 	b.WriteString("so it cannot be generated.")
-	return errors.New(b.String())
+	return b.String()
 }
 
 // iosDevice is a paired device's two identities. They are not the same value
