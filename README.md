@@ -156,13 +156,13 @@ ssh -p 2222 localhost          # needs a PTY; -T is refused with a hint
 Layered like a modern UI pipeline, as Go packages (arrows point down):
 
 ```
-widget   Widget/Element trees, State, keys, focus, reconciler
-gesture  hit testing, pointer routing, arena         anim  tickers, curves, controllers
+widget   Widget/Element trees, State, keys, focus, reconciler, gestures (hit testing, pointer routing)
+theme    design tokens & styled components (opt-in)          anim   tickers, curves, controllers
 ──────────────────────────────────────────────────────────────────────────────────────
 layout   RenderObject protocol — constraints down, sizes up; flex/stack/padding/viewport
 ──────────────────────────────────────────────────────────────────────────────────────
-scene    retained display lists, damage tracking     paint  Canvas, paths, gradients, layers
-text     shaping · bidi · line-breaking (go-text)     geom   points, rects, rrects, affine
+internal/scene   retained display lists, damage tracking     paint  Canvas, paths, gradients, layers
+text     shaping · bidi · line-breaking (go-text)             geom   points, rects, rrects, affine
 ──────────────────────────────────────────────────────────────────────────────────────
 app      the runtime (app.Run · app.Headless)         shell  per-platform window/input/present
 internal/gfx   the vendored pure-Go WebGPU + shader + 2D-renderer substrate (zero CGo)
