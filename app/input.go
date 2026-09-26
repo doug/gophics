@@ -114,23 +114,29 @@ type hitInteractive struct {
 }
 
 // Semantics returns the semantics tree of the current layout (a11y
-// foundation). Call after a frame (or Headless.Render).
+// foundation). Pending rebuilds are flushed and laid out first, so the tree
+// is current between an event and its frame too.
 func (c *core) Semantics() []layout.SemNode {
-	box := c.Owner.RootBox()
+	box := c.currentBox()
 	if box == nil {
 		return nil
 	}
 	return layout.CollectSemantics(box)
 }
 
-// interactivesAt returns the gesture targets under p, topmost first.
-// Pending rebuilds are flushed AND laid out first: hit geometry (child
-// offsets, sizes) is only valid after layout, and events can arrive
-// between a state change and its frame. When nothing is pending and the
-// size is unchanged the layout pass is skipped outright — a pointer move
-// over a clean tree costs a hit test, not a layout walk. The returned
-// slice is scratch reused across calls; callers must not retain it.
-func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
+// currentBox returns the root box with pending rebuilds flushed AND laid
+// out, for the readers that run between frames: a pointer event's hit test
+// and a screen reader's pull of the semantics tree. Both need geometry
+// (child offsets, sizes), which is only valid after layout, and both can
+// arrive between a state change and its frame. RootBox alone flushes without
+// laying out — a Flex visits no children it has not yet placed, so a tree
+// read that way was missing the content the build had just added, and the
+// flush had consumed the dirty set, so the frame did not build it again.
+// The flush is recorded in built so that frame republishes what the build
+// changed even when no pixel did. When nothing is pending and the size is
+// unchanged the layout pass is skipped outright — a pointer move over a
+// clean tree costs a hit test, not a layout walk.
+func (c *core) currentBox() layout.Box {
 	needsLayout := c.Owner.NeedsBuild() // check before RootBox flushes builds
 	if needsLayout {
 		c.built = true
@@ -142,6 +148,17 @@ func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
 	if !c.size.IsEmpty() && (needsLayout || c.size != c.lastLayout) {
 		box.Layout(layout.Tight(c.size))
 		c.lastLayout = c.size
+	}
+	return box
+}
+
+// interactivesAt returns the gesture targets under p, topmost first, in the
+// laid-out current tree (see currentBox). The returned slice is scratch
+// reused across calls; callers must not retain it.
+func (c *core) interactivesAt(p geom.Pt) []hitInteractive {
+	box := c.currentBox()
+	if box == nil {
+		return nil
 	}
 	c.hits = c.hits[:0]
 	for _, h := range layout.HitTest(box, p) {

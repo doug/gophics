@@ -29,8 +29,10 @@ type a11yTree struct {
 }
 
 // A11yTree flattens the current semantics tree into ID-addressed nodes at
-// the given device scale (physical px). Call after a frame. The activation
-// callbacks are retained so A11yActivate can invoke them.
+// the given device scale (physical px). A bridge may pull it on its own
+// schedule, between an event and its frame included: pending rebuilds are
+// flushed and laid out first (see core.Semantics). The activation callbacks
+// are retained so A11yActivate can invoke them.
 func (c *core) A11yTree(scale float32) []A11yNode {
 	t := &a11yTree{byID: map[int]int{}, actions: map[int]func(){}}
 	sem := c.Semantics()

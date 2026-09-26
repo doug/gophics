@@ -298,7 +298,9 @@ func (h *Headless) Owner() *widget.Owner { return h.core.Owner }
 // the frame just recorded is the one now called previous.
 func (h *Headless) Scene() *scene.List { return h.core.prev }
 
-// Semantics returns the flattened accessibility tree for assertions.
+// Semantics returns the semantics tree for assertions. Pending rebuilds are
+// flushed and laid out first, so it is current after an event as well as
+// after a Render.
 func (h *Headless) Semantics() []layout.SemNode { return h.core.Semantics() }
 
 // Press dispatches pointer-down at p without releasing — for testing
