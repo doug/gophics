@@ -65,6 +65,11 @@ func (b *RichBox) fullText() string {
 	return sb.String()
 }
 
+// isBreakRune reports the runes the wrapper may leave at the end of a line
+// and which must not be shown as part of it — the same set paint.WrapTextIn
+// trims.
+func isBreakRune(r rune) bool { return r == ' ' || r == '\n' || r == '\r' }
+
 // spanAt maps a rune index of the full text to its span index, using the
 // cumulative rune counts hoisted into spanEnds by Layout.
 func (b *RichBox) spanAt(idx int) int {
@@ -135,10 +140,20 @@ func (b *RichBox) Layout(cs layout.Constraints) geom.Size {
 		// Split the line's rune range at span boundaries; x advances by the
 		// cumulative width of prior segments, each measured in its own font.
 		a := line.Start
+		// The wrapper leaves the break runes it broke at on the line's end —
+		// the space, or the \r of a CRLF — and they are not part of what the
+		// line shows: a segment measured with its trailing space over-reports
+		// the paragraph's width past maxW and runs a link's underline under
+		// the gap, and a \r shapes as a visible glyph. Trim them, as
+		// WrapTextIn does for plain text.
+		lineEnd := line.End
+		for lineEnd > a && isBreakRune(runes[lineEnd-1]) {
+			lineEnd--
+		}
 		var x float32
-		for a < line.End {
+		for a < lineEnd {
 			span := b.spanAt(a)
-			end := line.End
+			end := lineEnd
 			// clip the segment to where this span ends
 			if spanEnd := b.spanEnds[span]; spanEnd < end {
 				end = spanEnd
