@@ -85,7 +85,7 @@ func TestPointerCancelEndsGestureWithoutMovingPointer(t *testing.T) {
 	if n.drag == 0 {
 		t.Fatal("drag never started")
 	}
-	h.core.Pointer(shell.Pointer{Kind: shell.PointerCancel, Source: shell.SourceTouch})
+	h.TouchCancel()
 	if n.release != 1 || n.pressEnd != 1 {
 		t.Errorf("after cancel: release=%d pressEnd=%d, want 1 and 1", n.release, n.pressEnd)
 	}
@@ -112,7 +112,7 @@ func TestPointerCancelEndsGestureWithoutMovingPointer(t *testing.T) {
 func TestPointerCancelDropsTheTap(t *testing.T) {
 	h, n := newDraggable(t)
 	h.Press(geom.Pt{X: 50, Y: 50})
-	h.core.Pointer(shell.Pointer{Kind: shell.PointerCancel})
+	h.Cancel()
 	if n.tap != 0 || n.pressEnd != 1 {
 		t.Errorf("tap=%d pressEnd=%d after a cancelled press, want 0 and 1", n.tap, n.pressEnd)
 	}

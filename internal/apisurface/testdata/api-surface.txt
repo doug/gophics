@@ -52,6 +52,7 @@ app.FrameSummary.WorstBlurs field
 app.FrameSummary.WorstMade field
 app.FrameSummary.WorstOps field
 app.Headless type
+app.Headless.Cancel method
 app.Headless.Clipboard method
 app.Headless.CommitComposition method
 app.Headless.Compose method
@@ -78,6 +79,7 @@ app.Headless.SetSafeInsets method
 app.Headless.Skipped method
 app.Headless.Step method
 app.Headless.Tap method
+app.Headless.TouchCancel method
 app.Headless.TouchDrag method
 app.Headless.TouchMove method
 app.Headless.TouchPress method
@@ -108,6 +110,7 @@ apptest.App type
 apptest.App.AssertLabel method
 apptest.App.AssertNoLabel method
 apptest.App.AssertText method
+apptest.App.Cancel method
 apptest.App.Clipboard method
 apptest.App.CommitComposition method
 apptest.App.Compose method
@@ -147,6 +150,7 @@ apptest.App.Step method
 apptest.App.Tap method
 apptest.App.TapLabel method
 apptest.App.TapText method
+apptest.App.TouchCancel method
 apptest.App.TouchDrag method
 apptest.App.TouchMove method
 apptest.App.TouchPress method

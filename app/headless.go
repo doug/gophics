@@ -317,6 +317,20 @@ func (h *Headless) Release(p geom.Pt) {
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
+// Cancel dispatches a pointer cancel: the platform took the pointer away
+// mid-gesture, as a browser does for a scroll it claims and a phone for a
+// system gesture (see shell.PointerCancel). The live press or drag ends
+// without a tap, and the pointer stays where it was — there is no position
+// to move it to.
+func (h *Headless) Cancel() {
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerCancel})
+}
+
+// TouchCancel is Cancel from a touch device.
+func (h *Headless) TouchCancel() {
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerCancel, Source: shell.SourceTouch})
+}
+
 // layoutForInput ensures hit testing sees current sizes even before the
 // first Render.
 func (h *Headless) layoutForInput() {
