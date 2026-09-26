@@ -21,6 +21,13 @@ import (
 // (its channel is the reader/writer, the pty-req carries the size, window-change
 // messages drive Resize) and call RunTTY — see the package doc.
 //
+// Stdin is read on a goroutine that stays parked in its blocking Read after
+// Run returns (see localTTY), so the first chunk typed after the app exits is
+// consumed by it and dropped: a prompt that reads stdin next in the same
+// process, or a second Run, misses that one keystroke. A program that reads
+// stdin after Run should expect it; exiting the process, the usual case,
+// never notices.
+//
 // Building any gophics app with -tags gophics_term routes app.Run here.
 func Run(h shell.Handler, cfg shell.Config) (err error) {
 	inFD := int(os.Stdin.Fd())
