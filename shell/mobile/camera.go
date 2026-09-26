@@ -240,13 +240,19 @@ func (b *Bridge) DeliverPreviewReady(reqID int) {
 	b.prevMu.Lock()
 	done := b.prevCb[reqID]
 	delete(b.prevCb, reqID)
+	if done == nil {
+		// A late or duplicate Ready — the app already stopped, or the id was
+		// never issued. Registering a preview here would keep a live-camera
+		// handle nobody owns and accept its frames forever; the monitor path
+		// declines the same way.
+		b.prevMu.Unlock()
+		return
+	}
 	p := &mobilePreview{b: b, id: reqID}
 	b.previews[reqID] = p
 	b.prevMu.Unlock()
 
-	if done != nil {
-		done(p, nil)
-	}
+	done(p, nil)
 }
 
 // FailPreview reports that the camera could not be opened. Call on the host's

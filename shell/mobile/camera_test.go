@@ -52,6 +52,37 @@ func TestCameraPreviewNilWithoutAHost(t *testing.T) {
 	}
 }
 
+// A Ready with nothing waiting for it — an id Go never issued, or one the app
+// already stopped — must not register a preview: that would be a live-camera
+// handle nobody owns, accepting frames for the life of the process.
+func TestPreviewReadyWithoutARequestRegistersNothing(t *testing.T) {
+	b, host := newPreviewBridge(t)
+
+	b.DeliverPreviewReady(42)
+	b.prevMu.Lock()
+	n := len(b.previews)
+	b.prevMu.Unlock()
+	if n != 0 {
+		t.Fatalf("an unrequested Ready registered %d preview(s)", n)
+	}
+
+	// The same shape after a real request has been torn down.
+	var frames shell.Frames
+	b.CameraPreview().Start(shell.PreviewOptions{}, func(f shell.Frames, _ error) { frames = f })
+	host.mu.Lock()
+	id := host.started[0]
+	host.mu.Unlock()
+	b.DeliverPreviewReady(id)
+	frames.Stop()
+	b.DeliverPreviewReady(id) // duplicate
+	b.prevMu.Lock()
+	n = len(b.previews)
+	b.prevMu.Unlock()
+	if n != 0 {
+		t.Errorf("a duplicate Ready after Stop registered %d preview(s)", n)
+	}
+}
+
 // The whole path: start, frames arrive, Frame returns the newest.
 func TestPreviewDeliversFrames(t *testing.T) {
 	b, host := newPreviewBridge(t)
