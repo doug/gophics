@@ -80,7 +80,9 @@ type CaptureOptions struct {
 type Camera interface {
 	// Authorize requests capture permission, reporting the outcome.
 	Authorize(func(Permission))
-	// Capture takes one still photo; on success img is a decoded image.
+	// Capture takes one still photo; on success img is a decoded image. A
+	// capture the user dismissed reports (nil, nil), like FilePicker.Open —
+	// backing out of the camera is a choice, not a failure.
 	Capture(CaptureOptions, func(img image.Image, err error))
 }
 

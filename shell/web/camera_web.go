@@ -12,7 +12,6 @@ package web
 
 import (
 	"bytes"
-	"errors"
 	"image"
 	_ "image/jpeg" // register decoders for captured photos
 	_ "image/png"
@@ -74,7 +73,7 @@ func (c *webCamera) Capture(opts shell.CaptureOptions, done func(image.Image, er
 		files := input.Get("files")
 		if files.Length() == 0 {
 			release()
-			done(nil, errors.New("no photo selected"))
+			done(nil, nil) // nothing chosen: a dismissal, as the file picker reports it
 			return nil
 		}
 		file := files.Index(0)
@@ -93,9 +92,11 @@ func (c *webCamera) Capture(opts shell.CaptureOptions, done func(image.Image, er
 	})
 	// A dismissed chooser fires `cancel`; without listening for it each
 	// cancelled capture leaked its callback and never answered the caller.
+	// It answers (nil, nil): the same hidden-input idiom in filepicker_web.go
+	// reports a dismissal that way, and a dismissal is a choice, not a fault.
 	onCancel = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		release()
-		done(nil, errors.New("no photo selected"))
+		done(nil, nil)
 		return nil
 	})
 	input.Call("addEventListener", "change", onChange)
