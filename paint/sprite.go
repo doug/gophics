@@ -70,25 +70,38 @@ func (p *Painter) tinted(atlas image.Image, src image.Rectangle, tint Color) *gg
 			evictHalf(p.tintBufs)
 		}
 	}
+	buf := gg.ImageBufFromImage(tintPixels(atlas, src, key))
+	if cache {
+		p.tintBufs[key] = buf
+	}
+	return buf
+}
+
+// tintPixels multiplies the src region of atlas by the quantized tint in key,
+// returning a premultiplied image.
+func tintPixels(atlas image.Image, src image.Rectangle, key tintKey) *image.RGBA {
 	tr, tg, tb, ta := unq4(key.r), unq4(key.g), unq4(key.b), unq4(key.a)
 	w, h := src.Dx(), src.Dy()
 	out := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := range h {
 		for x := range w {
-			r, g, b, a := atlas.At(src.Min.X+x, src.Min.Y+y).RGBA() // 16-bit, straight
+			// RGBA() is 16-bit and alpha-premultiplied (the color.Color
+			// contract), and *image.RGBA is premultiplied too, so the output
+			// must stay premultiplied: a tint alpha scales every channel, not
+			// just A. Scaling only A leaves RGB above A, which the CPU blit
+			// clamps away but the GPU uploads verbatim and blends as
+			// source-over — a half-transparent tinted sprite drew fully
+			// opaque there.
+			r, g, b, a := atlas.At(src.Min.X+x, src.Min.Y+y).RGBA()
 			out.SetRGBA(x, y, color.RGBA{
-				R: mul8(uint8(r>>8), tr),
-				G: mul8(uint8(g>>8), tg),
-				B: mul8(uint8(b>>8), tb),
+				R: mul8(uint8(r>>8), tr*ta),
+				G: mul8(uint8(g>>8), tg*ta),
+				B: mul8(uint8(b>>8), tb*ta),
 				A: mul8(uint8(a>>8), ta),
 			})
 		}
 	}
-	buf := gg.ImageBufFromImage(out)
-	if cache {
-		p.tintBufs[key] = buf
-	}
-	return buf
+	return out
 }
 
 // unq4 maps a 4-bit channel back to the factor tinted multiplies by.

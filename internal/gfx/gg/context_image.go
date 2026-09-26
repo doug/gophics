@@ -2,6 +2,7 @@ package gg
 
 import (
 	"image"
+	"math"
 
 	intImage "github.com/doug/gophics/internal/gfx/gg/internal/image"
 	"github.com/doug/gophics/internal/gfx/gpucontext"
@@ -587,13 +588,7 @@ func (p *ImagePattern) ColorAt(x, y float64) RGBA {
 		}
 		ix += p.x
 		iy += p.y
-		r, g, b, a := p.image.GetRGBA(ix, iy)
-		col := RGBA{
-			R: float64(r) / 255.0,
-			G: float64(g) / 255.0,
-			B: float64(b) / 255.0,
-			A: float64(a) / 255.0,
-		}
+		col := sampleStraight(p.image, ix, iy)
 		if p.opacity > 0 && p.opacity < 1.0 {
 			col.A *= p.opacity
 		}
@@ -615,15 +610,31 @@ func (p *ImagePattern) ColorAt(x, y float64) RGBA {
 	py += p.y
 
 	// Sample the image.
-	r, g, b, a := p.image.GetRGBA(px, py)
+	col := sampleStraight(p.image, px, py)
+	if p.opacity > 0 && p.opacity < 1.0 {
+		col.A *= p.opacity
+	}
+	return col
+}
+
+// sampleStraight returns the pixel at (x, y) as a straight-alpha RGBA, which
+// is what the fill pipeline composites (RGBA.RGBA premultiplies on the way
+// out). A premultiplied buffer — every *image.RGBA, see FromStdImage — has to
+// be un-premultiplied here; reading its bytes as straight colour multiplied
+// them by alpha a second time, so a half-transparent pixel composited at a
+// quarter on the CPU while the GPU textured-quad path drew it correctly.
+func sampleStraight(img *ImageBuf, x, y int) RGBA {
+	r, g, b, a := img.GetRGBA(x, y)
 	col := RGBA{
 		R: float64(r) / 255.0,
 		G: float64(g) / 255.0,
 		B: float64(b) / 255.0,
 		A: float64(a) / 255.0,
 	}
-	if p.opacity > 0 && p.opacity < 1.0 {
-		col.A *= p.opacity
+	if a > 0 && a < 255 && img.Format().IsPremultiplied() {
+		col.R = math.Min(col.R/col.A, 1)
+		col.G = math.Min(col.G/col.A, 1)
+		col.B = math.Min(col.B/col.A, 1)
 	}
 	return col
 }
