@@ -24,7 +24,13 @@ type mobileConnectivity struct{ b *Bridge }
 
 func (c mobileConnectivity) Online() bool { return c.b.online }
 
+// The nil guards on the three subscriptions below are load-bearing: the host
+// pushes on its UI thread, and a nil in the list would be dereferenced there.
+
 func (c mobileConnectivity) OnChange(fn func(online bool)) {
+	if fn == nil {
+		return
+	}
 	c.b.netSubs = append(c.b.netSubs, fn)
 }
 
@@ -61,6 +67,9 @@ type mobileBattery struct{ b *Bridge }
 func (m mobileBattery) Level() float32 { return m.b.batLevel }
 func (m mobileBattery) Charging() bool { return m.b.batCharging }
 func (m mobileBattery) OnChange(fn func()) {
+	if fn == nil {
+		return
+	}
 	m.b.batSubs = append(m.b.batSubs, fn)
 }
 
@@ -101,6 +110,9 @@ type mobileLinks struct{ b *Bridge }
 func (l mobileLinks) Initial() string { return l.b.initialLink }
 
 func (l mobileLinks) OnLink(fn func(url string)) {
+	if fn == nil {
+		return
+	}
 	l.b.linkSubs = append(l.b.linkSubs, fn)
 }
 

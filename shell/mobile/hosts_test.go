@@ -206,6 +206,16 @@ func TestNilCallbacksAreNoOps(t *testing.T) {
 			func(b *Bridge) { b.Biometric().Authenticate("why", false, nil) }},
 		{"Notifier.Authorize", false, false, false,
 			func(b *Bridge) { b.Notifier().Authorize(nil) }},
+		// The push-style subscriptions: a nil that gets appended is
+		// dereferenced on the host's next push, on its UI thread.
+		{"Connectivity.OnChange then a reachability flip", false, false, false,
+			func(b *Bridge) { b.SetOnline(true); b.Connectivity().OnChange(nil); b.SetOnline(false) }},
+		{"Battery.OnChange then a level change", false, false, false,
+			func(b *Bridge) { b.SetBattery(0.5, false); b.Battery().OnChange(nil); b.SetBattery(0.4, false) }},
+		{"Links.OnLink then a delivered link", false, false, false,
+			func(b *Bridge) { b.Links().OnLink(nil); b.DeliverLink("https://example.com/x") }},
+		{"Lifecycle.OnChange then a state change", false, false, false,
+			func(b *Bridge) { b.Lifecycle().OnChange(nil); b.SetAppState(int(shell.StateBackground)) }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
