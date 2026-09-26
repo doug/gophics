@@ -21,7 +21,7 @@ func line10(n int) Line {
 func rtlLine10(n int) Line {
 	gs := make([]Glyph, n)
 	for i := range gs {
-		gs[i] = Glyph{Cluster: n - 1 - i, X: float32(i) * 10, Advance: 10}
+		gs[i] = Glyph{Cluster: n - 1 - i, X: float32(i) * 10, Advance: 10, RTL: true}
 	}
 	return Line{Glyphs: gs, Start: 0, End: n, Width: float32(n) * 10, RTL: true}
 }

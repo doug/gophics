@@ -33,16 +33,16 @@ func TestCaretXTrailingEdge(t *testing.T) {
 }
 
 // A bidi line mixes runs, and each glyph's direction has to be read from its
-// visual neighbours rather than from the line's base direction.
+// own run rather than from the line's base direction.
 func TestCaretXMixedRuns(t *testing.T) {
 	// "ab" LTR then an RTL run of clusters 4,3,2 laid out left to right.
 	l := Line{
 		Glyphs: []Glyph{
 			{Cluster: 0, X: 0, Advance: 10},
 			{Cluster: 1, X: 10, Advance: 10},
-			{Cluster: 4, X: 20, Advance: 10},
-			{Cluster: 3, X: 30, Advance: 10},
-			{Cluster: 2, X: 40, Advance: 10},
+			{Cluster: 4, X: 20, Advance: 10, RTL: true},
+			{Cluster: 3, X: 30, Advance: 10, RTL: true},
+			{Cluster: 2, X: 40, Advance: 10, RTL: true},
 		},
 		Width: 50, End: 5,
 	}

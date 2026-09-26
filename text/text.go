@@ -166,6 +166,11 @@ type Glyph struct {
 	X, Y float32
 	// Advance is the pen advance contributed by this glyph.
 	Advance float32
+	// RTL reports that the glyph's run reads right to left, which decides
+	// which edge the caret "before" its cluster sits on (see CaretX). It is
+	// recorded here rather than inferred from neighbouring clusters because
+	// a run of one glyph has no neighbours to infer from.
+	RTL bool
 }
 
 // Line is one shaped, positioned line of text.
@@ -489,6 +494,7 @@ func (s *Shaper) assemble(runs []shaping.Output, runeOffset int, base di.Directi
 	var pen float32
 	for _, run := range visual {
 		f := s.fontFor(run.Face)
+		rtl := run.Direction == di.DirectionRTL
 		for _, g := range run.Glyphs {
 			l.Glyphs = append(l.Glyphs, Glyph{
 				Font:    f,
@@ -497,6 +503,7 @@ func (s *Shaper) assemble(runs []shaping.Output, runeOffset int, base di.Directi
 				X:       pen + unfx(g.XOffset),
 				Y:       -unfx(g.YOffset),
 				Advance: unfx(g.Advance),
+				RTL:     rtl,
 			})
 			pen += unfx(g.Advance)
 		}

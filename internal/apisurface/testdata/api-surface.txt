@@ -1373,6 +1373,7 @@ text.Glyph.Advance field
 text.Glyph.Cluster field
 text.Glyph.Font field
 text.Glyph.GID field
+text.Glyph.RTL field
 text.Glyph.X field
 text.Glyph.Y field
 text.Line type
