@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -662,6 +663,36 @@ func TestWallKeepsTheCaptureClock(t *testing.T) {
 	}
 	if age := now - snap[1].At; age < 0 || age > 5_000 {
 		t.Errorf("newest span is %d ms old; the Age clock should have been rebased to now", age)
+	}
+}
+
+// TestReplaceOrdersASaturatedCapture: a span older than 24.8 days decodes with
+// At saturated at MinInt32, and the sort comparator used to subtract, which
+// overflows for exactly that value. The capture then sorted wrong, the real
+// newest span was not the one rebased to 0, and the Time column shifted with it.
+func TestReplaceOrdersASaturatedCapture(t *testing.T) {
+	newest := time.Unix(1700000000, 0)
+	c := Capture{Newest: newest, Spans: []Span{
+		{At: math.MinInt32, Dur: 1},
+		{At: 0, Dur: 1},
+		{At: -5000, Dur: 1},
+	}}
+	store := NewStore(1)
+	store.Replace(c, "saturated")
+	snap, _ := store.Snapshot(nil)
+	if len(snap) != 3 {
+		t.Fatalf("stored %d spans, want 3", len(snap))
+	}
+	for i := 1; i < len(snap); i++ {
+		if snap[i].At < snap[i-1].At {
+			t.Fatalf("loaded window isn't time-ordered: %d %d %d", snap[0].At, snap[1].At, snap[2].At)
+		}
+	}
+	if last := snap[2].At; last != 0 {
+		t.Errorf("newest span is at %d ms; the real newest should have been rebased to 0", last)
+	}
+	if got := store.Wall(snap[2].At); !got.Equal(newest) {
+		t.Errorf("newest span's wall time is %v, want the capture's %v", got, newest)
 	}
 }
 

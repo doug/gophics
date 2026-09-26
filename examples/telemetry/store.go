@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"math"
 	"math/rand"
 	"slices"
@@ -233,7 +234,11 @@ func (s *Store) Replace(c Capture, source string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	spans := c.Spans
-	slices.SortFunc(spans, func(a, b Span) int { return int(a.At - b.At) })
+	// cmp.Compare rather than int(a.At - b.At): the subtraction overflows for
+	// the saturated MinInt32 that DecodeOTLP gives a span older than 24.8
+	// days, which sorted such a capture wrong and rebased its real newest
+	// span into the future.
+	slices.SortFunc(spans, func(a, b Span) int { return cmp.Compare(a.At, b.At) })
 	if len(spans) > Window {
 		spans = spans[len(spans)-Window:]
 	}
