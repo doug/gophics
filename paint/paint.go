@@ -995,16 +995,28 @@ func (p *Painter) ImageChanged(img image.Image) {
 		return
 	}
 	delete(p.imgBufs, img)
+	// Tinted sprites are cached apart from the plain image, keyed by the same
+	// atlas; a tinted copy left behind draws the pixels the atlas held before
+	// the rewrite.
+	for k := range p.tintBufs {
+		if k.atlas == img {
+			delete(p.tintBufs, k)
+		}
+	}
 }
 
 // cacheable reports whether img can key a texture cache. The caches are maps
 // keyed by the image value, and a map lookup with an interface key whose
-// dynamic type is not comparable — a struct-typed image holding a slice —
+// dynamic value is not comparable — a struct-typed image holding a slice —
 // panics. Canvas.Image promises such images draw without one, so they draw
 // uncached instead: they are rare, and scene diffing already treats them as
 // changed every frame, so there was nothing to reuse anyway.
+//
+// The check is on the value, not the type: a struct with an interface field
+// has a comparable type whatever the field holds, and the map panics on the
+// slice-backed image inside it all the same.
 func cacheable(img image.Image) bool {
-	return reflect.TypeOf(img).Comparable()
+	return reflect.ValueOf(img).Comparable()
 }
 
 // imgBuf returns the cached gg texture for img (shared by Image and

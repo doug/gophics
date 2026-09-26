@@ -152,3 +152,54 @@ func TestImageChangedIsNilSafe(t *testing.T) {
 	p.ImageChanged(nil)
 	NewPainter().ImageChanged(nil)
 }
+
+// A tinted sprite is cached separately from the plain image, keyed by the
+// same atlas, so ImageChanged has to drop those copies too — or a tinted
+// sprite keeps drawing the pixels the atlas held before the rewrite.
+func TestImageChangedRefreshesTintedSprites(t *testing.T) {
+	p := NewPainter()
+	atlas := whiteAtlas(4, 4)
+	tint := Sprite{Tint: Color{R: 1, G: 1, B: 1, A: 1}}
+	if px := spriteCentre(p, atlas, tint); px.R < 200 || px.G < 200 {
+		t.Fatalf("first draw = %v, want white; the rest of this test would prove nothing", px)
+	}
+	fill(atlas, color.RGBA{R: 255, A: 255})
+	if px := spriteCentre(p, atlas, tint); px.G < 200 {
+		t.Skip("tinted sprites are no longer cached; this test is obsolete")
+	}
+	p.ImageChanged(atlas)
+	if px := spriteCentre(p, atlas, tint); px.R < 200 || px.G > 50 {
+		t.Errorf("after ImageChanged the tinted sprite still drew the old pixels (%v, want red)", px)
+	}
+}
+
+// wrapImg is a struct-typed image whose *type* is comparable (an interface
+// field) but whose *value* need not be: the field can hold a slice-backed
+// image, and a map keyed by that value panics just as sliceImg does.
+type wrapImg struct{ inner image.Image }
+
+func (w wrapImg) ColorModel() color.Model { return w.inner.ColorModel() }
+func (w wrapImg) Bounds() image.Rectangle { return w.inner.Bounds() }
+func (w wrapImg) At(x, y int) color.Color { return w.inner.At(x, y) }
+
+// The comparability check has to look at the dynamic value, not the static
+// type: reflect.Type.Comparable says yes to wrapImg and the map lookup then
+// panics on the sliceImg inside it.
+func TestComparableTypeWithUnhashableValueDrawsWithoutPanic(t *testing.T) {
+	p := NewPainter()
+	img := wrapImg{inner: sliceImg{pix: []uint8{1}}}
+	c := p.BeginOffscreen(geom.Size{W: 10, H: 10}, 1)
+	c.Image(img, geom.RectXYWH(0, 0, 4, 4))
+	c.DrawSprite(img, Sprite{Src: image.Rect(0, 0, 4, 4), Dst: geom.RectXYWH(4, 4, 4, 4)})
+	c.DrawSprite(img, Sprite{Src: image.Rect(0, 0, 4, 4), Dst: geom.RectXYWH(4, 4, 4, 4), Tint: Color{1, 1, 1, 1}})
+	p.ImageChanged(img)
+	if r, _, _, _ := p.Image().At(2, 2).RGBA(); r>>8 < 200 {
+		t.Errorf("the image did not draw (red = %d)", r>>8)
+	}
+	// And the same wrapper around a pointer image is cached as usual.
+	ptr := wrapImg{inner: whiteAtlas(4, 4)}
+	c.Image(ptr, geom.RectXYWH(0, 0, 4, 4))
+	if _, ok := p.imgBufs[ptr]; !ok {
+		t.Error("a comparable wrapper value was not cached")
+	}
+}
