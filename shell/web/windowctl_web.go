@@ -39,9 +39,12 @@ func (c *webWindowControl) SetFullscreen(on bool) {
 	}
 }
 
-// Fullscreen reports whether document.fullscreenElement is set.
+// Fullscreen reports whether document.fullscreenElement is set. Truthy, not
+// !IsNull: where the property does not exist at all (older iOS Safari, with
+// only the webkit-prefixed API) the read is undefined, which is not null and
+// reported the page as fullscreen.
 func (c *webWindowControl) Fullscreen() bool {
-	return !c.w.doc.Get("fullscreenElement").IsNull()
+	return c.w.doc.Get("fullscreenElement").Truthy()
 }
 
 // Size returns the canvas logical size (the viewport).
