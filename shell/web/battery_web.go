@@ -7,6 +7,7 @@
 package web
 
 import (
+	"log"
 	"syscall/js"
 
 	"github.com/doug/gophics/shell"
@@ -15,9 +16,18 @@ import (
 // Battery returns the battery capability, or nil when the browser lacks the
 // Battery Status API (Safari, Firefox) — the correct nil-where-unsupported
 // signal so callers hide any battery affordance.
+//
+// Nil also on an insecure context: since Chrome 103 getBattery() rejects
+// there, and a capability whose promise never resolves would report "full and
+// charging" forever — indistinguishable from a real battery, which is what an
+// app must never be handed. The function exists on http://, so the check is
+// isSecureContext, not the function's presence.
 func (w *window) Battery() shell.Battery {
 	nav := js.Global().Get("navigator")
 	if !nav.Truthy() || nav.Get("getBattery").Type() != js.TypeFunction {
+		return nil
+	}
+	if !js.Global().Get("isSecureContext").Truthy() {
 		return nil
 	}
 	b := &webBattery{}
@@ -41,6 +51,10 @@ func (b *webBattery) resolve(nav js.Value) {
 	go func() {
 		mgr, err := await(promise)
 		if err != nil {
+			// An iframe without the `battery` permission policy is the case
+			// isSecureContext cannot see. Say so: the capability stays at
+			// its neutral defaults, which otherwise look like a real reading.
+			log.Printf("gophics/web: getBattery rejected, battery state unavailable: %v", err)
 			return
 		}
 		b.mgr, b.ready = mgr, true
