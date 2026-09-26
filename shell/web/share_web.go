@@ -48,11 +48,16 @@ func (s *webShare) Share(item shell.ShareItem, done func(error)) {
 
 	promise := nav.Call("share", data)
 	go func() {
-		// A user cancel rejects with AbortError; treat any rejection as a
-		// non-fatal dismissal (the interface promises no reliable "shared" signal).
-		_, _ = await(promise)
+		// A user cancel rejects with AbortError, and the contract reports a
+		// dismissal as a nil error. The other rejections are failures the
+		// app should hear about: NotAllowedError (no user gesture),
+		// TypeError (nothing shareable), DataError.
+		_, err := await(promise)
+		if isDOMError(err, "AbortError") {
+			err = nil
+		}
 		if done != nil {
-			done(nil)
+			done(err)
 		}
 	}()
 }
