@@ -169,8 +169,10 @@ type SemNode struct {
 }
 
 // CollectSemantics walks the laid-out tree and returns the semantics
-// nodes. Boxes implementing Semantic become nodes; an interactive node
-// with no label of its own inherits the concatenated text of its subtree.
+// nodes. Boxes implementing Semantic become nodes; a node whose role names
+// from content (a button, a link, a heading, a list item) and has no label
+// of its own inherits the concatenated text of its subtree, while a
+// container with no label stays unnamed and exposes its children.
 //
 // The root's own rect is the outermost clip: a page mid-slide beyond the
 // window's edge is as unreachable as a row scrolled out of a viewport, and
@@ -234,24 +236,44 @@ func collectSem(b Box, at geom.Pt, clip geom.Rect, clipEmpty bool) []SemNode {
 	} else {
 		node.Visible = clampTo(rect, clip)
 	}
+	// A node with no label of its own is named from its children only when
+	// its role names from content. Naming every unlabeled node that way gave
+	// a list the concatenated text of all its rows as its own name, read out
+	// before each of them; a container stays unnamed instead.
+	named := node.Label == "" && info.Role.namesFromContent()
+	if named {
+		node.Label = joinLabels(kids)
+	}
 	// Plain text children are absorbed into the node when they are its name:
 	// when they supplied the label, or when the role is a control whose text
 	// *is* its label (a button reading "Send" is "Send, button", not a button
 	// containing a text). Structural children (buttons inside a group) always
-	// stay, and so does text inside a container that has a label of its own —
-	// a group labeled "Settings" wrapping "Version 1.2" would otherwise make
-	// that line unreadable to assistive technology: neither in the label nor
-	// in the tree.
-	absorbText := node.Label == "" || info.Role.childrenPresentational()
-	if node.Label == "" {
-		node.Label = joinLabels(kids)
-	}
+	// stay, and so does text inside a container, labeled or not — a group
+	// labeled "Settings" wrapping "Version 1.2" would otherwise make that line
+	// unreadable to assistive technology: neither in the label nor in the tree.
+	absorbText := named || info.Role.childrenPresentational()
 	for _, k := range kids {
 		if k.Role != RoleText || !absorbText {
 			node.Children = append(node.Children, k)
 		}
 	}
 	return []SemNode{node}
+}
+
+// namesFromContent reports whether a role takes its accessible name from the
+// text inside it when it has none of its own — ARIA's "name from content": a
+// button, a link, a heading, a tab, a checkbox, a radio, a switch, a list or
+// tree item, and plain text. Containers (group, list, tree) do not: a list
+// named after every row in it would be announced with all of them before each
+// one. Nor do the value-bearing controls (text field, slider, progress bar)
+// and images, whose text is a value or a caption, not a name.
+func (r Role) namesFromContent() bool {
+	switch r {
+	case RoleText, RoleButton, RoleLink, RoleHeading, RoleCheckbox, RoleRadio,
+		RoleSwitch, RoleListItem, RoleTab, RoleTreeItem:
+		return true
+	}
+	return false
 }
 
 // childrenPresentational reports whether a role's descendants are part of its
