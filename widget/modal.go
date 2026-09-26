@@ -63,11 +63,30 @@ func (s *modalState) Build(Ctx) Widget { return s.W().Child }
 // TopModal returns the Escape handler of the innermost mounted Modal that
 // has one, or nil when no modal layer wants the key. The app runner calls it
 // before dispatching Escape to the keyboard target.
+//
+// A modal the user cannot see does not count: a Navigator keeps the pages
+// under the top one mounted, so a Modal on one of them — a page that spells
+// "cannot escape" as a no-op handler, a suggestion list left open when a
+// result was tapped — stayed registered and took Escape from the page
+// pushed over it. Tab already skips those pages (focusHider); Escape uses
+// the same rule.
 func (o *Owner) TopModal() func() {
 	for i := len(o.modals) - 1; i >= 0; i-- {
-		if f := o.modals[i].W().OnEscape; f != nil {
+		m := o.modals[i]
+		if f := m.W().OnEscape; f != nil && !m.hidden() {
 			return f
 		}
 	}
 	return nil
+}
+
+// hidden reports whether the modal sits under a box that hides its subtree
+// from the user — an offstage Navigator page.
+func (s *modalState) hidden() bool {
+	for e := s.ctx.el; e != nil; e = e.parent {
+		if h, ok := e.box.(focusHider); ok && h.hidesFocus() {
+			return true
+		}
+	}
+	return false
 }
