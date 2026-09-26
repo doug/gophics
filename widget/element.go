@@ -462,7 +462,16 @@ func (el *element) attachKids(w renderWidget) {
 var scrubAttachBuf bool
 
 // update reconciles el (already type/key-matched) to the new widget value.
+//
+// The dirty flag is cleared before reconciling, as rebuild does, not after.
+// A SetState raised on this element while its subtree is being reconciled —
+// a descendant Interactive releasing focus from updateBox, whose OnFocus(false)
+// lands in this element's state — must re-queue it: this Build has already
+// run and drew the old state. Clearing afterwards un-marked it, the entry in
+// the owner's list went stale, and the wrapper kept its focus ring painted on
+// a field that had just been disabled until something else rebuilt it.
 func (el *element) update(w Widget) {
+	el.dirty = false
 	el.widget = w
 	switch w := w.(type) {
 	case Stateful:
@@ -478,7 +487,6 @@ func (el *element) update(w Widget) {
 		// clean and skip their layout entirely.
 		el.markBoxChainDirty()
 	}
-	el.dirty = false
 }
 
 func (el *element) markBoxChainDirty() {
