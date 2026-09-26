@@ -110,6 +110,42 @@ func TestBottomSheetEscapeWithFocusedField(t *testing.T) {
 	}
 }
 
+// A sheet on its way out no longer claims Escape. The exit slide keeps the
+// entry mounted for the length of the animation, and its Modal used to stay
+// registered with a close that had become a no-op, so an Escape in that
+// window was consumed and dropped instead of reaching the dialog beneath.
+func TestBottomSheetDeclinesEscapeWhileExiting(t *testing.T) {
+	a := escapeHarness(t, func(ctx widget.Ctx) {
+		theme.ShowDialog(ctx, widget.Column(
+			theme.Body("Outer dialog"),
+			theme.Button{Label: "Sheet", OnTap: func() {
+				theme.ShowBottomSheet(ctx, theme.Title("Sheet Title"))
+			}},
+		))
+	})
+	a.TapLabel("Open")
+	settle(a)
+	a.TapLabel("Sheet")
+	settle(a)
+	if !a.HasText("Sheet Title") {
+		t.Fatal("sheet did not open")
+	}
+	a.Key(shell.KeyEscape) // starts the exit slide
+	a.Step(1.0 / 60)
+	a.Render()
+	if !a.HasText("Sheet Title") {
+		t.Fatal("the sheet left in one frame; the test needs the exit window")
+	}
+	a.Key(shell.KeyEscape) // reaches the dialog, not the departing sheet
+	settle(a)
+	if a.HasText("Outer dialog") {
+		t.Fatal("Escape during the sheet's exit was swallowed instead of closing the dialog beneath")
+	}
+	if a.HasText("Sheet Title") {
+		t.Fatal("the sheet never finished leaving")
+	}
+}
+
 // Two stacked dialogs: Escape closes the top one only.
 func TestDialogEscapeClosesTopmostOnly(t *testing.T) {
 	a := escapeHarness(t, func(ctx widget.Ctx) {

@@ -169,8 +169,18 @@ func (s *bottomSheetState) Build(ctx widget.Ctx) widget.Widget {
 			Child: widget.Transform{T: paint.Transform{TY: ty}, Child: draggable}}
 		// The Modal is what makes Escape dismiss when a field in the sheet
 		// holds focus; the scrim's OnKey only sees it while the scrim does.
+		//
+		// Once the exit slide is running the sheet is on its way out, and a
+		// nil handler lets the layer decline the key. Otherwise the entry
+		// stays registered with close, which is a no-op while exiting, for up
+		// to the animation's length, and an Escape in that window is eaten
+		// rather than reaching the modal beneath or the focused widget.
+		var onEscape func()
+		if !s.exiting {
+			onEscape = s.close
+		}
 		return widget.Modal{
-			OnEscape: s.close,
+			OnEscape: onEscape,
 			Child:    widget.Stack{Children: []widget.Widget{scrim, sheet}},
 		}
 	}}
