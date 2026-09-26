@@ -3,8 +3,12 @@
 package desktop
 
 import (
+	"errors"
+	"io/fs"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // writeFileAtomic writes data to path via a temporary file in the same
@@ -29,15 +33,32 @@ import (
 //   - Fall back to a direct write when the directory will not take a temp file
 //     (a FUSE mount, say): a file that cannot be saved at all is worse than
 //     one saved non-atomically.
+//   - The result has the mode a plain save would: an existing destination
+//     keeps its own, a new file gets 0644 through the umask. The temp file
+//     used to come from os.CreateTemp, which is 0600 by design, so every
+//     document the save panels and Folder.Write produced was user-private —
+//     a file exported for sharing on a multi-user machine silently lost
+//     group and other read.
 func writeFileAtomic(path string, data []byte) error {
 	dir, base := filepath.Split(path)
-	tmp, err := os.CreateTemp(dir, "."+base+".tmp")
+	var keep os.FileMode
+	if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() {
+		keep = st.Mode().Perm()
+	}
+	tmp, err := createTemp(dir, "."+base+".tmp")
 	if err != nil {
 		return os.WriteFile(path, data, 0o644)
 	}
 	name := tmp.Name()
 	fail := func(err error) error { tmp.Close(); os.Remove(name); return err }
 
+	if keep != 0 {
+		// Chmod applies the bits as given, without the umask — the file
+		// already had them.
+		if err := tmp.Chmod(keep); err != nil {
+			return fail(err)
+		}
+	}
 	if _, err := tmp.Write(data); err != nil {
 		return fail(err)
 	}
@@ -53,4 +74,21 @@ func writeFileAtomic(path string, data []byte) error {
 		return err
 	}
 	return nil
+}
+
+// createTemp is os.CreateTemp with a 0644 create mode instead of 0600, so
+// the file that will be renamed into place has the permissions a new
+// document should, umask-adjusted by the kernel as for any create. An empty
+// dir means the working directory, not the system temp dir — the rename has
+// to stay on one filesystem.
+func createTemp(dir, prefix string) (*os.File, error) {
+	for range 10000 {
+		name := filepath.Join(dir, prefix+strconv.FormatUint(uint64(rand.Uint32()), 10))
+		f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		return f, err
+	}
+	return nil, &fs.PathError{Op: "createtemp", Path: filepath.Join(dir, prefix+"*"), Err: fs.ErrExist}
 }
