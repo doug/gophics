@@ -28,7 +28,13 @@ child render contexts (`childCtxPool`) before destroying the pipelines, and
 `SetDeviceProvider` flushes that pool on any device change rather than only
 when it still holds a differing device — the mobile shell closes the
 accelerator and rebuilds the device on every rotation, and a pooled context
-bound to the released device rendered its layer group into nothing. Each is
+bound to the released device rendered its layer group into nothing. Two
+rendering fixes sit alongside: `context_image.go`'s CPU `ImagePattern`
+un-premultiplies premultiplied buffers when it samples them, so a
+semi-transparent image edge is no longer darkened twice and the CPU and GPU
+paths agree on tinted sprites; and `backdrop.go` exports `BackdropBlurReach`,
+the distance its three-pass box blur actually reads from, so the scene differ
+can inflate damage by the kernel's real reach instead of a guess. Each is
 covered by tests in its own package; the licences and copyright notices are
 unchanged.
 
