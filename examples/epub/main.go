@@ -78,13 +78,17 @@ func (library) CreateState() widget.State { return &libraryState{} }
 
 type libraryState struct {
 	widget.StateBase[library]
-	loadErr bool
+	// loadErr is why the last "Open EPUB…" failed, shown under the button;
+	// empty when it did not. The parser names the file and the chapter it
+	// stopped at, so a book refused for one stray tag says which.
+	loadErr string
 }
 
 // open pops the platform's file picker (ctx.FilePicker — a file dialog on web,
 // native panels on desktop, the document picker on mobile) and, on success,
 // swaps in the loaded book and rebuilds. The bundled sample stays put on cancel
-// or a parse error, so the demo is never left empty.
+// or a parse error, so the demo is never left empty — and the error stays on
+// screen, so the user knows what was refused and why.
 func (s *libraryState) open(fp shell.FilePicker) {
 	if fp == nil {
 		return
@@ -92,7 +96,7 @@ func (s *libraryState) open(fp shell.FilePicker) {
 	fp.Open(shell.OpenOptions{Accept: []string{".epub", "application/epub+zip"}},
 		func(files []shell.PickedFile, err error) {
 			if err != nil {
-				s.SetState(func() { s.loadErr = true })
+				s.SetState(func() { s.loadErr = "Couldn't open a file: " + err.Error() })
 				return
 			}
 			if len(files) == 0 {
@@ -100,12 +104,13 @@ func (s *libraryState) open(fp shell.FilePicker) {
 			}
 			b, perr := parseEPUB(files[0].Data)
 			if perr != nil {
-				s.SetState(func() { s.loadErr = true })
+				msg := loadError(files[0].Name, perr)
+				s.SetState(func() { s.loadErr = msg })
 				return
 			}
 			s.SetState(func() {
 				book = b
-				s.loadErr = false
+				s.loadErr = ""
 			})
 		})
 }
@@ -121,8 +126,8 @@ func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 	if fp := ctx.FilePicker(); fp != nil {
 		kids = append(kids, widget.Row(theme.Button{Label: "Open EPUB…", OnTap: func() { s.open(fp) }}, widget.Spacer()))
 	}
-	if s.loadErr {
-		kids = append(kids, widget.Padding{Insets: geom.Insets{Top: 8}, Child: widget.Text{Value: "Couldn't read that file as an EPUB.", Size: th.Type.Label, Color: th.Muted}})
+	if s.loadErr != "" {
+		kids = append(kids, widget.Padding{Insets: geom.Insets{Top: 8}, Child: widget.Text{Value: s.loadErr, Size: th.Type.Label, Color: th.Muted, Wrap: true}})
 	}
 	kids = append(kids,
 		widget.Padding{Insets: geom.Insets{Top: 32, Bottom: 0}, Child: widget.Text{Value: "CONTENTS", Font: theme.FontBold, Size: th.Type.Label, Color: th.Primary}},
@@ -136,6 +141,16 @@ func (s *libraryState) Build(ctx widget.Ctx) widget.Widget {
 		Insets: geom.InsetsSymmetric(28, 12),
 		Child:  widget.Flex{CrossAlign: layout.CrossStretch, Children: kids},
 	}}}
+}
+
+// loadError is the line shown when a picked file is not a readable EPUB. It
+// names the file and repeats the parser's reason, which already names the
+// chapter it stopped at.
+func loadError(name string, err error) string {
+	if name == "" {
+		name = "that file"
+	}
+	return fmt.Sprintf("Couldn't read %s as an EPUB: %v", name, err)
 }
 
 func tocRow(th theme.Theme, n int, title string, onTap func()) widget.Widget {

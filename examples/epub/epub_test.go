@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -139,4 +140,20 @@ func zipOf(pairs ...string) []byte {
 	}
 	_ = zw.Close()
 	return buf.Bytes()
+}
+
+// TestLoadErrorNamesTheFileAndTheChapter pins the message the library shows
+// under "Open EPUB…" when a book is refused: a reader whose 30th chapter has a
+// stray end tag is told which file and where, not just that it failed.
+func TestLoadErrorNamesTheFileAndTheChapter(t *testing.T) {
+	err := errors.New("epub: ch30.xhtml: unexpected end element </q>")
+	msg := loadError("tide.epub", err)
+	for _, want := range []string{"tide.epub", "ch30.xhtml", err.Error()} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q does not mention %q", msg, want)
+		}
+	}
+	if msg := loadError("", err); !strings.Contains(msg, "that file") {
+		t.Errorf("with no name, message %q should still read naturally", msg)
+	}
 }
