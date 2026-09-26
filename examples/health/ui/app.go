@@ -137,10 +137,11 @@ func (s *healthState) Build(ctx widget.Ctx) widget.Widget {
 	switch {
 	case !s.connected:
 		content = s.onboarding(th)
-	case !s.p.Authorized():
-		// The host answered the permission prompt with no, or has not
-		// answered yet. Four cards reading 0 would be indistinguishable from
-		// a person with no data; say what is actually the case.
+	case s.p.Access() != AccessGranted:
+		// The host answered the permission prompt with no, has not answered
+		// yet, or has no store to ask about. Four cards reading 0 would be
+		// indistinguishable from a person with no data; say what is
+		// actually the case.
 		content = s.noAccess(th)
 	default:
 		// The dashboard is the Navigator's Home so it (and pushed detail pages)
@@ -200,18 +201,25 @@ func (s *healthState) onboarding(th theme.Theme) widget.Widget {
 	}}
 }
 
-// noAccess is the screen for a source the user has not let the app read. There
-// is no button: the prompt is the platform's and the host raises it, and the
-// provider's OnChange repaints this the moment the answer changes.
+// noAccess is the screen for a source the app cannot read. There is no
+// button: the prompt is the platform's and the host raises it, and the
+// provider's OnChange repaints this the moment the answer changes. A store
+// that is not on the device gets different words, because the instruction
+// to allow access in it sent the user looking for a sheet that never comes.
 func (s *healthState) noAccess(th theme.Theme) widget.Widget {
+	name := s.p.Name()
+	title := "No access to " + name
+	body := "Allow this app to read your health data in " + name + " and the dashboard fills in by itself."
+	if s.p.Access() == AccessUnavailable {
+		title = name + " is not available"
+		body = "This device has no " + name + " to read from, so there is no health data to show."
+	}
 	return widget.Align{X: 0.5, Y: 0.5, Child: widget.Padding{
 		All: 32,
 		Child: widget.Flex{CrossAlign: layout.CrossCenter, Children: []widget.Widget{
 			widget.Text{Value: "♥", Size: 72, Color: th.Muted},
-			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{Value: "No access to " + s.p.Name(), Size: 22, Color: th.Text}},
-			widget.Padding{Insets: geom.Insets{Top: 6}, Child: widget.Text{
-				Value: "Allow this app to read your health data in " + s.p.Name() + " and the dashboard fills in by itself.",
-				Size:  15, Color: th.Muted, Wrap: true}},
+			widget.Padding{Insets: geom.Insets{Top: 12}, Child: widget.Text{Value: title, Size: 22, Color: th.Text, Wrap: true}},
+			widget.Padding{Insets: geom.Insets{Top: 6}, Child: widget.Text{Value: body, Size: 15, Color: th.Muted, Wrap: true}},
 		}},
 	}}
 }

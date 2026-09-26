@@ -96,6 +96,25 @@ func TestUnauthorizedProviderShowsNoAccess(t *testing.T) {
 	}
 }
 
+// A store that is not on the device is told apart from one the user has not
+// opened up. The no-access screen used to ask for a permission in a Health
+// Connect that was not installed, which nobody could follow.
+func TestUnavailableProviderDoesNotAskForPermission(t *testing.T) {
+	p := NewDeviceProvider("Health Connect")
+	p.SetUnavailable() // the host, finding no Health Connect
+	a := healthApp(t, p)
+	a.TapText("Connect Health Connect")
+	a.Render()
+
+	a.AssertText("Health Connect is not available")
+	if a.HasText("Allow this app") || a.HasText("No access") {
+		t.Errorf("asked for a permission in a store that is not there; labels=%v", a.Labels())
+	}
+	if a.HasText("Heart Rate") {
+		t.Error("dashboard shown with no store to read")
+	}
+}
+
 // A host push repaints the dashboard by itself; the UI no longer polls.
 func TestDevicePushRepaints(t *testing.T) {
 	p := NewDeviceProvider("Apple Health")

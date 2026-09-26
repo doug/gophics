@@ -36,9 +36,28 @@ type Provider interface {
 	Series(m Metric) []Sample
 	// Latest returns the most recent value for a metric.
 	Latest(m Metric) (Sample, bool)
-	// Authorized reports whether the user granted read access.
-	Authorized() bool
+	// Access reports whether the store can be read, and if not, why.
+	Access() Access
 }
+
+// Access is what a Provider can say about reading its store. The two ways
+// of not having data are told apart because they ask different things of
+// the user: a denied grant is theirs to give, and a store that is not on the
+// device is not.
+type Access int
+
+const (
+	// AccessDenied: the user has not let the app read the store — refused,
+	// or not asked yet. The zero value, which is what a device provider is
+	// before the host has answered.
+	AccessDenied Access = iota
+	// AccessGranted: the store is readable.
+	AccessGranted
+	// AccessUnavailable: there is no store on this device to read — Health
+	// Connect not installed, HealthKit on hardware without it. No answer
+	// to a permission prompt changes that, so the screen must not ask.
+	AccessUnavailable
+)
 
 // Advancer is an optional capability: a live source the app advances once per
 // frame so synthetic data streams in real time. Real device providers push
@@ -147,7 +166,7 @@ func (p *synthProvider) Latest(m Metric) (Sample, bool) {
 	return s[len(s)-1], true
 }
 
-func (p *synthProvider) Authorized() bool { return true }
+func (p *synthProvider) Access() Access { return AccessGranted }
 
 // Compile-time proof the synthetic provider satisfies both interfaces.
 var (
@@ -163,7 +182,7 @@ var (
 type DeviceProvider struct {
 	mu       sync.RWMutex
 	name     string
-	authed   bool
+	access   Access
 	series   [4][]Sample // indexed by Metric
 	stepsSum float64     // Steps reports a running total, like the synthetic one
 	changed  func()      // called after every change, on the caller's thread
@@ -201,16 +220,29 @@ func (d *DeviceProvider) Name() string {
 	return d.name
 }
 
-func (d *DeviceProvider) Authorized() bool {
+func (d *DeviceProvider) Access() Access {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	return d.authed
+	return d.access
 }
 
 // SetAuthorized records the result of the platform permission prompt.
 func (d *DeviceProvider) SetAuthorized(ok bool) {
+	access := AccessDenied
+	if ok {
+		access = AccessGranted
+	}
+	d.setAccess(access)
+}
+
+// SetUnavailable records that the platform store is not on this device, so
+// the app can say so instead of asking for a permission nothing will prompt
+// for.
+func (d *DeviceProvider) SetUnavailable() { d.setAccess(AccessUnavailable) }
+
+func (d *DeviceProvider) setAccess(a Access) {
 	d.mu.Lock()
-	d.authed = ok
+	d.access = a
 	d.mu.Unlock()
 	d.notify()
 }

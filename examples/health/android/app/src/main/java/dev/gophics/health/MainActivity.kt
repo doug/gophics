@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
 import android.view.Choreographer
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -82,9 +83,35 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            else -> Log.w("gophics", "Health Connect unavailable (status=" +
-                "${HealthConnectClient.getSdkStatus(this)}) — the app stays on its no-access screen")
+            else -> {
+                // No store to ask about: the Go side says so, instead of
+                // telling the user to allow access in a Health Connect that
+                // is not installed.
+                Healthmobile.setUnavailable()
+                Log.w("gophics", "Health Connect unavailable (status=" +
+                    "${HealthConnectClient.getSdkStatus(this)})")
+            }
         }
+    }
+
+    // Run states, matching shell.AppState: 0 active, 1 inactive, 2 background.
+    // onPause means "no longer frontmost" — a dialog over the app counts —
+    // while onStop means "not visible", which is the one worth persisting on.
+    override fun onPause() {
+        super.onPause()
+        bridge.focused(false)
+        bridge.setAppState(1)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        bridge.focused(true)
+        bridge.setAppState(0)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        bridge.setAppState(2)
     }
 
     /** pump reads each metric once and backfills the Go provider. The bind's

@@ -43,6 +43,11 @@ func Start(storeName string) (*mobile.Bridge, error) {
 // SetAuthorized records the result of the platform permission prompt.
 func SetAuthorized(ok bool) { dev.SetAuthorized(ok) }
 
+// SetUnavailable records that the platform store is not on this device —
+// Health Connect not installed, say — so the app tells the user that rather
+// than asking them to allow access in a store they do not have.
+func SetUnavailable() { dev.SetUnavailable() }
+
 // PushSample feeds one reading from the native health store into metric m. t is
 // a metric-relative x coordinate (seconds for the live heart rate, days for
 // weight/sleep, hours for steps — see healthui.Sample); capN bounds retained

@@ -30,11 +30,11 @@ func TestSynthProviderDeterministic(t *testing.T) {
 // history, Steps reports the cumulative latest, and unknown metrics are ignored.
 func TestDeviceProviderPush(t *testing.T) {
 	d := NewDeviceProvider("Apple Health")
-	if d.Name() != "Apple Health" || d.Authorized() {
-		t.Fatalf("unexpected initial state: name=%q authed=%v", d.Name(), d.Authorized())
+	if d.Name() != "Apple Health" || d.Access() != AccessDenied {
+		t.Fatalf("unexpected initial state: name=%q access=%v", d.Name(), d.Access())
 	}
 	d.SetAuthorized(true)
-	if !d.Authorized() {
+	if d.Access() != AccessGranted {
 		t.Fatal("SetAuthorized(true) did not stick")
 	}
 
