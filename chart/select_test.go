@@ -41,3 +41,35 @@ func TestSelectionLabelFollowsXAxis(t *testing.T) {
 		t.Fatalf("numeric selection label = %q, want the compact number", got)
 	}
 }
+
+// XAxis.Format is one contract for the axis and the tooltip. On a time scale
+// the ticks carry their own calendar labels, and those used to win over the
+// formatter on the axis while the tooltip applied it — so a chart with
+// Format set read "Jan 5" along the bottom and "week 1,758.9M" when tapped.
+// A Band's categories are the exception on both: Format gets an index there,
+// which is nothing to format.
+func TestFormatLabelsTheAxisAndTheTooltipAlike(t *testing.T) {
+	lo := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	ts := NewTime(lo, lo.AddDate(0, 0, 30))
+	monthYear := func(v float64) string { return time.Unix(int64(v), 0).UTC().Format("Jan '06") }
+	fmtd := Axis{Format: monthYear}
+
+	for _, tk := range ts.Ticks(0) {
+		if got := fmtd.label(ts, tk); got != "Mar '26" {
+			t.Fatalf("time tick %q labelled %q under XAxis.Format, want the formatter's text", tk.Label, got)
+		}
+	}
+	if got, want := selectionLabel(ts, fmtd, Datum{X: Seconds(lo.AddDate(0, 0, 9))}), "Mar '26"; got != want {
+		t.Fatalf("tooltip under XAxis.Format = %q, want %q like the axis", got, want)
+	}
+	first := ts.Ticks(0)[0]
+	if got := (Axis{}).label(ts, first); got != first.Label {
+		t.Fatalf("time tick without a formatter labelled %q, want the scale's own %q", got, first.Label)
+	}
+
+	band := NewBand([]string{"Q1", "Q2"})
+	index := Axis{Format: func(v float64) string { return "#" + trim(v, Axis{}.loc) }}
+	if got := index.label(band, band.Ticks(0)[1]); got != "Q2" {
+		t.Fatalf("band category labelled %q under Format, want the category", got)
+	}
+}

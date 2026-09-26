@@ -15,7 +15,7 @@ func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col pa
 	dot(c, x, y, 13, halo(th)) // ring
 	dot(c, x, y, 8, col)
 
-	drawTooltip(c, p, area, geom.Pt{X: x, Y: y}, selectionLabel(xs, xaxis, d), yaxis.label(Tick{Value: d.Y}), th)
+	drawTooltip(c, p, area, geom.Pt{X: x, Y: y}, selectionLabel(xs, xaxis, d), yaxis.label(ys, Tick{Value: d.Y}), th)
 }
 
 // selectionLabel is the tooltip's first line: what the selected datum is,
@@ -23,17 +23,16 @@ func drawSelection(c paint.Canvas, area geom.Rect, xs, ys Scale, d Datum, col pa
 // formats the position the way it formats its ticks, so a caller's
 // XAxis.Format applies and a time scale reads as a date rather than as the
 // epoch seconds behind it ("1,758.9M" was what a tap on a time series said).
+// The one departure from the axis is detail: a time scale's ticks say "Jan 5"
+// while the datum between two of them says "Jan 5 15:04".
 func selectionLabel(xs Scale, xaxis Axis, d Datum) string {
 	if d.Label != "" {
 		return d.Label
 	}
-	if xaxis.Format != nil {
-		return xaxis.Format(d.X)
-	}
-	if ts, ok := xs.(*Time); ok {
+	if ts, ok := xs.(*Time); ok && xaxis.Format == nil {
 		return ts.pointLabel(d.X)
 	}
-	return xaxis.label(Tick{Value: d.X})
+	return xaxis.label(xs, Tick{Value: d.X})
 }
 
 // halo is the marker ring color: near-white on light charts, near-black on dark.

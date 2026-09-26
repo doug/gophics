@@ -9,10 +9,15 @@ import (
 
 // Axis configures one axis of a chart.
 type Axis struct {
-	Hide   bool                 // omit the axis and its labels entirely
-	Grid   bool                 // X axis: draw vertical gridlines at the ticks. (Horizontal Y gridlines are always drawn as chart chrome, so this field has no effect on the Y axis.)
-	Ticks  int                  // target tick count; 0 → a sensible default
-	Format func(float64) string // tick label formatter for numeric values
+	Hide  bool // omit the axis and its labels entirely
+	Grid  bool // X axis: draw vertical gridlines at the ticks. (Horizontal Y gridlines are always drawn as chart chrome, so this field has no effect on the Y axis.)
+	Ticks int  // target tick count; 0 → a sensible default
+	// Format labels the ticks and the selection tooltip from the tick's
+	// domain value. It replaces the built-in labels of every scale but Band:
+	// a Linear or Log tick is its number, a Time tick its Unix seconds (so a
+	// caller can print "Jan '06" where the scale would print "Jan"), while a
+	// Band tick's value is a category index, which is nothing to format.
+	Format func(float64) string
 
 	// loc formats the default numeric labels. Set by Chart.Build from
 	// ctx.IntlLocale(), not by the app: a chart's axis numbers should follow
@@ -37,16 +42,33 @@ func (a Axis) tickCount(def int) int {
 	return def
 }
 
-// label renders a tick's text: a band category as-is, else the axis formatter,
-// else a compact number.
-func (a Axis) label(t Tick) string {
-	if t.Label != "" {
+// label renders a tick's text on scale s: a band category as-is, else the
+// axis formatter, else the label the scale gave the tick (a Time scale's
+// calendar text), else a compact number.
+//
+// Format outranks a Time tick's own label because a caller who set it asked
+// for it: the label used to win, so XAxis.Format on a time series changed the
+// tooltip and not the axis.
+func (a Axis) label(s Scale, t Tick) string {
+	if _, band := s.(*Band); band && t.Label != "" {
 		return t.Label
 	}
 	if a.Format != nil {
 		return a.Format(t.Value)
 	}
+	if t.Label != "" {
+		return t.Label
+	}
 	return fmtNumber(t.Value, a.loc)
+}
+
+// labels is label over a run of ticks.
+func (a Axis) labels(s Scale, ticks []Tick) []string {
+	out := make([]string, len(ticks))
+	for i, t := range ticks {
+		out[i] = a.label(s, t)
+	}
+	return out
 }
 
 // drawYAxis draws horizontal gridlines and right-aligned value labels.
@@ -59,7 +81,7 @@ func drawYAxis(c paint.Canvas, area geom.Rect, ys Scale, ax Axis, th chartTheme,
 	for _, t := range ys.Ticks(ax.tickCount(5)) {
 		y := area.Max.Y - t.Pos*area.Dy()
 		c.Line(geom.Pt{X: area.Min.X, Y: y}, geom.Pt{X: area.Max.X, Y: y}, 1, th.grid)
-		lab := ax.label(t)
+		lab := ax.label(ys, t)
 		w := p.MeasureWidthIn("", lab, labelSize)
 		c.TextIn("", lab, geom.Pt{X: area.Min.X - 8 - w, Y: y + baseline}, labelSize, th.text)
 	}
@@ -81,12 +103,12 @@ const xLabelGap = 8
 // still mark the positions of the ticks that lost their label.
 //
 // The first tick always keeps its label, so an axis never comes back empty.
-func visibleXLabels(ticks []Tick, area, bounds geom.Rect, ax Axis, measure func(string) float32) []bool {
+func visibleXLabels(ticks []Tick, labels []string, area, bounds geom.Rect, measure func(string) float32) []bool {
 	show := make([]bool, len(ticks))
 	prevRight := float32(0)
 	first := true
 	for i, t := range ticks {
-		w := measure(ax.label(t))
+		w := measure(labels[i])
 		left := xLabelLeft(area.Min.X+t.Pos*area.Dx(), w, bounds)
 		if first || left >= prevRight+xLabelGap {
 			show[i] = true
@@ -126,7 +148,8 @@ func drawXAxis(c paint.Canvas, area, bounds geom.Rect, xs Scale, ax Axis, th cha
 	}
 	met := p.MetricsIn("", labelSize)
 	ticks := xs.Ticks(ax.tickCount(6))
-	show := visibleXLabels(ticks, area, bounds, ax, func(lab string) float32 {
+	labels := ax.labels(xs, ticks)
+	show := visibleXLabels(ticks, labels, area, bounds, func(lab string) float32 {
 		return p.MeasureWidthIn("", lab, labelSize)
 	})
 	for i, t := range ticks {
@@ -138,7 +161,7 @@ func drawXAxis(c paint.Canvas, area, bounds geom.Rect, xs Scale, ax Axis, th cha
 			continue // its neighbour is already there; two labels on top of each
 			// other read as neither
 		}
-		lab := ax.label(t)
+		lab := labels[i]
 		w := p.MeasureWidthIn("", lab, labelSize)
 		lx := xLabelLeft(x, w, bounds)
 		c.TextIn("", lab, geom.Pt{X: lx, Y: area.Max.Y + met.Ascent + 6}, labelSize, th.text)

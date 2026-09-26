@@ -267,7 +267,7 @@ func margins(p *paint.Painter, w Chart, ys Scale) geom.Insets {
 	if !w.YAxis.Hide {
 		maxw := float32(0)
 		for _, t := range ys.Ticks(w.YAxis.tickCount(5)) {
-			if ww := p.MeasureWidthIn("", w.YAxis.label(t), labelSize); ww > maxw {
+			if ww := p.MeasureWidthIn("", w.YAxis.label(ys, t), labelSize); ww > maxw {
 				maxw = ww
 			}
 		}

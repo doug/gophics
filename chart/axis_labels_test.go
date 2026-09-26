@@ -16,7 +16,7 @@ func TestVisibleXLabelsDropsOverlappingOnes(t *testing.T) {
 
 	// Each label 60px wide: at 200px across, five of them cannot all fit.
 	wide := func(string) float32 { return 60 }
-	show := visibleXLabels(ticks, area, roomy(area), Axis{}, wide)
+	show := visibleXLabels(ticks, labels(ticks), area, roomy(area), wide)
 
 	kept := 0
 	for _, v := range show {
@@ -55,7 +55,7 @@ func TestVisibleXLabelsKeepsAllWhenTheyFit(t *testing.T) {
 	ticks := []Tick{{Pos: 0}, {Pos: 0.25}, {Pos: 0.5}, {Pos: 0.75}, {Pos: 1}}
 	narrow := func(string) float32 { return 20 }
 
-	for i, v := range visibleXLabels(ticks, area, roomy(area), Axis{}, narrow) {
+	for i, v := range visibleXLabels(ticks, labels(ticks), area, roomy(area), narrow) {
 		if !v {
 			t.Errorf("dropped label %d even though 5 x 20px fits easily in 600px", i)
 		}
@@ -68,7 +68,7 @@ func TestVisibleXLabelsAlwaysKeepsTheFirst(t *testing.T) {
 	ticks := []Tick{{Pos: 0}, {Pos: 0.5}, {Pos: 1}}
 	huge := func(string) float32 { return 500 }
 
-	show := visibleXLabels(ticks, area, roomy(area), Axis{}, huge)
+	show := visibleXLabels(ticks, labels(ticks), area, roomy(area), huge)
 	if !show[0] {
 		t.Error("no labels at all on a very narrow axis")
 	}
