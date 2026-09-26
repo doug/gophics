@@ -194,6 +194,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		}})
 	})
 	listen(doc, "keydown", func(e js.Value) {
+		if imeKey(e) {
+			return // the IME owns it: Enter confirms a composition, Backspace edits it
+		}
 		key := e.Get("key").String()
 		mods := modBits(e)
 		if code := keyCode(key, mods); code != shell.KeyUnknown {
@@ -202,7 +205,7 @@ func Run(h shell.Handler, cfg shell.Config) error {
 			return
 		}
 		// Printable input: single-rune keys without command modifiers.
-		// (IME composition events come with the M7 text input work.)
+		// (Composition text arrives through the hidden input, textinput_web.go.)
 		if len([]rune(key)) == 1 && !e.Get("ctrlKey").Bool() && !e.Get("metaKey").Bool() {
 			// The app owns text input, so suppress the browser's default action
 			// for the key — most importantly Space (which otherwise scrolls the
@@ -213,6 +216,9 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		}
 	})
 	listen(doc, "keyup", func(e js.Value) {
+		if imeKey(e) {
+			return
+		}
 		mods := modBits(e)
 		if code := keyCode(e.Get("key").String(), mods); code != shell.KeyUnknown {
 			h.Event(w, shell.Key{Kind: shell.KeyRelease, Code: code, Mods: mods})
@@ -240,6 +246,20 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	h.Event(w, shell.Resize{Size: w.logical, Scale: float32(w.dpr)})
 	w.Invalidate()
 	select {} // run forever; the browser owns the loop
+}
+
+// imeKey reports a key event that belongs to an active IME composition. Chrome
+// and Firefox hide the real key behind "Process", but Safari reports the true
+// key with isComposing set — so without this the Enter that confirms a
+// Japanese composition also submitted the field, and Backspace during one also
+// deleted a committed character. keyCode 229 is the older spelling of the same
+// thing, still what some Android keyboards send.
+func imeKey(e js.Value) bool {
+	if e.Get("isComposing").Truthy() {
+		return true
+	}
+	kc := e.Get("keyCode")
+	return kc.Type() == js.TypeNumber && kc.Int() == 229
 }
 
 func keyCode(key string, mods shell.Mods) shell.KeyCode {

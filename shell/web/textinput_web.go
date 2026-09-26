@@ -3,7 +3,18 @@
 // Web implementation of the shell text-input capability (shell/textinput.go).
 // gophics draws its own editor, so to raise the mobile soft keyboard we focus a
 // hidden <input> and forward its input and composition events. The input is a
-// commit funnel: each `input` event yields committed text and is cleared.
+// commit funnel: an `input` event outside a composition yields committed text
+// and is cleared.
+//
+// Inside a composition the element is the IME's scratch space and is left
+// alone. Every browser fires `input` (inputType insertCompositionText,
+// isComposing true) on each composition update, so treating those as commits
+// typed the marked text once per keystroke — "にほ" arrived as "ににほ" — and
+// clearing the value under the IME reset its composition. Updates reach the
+// app as OnComposing from `compositionupdate`; the commit is `compositionend`,
+// whose data is the final text, and only then is the value cleared. That
+// covers CJK input and the dead-key accent composition macOS browsers use for
+// Option+e, e.
 //
 // Editing keys (Backspace, Enter, arrows) are deliberately *not* forwarded
 // through OnEditKey. A keydown on the input bubbles to the document, where
@@ -27,6 +38,7 @@
 package web
 
 import (
+	"strings"
 	"syscall/js"
 
 	"github.com/doug/gophics/shell"
@@ -78,7 +90,10 @@ func (t *webTextInput) ensure() {
 	}
 	t.doc.Get("body").Call("appendChild", in)
 
-	onInput := js.FuncOf(func(_ js.Value, _ []js.Value) any {
+	onInput := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) > 0 && composing(args[0]) {
+			return nil // the IME's marked text; compositionend commits it
+		}
 		if v := in.Get("value").String(); v != "" {
 			if t.h.OnText != nil {
 				t.h.OnText(v)
@@ -93,10 +108,44 @@ func (t *webTextInput) ensure() {
 		}
 		return nil
 	})
+	onCompEnd := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		// Clear first: Safari and Firefox fire the commit's `input` event
+		// after compositionend, and an empty value is what keeps that event
+		// from committing the same text a second time.
+		in.Set("value", "")
+		data := ""
+		if len(args) > 0 {
+			if d := args[0].Get("data"); d.Type() == js.TypeString {
+				data = d.String()
+			}
+		}
+		if data != "" && t.h.OnText != nil {
+			t.h.OnText(data)
+		}
+		if t.h.OnComposing != nil {
+			t.h.OnComposing("") // the preedit is gone whether or not it committed
+		}
+		return nil
+	})
 	in.Call("addEventListener", "input", onInput)
 	in.Call("addEventListener", "compositionupdate", onComp)
+	in.Call("addEventListener", "compositionend", onCompEnd)
 
-	t.input, t.funcs = in, []js.Func{onInput, onComp}
+	t.input, t.funcs = in, []js.Func{onInput, onComp, onCompEnd}
+}
+
+// composing reports whether an input event belongs to an IME composition:
+// isComposing where the browser sets it, else the inputType — Chrome and
+// Firefox say insertCompositionText, Safari insertFromComposition and
+// deleteByComposition — so the test is for the word, not one spelling.
+func composing(e js.Value) bool {
+	if e.Get("isComposing").Truthy() {
+		return true
+	}
+	if it := e.Get("inputType"); it.Type() == js.TypeString {
+		return strings.Contains(it.String(), "Composition")
+	}
+	return false
 }
 
 func (t *webTextInput) cancelBlur() {
