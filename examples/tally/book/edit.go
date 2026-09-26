@@ -3,6 +3,7 @@ package book
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -129,15 +130,20 @@ func (b *Book) Add(e NewEntry) (AddResult, error) {
 	return res, nil
 }
 
-// unchangedOnDisk reports an error when the file's modification time is not
-// the one this Book last read or wrote.
+// ErrChangedOnDisk is what Add returns when the ledger file is no longer the
+// one this Book read, so the UI can offer to reload it rather than only
+// report it.
+var ErrChangedOnDisk = errors.New("the ledger file changed on disk since it was opened; reload it before adding to it")
+
+// unchangedOnDisk reports ErrChangedOnDisk when the file's modification time
+// or size is not what this Book last read or wrote.
 func (b *Book) unchangedOnDisk() error {
-	info, err := os.Stat(b.Path)
+	info, err := os.Stat(b.target)
 	if err != nil {
 		return err
 	}
-	if !b.modTime.IsZero() && !info.ModTime().Equal(b.modTime) {
-		return errors.New("the ledger file changed on disk since it was opened; reopen it before adding to it")
+	if !b.modTime.IsZero() && (!info.ModTime().Equal(b.modTime) || info.Size() != b.size) {
+		return ErrChangedOnDisk
 	}
 	return nil
 }
@@ -145,10 +151,26 @@ func (b *Book) unchangedOnDisk() error {
 // writeFile replaces the ledger file with the current text atomically: the
 // new text goes to a temporary file beside it, which is then renamed over the
 // original, so a crash between the two leaves either the old file or the new
-// one, never a truncated one.
+// one, never a truncated one. The temporary file is synced before the rename,
+// or the rename could reach the disk before the bytes it points at and a
+// power cut would leave the name attached to an empty file.
+//
+// The rename targets the resolved path, not Path: renaming over a symlink
+// replaces the link with a regular file and never touches what it pointed at.
+// And the target is opened for writing first, because a rename does not need
+// write permission on the file it replaces — a ledger made read-only on
+// purpose would otherwise be rewritten without a word.
 func (b *Book) writeFile() error {
-	dir := filepath.Dir(b.Path)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(b.Path)+".*.tmp")
+	if err := b.probeWrite(); err != nil {
+		b.readOnly = true
+		if errors.Is(err, fs.ErrPermission) {
+			return errors.New("the ledger file is read-only; make it writable before adding to it")
+		}
+		return err
+	}
+	b.readOnly = false
+	dir := filepath.Dir(b.target)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(b.target)+".*.tmp")
 	if err != nil {
 		return err
 	}
@@ -158,20 +180,23 @@ func (b *Book) writeFile() error {
 		cleanup()
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
 		return err
 	}
-	if info, err := os.Stat(b.Path); err == nil {
+	if info, err := os.Stat(b.target); err == nil {
 		_ = os.Chmod(tmp.Name(), info.Mode().Perm()) // keep the user's permissions
 	}
-	if err := os.Rename(tmp.Name(), b.Path); err != nil {
+	if err := os.Rename(tmp.Name(), b.target); err != nil {
 		cleanup()
 		return err
 	}
-	if info, err := os.Stat(b.Path); err == nil {
-		b.modTime = info.ModTime()
-	}
+	b.recordDisk()
 	return nil
 }
 
@@ -179,8 +204,9 @@ func (b *Book) writeFile() error {
 // ledger can be edited in memory but never saved).
 func (b *Book) CanEdit() bool { return b.src != nil }
 
-// writable reports whether the ledger came from a real file we can write back to.
-func (b *Book) writable() bool { return b.file }
+// writable reports whether the ledger came from a real file we can write back
+// to: one Open read, and one that did not refuse a write when last asked.
+func (b *Book) writable() bool { return b.file && !b.readOnly }
 
 // Writable reports whether saving is possible, for the UI to label its button.
 func (b *Book) Writable() bool { return b.src != nil && b.writable() }

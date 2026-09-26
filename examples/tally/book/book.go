@@ -9,6 +9,7 @@ package book
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/doug/tally/bean"
@@ -27,10 +28,24 @@ type Book struct {
 	// demo's Path is the bare name "example.beancount" — so a file of that name
 	// in the working directory was silently overwritten with the whole demo.
 	file bool
-	// modTime is the file's modification time as last read or written, so a
-	// save can notice the file changed underneath it — an edit made in another
-	// editor since the ledger was opened would otherwise be clobbered.
+	// target is Path with symlinks resolved, fixed at Open. A save renames a
+	// temporary file over the ledger, and renaming over a link replaces the
+	// link itself with a regular file: the real ledger — in a dotfiles repo,
+	// a synced folder — was left untouched while Tally reported "saved".
+	target string
+	// readOnly records that the file refused to be opened for writing, at
+	// Open or at the last save. The rename that writes the ledger succeeds
+	// over a read-only file on POSIX, so without asking first a ledger the
+	// user had protected was quietly rewritten (and, on Windows, refused —
+	// the two disagreed). The UI's Save button reads this.
+	readOnly bool
+	// modTime and size are the file's as last read or written, so a save can
+	// notice the file changed underneath it — an edit made in another editor
+	// since the ledger was opened would otherwise be clobbered. Both, because
+	// a filesystem with coarse timestamps (FAT, ext3) reports the same time
+	// for an edit within a second or two of the open.
 	modTime time.Time
+	size    int64
 
 	// ProcessErr holds any error from loading (a missing include, a syntax error).
 	// The ledger stays usable for display when this is non-nil — a file with one
@@ -50,16 +65,38 @@ func Open(path string) (*Book, error) {
 	if led == nil {
 		return nil, err
 	}
-	b := &Book{Path: path, led: led, ProcessErr: err, file: true}
-	if raw, rerr := os.ReadFile(path); rerr == nil {
+	b := &Book{Path: path, led: led, ProcessErr: err, file: true, target: path}
+	if real, rerr := filepath.EvalSymlinks(path); rerr == nil {
+		b.target = real
+	}
+	if raw, rerr := os.ReadFile(b.target); rerr == nil {
 		if src, serr := bean.NewSource(path, string(raw)); src != nil && serr == nil {
 			b.src = src
 		}
-		if info, err := os.Stat(path); err == nil {
-			b.modTime = info.ModTime()
-		}
+		b.recordDisk()
+		b.readOnly = b.probeWrite() != nil
 	}
 	return b, nil
+}
+
+// recordDisk notes the file's modification time and size after a read or a
+// write, for unchangedOnDisk to compare against.
+func (b *Book) recordDisk() {
+	if info, err := os.Stat(b.target); err == nil {
+		b.modTime, b.size = info.ModTime(), info.Size()
+	}
+}
+
+// probeWrite opens the ledger for writing and closes it again: the cheapest
+// honest answer to "may we save here", and the one os.WriteFile gave for free
+// before the save went through a rename. Opening for write does not touch the
+// file's contents or its modification time.
+func (b *Book) probeWrite() error {
+	f, err := os.OpenFile(b.target, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // OpenBytes loads a beancount ledger from in-memory bytes, tagged with a logical

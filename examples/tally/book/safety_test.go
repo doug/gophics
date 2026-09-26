@@ -1,6 +1,7 @@
 package book
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,6 +126,122 @@ func TestAddRefusesWhenTheFileChangedOnDisk(t *testing.T) {
 	b2, _ := Open(path)
 	if _, err := b2.Add(entry(20, "4.50")); err != nil {
 		t.Fatalf("Add after reopen: %v", err)
+	}
+}
+
+// The modification time alone missed an edit made within the same clock tick
+// on a filesystem with coarse timestamps; the size is the second witness.
+func TestAddRefusesWhenOnlyTheSizeChanged(t *testing.T) {
+	path := writeLedger(t, editable)
+	b, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	external := editable + "\n2021-01-12 * \"Elsewhere\"\n  Assets:Cash      -1.00 USD\n  Expenses:Food     1.00 USD\n"
+	if err := os.WriteFile(path, []byte(external), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Put the recorded time back, as a coarse clock would have.
+	if err := os.Chtimes(path, b.modTime, b.modTime); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Add(entry(20, "4.50")); !errors.Is(err, ErrChangedOnDisk) {
+		t.Fatalf("Add returned %v, want ErrChangedOnDisk", err)
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != external {
+		t.Error("the external edit was lost")
+	}
+}
+
+// A ledger reached through a symlink is written through it. A rename over the
+// link replaced the link with a regular file and left the real ledger as it
+// was — while reporting the entry saved.
+func TestAddWritesThroughASymlink(t *testing.T) {
+	real := writeLedger(t, editable)
+	link := filepath.Join(t.TempDir(), "ledger.beancount")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("cannot create a symlink here (a capability, not a defect): %v", err)
+	}
+	b, err := Open(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Path != link {
+		t.Errorf("Path = %s, want the path the user opened, %s", b.Path, link)
+	}
+	res, err := b.Add(entry(20, "4.50"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Saved {
+		t.Error("Add did not report saving")
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the link was replaced by a regular file (%v, %v)", info, err)
+	}
+	if raw, _ := os.ReadFile(real); !strings.Contains(string(raw), "Coffee") {
+		t.Error("the entry did not reach the file the link points at")
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(link), ".*tmp")); len(left) != 0 {
+		t.Errorf("temporary files left beside the link: %v", left)
+	}
+	// A second Add sees its own write as the current state of the target.
+	if _, err := b.Add(entry(21, "1.00")); err != nil {
+		t.Fatalf("second Add: %v", err)
+	}
+}
+
+// A read-only ledger is not written. The rename succeeds over one on POSIX,
+// so a file the user had protected was rewritten and the button still said
+// "Save to ledger".
+func TestReadOnlyLedgerIsNotWritable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write to a read-only file, so the refusal cannot be provoked")
+	}
+	path := writeLedger(t, editable)
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	b, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Writable() {
+		t.Error("a read-only ledger reports itself writable")
+	}
+	res, err := b.Add(entry(20, "4.50"))
+	if err == nil {
+		t.Fatal("Add wrote a read-only ledger")
+	}
+	if res.Saved {
+		t.Error("Saved reported on a refused write")
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != editable {
+		t.Error("the read-only file changed")
+	}
+	if strings.Contains(b.src.String(), "Coffee") {
+		t.Error("the refused entry is still in the text")
+	}
+
+	// Protected after it was opened: the save notices, and the label follows.
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Writable() {
+		t.Fatal("a writable ledger reports itself read-only")
+	}
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Add(entry(20, "4.50")); err == nil {
+		t.Fatal("Add wrote a ledger made read-only after it was opened")
+	}
+	if b.Writable() {
+		t.Error("Writable() still true after the file refused a write")
 	}
 }
 
