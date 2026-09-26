@@ -286,6 +286,7 @@ type Painter struct {
 	// so shaped lines are memoized (cleared on font change or when the
 	// cache grows past a bound).
 	shapes   map[shapeKey]text.Line
+	inks     map[shapeKey]inkBounds // outline bounds of shaped lines, see InkBoundsIn
 	metrics  map[metricsKey]TextMetrics
 	imgBufs  map[image.Image]*gg.ImageBuf
 	tintBufs map[tintKey]*gg.ImageBuf // per (atlas, src rect, quantized tint)
@@ -352,6 +353,7 @@ func NewPainter() *Painter {
 		families:  map[string]*text.Font{},
 		shapers:   map[string]*text.Shaper{"": text.NewShaper()},
 		shapes:    map[shapeKey]text.Line{},
+		inks:      map[shapeKey]inkBounds{},
 		metrics:   map[metricsKey]TextMetrics{},
 		imgBufs:   map[image.Image]*gg.ImageBuf{},
 		tintBufs:  map[tintKey]*gg.ImageBuf{},
@@ -385,6 +387,7 @@ func (p *Painter) rebuildShapers() {
 		sh.SetFonts(chain...)
 	}
 	clear(p.shapes)
+	clear(p.inks)
 	clear(p.runs)
 	clear(p.metrics)
 	p.shapeGen++
@@ -517,6 +520,69 @@ func (p *Painter) MetricsIn(font string, size float32) TextMetrics {
 	p.metrics[k] = m
 	return m
 }
+
+// InkBoundsIn returns the bounding box of the glyph outlines of s shaped in
+// the named family, relative to the baseline-left origin (y down, so the top
+// of the ink is negative). ok is false when s draws nothing — spaces, or no
+// font. The box is a superset: it is taken over the outlines' control points,
+// which contain the curves.
+//
+// This is where a run really paints, as opposed to the advance-and-metrics
+// box MeasureWidthIn and MetricsIn describe: an accented capital rises above
+// the ascender, an italic f overhangs its advance, a fallback font can be
+// taller than the primary one. The run cache is sized from it, and scene
+// damage has to cover it, or the overhang is clipped by one and left stale by
+// the other.
+func (p *Painter) InkBoundsIn(font, s string, size float32) (r geom.Rect, ok bool) {
+	k := shapeKey{font, s, size}
+	if b, ok := p.inks[k]; ok {
+		return b.r, b.ok
+	}
+	if len(p.inks) >= shapeCacheLimit {
+		evictHalf(p.inks)
+	}
+	var sink boundsSink
+	for _, g := range p.ShapeIn(font, s, size).Glyphs {
+		g.Font.AppendGlyphPath(&sink, g.GID, size, g.X, g.Y)
+	}
+	b := inkBounds{r: sink.r, ok: sink.any}
+	p.inks[k] = b
+	return b.r, b.ok
+}
+
+type inkBounds struct {
+	r  geom.Rect
+	ok bool
+}
+
+// boundsSink is a text.PathSink that records the bounding box of every point
+// it is handed, control points included.
+type boundsSink struct {
+	r   geom.Rect
+	any bool
+}
+
+func (b *boundsSink) pt(x, y float32) {
+	if !b.any {
+		b.r = geom.Rect{Min: geom.Pt{X: x, Y: y}, Max: geom.Pt{X: x, Y: y}}
+		b.any = true
+		return
+	}
+	b.r.Min.X = min(b.r.Min.X, x)
+	b.r.Min.Y = min(b.r.Min.Y, y)
+	b.r.Max.X = max(b.r.Max.X, x)
+	b.r.Max.Y = max(b.r.Max.Y, y)
+}
+
+func (b *boundsSink) MoveTo(x, y float32)         { b.pt(x, y) }
+func (b *boundsSink) LineTo(x, y float32)         { b.pt(x, y) }
+func (b *boundsSink) QuadTo(cx, cy, x, y float32) { b.pt(cx, cy); b.pt(x, y) }
+func (b *boundsSink) CubeTo(c1x, c1y, c2x, c2y, x, y float32) {
+	b.pt(c1x, c1y)
+	b.pt(c2x, c2y)
+	b.pt(x, y)
+}
+func (b *boundsSink) Close() {}
 
 // ParagraphIn shapes and wraps s to maxWidth in a named font family ("" =
 // default), returning positioned lines with rune ranges (see
@@ -911,10 +977,23 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 	if len(line.Glyphs) == 0 {
 		return nil
 	}
-	m := p.MetricsIn(font, size)
-	const pad = 2 // device px, guards left/top glyph overhang
-	wDev := int(math.Ceil(float64(line.Width*scale))) + 2*pad
-	hDev := int(math.Ceil(float64((m.Ascent+m.Descent)*scale))) + 2*pad
+	ink, ok := p.InkBoundsIn(font, s, size)
+	if !ok {
+		return nil // nothing but spaces: nothing to rasterize or blit
+	}
+	// The image is the run's ink bounds — not the primary font's ascent/
+	// descent by the advance width, which clipped accents above the ascender,
+	// italic overhangs and taller fallback fonts — snapped outward to whole
+	// device pixels with a pad for anti-aliasing. Whole pixels matter: the
+	// blit lands at pos + offset, and an integer offset keeps a run whose pos
+	// is on the device grid from being resampled at a sub-pixel phase, which
+	// softened every run visibly against a direct outline fill.
+	const pad = 2 // device px
+	left := int(math.Floor(float64(ink.Min.X*scale))) - pad
+	top := int(math.Floor(float64(ink.Min.Y*scale))) - pad
+	right := int(math.Ceil(float64(ink.Max.X*scale))) + pad
+	bottom := int(math.Ceil(float64(ink.Max.Y*scale))) + pad
+	wDev, hDev := right-left, bottom-top
 	if wDev <= 0 || hDev <= 0 {
 		return nil
 	}
@@ -933,18 +1012,17 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 	scratch.SetRasterizerMode(gg.RasterizerAnalytic)
 	scratch.SetColor(col.nrgba())
 	scratch.ClearPath()
-	baseline := m.Ascent*scale + pad
 	sink := ggSink{scratch}
 	for _, g := range line.Glyphs {
-		g.Font.AppendGlyphPath(sink, g.GID, size*scale, g.X*scale+pad, baseline+g.Y*scale)
+		g.Font.AppendGlyphPath(sink, g.GID, size*scale, g.X*scale-float32(left), g.Y*scale-float32(top))
 	}
 	scratch.Fill()
 	r := &cachedRun{
 		buf:  gg.ImageBufFromImage(scratch.Image()),
 		dstW: float32(wDev) / scale,
 		dstH: float32(hDev) / scale,
-		offX: -pad / scale,
-		offY: -m.Ascent - pad/scale,
+		offX: float32(left) / scale,
+		offY: float32(top) / scale,
 	}
 	if len(p.runs) >= runCacheLimit {
 		evictHalf(p.runs)
@@ -1161,6 +1239,7 @@ func (p *Painter) LoadSystemFonts() error {
 		}
 	}
 	clear(p.shapes)
+	clear(p.inks)
 	clear(p.runs)
 	p.shapeGen++
 	return nil

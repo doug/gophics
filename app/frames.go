@@ -169,6 +169,9 @@ type nullMeasurer struct{}
 
 func (nullMeasurer) MeasureWidthIn(string, string, float32) float32 { return 0 }
 func (nullMeasurer) MetricsIn(string, float32) paint.TextMetrics    { return paint.TextMetrics{} }
+func (nullMeasurer) InkBoundsIn(string, string, float32) (geom.Rect, bool) {
+	return geom.Rect{}, false
+}
 
 // bg is the background for this frame: the dark variant when the platform
 // reports a dark colour scheme and one was given, else the light one.

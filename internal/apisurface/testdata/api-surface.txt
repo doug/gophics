@@ -664,6 +664,7 @@ paint.Painter.BeginOffscreen method
 paint.Painter.GPUCanvas method
 paint.Painter.Image method
 paint.Painter.ImageChanged method
+paint.Painter.InkBoundsIn method
 paint.Painter.LoadFallbackFont method
 paint.Painter.LoadFont method
 paint.Painter.LoadFontFamily method

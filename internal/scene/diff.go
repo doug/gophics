@@ -10,6 +10,7 @@ import (
 type Measurer interface {
 	MeasureWidthIn(font, s string, size float32) float32
 	MetricsIn(font string, size float32) paint.TextMetrics
+	InkBoundsIn(font, s string, size float32) (geom.Rect, bool)
 }
 
 // Diff compares l against prev and returns the damage: the union of the
@@ -278,10 +279,18 @@ func opBounds(o *op, m Measurer) geom.Rect {
 		w := m.MeasureWidthIn(o.str1, o.str2, o.f1)
 		mt := m.MetricsIn(o.str1, o.f1)
 		pos := o.r.Min
-		return geom.Rect{
+		r := geom.Rect{
 			Min: geom.Pt{X: pos.X, Y: pos.Y - mt.Ascent},
 			Max: geom.Pt{X: pos.X + w, Y: pos.Y + mt.Descent},
 		}
+		// The metrics box is where the text is laid out; the ink can leave it
+		// (accents above the ascender, italic overhangs, a taller fallback
+		// font), and the run cache blits the ink box with a 2px pad, so damage
+		// covers that or the overhang is left stale.
+		if ink, ok := m.InkBoundsIn(o.str1, o.str2, o.f1); ok {
+			r = r.Union(ink.Translate(pos))
+		}
+		return inflate(r, 2)
 	}
 	return geom.Rect{}
 }
