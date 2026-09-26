@@ -74,7 +74,7 @@ func (p *webPermissions) Request(k shell.PermissionKind, cb func(shell.Permissio
 		var ok, fail js.Func
 		ok = js.FuncOf(func(js.Value, []js.Value) any { ok.Release(); fail.Release(); cb(shell.PermissionGranted); return nil })
 		fail = js.FuncOf(func(js.Value, []js.Value) any { ok.Release(); fail.Release(); cb(shell.PermissionDenied); return nil })
-		geo.Call("getCurrentPosition", ok, fail)
+		geo.Call("getCurrentPosition", ok, fail, geoOptions)
 
 	default:
 		cb(shell.PermissionPrompt)

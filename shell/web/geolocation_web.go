@@ -27,6 +27,11 @@ func (w *window) Geolocation() shell.Geolocation {
 
 type webGeolocation struct{ geo js.Value }
 
+// geoOptions bounds a one-shot fix. Without a timeout a device that never
+// gets a fix calls neither callback: the caller waits forever and both funcs
+// leak, although the contract lists timeout among the reportable errors.
+var geoOptions = map[string]any{"timeout": 30_000}
+
 // Current requests one position fix. Exactly one of ok/fail fires; both funcs are
 // released there so neither leaks.
 func (g webGeolocation) Current(cb func(lat, lon, accuracy float64, err error)) {
@@ -50,7 +55,7 @@ func (g webGeolocation) Current(cb func(lat, lon, accuracy float64, err error)) 
 		cb(0, 0, 0, errors.New(msg))
 		return nil
 	})
-	g.geo.Call("getCurrentPosition", ok, fail)
+	g.geo.Call("getCurrentPosition", ok, fail, geoOptions)
 }
 
 // Watch subscribes to position updates and returns a cancel that stops the watch
