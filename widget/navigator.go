@@ -468,8 +468,19 @@ type pageW struct {
 }
 
 func (w pageW) createBox(Ctx) layout.Box { return &pageBox{} }
-func (w pageW) updateBox(_ Ctx, b layout.Box) {
+func (w pageW) updateBox(ctx Ctx, b layout.Box) {
 	pb := b.(*pageBox)
+	// A page going offstage stays mounted, so nothing unmounts the field
+	// that has keyboard focus on it; left alone, keystrokes on the page
+	// pushed over it kept editing the field the user could no longer see,
+	// and on a phone the soft keyboard stayed up over the new page because
+	// the field's OnFocus(false) — which is what hides it — never ran. Let
+	// go the way unmounting does. Coming back onstage needs nothing: focus
+	// is taken by a tap or an Autofocus, and the page is where the user
+	// left it.
+	if w.offstage && !pb.offstage {
+		ctx.el.releaseFocusWithin()
+	}
 	pb.offstage, pb.fracX, pb.reg = w.offstage, w.fracX, w.reg
 }
 func (w pageW) childWidgets() []Widget { return []Widget{w.child} }

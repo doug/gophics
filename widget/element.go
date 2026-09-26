@@ -741,14 +741,7 @@ func (el *element) unmount() {
 	// stop routing to a detached handler and a newly-mounted focusable can take
 	// focus (autofocus only fires when KeyboardTarget is nil, and text-capturing
 	// would otherwise stay stuck on).
-	if el.owner != nil && el.owner.KeyboardTarget != nil {
-		if ib, ok := el.box.(*InteractiveBox); ok && el.owner.KeyboardTarget == &ib.Gestures {
-			el.owner.KeyboardTarget = nil
-			if ib.Gestures.OnFocus != nil {
-				ib.Gestures.OnFocus(false)
-			}
-		}
-	}
+	el.releaseFocus()
 	if el.state != nil {
 		if d, ok := el.state.(Disposer); ok {
 			d.Dispose()
@@ -760,4 +753,45 @@ func (el *element) unmount() {
 	for _, k := range el.kids {
 		k.unmount()
 	}
+}
+
+// releaseFocus lets go of keyboard focus if this element's box holds it,
+// telling the handler so (OnFocus(false) is what hides a soft keyboard), and
+// reports whether it did.
+func (el *element) releaseFocus() bool {
+	if el.owner == nil || el.owner.KeyboardTarget == nil {
+		return false
+	}
+	ib, ok := el.box.(*InteractiveBox)
+	if !ok || el.owner.KeyboardTarget != &ib.Gestures {
+		return false
+	}
+	el.owner.KeyboardTarget = nil
+	if ib.Gestures.OnFocus != nil {
+		ib.Gestures.OnFocus(false)
+	}
+	return true
+}
+
+// releaseFocusWithin releases keyboard focus held anywhere in el's subtree.
+// It is what a subtree that stays mounted but leaves the user's reach — a
+// Navigator page going offstage — does instead of unmounting: the field is
+// still there, but keystrokes must stop landing in it and the keyboard it
+// raised must come down.
+func (el *element) releaseFocusWithin() bool {
+	if el == nil || el.owner == nil || el.owner.KeyboardTarget == nil {
+		return false
+	}
+	if el.releaseFocus() {
+		return true
+	}
+	if el.child.releaseFocusWithin() {
+		return true
+	}
+	for _, k := range el.kids {
+		if k.releaseFocusWithin() {
+			return true
+		}
+	}
+	return false
 }
