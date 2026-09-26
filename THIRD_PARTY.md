@@ -22,8 +22,15 @@ The vendored trees are forks and carry local changes beyond their upstreams.
 `internal/gfx/gg` in particular has performance work not present in
 `gogpu/gg`: a pooled free list for popped layer pixmaps in `context_layer.go`
 and `pixmap.go`, and a row-copy fast path for identity (unscaled, untranslated)
-image draws in `internal/image/draw.go`. Each is covered by tests in its own
-package; the licences and copyright notices are unchanged.
+image draws in `internal/image/draw.go`. It also carries a lifetime fix in
+`internal/gpu/gpu_shared.go`: `GPUShared.Close` closes and drops the pooled
+child render contexts (`childCtxPool`) before destroying the pipelines, and
+`SetDeviceProvider` flushes that pool on any device change rather than only
+when it still holds a differing device — the mobile shell closes the
+accelerator and rebuilds the device on every rotation, and a pooled context
+bound to the released device rendered its layer group into nothing. Each is
+covered by tests in its own package; the licences and copyright notices are
+unchanged.
 
 These packages are `internal/` on purpose: they are gophics's private
 implementation substrate, not a public API. The rationale is that gomobile ignores go.work, so a multi-module layout

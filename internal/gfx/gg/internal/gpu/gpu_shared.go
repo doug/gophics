@@ -238,13 +238,14 @@ func (s *GPUShared) SetDeviceProvider(provider gpucontext.DeviceProvider) error 
 	// survives). Close and drop the pool — while the old device is still alive,
 	// just above — so acquireChildContext rebuilds them on the new device. Same
 	// class of fix as the glyph-atlas re-upload in SyncAtlasTextures.
-	if s.device != nil && s.device != wgpuDev {
-		for _, c := range s.childCtxPool {
-			if c != nil {
-				c.Close()
-			}
-		}
-		s.childCtxPool = nil
+	//
+	// The comparison is against the incoming device alone, not "we hold a
+	// device and it differs". Close nils s.device, and the pool it left behind
+	// (or one filled before any device existed) is bound to nothing this
+	// provider knows about; the old guard skipped exactly that case. Close
+	// empties the pool itself now, so this is the second line.
+	if s.device != wgpuDev {
+		s.closeChildCtxPoolLocked()
 	}
 
 	// Destroy own resources if we created them.
@@ -353,6 +354,14 @@ func (s *GPUShared) Close() {
 	if s.texturePool != nil {
 		s.texturePool.DestroyAll()
 	}
+	// The pooled child contexts own sessions built on this device and its
+	// pipelines, so they go before either. Left in the pool they outlived
+	// both: the mobile shell closes the accelerator on every surface rebuild
+	// and hands the next SetDeviceProvider a fresh device, and the first
+	// opacity/blend layer after a rotation acquired a context whose session
+	// still pointed at the released device — rendering the group into
+	// nothing, on memory that was gone.
+	s.closeChildCtxPoolLocked()
 	s.destroyPipelinesLocked()
 	if !s.externalDevice {
 		if s.device != nil {
@@ -371,6 +380,18 @@ func (s *GPUShared) Close() {
 	s.deviceReady = false
 	s.gpuReady = false
 	s.externalDevice = false
+}
+
+// closeChildCtxPoolLocked closes every pooled child render context and empties
+// the pool, so the next acquireChildContext builds on whatever device is
+// current. Caller holds mu.
+func (s *GPUShared) closeChildCtxPoolLocked() {
+	for _, c := range s.childCtxPool {
+		if c != nil {
+			c.Close()
+		}
+	}
+	s.childCtxPool = nil
 }
 
 // SampleCount returns the resolved MSAA sample count (4 or 1).

@@ -53,3 +53,56 @@ func TestPooledChildContextDoesNotInheritFrameState(t *testing.T) {
 			"offscreen will compare equal and skip the clear")
 	}
 }
+
+// Close must take the pooled child contexts with it.
+//
+// The mobile shell closes the accelerator on every surface rebuild (rotation,
+// background→foreground) and then hands SetDeviceProvider a new device. Close
+// released the device and left childCtxPool alone, and SetDeviceProvider
+// flushed the pool only when it still held a device that differed from the
+// incoming one — which, after Close, it never did. The first opacity/blend
+// layer after a rotation acquired a context whose session was bound to the
+// released device and its destroyed pipelines.
+func TestCloseEmptiesChildContextPool(t *testing.T) {
+	s := &GPUShared{}
+	c := s.acquireChildContext()
+	if c == nil {
+		t.Skip("no render context available")
+	}
+	s.releaseChildContext(c)
+	if n := len(s.childCtxPool); n != 1 {
+		t.Fatalf("pool holds %d contexts after release, want 1", n)
+	}
+
+	s.Close()
+	if n := len(s.childCtxPool); n != 0 {
+		t.Fatalf("pool holds %d contexts after Close; the next SetDeviceProvider "+
+			"would hand out a context bound to the released device", n)
+	}
+	if got := s.acquireChildContext(); got == c {
+		t.Error("acquire after Close returned the closed context")
+	}
+}
+
+// SetDeviceProvider drops the pool on any device change, and that includes
+// the change from "no device" — the case Close leaves behind. There is no
+// device to hand a provider here, so this pins the flush it calls.
+func TestDeviceChangeFlushEmptiesChildContextPool(t *testing.T) {
+	s := &GPUShared{}
+	c := s.acquireChildContext()
+	if c == nil {
+		t.Skip("no render context available")
+	}
+	s.releaseChildContext(c)
+
+	s.mu.Lock()
+	s.closeChildCtxPoolLocked()
+	n := len(s.childCtxPool)
+	s.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("pool holds %d contexts after the flush, want 0", n)
+	}
+	if c.session != nil {
+		t.Error("the flushed context still holds its session")
+	}
+}
