@@ -40,6 +40,13 @@ type Scroll struct {
 	// layout. OnEndReached then fires at the far (oldest) end, for loading
 	// history. Not combined with pull-to-refresh.
 	Reverse bool
+
+	// onExtent reports the viewport's main-axis extent from layout, whenever
+	// layout changes it. OnOffset carries the extent too, but only with a
+	// scroll; a widget that windows by it (LazyList) needs the first frame's
+	// extent and a resize's before anything has scrolled. Internal: the
+	// extent is a layout fact, and apps read layout through LayoutBuilder.
+	onExtent func(extent float32)
 }
 
 func (s Scroll) CreateState() State { return &scrollState{} }
@@ -895,7 +902,7 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				}
 			},
 		},
-		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Reverse: w.Reverse, Ref: s.vp,
+		Child: viewport{Axis: w.Axis, Offset: s.offset, Lead: s.overscroll, Reverse: w.Reverse, Ref: s.vp, OnExtent: w.onExtent,
 			// revealAnchor captures the content origin each paint; Provide exposes
 			// the reveal service to descendants (TextField caret-into-view).
 			Child: Provide[*scrollReveal]{Value: s.reveal, Child: revealAnchor{reveal: s.reveal, child: w.Child}}},
@@ -1195,24 +1202,54 @@ func (b *refreshBox) Paint(c paint.Canvas, at geom.Pt) {
 
 // viewport is the internal render widget behind Scroll.
 type viewport struct {
-	Axis    layout.Axis
-	Offset  float32
-	Lead    float32
-	Reverse bool
-	Ref     *viewportRef
-	Child   Widget
+	Axis     layout.Axis
+	Offset   float32
+	Lead     float32
+	Reverse  bool
+	Ref      *viewportRef
+	OnExtent func(float32)
+	Child    Widget
 }
 
-func (v viewport) createBox(Ctx) layout.Box { return &layoutbox.Viewport{} }
+func (v viewport) createBox(Ctx) layout.Box { return &viewportBox{} }
 func (v viewport) updateBox(_ Ctx, b layout.Box) {
-	vb := b.(*layoutbox.Viewport)
+	vb := b.(*viewportBox)
 	vb.Axis, vb.Offset, vb.Lead, vb.Reverse = v.Axis, v.Offset, v.Lead, v.Reverse
+	vb.onExtent = v.OnExtent
 	if v.Ref != nil {
-		v.Ref.box = vb
+		v.Ref.box = &vb.Viewport
 	}
 }
 func (v viewport) childWidgets() []Widget { return []Widget{v.Child} }
 func (v viewport) soleChild() Widget      { return v.Child }
 func (v viewport) attach(b layout.Box, kids []layout.Box) {
-	b.(*layoutbox.Viewport).Child = first(kids)
+	b.(*viewportBox).Child = first(kids)
+}
+
+// viewportBox is the layout Viewport with a report of its main-axis extent.
+// The extent is what a windowed list mounts its rows by, and it used to
+// travel only with a scroll, so a viewport that had not scrolled yet — the
+// first frame, or a window resized taller after a scroll — kept the list at
+// its guess and left the rows below it blank. Layout is where the extent is
+// decided, so layout reports it; the report runs on a change only, and the
+// listener's SetState is settled by the frame's layout loop, the way a
+// LayoutBuilder's is.
+type viewportBox struct {
+	layoutbox.Viewport
+	onExtent func(float32)
+	extent   float32 // last reported main-axis extent
+	reported bool
+}
+
+func (b *viewportBox) Layout(cs layout.Constraints) geom.Size {
+	sz := b.Viewport.Layout(cs)
+	ext := sz.H
+	if b.Axis == layout.Horizontal {
+		ext = sz.W
+	}
+	if b.onExtent != nil && (!b.reported || ext != b.extent) {
+		b.extent, b.reported = ext, true
+		b.onExtent(ext)
+	}
+	return sz
 }

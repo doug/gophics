@@ -67,7 +67,9 @@ func (s *lazyState) Build(Ctx) Widget {
 	}
 	viewH := s.viewH
 	if viewH <= 0 {
-		viewH = 800 // first frame: generous window until measured
+		// Before the first layout: a generous window, corrected by the
+		// viewport's extent report in the same frame.
+		viewH = 800
 	}
 	overscan := viewH / 2
 	// The scroll offset is measured from the start, or from the end when
@@ -119,6 +121,16 @@ func (s *lazyState) Build(Ctx) Widget {
 		Reverse:      w.Reverse,
 		OnOffset: func(off, extent float32) {
 			s.SetState(func() { s.offset, s.viewH = off, extent })
+		},
+		// The extent arrives from layout, not only from scrolling: the
+		// first frame's, and a resize's. Without it a viewport taller than
+		// the guess above showed rows down to the guess and nothing below
+		// until the user scrolled, and a window resized taller kept the old
+		// extent — eight rows and a blank remainder.
+		onExtent: func(extent float32) {
+			if extent != s.viewH {
+				s.SetState(func() { s.viewH = extent })
+			}
 		},
 	}
 }
