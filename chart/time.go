@@ -3,8 +3,8 @@ package chart
 import "time"
 
 // Time is a continuous scale over a date range whose ticks fall on calendar
-// boundaries (days, weeks, months, or years depending on span). Datum X values
-// are Unix seconds; use Seconds(t) to convert.
+// boundaries (hours, days, weeks, months, or years depending on span). Datum X
+// values are Unix seconds; use Seconds(t) to convert.
 type Time struct {
 	Lo, Hi time.Time
 }
@@ -54,23 +54,45 @@ func (s *Time) pointLabel(v float64) string {
 	}
 }
 
-// Ticks chooses calendar-aligned ticks by span: days → daily, up to a quarter →
+// Ticks chooses calendar-aligned ticks by span: a day or two → hourly (in
+// steps of 1, 2, 3, or 6 hours), up to two weeks → daily, up to a quarter →
 // weekly (Mondays), up to two years → monthly, else yearly.
 //
 // Each run starts from the boundary at or before Lo, which lies before Lo
-// whenever Lo is not itself on the boundary — a series starting at noon, or
-// on a Monday afternoon. Such a tick has a negative position: its gridline
-// landed left of the plot and its label was clamped into the y-axis column.
-// Every branch skips it.
+// whenever Lo is not itself on the boundary — a series starting at 09:30, at
+// noon, or on a Monday afternoon. Such a tick has a negative position: its
+// gridline landed left of the plot and its label was clamped into the y-axis
+// column. Every branch skips it.
+//
+// The hourly branch is the one that skip used to empty: with nothing finer
+// than daily, an intraday chart got the single midnight tick, or none at all
+// when its Lo was not midnight, while the selection tooltip already spoke in
+// clock time for the same span.
 func (s *Time) Ticks(_ int) []Tick {
 	days := s.Hi.Sub(s.Lo).Hours() / 24
 	var out []Tick
-	add := func(d time.Time, layout string) {
-		if !d.Before(s.Lo) {
-			out = append(out, s.tick(d, layout))
+	add := func(d time.Time, layout string) bool {
+		if d.Before(s.Lo) {
+			return false
 		}
+		out = append(out, s.tick(d, layout))
+		return true
 	}
 	switch {
+	case days <= 2:
+		step := hourStep(s.Hi.Sub(s.Lo))
+		var prev time.Time // the last tick emitted
+		for d := hourStart(s.Lo, step); !d.After(s.Hi); d = d.Add(step) {
+			// A clock time alone does not say which day, so the first tick
+			// and the first of each day the run crosses into carry the date.
+			layout := "15:04"
+			if prev.IsZero() || d.YearDay() != prev.YearDay() {
+				layout = "Jan 2 15:04"
+			}
+			if add(d, layout) {
+				prev = d
+			}
+		}
 	case days <= 14:
 		step := 1
 		if days > 8 {
@@ -93,6 +115,31 @@ func (s *Time) Ticks(_ int) []Tick {
 		}
 	}
 	return out
+}
+
+// hourStep is the hourly tick spacing for a span: the coarsest of 1, 2, 3, and
+// 6 hours that still gives the axis at least six ticks. Each divides a day, so
+// a run lands on the same clock times every day it covers.
+func hourStep(span time.Duration) time.Duration {
+	switch {
+	case span <= 6*time.Hour:
+		return time.Hour
+	case span <= 12*time.Hour:
+		return 2 * time.Hour
+	case span <= 18*time.Hour:
+		return 3 * time.Hour
+	default:
+		return 6 * time.Hour
+	}
+}
+
+// hourStart is the last multiple of step at or before t, counted from t's
+// local midnight. time.Time.Truncate counts from the zero time instead, which
+// puts a 6 h step on UTC boundaries in every zone and on the half hour in a
+// +05:30 one.
+func hourStart(t time.Time, step time.Duration) time.Time {
+	day := dayStart(t)
+	return day.Add(t.Sub(day).Truncate(step))
 }
 
 func dayStart(t time.Time) time.Time {
