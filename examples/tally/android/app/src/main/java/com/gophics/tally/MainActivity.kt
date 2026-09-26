@@ -118,14 +118,26 @@ class MainActivity : Activity() {
         platform?.stopObserving()
     }
 
+    // Run states, matching shell.AppState: 0 active, 1 inactive, 2 background.
+    // onPause means "no longer frontmost" — a dialog over the app counts —
+    // while onStop means "not visible", which is the one worth persisting on.
+    // Lifecycle is always published on the Go side, so without these calls
+    // ctx.Lifecycle() would report a state that never changes.
     override fun onPause() {
         super.onPause()
         bridge.focused(false)
+        bridge.setAppState(1)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        bridge.setAppState(2)
     }
 
     override fun onResume() {
         super.onResume()
         bridge.focused(true)
+        bridge.setAppState(0)
         // Whether there is text to paste — from the description, never the clip
         // itself. The clipboard can change while another app is frontmost, so
         // the Go side has to be told on the way in, but since Android 12
@@ -239,6 +251,9 @@ class GophicsView(private val activity: Activity) :
             }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
                 repeat(beforeLength) { bridge.key(2, true) } // KeyBackspace
+                // Forward deletion too: an IME removing a suggestion span after
+                // the caret asks for it here, and ignoring it left the span.
+                repeat(afterLength) { bridge.key(3, true) } // KeyDelete
                 return true
             }
             override fun sendKeyEvent(event: KeyEvent): Boolean {
