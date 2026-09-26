@@ -82,6 +82,11 @@ var errMessageTooLarge = errors.New("shell: websocket message exceeds 16 MiB")
 // handshake before giving up on it. A variable so a test can shorten it.
 var closeTimeout = 5 * time.Second
 
+// dialTimeout bounds each stage of Dial: the TCP connect (and TLS handshake
+// for wss), then separately the opening handshake — the request write and the
+// read of the 101 response. A variable so a test can shorten it.
+var dialTimeout = 10 * time.Second
+
 // acceptKey computes the expected Sec-WebSocket-Accept for a client key.
 func acceptKey(clientKey string) string {
 	h := sha1.New()
@@ -108,7 +113,7 @@ func dialWebSocket(rawurl string) (*wsConn, error) {
 	}
 
 	var netConn net.Conn
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	dialer := &net.Dialer{Timeout: dialTimeout}
 	switch u.Scheme {
 	case "ws":
 		host := u.Host
@@ -148,6 +153,18 @@ func dialWebSocket(rawurl string) (*wsConn, error) {
 	req.WriteString("Connection: Upgrade\r\n")
 	fmt.Fprintf(&req, "Sec-WebSocket-Key: %s\r\n", key)
 	req.WriteString("Sec-WebSocket-Version: 13\r\n\r\n")
+
+	// The dialer's timeout ends at the connect. A server that accepts TCP and
+	// never answers the upgrade used to park this goroutine on the response
+	// read forever, and neither OnOpen nor OnClose ever fired — the caller
+	// could not tell the difference from a slow network, and could not retry.
+	// The deadline covers the request write and the whole 101 read, and comes
+	// off again before the connection is handed to the read loop, which sets
+	// its own on Close.
+	if err := netConn.SetDeadline(time.Now().Add(dialTimeout)); err != nil {
+		netConn.Close()
+		return nil, err
+	}
 	if _, err := io.WriteString(netConn, req.String()); err != nil {
 		netConn.Close()
 		return nil, err
@@ -181,6 +198,10 @@ func dialWebSocket(rawurl string) (*wsConn, error) {
 	if accept != acceptKey(key) {
 		netConn.Close()
 		return nil, errors.New("shell: websocket handshake: bad Sec-WebSocket-Accept")
+	}
+	if err := netConn.SetDeadline(time.Time{}); err != nil {
+		netConn.Close()
+		return nil, err
 	}
 	return &wsConn{conn: netConn, br: br}, nil
 }

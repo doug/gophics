@@ -334,6 +334,54 @@ func TestCloseCompletesWhenThePeerNeverAnswers(t *testing.T) {
 	}
 }
 
+// Dial bounded the TCP connect and nothing after it. A server that accepts
+// the connection and never answers the upgrade parked the dial goroutine on
+// the 101 read forever: no OnOpen, no OnClose, and nothing for the caller to
+// retry on — the close-side hang one step earlier.
+func TestDialReportsWhenTheHandshakeIsNeverAnswered(t *testing.T) {
+	old := dialTimeout
+	dialTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { dialTimeout = old })
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	release := make(chan struct{})
+	defer close(release)
+	go func() {
+		// Accept and say nothing; keep TCP up so EOF cannot be the reason.
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		<-release
+	}()
+
+	opened := make(chan SocketConn, 1)
+	closed := make(chan error, 1)
+	began := time.Now()
+	NewSocket().Dial("ws://"+ln.Addr().String()+"/", SocketHandlers{
+		OnOpen:  func(c SocketConn) { opened <- c },
+		OnClose: func(err error) { closed <- err },
+	})
+	select {
+	case <-opened:
+		t.Fatal("OnOpen fired with no 101 response")
+	case err := <-closed:
+		if err == nil {
+			t.Error("a handshake that never completed was reported as a clean close")
+		}
+		if took := time.Since(began); took > 3*time.Second {
+			t.Errorf("OnClose took %v after Dial", took)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("neither OnOpen nor OnClose fired: the handshake read has no deadline")
+	}
+}
+
 // compile-time guard: the pure-Go client implements the capability interfaces.
 var (
 	_ Socket     = socketClient{}
