@@ -24,6 +24,7 @@ import (
 	"image"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -61,6 +62,7 @@ const (
 	readerSetCurrentMediaType = 7
 	readerGetCurrentMediaType = 6
 	readerReadSample          = 9
+	readerFlush               = 10
 
 	// IMFSample : IMFAttributes(33)
 	sampleConvertToContiguous = 41
@@ -427,15 +429,51 @@ func rgb32ToRGBA(src []byte, img *image.RGBA, w, h, stride int) {
 	}
 }
 
+// stopTimeout bounds how long Stop waits for the stream goroutine.
+//
+// Generous against a camera that is merely slow to hand back a frame, short
+// enough that a capture page closing on a dead device does not look hung.
+const stopTimeout = 2 * time.Second
+
 // Stop ends the stream and releases the device, turning the camera light off.
+//
+// The stream goroutine is usually parked inside a synchronous ReadSample, and
+// the reader must not be released under it — so Stop joins the goroutine
+// first. Joining alone is not enough: ReadSample returns on the next frame or
+// on a device error, and a camera that is present but delivers nothing (the
+// ErrNoFrames case: unplugged but still enumerated, passed through to a VM,
+// a stuck virtual camera) does neither, so a plain join waited forever. That
+// is the path the capability's first-frame timeout takes by design, and the
+// app never heard the error because Stop never returned.
+//
+// Flush is the reader's own cancellation: it discards queued samples and
+// cancels pending requests, which is what a blocked ReadSample is waiting
+// on. It is issued from its own goroutine because the synchronous reader
+// serializes its calls, so a Flush that has to wait for ReadSample to let go
+// would otherwise block Stop just as the join did. Both are then joined
+// under one deadline. When it passes, the reader is leaked rather than
+// released: an object nobody can prove idle is cheaper to lose than to free
+// under an in-flight call, and the goroutine that eventually returns sees
+// done closed and exits without touching anything freed.
 func (c *Capture) Stop() {
 	if !c.stop() {
 		return
 	}
 	close(c.done)
-	// Join before releasing: ReadSample returns on the next frame, or with an
-	// error once the device is gone, and only then is the reader nobody's.
-	<-c.finished
+	flushed := make(chan struct{})
+	go func() {
+		defer close(flushed)
+		comCall(c.reader, readerFlush, firstVideoStream)
+	}()
+	deadline := time.NewTimer(stopTimeout)
+	defer deadline.Stop()
+	for _, ch := range []chan struct{}{c.finished, flushed} {
+		select {
+		case <-ch:
+		case <-deadline.C:
+			return
+		}
+	}
 	release(c.reader)
 	release(c.source)
 	c.reader, c.source = nil, nil

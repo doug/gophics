@@ -98,6 +98,13 @@ func TestHardwareCapture(t *testing.T) {
 // Neither shows up in a single open/capture/stop, and both are the kind of
 // crash a preview page that is opened and closed a few times produces. macOS
 // leaked a session, an output, a delegate and a queue per cycle instead.
+//
+// The odd cycles, where Stop lands before the first frame, are the closest a
+// working camera gets to the case the Windows join then got wrong: a device
+// that never delivers leaves ReadSample blocked, and a Stop that only waited
+// for it hung for good. That case needs a camera that produces nothing —
+// unplugged but enumerated, or passed through to a VM — which this test
+// cannot arrange; Stop's bounded join is what covers it.
 func TestHardwareOpenStopCycles(t *testing.T) {
 	if os.Getenv("GOPHICS_CAMERA_HW") == "" {
 		t.Skip("set GOPHICS_CAMERA_HW=1 to run against a real camera")
