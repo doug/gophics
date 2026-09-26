@@ -42,7 +42,12 @@ func (webFolderPicker) Open(done func(shell.Folder, error)) {
 	if done == nil {
 		return
 	}
-	promise := js.Global().Call("showDirectoryPicker") // spends the gesture now
+	// mode: readwrite, because the picker's default grant is read-only and the
+	// first createWritable then has to ask again — outside a user gesture
+	// (an autosave, a debounce timer) that second ask rejects with
+	// NotAllowedError. Asked up front, the one prompt covers what the Folder
+	// contract promises: read and write until it is dropped.
+	promise := js.Global().Call("showDirectoryPicker", map[string]any{"mode": "readwrite"}) // spends the gesture now
 	onSettled(promise, func(handle js.Value, err error) {
 		if err != nil {
 			// Dismissing the picker rejects with AbortError. That is a choice,
