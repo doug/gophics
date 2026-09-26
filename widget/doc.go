@@ -22,9 +22,9 @@
 //   - The reconciler core (element.go): Owner, the element tree, the
 //     build/reconcile machinery, the renderWidget bridge, and the internals
 //     behind Ctx. This is the engine; nothing here is widget-specific.
-//   - The widget catalog (basic.go, layout_widgets.go, scroll/text/overlay/
-//     navigator/... files): the built-in widgets, each a thin value type that
-//     the core reconciles into render objects.
+//   - The widget catalog (text.go, image.go, canvas.go, layout_widgets.go,
+//     scroll/textfield/overlay/navigator/... files): the built-in widgets,
+//     each a thin value type that the core reconciles into render objects.
 //
 // The catalog depends on the core, never the reverse.
 //
