@@ -583,7 +583,11 @@ func (w *window) Invalidate() {
 }
 
 func (w *window) SetTitle(title string) { w.doc.Set("title", title) }
-func (w *window) Close()                {}
+
+// Close delivers Closed, as shell.Window.Close promises. A page cannot close
+// itself from wasm, but the contract is about the event: an app's save-on-quit
+// hook runs from it, and desktop and terminal already honour that.
+func (w *window) Close() { w.handler.Event(w, shell.Closed{}) }
 
 func (w *window) ClipboardRead() (string, error) {
 	return "", errors.New("web: synchronous clipboard read unsupported")
