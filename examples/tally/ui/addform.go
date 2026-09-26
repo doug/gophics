@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 
+	"github.com/doug/tally/bean"
 	"github.com/doug/tally/book"
 )
 
@@ -34,6 +36,9 @@ type addForm struct {
 	// err is the validation or write failure to show; result is the confirmation.
 	err    string
 	result string
+	// stale is set when err is that the file changed on disk: the fix is to
+	// reload it, which the status row then offers, keeping what was typed.
+	stale bool
 	// warnings names balance assertions this edit invalidated — a consequence the
 	// user did not ask for and must not discover later.
 	warnings []string
@@ -44,7 +49,7 @@ type addForm struct {
 func (f *addForm) reset(now time.Time) {
 	f.date = now.Format("2006-01-02")
 	f.payee, f.narration, f.amount = "", "", ""
-	f.err, f.result, f.warnings = "", "", nil
+	f.err, f.result, f.warnings, f.stale = "", "", nil, false
 }
 
 // addPanel renders the form, or nothing when it's closed.
@@ -187,6 +192,16 @@ func saveLabel(b *book.Book) string {
 func (s *state) formStatus(th theme.Theme) widget.Widget {
 	f := &s.form
 	switch {
+	case f.err != "" && f.stale:
+		// The error says to reload; the only other loader is the file picker,
+		// which would mean finding the same file again and losing the entry.
+		row := widget.Row(
+			widget.Expand(widget.Text{Value: f.err, Size: th.Type.Label, Color: th.Danger, Wrap: true}),
+			widget.Sized{W: 10},
+			theme.Button{Label: "Reload", OnTap: func() { s.reload() }},
+		)
+		row.CrossAlign = layout.CrossCenter
+		return row
 	case f.err != "":
 		return widget.Text{Value: f.err, Size: th.Type.Label, Color: th.Danger, Wrap: true}
 	case f.result != "" && len(f.warnings) > 0:
@@ -253,17 +268,44 @@ func (s *state) submitForm() {
 		From: f.from, To: f.to, Amount: amount, Currency: s.baseCurrency,
 	})
 	if err != nil {
-		s.SetState(func() { f.err, f.result = capitalize(err.Error())+".", "" })
+		s.SetState(func() {
+			f.err, f.result = capitalize(err.Error())+".", ""
+			f.stale = errors.Is(err, book.ErrChangedOnDisk)
+		})
 		return
 	}
 
 	// The ledger changed underneath every view, so drop the derived state and let
 	// it recompute.
 	s.SetState(func() {
-		f.err = ""
+		f.err, f.stale = "", false
 		f.result = "Added" + savedSuffix(res.Saved)
 		f.warnings = res.Invalidated
 		f.payee, f.narration, f.amount = "", "", ""
+		s.seriesReady = false
+		s.refreshAfterEdit()
+	})
+}
+
+// reload reopens the ledger at its path after a save was refused because the
+// file changed on disk. The form keeps what was typed — the entry is still
+// wanted, only the copy it would have been added to was stale — and the user
+// saves again against the fresh one.
+func (s *state) reload() {
+	b, err := book.Open(s.book.Path)
+	var tr *bean.Tree
+	if err == nil {
+		tr, err = b.Tree()
+	}
+	s.SetState(func() {
+		f := &s.form
+		if err != nil {
+			f.err, f.stale = "Couldn't reload the ledger: "+err.Error(), false
+			return
+		}
+		s.book, s.tree = b, tr
+		f.err, f.stale = "", false
+		f.result = "Reloaded; save again to add the entry."
 		s.seriesReady = false
 		s.refreshAfterEdit()
 	})

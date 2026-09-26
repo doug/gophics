@@ -150,6 +150,7 @@ func (s *state) open(account string) {
 	entries, err := s.book.Register(account, curs[0])
 	s.SetState(func() {
 		s.account, s.currency, s.entries, s.selected, s.filter = account, curs[0], entries, -1, ""
+		s.showProblems = false // the register replaces the list, as a tab does
 		if err != nil {
 			s.err = err
 		}
@@ -565,7 +566,11 @@ func (s *state) tab(th theme.Theme, label string, v view) widget.Widget {
 	}
 	return theme.Tappable{
 		Radius: 6,
-		OnTap:  func() { s.SetState(func() { s.view, s.account, s.entries = v, "", nil }) },
+		// A tab leaves the problems list too: screen tests showProblems
+		// first, so without this the tabs did nothing while it was open.
+		OnTap: func() {
+			s.SetState(func() { s.view, s.account, s.entries, s.showProblems = v, "", nil, false })
+		},
 		Child: widget.Padding{
 			Insets: geom.Insets{Left: 10, Right: 10, Top: 5, Bottom: 5},
 			Child:  widget.Text{Value: label, Font: font, Size: th.Type.Body, Color: col},
