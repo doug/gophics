@@ -14,11 +14,12 @@ import (
 	"github.com/doug/gophics/shell"
 )
 
-// SecureStorage returns a store only when localStorage is available (it isn't in
-// some private-mode / sandboxed contexts).
+// SecureStorage returns a store only when localStorage is available. It isn't
+// in some private-mode / sandboxed contexts, where reading the property throws
+// rather than yielding undefined — hence globalProp.
 func (w *window) SecureStorage() shell.SecureStorage {
-	ls := js.Global().Get("localStorage")
-	if ls.IsUndefined() || ls.IsNull() {
+	ls := globalProp("localStorage")
+	if !ls.Truthy() {
 		return nil
 	}
 	return &webStorage{ls: ls}

@@ -14,6 +14,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"syscall/js"
 )
 
@@ -30,15 +31,34 @@ const (
 // and a cached handle would have to deal with the connection being closed out
 // from under it by a version change in another tab.
 func withFolderStore(mode string, fn func(store js.Value, fail func(error)), onErr func(error)) {
-	idb := js.Global().Get("indexedDB")
+	// Read through globalProp and open under recover: where IndexedDB is
+	// denied (an opaque origin, storage blocked in a sandboxed frame) the
+	// property getter and open() both throw SecurityError instead of
+	// reporting through onerror.
+	idb := globalProp("indexedDB")
 	if !idb.Truthy() {
 		onErr(errors.New("web: indexedDB unavailable"))
 		return
 	}
-	req := idb.Call("open", folderDBName, 1)
+	req, err := idbOpen(idb)
+	if err != nil {
+		onErr(err)
+		return
+	}
 
-	var upgrade, success, failure js.Func
-	release := func() { upgrade.Release(); success.Release(); failure.Release() }
+	var upgrade, success, failure, blocked js.Func
+	release := func() { upgrade.Release(); success.Release(); failure.Release(); blocked.Release() }
+	// One outcome reaches the caller. onblocked can precede onsuccess — the
+	// request goes ahead once the blocking connection closes — so a blocked
+	// request is reported at once and the late success is then dropped.
+	settled := false
+	settle := func() bool {
+		if settled {
+			return false
+		}
+		settled = true
+		return true
+	}
 
 	upgrade = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		db := req.Get("result")
@@ -47,15 +67,39 @@ func withFolderStore(mode string, fn func(store js.Value, fail func(error)), onE
 		}
 		return nil
 	})
+	blocked = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		if settle() {
+			onErr(errors.New("web: indexedDB open blocked by another connection"))
+		}
+		return nil
+	})
 	failure = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		release()
-		onErr(errors.New("web: indexedDB open failed"))
+		if settle() {
+			onErr(errors.New("web: indexedDB open failed"))
+		}
 		return nil
 	})
 	success = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		release()
 		db := req.Get("result")
+		if !settle() {
+			db.Call("close")
+			return nil
+		}
 		tx := db.Call("transaction", folderDBStore, mode)
+		// The connection is opened per call, so it is closed per call: once
+		// the transaction ends (complete or abort — an error aborts it) the
+		// database is let go, instead of one connection lingering per
+		// Open/Restore and blocking a version change in another tab.
+		var closer js.Func
+		closer = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+			closer.Release()
+			db.Call("close")
+			return nil
+		})
+		tx.Call("addEventListener", "complete", closer)
+		tx.Call("addEventListener", "abort", closer)
 		fn(tx.Call("objectStore", folderDBStore), onErr)
 		return nil
 	})
@@ -63,6 +107,17 @@ func withFolderStore(mode string, fn func(store js.Value, fail func(error)), onE
 	req.Set("onupgradeneeded", upgrade)
 	req.Set("onsuccess", success)
 	req.Set("onerror", failure)
+	req.Set("onblocked", blocked)
+}
+
+// idbOpen issues indexedDB.open, turning a synchronous throw into an error.
+func idbOpen(idb js.Value) (req js.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("web: indexedDB open: %v", r)
+		}
+	}()
+	return idb.Call("open", folderDBName, 1), nil
 }
 
 // idbPut stores handle under key.

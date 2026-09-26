@@ -18,11 +18,12 @@ import (
 // prefsPrefix namespaces preference keys within localStorage.
 const prefsPrefix = "gophics.pref."
 
-// Preferences returns a store only when localStorage is available (it isn't in
-// some private-mode / sandboxed contexts).
+// Preferences returns a store only when localStorage is available. It isn't in
+// some private-mode / sandboxed contexts, where reading the property throws
+// rather than yielding undefined — hence globalProp.
 func (w *window) Preferences() shell.Preferences {
-	ls := js.Global().Get("localStorage")
-	if ls.IsUndefined() || ls.IsNull() {
+	ls := globalProp("localStorage")
+	if !ls.Truthy() {
 		return nil
 	}
 	return &webPrefs{ls: ls}

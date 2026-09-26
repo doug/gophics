@@ -25,6 +25,26 @@ import (
 	"syscall/js"
 )
 
+// globalProp reads window[name], or undefined when the property's getter
+// throws.
+//
+// Value.Get is a bare Reflect.get on the JS side of the bridge, with no
+// try/catch: a getter that throws unwinds the wasm import and wedges the Go
+// runtime somewhere no recover can reach. window.localStorage does exactly
+// that — SecurityError — where storage is blocked, in a sandboxed or
+// third-party frame, which is the very case the storage capabilities want to
+// answer with nil. Value.Call does catch, so the read goes through Reflect.get
+// as a call and a throw becomes an ordinary, recoverable panic.
+func globalProp(name string) (v js.Value) {
+	defer func() {
+		if recover() != nil {
+			v = js.Undefined()
+		}
+	}()
+	g := js.Global()
+	return g.Get("Reflect").Call("get", g, name)
+}
+
 // await blocks the calling goroutine until p settles, returning its value or a
 // rejection error. It must run on a spawned goroutine, never the event-loop
 // one — see the package comment on this file.
