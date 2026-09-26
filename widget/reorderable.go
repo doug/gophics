@@ -82,21 +82,32 @@ func (s *reorderState) row(i int) Widget {
 	child := w.Build(i)
 
 	axis := DragVertical
+	if w.Axis == layout.Horizontal {
+		axis = DragHorizontal
+	}
 	// The list already draws the dragged row in the slot it would land in —
 	// that is what opens the gap ahead of it — so the row has been displaced
 	// by a whole ItemExtent for every row the drag has passed. What is left to
 	// apply is the pointer distance minus that displacement. Applying the
 	// whole distance on top of it made the row travel twice, running away
 	// downward by another row's height each time it crossed one.
-	travel := s.delta - float32(s.target()-s.from)*w.ItemExtent
-	off := geom.Pt{Y: travel}
-	if w.Axis == layout.Horizontal {
-		axis = DragHorizontal
-		off = geom.Pt{X: travel}
-	}
+	var off geom.Pt
 	if i == s.from {
-		child = dragOffset{dx: off.X, dy: off.Y, child: child}
+		travel := s.delta - float32(s.target()-s.from)*w.ItemExtent
+		if w.Axis == layout.Horizontal {
+			off.X = travel
+		} else {
+			off.Y = travel
+		}
 	}
+	// Every row is wrapped, the ones not being dragged at zero offset. The
+	// wrapper used to appear on press and go on release, and the reconciler
+	// reads a different widget type at the same position as a different
+	// widget: the row's content was unmounted and remounted on the press
+	// frame and again on release, so a tap on a row lost whatever state the
+	// row held, and a field inside one was focused by the press and gone by
+	// the next frame.
+	child = dragOffset{dx: off.X, dy: off.Y, child: child}
 
 	return Interactive{
 		Gestures: Gestures{
