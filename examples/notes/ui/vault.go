@@ -81,16 +81,55 @@ func (v *Vault) Save(path, body string) error {
 	if !ok {
 		return errors.New("note not found")
 	}
+	// The body is taken before the write, not after. A folder store reports
+	// the write's outcome through its own callback, and nothing says that
+	// arrives after Write returns; revert looks for the body it is undoing,
+	// so it has to be in place by the time the store can speak.
+	v.setBody(path, body)
 	if err := v.store.Write(n, body); err != nil {
+		v.setBody(path, n.Body)
 		return err
 	}
+	return nil
+}
+
+func (v *Vault) setBody(path, body string) {
 	for i := range v.Notes {
 		if v.Notes[i].Path == path {
 			v.Notes[i].Body = body
-			break
+			return
 		}
 	}
-	return nil
+}
+
+// revert undoes a save whose write failed after Save had returned success
+// (the web store reports late). The body goes back to n.Body — what the file
+// still holds, as the note was when the write was asked for. A body that a
+// later save has since replaced is left alone: that save's own result speaks
+// for it. Reports whether anything was reverted.
+func (v *Vault) revert(n Note, failed string) bool {
+	for i := range v.Notes {
+		if v.Notes[i].Path != n.Path {
+			continue
+		}
+		if v.Notes[i].Body != failed {
+			return false
+		}
+		v.Notes[i].Body = n.Body
+		return true
+	}
+	return false
+}
+
+// restore puts back a note whose removal failed after Delete had returned
+// success. The file is still there, so the vault lists it again now rather
+// than leaving that to the next launch.
+func (v *Vault) restore(n Note) {
+	if _, ok := v.Get(n.Path); ok {
+		return
+	}
+	v.Notes = append(v.Notes, n)
+	sortNotes(v.Notes)
 }
 
 // Create adds a new note named name (a "# name" stub), writes it, and returns

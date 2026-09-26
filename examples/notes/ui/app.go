@@ -396,7 +396,48 @@ func (s *workspaceState) save(v *Vault) {
 		s.SetState(func() { s.paneErr = "Could not save: " + err.Error() })
 		return
 	}
-	s.SetState(func() { s.Editing, s.paneErr = false, "" })
+	s.SetState(func() {
+		// A folder store may have reported the write's failure before Save
+		// returned, through storeResult, which has then already put the
+		// vault and the editor back; closing the editor here would undo
+		// that. Edit mode ends once the vault holds the draft.
+		if n, ok := v.Get(s.OpenPath); ok && n.Body == s.Draft {
+			s.Editing, s.paneErr = false, ""
+		}
+	})
+}
+
+// storeResult hears from the folder store once a write or removal has
+// actually landed — on web, after the call that asked for it returned
+// success and the app acted on that. A failure has to undo what the success
+// was taken to mean. The vault's body goes back to what the file holds, and
+// if the note is the one on screen the editor comes back with the failed
+// body as its draft: the state a synchronous failure leaves on desktop, and
+// the only place the edits still exist. A note the user has moved on from
+// can only be reported, so the sidebar names it. A success clears the
+// sidebar, so what it says is about the last write, not the worst one.
+func (s *workspaceState) storeResult(r lateResult) {
+	v := s.W().Vault
+	s.SetState(func() {
+		switch {
+		case r.Err == nil:
+			s.storeErr = ""
+		case r.Removed:
+			v.restore(r.Note)
+			s.storeErr = "Could not delete " + r.Note.Name + ": " + r.Err.Error()
+		default:
+			v.revert(r.Note, r.Body)
+			msg := "Could not save " + r.Note.Name + ": " + r.Err.Error()
+			if s.OpenPath != r.Note.Path {
+				s.storeErr = msg
+				return
+			}
+			if !s.Editing {
+				s.Editing, s.Draft = true, r.Body
+			}
+			s.paneErr = msg
+		}
+	})
 }
 
 func (s *workspaceState) onLink(ctx widget.Ctx, v *Vault, url string) {
@@ -426,12 +467,14 @@ func (s *workspaceState) createNote(v *Vault) {
 		return
 	}
 	n, err := v.Create(s.newName)
+	if err != nil {
+		// The name stays in the input. The message says why it did not
+		// work; typing it again is not part of fixing that.
+		s.SetState(func() { s.paneErr = "Could not create note: " + err.Error() })
+		return
+	}
 	s.SetState(func() {
 		s.creating, s.newName = false, ""
-		if err != nil {
-			s.paneErr = "Could not create note: " + err.Error()
-			return
-		}
 		s.OpenPath, s.Editing, s.Draft, s.confirmDelete, s.paneErr = n.Path, true, n.Body, false, ""
 	})
 }

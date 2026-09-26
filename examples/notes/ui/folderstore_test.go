@@ -16,13 +16,38 @@ import (
 // resumes, so a missing callback shows up as a missing result rather than a
 // pass that raced.
 type fakeFolder struct {
-	name     string
-	files    map[string][]byte
-	readErr  map[string]error // names that fail to read
-	writeErr error            // every write fails
-	listErr  error
-	writes   []string // names written, in order
-	removed  []string
+	name      string
+	files     map[string][]byte
+	readErr   map[string]error // names that fail to read
+	writeErr  error            // every write fails
+	removeErr error            // every removal fails
+	listErr   error
+	writes    []string // names written, in order
+	removed   []string
+	// late queues the outcome of every write and removal until flush. That
+	// is the browser's order — the call returns, the app acts on it, the
+	// bytes land or do not — and the tests of what the app does about a
+	// write that fails after it was reported done need exactly that order.
+	late    bool
+	pending []func()
+}
+
+// settle delivers a write or removal's outcome: now, or at flush when late.
+func (f *fakeFolder) settle(fn func()) {
+	if f.late {
+		f.pending = append(f.pending, fn)
+		return
+	}
+	fn()
+}
+
+// flush delivers every queued outcome, in order.
+func (f *fakeFolder) flush() {
+	for len(f.pending) > 0 {
+		fn := f.pending[0]
+		f.pending = f.pending[1:]
+		fn()
+	}
 }
 
 func newFakeFolder(files map[string][]byte) *fakeFolder {
@@ -61,19 +86,29 @@ func (f *fakeFolder) Read(name string, done func([]byte, error)) {
 }
 
 func (f *fakeFolder) Write(name string, data []byte, done func(error)) {
-	if f.writeErr != nil {
-		done(f.writeErr)
-		return
-	}
-	f.files[name] = data
-	f.writes = append(f.writes, name)
-	done(nil)
+	err := f.writeErr
+	f.settle(func() {
+		if err != nil {
+			done(err)
+			return
+		}
+		f.files[name] = data
+		f.writes = append(f.writes, name)
+		done(nil)
+	})
 }
 
 func (f *fakeFolder) Remove(name string, done func(error)) {
-	delete(f.files, name)
-	f.removed = append(f.removed, name)
-	done(nil)
+	err := f.removeErr
+	f.settle(func() {
+		if err != nil {
+			done(err)
+			return
+		}
+		delete(f.files, name)
+		f.removed = append(f.removed, name)
+		done(nil)
+	})
 }
 
 // Opening a folder loads its .md files as notes, named without the extension.
@@ -194,17 +229,48 @@ func TestFolderStoreRemovesTheFile(t *testing.T) {
 func TestFolderStoreReportsLateWriteFailure(t *testing.T) {
 	f := newFakeFolder(map[string][]byte{})
 	f.writeErr = errors.New("disk full")
-	var got error
-	s := newFolderStore(f, func(err error) { got = err })
+	var got []lateResult
+	s := newFolderStore(f, func(r lateResult) { got = append(got, r) })
 
 	if _, err := s.Create("Alpha", "body"); err != nil {
-		t.Fatalf("Create returned %v; it reports success and surfaces failures through onErr", err)
+		t.Fatalf("Create returned %v; it reports success and surfaces failures through done", err)
 	}
-	if got == nil {
-		t.Fatal("a failed write was never reported")
+	if len(got) != 1 || got[0].Err == nil {
+		t.Fatalf("a failed write was reported as %+v", got)
 	}
-	if !strings.Contains(got.Error(), "disk full") {
-		t.Errorf("reported %v, want the underlying failure", got)
+	if r := got[0]; !strings.Contains(r.Err.Error(), "disk full") || r.Note.Name != "Alpha" || r.Body != "body" || r.Removed {
+		t.Errorf("reported %+v, want the underlying failure with the note and body it was for", r)
+	}
+
+	// Success is reported too — it is what clears a standing message.
+	f.writeErr = nil
+	if err := s.Write(Note{Path: "Alpha.md", Name: "Alpha"}, "better"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[1].Err != nil || got[1].Body != "better" {
+		t.Errorf("a write that landed was reported as %+v", got[1:])
+	}
+	if err := s.Remove(Note{Path: "Alpha.md", Name: "Alpha"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || !got[2].Removed || got[2].Note.Name != "Alpha" {
+		t.Errorf("a removal was reported as %+v", got[2:])
+	}
+}
+
+// A name the folder refuses is refused by Create, not reported late: the
+// capability would have said so inline, through done, before the vault had
+// added a note the folder was never going to hold.
+func TestFolderStoreRefusesABadNameUpFront(t *testing.T) {
+	f := newFakeFolder(map[string][]byte{})
+	reported := 0
+	s := newFolderStore(f, func(lateResult) { reported++ })
+
+	if _, err := s.Create("meeting: notes", "body"); err == nil {
+		t.Fatal("a name with a colon was accepted")
+	}
+	if reported != 0 || len(f.writes) != 0 {
+		t.Errorf("the refused name was still written (%v) or reported (%d)", f.writes, reported)
 	}
 }
 

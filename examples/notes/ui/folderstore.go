@@ -24,12 +24,25 @@ const prefFolderToken = "notes.folder"
 // folder, which is a runtime answer, so an app asks rather than compiling two
 // versions of itself.
 type folderStore struct {
-	f     shell.Folder
-	onErr func(error)
+	f shell.Folder
+	// done hears the outcome of every write and removal once it is actually
+	// known, which is after the call that asked for it has returned. Success
+	// is reported too: it is what lets a message about the last failure be
+	// cleared by the next write that lands, instead of standing for the
+	// session.
+	done func(lateResult)
 }
 
-func newFolderStore(f shell.Folder, onErr func(error)) *folderStore {
-	return &folderStore{f: f, onErr: onErr}
+// lateResult is the outcome of a folderStore write or removal.
+type lateResult struct {
+	Note    Note   // as it was when the call was made — for a write, with the body still on disk
+	Body    string // what a write wrote; unused for a removal
+	Removed bool   // a removal rather than a write
+	Err     error  // nil when it landed
+}
+
+func newFolderStore(f shell.Folder, done func(lateResult)) *folderStore {
+	return &folderStore{f: f, done: done}
 }
 
 func (s *folderStore) Label() string { return s.f.Name() }
@@ -40,30 +53,38 @@ func (s *folderStore) Label() string { return s.f.Name() }
 // The vault is the in-memory model and the file is the write-through, so the
 // editor cannot wait for a round trip on every keystroke pause — and on web
 // there is no way to wait that does not block the frame. A failure therefore
-// cannot come back through the return value; it arrives later through onErr,
+// cannot come back through the return value; it arrives later through done,
 // which is strictly more than the code this replaces did. That one awaited the
 // real error and handed it to a caller that wrote `_ =`.
 func (s *folderStore) Create(name, body string) (Note, error) {
 	file := name + ".md"
-	s.f.Write(file, []byte(body), s.report)
-	return Note{Path: file, Name: name, Body: body}, nil
+	// The one failure known before asking is a name the folder refuses. The
+	// capability would report it through done, inline, before the vault had
+	// even added the note; the synchronous error path exists, so it goes
+	// there, and the vault never holds a note the folder could not have.
+	if err := shell.CheckFolderName(file); err != nil {
+		return Note{}, err
+	}
+	n := Note{Path: file, Name: name, Body: body}
+	s.f.Write(file, []byte(body), func(err error) { s.report(lateResult{Note: n, Body: body, Err: err}) })
+	return n, nil
 }
 
-// Write overwrites an existing note's file, with the same late error reporting
-// as Create.
+// Write overwrites an existing note's file, with the same late reporting as
+// Create.
 func (s *folderStore) Write(n Note, body string) error {
-	s.f.Write(n.Path, []byte(body), s.report)
+	s.f.Write(n.Path, []byte(body), func(err error) { s.report(lateResult{Note: n, Body: body, Err: err}) })
 	return nil
 }
 
 func (s *folderStore) Remove(n Note) error {
-	s.f.Remove(n.Path, s.report)
+	s.f.Remove(n.Path, func(err error) { s.report(lateResult{Note: n, Removed: true, Err: err}) })
 	return nil
 }
 
-func (s *folderStore) report(err error) {
-	if err != nil && s.onErr != nil {
-		s.onErr(err)
+func (s *folderStore) report(r lateResult) {
+	if s.done != nil {
+		s.done(r)
 	}
 }
 
@@ -156,9 +177,7 @@ func loadFolder(s *workspaceState, f shell.Folder) {
 		var read func(int)
 		read = func(i int) {
 			if i == len(entries) {
-				store := newFolderStore(f, func(error) {
-					s.SetState(func() { s.storeErr = "Could not save to that folder." })
-				})
+				store := newFolderStore(f, s.storeResult)
 				s.SetState(func() {
 					s.storeErr = ""
 					s.W().Vault.adopt(store, notes)

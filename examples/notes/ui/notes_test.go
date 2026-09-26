@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -499,5 +500,158 @@ func TestNotesSaveKeepsUpperCaseExtension(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(filepath.Join(dir, "Foo.MD")); !strings.Contains(string(got), "edited") {
 		t.Errorf("Foo.MD not updated: %q", got)
+	}
+}
+
+// A create that fails keeps the name that was typed. It used to close the
+// input and clear it in the same breath as showing the error, so the user
+// read "Could not create note" and had the name to type again.
+func TestNotesFailedCreateKeepsTypedName(t *testing.T) {
+	dir := t.TempDir()
+	writeNote(t, dir, "A.md", "# A\n")
+	h, st := mountNotes(t, dir)
+	readOnly(t, dir)
+
+	st.SetState(func() { st.creating, st.newName = true, "Long note title" })
+	st.createNote(st.W().Vault)
+	h.Render()
+
+	if _, err := os.Stat(filepath.Join(dir, "Long note title.md")); err == nil {
+		t.Skip("capability: this filesystem ignores mode bits, the create went through")
+	}
+	if !st.creating || st.newName != "Long note title" {
+		t.Errorf("the typed name was dropped: creating=%v newName=%q", st.creating, st.newName)
+	}
+	if !hasLabel(h, "Could not create note") {
+		t.Errorf("the failure is not shown; labels=%v", labels(h))
+	}
+}
+
+// webNotes mounts the workspace over a picked folder whose writes and
+// removals report late, the way the browser's do.
+func webNotes(t *testing.T, files map[string]string) (*app.Headless, *workspaceState, *fakeFolder) {
+	t.Helper()
+	m := map[string][]byte{}
+	for name, body := range files {
+		m[name] = []byte(body)
+	}
+	f := newFakeFolder(m)
+	h, st := mountNotes(t, t.TempDir())
+	loadFolder(st, f)
+	h.Render()
+	if !st.W().Vault.HasStore() || len(st.W().Vault.Notes) != len(files) {
+		t.Fatalf("folder not adopted: %v", st.W().Vault.Notes)
+	}
+	f.late = true
+	return h, st, f
+}
+
+// On web a write reports done before the bytes land, and a failure arrives
+// after the app has closed the editor on the strength of that. It used to
+// leave the vault holding text the file did not, with nothing to bring them
+// back together: the note read as saved, flushDraft saw a draft equal to the
+// body and skipped every retry, and the sidebar said "Could not save to that
+// folder" for the rest of the session because a write that landed never
+// cleared it. Reload, and the edits were gone.
+func TestNotesLateWriteFailureReopensTheEditor(t *testing.T) {
+	h, st, f := webNotes(t, map[string]string{"A.md": "# A\n\noriginal"})
+	v := st.W().Vault
+	editing(t, h, st, "A.md", "# A\n\nhours of edits")
+
+	f.writeErr = errors.New("disk full")
+	st.save(v)
+	h.Render()
+	if st.Editing {
+		t.Fatal("the editor is still open before the write has reported — not the order this test is about")
+	}
+
+	f.flush() // the failure lands
+	h.Render()
+	if n, _ := v.Get("A.md"); n.Body != "# A\n\noriginal" {
+		t.Errorf("vault holds %q after the write failed; the file holds the original", n.Body)
+	}
+	if !st.Editing || st.Draft != "# A\n\nhours of edits" {
+		t.Errorf("the edits are not back in the editor: Editing=%v Draft=%q", st.Editing, st.Draft)
+	}
+	if !hasLabel(h, "Could not save A") {
+		t.Errorf("the failure is not shown against the note; labels=%v", labels(h))
+	}
+
+	// Saving again is an ordinary save, and one that lands clears the message.
+	f.writeErr = nil
+	st.save(v)
+	f.flush()
+	h.Render()
+	if got := string(f.files["A.md"]); got != "# A\n\nhours of edits" {
+		t.Errorf("the retry did not reach the folder: %q", got)
+	}
+	if st.Editing || st.paneErr != "" || st.storeErr != "" {
+		t.Errorf("after a write that landed: Editing=%v paneErr=%q storeErr=%q", st.Editing, st.paneErr, st.storeErr)
+	}
+}
+
+// The same failure after the user has moved on: the sidebar names the note,
+// the vault goes back to the file, and the next write that lands clears the
+// message.
+func TestNotesLateWriteFailureAfterMovingOnNamesTheNote(t *testing.T) {
+	h, st, f := webNotes(t, map[string]string{"A.md": "# A\n\noriginal", "B.md": "# B\n"})
+	v := st.W().Vault
+	editing(t, h, st, "A.md", "# A\n\nedits")
+
+	f.writeErr = errors.New("disk full")
+	st.open("B.md") // flushes A's draft, which reports done
+	h.Render()
+	if st.OpenPath != "B.md" {
+		t.Fatalf("navigation refused: OpenPath=%q", st.OpenPath)
+	}
+
+	f.flush()
+	h.Render()
+	if n, _ := v.Get("A.md"); n.Body != "# A\n\noriginal" {
+		t.Errorf("vault holds %q for A after the write failed", n.Body)
+	}
+	if st.OpenPath != "B.md" || st.Editing {
+		t.Errorf("the failure moved the user: OpenPath=%q Editing=%v", st.OpenPath, st.Editing)
+	}
+	if !strings.Contains(st.storeErr, "Could not save A") || !hasLabel(h, "Could not save A") {
+		t.Errorf("the sidebar does not name the note: storeErr=%q labels=%v", st.storeErr, labels(h))
+	}
+
+	f.writeErr = nil
+	editing(t, h, st, "B.md", "# B\n\nmore")
+	st.save(v)
+	f.flush()
+	h.Render()
+	if st.storeErr != "" {
+		t.Errorf("a write that landed left the sidebar saying %q", st.storeErr)
+	}
+}
+
+// A removal that fails after Delete reported done puts the note back: the
+// file is still there, and the next launch would have listed it anyway.
+func TestNotesLateDeleteFailureRestoresTheNote(t *testing.T) {
+	h, st, f := webNotes(t, map[string]string{"A.md": "# A\n", "B.md": "# B\n"})
+	v := st.W().Vault
+	st.open("A.md")
+	h.Render()
+
+	f.removeErr = errors.New("file is locked")
+	st.SetState(func() { st.confirmDelete = true })
+	st.deleteNote(v)
+	h.Render()
+	if _, ok := v.Get("A.md"); ok {
+		t.Fatal("the note is still listed before the removal has reported")
+	}
+
+	f.flush()
+	h.Render()
+	if _, ok := v.Get("A.md"); !ok {
+		t.Error("the note was not put back after the removal failed")
+	}
+	if !hasLabel(h, "Could not delete A") {
+		t.Errorf("the failure is not shown against the note; labels=%v", labels(h))
+	}
+	if _, ok := f.files["A.md"]; !ok {
+		t.Error("the fake removed the file it was told to fail on")
 	}
 }
