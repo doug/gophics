@@ -1,6 +1,9 @@
 package widget
 
-import "github.com/doug/gophics/shell"
+import (
+	"github.com/doug/gophics/geom"
+	"github.com/doug/gophics/shell"
+)
 
 // Autocomplete is a text field that offers suggestions as you type.
 //
@@ -41,6 +44,18 @@ type autocompleteState struct {
 	// index rather than a string because the same suggestion can appear twice
 	// and because the keyboard moves by position.
 	highlight int
+	// focused tracks the field, and rowPressed is set while a pointer is down
+	// on a suggestion row. The press moves focus off the field before the tap
+	// that picks the row arrives, and the blur must not close the list under
+	// the tap; see the field's OnFocus.
+	focused    bool
+	rowPressed bool
+}
+
+// close hides the list. It is one place because four things do it — a pick,
+// Escape, the field losing focus, a press on a row released elsewhere.
+func (s *autocompleteState) close() {
+	s.SetState(func() { s.open, s.highlight = false, -1 })
 }
 
 func (s *autocompleteState) Build(ctx Ctx) Widget {
@@ -63,6 +78,17 @@ func (s *autocompleteState) Build(ctx Ctx) Widget {
 			}
 		},
 		OnSubmit: func(v string) { s.commit(v) },
+		// The list goes with the focus. It used to stay: clicking into
+		// another field left it hanging under this one — and, as a Modal,
+		// owning Escape. A press on one of the list's own rows blurs the
+		// field too, before the tap that picks the row arrives; the row
+		// flags that press and the pick closes the list itself.
+		OnFocus: func(v bool) {
+			s.focused = v
+			if !v && s.open && !s.rowPressed {
+				s.close()
+			}
+		},
 		// The list is driven from here rather than from a wrapper around the
 		// field. Keyboard events reach exactly one widget — the focused one,
 		// with no bubbling — and once the user clicks into the field, that is
@@ -90,7 +116,7 @@ func (s *autocompleteState) Build(ctx Ctx) Widget {
 	// so opening the list never remounts the field.
 	var onEscape func()
 	if showing {
-		onEscape = func() { s.SetState(func() { s.open, s.highlight = false, -1 }) }
+		onEscape = s.close
 	}
 	return Modal{OnEscape: onEscape, Child: Column(rows...)}
 }
@@ -117,14 +143,25 @@ func (s *autocompleteState) row(i int, sug string) Widget {
 		content = f(sug, i == s.highlight)
 	}
 	return Interactive{
-		Gestures: Gestures{OnTap: func() { s.commit(sug) }},
-		Child:    content,
+		Gestures: Gestures{
+			OnPress: func(geom.Pt) { s.rowPressed = true },
+			OnTap:   func() { s.commit(sug) },
+			// A press released off the row picks nothing, and the field it
+			// blurred is not coming back: close what the blur left open.
+			OnPressEnd: func() {
+				s.rowPressed = false
+				if s.open && !s.focused {
+					s.close()
+				}
+			},
+		},
+		Child: content,
 	}
 }
 
 // commit accepts a suggestion: the text becomes it, the list closes.
 func (s *autocompleteState) commit(v string) {
-	s.SetState(func() { s.open, s.highlight = false, -1 })
+	s.close()
 	w := s.W()
 	if f := w.OnChange; f != nil {
 		f(v)
@@ -164,12 +201,16 @@ func (s *autocompleteState) onKey(k shell.Key) bool {
 		s.move(-1, len(list))
 		return true
 	case shell.KeyEscape:
-		// Only consumed while the list is showing; otherwise Escape belongs to
-		// the field, which uses it to collapse a selection.
-		if !s.open {
+		// Only consumed while the list is showing — the same test the Modal
+		// makes, which takes the key first under the app runner; this branch
+		// is for a field driven without one. Open with nothing to show is
+		// not showing: Escape then belongs to the field, which uses it to
+		// collapse a selection, and consuming it here made the first press
+		// do nothing.
+		if !s.open || len(list) == 0 {
 			return false
 		}
-		s.SetState(func() { s.open, s.highlight = false, -1 })
+		s.close()
 		return true
 	case shell.KeyEnter, shell.KeyTab:
 		// Both accept the highlighted suggestion. Neither is consumed when
