@@ -175,3 +175,82 @@ func TestMoveWordStartIsTheWindowsConvention(t *testing.T) {
 		t.Errorf("Ctrl+Right at the last word: caret %d, want the end", e.Caret())
 	}
 }
+
+// Typing over a selection must not coalesce with the typing before it:
+// SelectAll leaves the caret where typing ended, so the caret check alone
+// merged the replacement into the previous group and Undo skipped the state
+// that still had the text.
+func TestTypingOverASelectionIsItsOwnUndoStep(t *testing.T) {
+	var e Editor
+	e.Insert("hello")
+	e.SelectAll()
+	e.Insert("x")
+	if e.Text() != "x" {
+		t.Fatalf("typing over the selection gave %q", e.Text())
+	}
+	if !e.Undo() || e.Text() != "hello" {
+		t.Errorf("Undo gave %q, want %q", e.Text(), "hello")
+	}
+}
+
+// Inserting nothing with nothing selected is not an edit and not an undo
+// step, the same as a no-op delete.
+func TestEmptyInsertIsNotAnUndoStep(t *testing.T) {
+	var e Editor
+	e.Insert("a")
+	e.MoveTo(0, false)
+	e.Insert("")
+	e.Replace("")
+	if !e.Undo() || e.Text() != "" {
+		t.Fatalf("after Undo: %q, want empty (the no-op inserts must not push history)", e.Text())
+	}
+	if e.Undo() {
+		t.Error("a second Undo found history that no edit made")
+	}
+}
+
+// Combining marks and joiners are inside the grapheme of the letter before
+// them, so word movement, word deletion and double-click must not stop
+// between a letter and its accent, a consonant and its vowel sign, or the
+// halves of a ZWJ-joined conjunct.
+func TestWordOpsKeepCombiningMarksWithTheirLetter(t *testing.T) {
+	e := ed("café bar", 0) // e + combining acute
+	e.MoveWord(1, false)
+	if e.Caret() != 5 {
+		t.Errorf("word right over café: caret %d, want 5 (after the accent)", e.Caret())
+	}
+	e = ed("नमस्ते x", 0)
+	e.SelectWordAt(0)
+	if got := e.SelectedText(); got != "नमस्ते" {
+		t.Errorf("double-click on नमस्ते selected %q", got)
+	}
+	e = ed("नमस्ते x", 0)
+	e.DeleteWordForward()
+	if got := e.Text(); got != " x" {
+		t.Errorf("delete word forward over नमस्ते left %q, want %q", got, " x")
+	}
+	e = ed("क्‍ष a", 0) // ZWJ inside a conjunct
+	e.MoveWord(1, false)
+	if e.Caret() != 4 {
+		t.Errorf("word right over a ZWJ conjunct: caret %d, want 4", e.Caret())
+	}
+}
+
+// Double-clicking a non-word character selects the grapheme there, not one
+// rune of it: an emoji with a skin-tone modifier is two runes.
+func TestSelectWordAtOnAGraphemeSelectsAllOfIt(t *testing.T) {
+	e := ed("👍🏽 a", 0)
+	e.SelectWordAt(0)
+	if s, en := e.Selection(); s != 0 || en != 2 {
+		t.Errorf("SelectWordAt(0) on 👍🏽 selected [%d,%d), want [0,2)", s, en)
+	}
+	e.SelectWordAt(1) // inside the grapheme
+	if s, en := e.Selection(); s != 0 || en != 2 {
+		t.Errorf("SelectWordAt(1) inside 👍🏽 selected [%d,%d), want [0,2)", s, en)
+	}
+	e = ed("a 👍🏽", 4)
+	e.SelectWordAt(4) // at the end
+	if s, en := e.Selection(); s != 2 || en != 4 {
+		t.Errorf("SelectWordAt at the end selected [%d,%d), want [2,4)", s, en)
+	}
+}

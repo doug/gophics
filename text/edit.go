@@ -77,6 +77,9 @@ func (e *Editor) SelectedText() string {
 
 // Insert replaces the selection (or inserts at the caret) with s.
 func (e *Editor) Insert(s string) {
+	if s == "" && !e.HasSelection() {
+		return // nothing changes, so nothing to undo (see deleteTo)
+	}
 	e.snapshot(opType)
 	e.insertRaw(s)
 }
@@ -163,17 +166,27 @@ func (e *Editor) SelectWordAt(idx int) {
 		hi++
 	}
 	if lo == hi { // not on a word char — select the single character
+		// The character is a grapheme, not a rune: an emoji with a skin-tone
+		// modifier, a ZWJ sequence, a flag. Selecting one rune of it would
+		// split it.
 		if idx < n {
-			hi = idx + 1
+			hi = e.nextBoundary(idx)
+			lo = e.prevBoundary(hi)
 		} else if idx > 0 {
-			lo = idx - 1
+			lo = e.prevBoundary(idx)
 		}
 	}
 	e.anchor, e.caret = lo, hi
 }
 
+// isWordRune reports whether r is part of a word for word movement, word
+// deletion and double-click selection. Combining marks and the zero-width
+// (non-)joiners count: they are inside the grapheme of the letter before them,
+// and stopping at one splits a letter from its accent, a consonant from its
+// vowel sign in Devanagari, or an Arabic letter from its harakat.
 func isWordRune(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) ||
+		r == '_' || r == '\u200c' || r == '\u200d'
 }
 
 // prevBoundary returns the grapheme boundary before idx.
@@ -386,7 +399,11 @@ type editSnapshot struct {
 // snapshot records the state before a mutation of class op, unless it
 // coalesces with the previous one.
 func (e *Editor) snapshot(op editOp) {
-	if op == e.lastOp && op == opType && e.caret == e.lastCaret {
+	// Typing over a selection is a boundary even when the caret has not
+	// moved: SelectAll leaves the caret where typing ended, and coalescing
+	// then would fold the replacement into the previous group, so Undo would
+	// skip the state that still had the text.
+	if op == e.lastOp && op == opType && e.caret == e.lastCaret && !e.HasSelection() {
 		e.lastCaret = e.caret // still contiguous; updated after the insert below
 		return
 	}
@@ -423,6 +440,9 @@ func (e *Editor) insertRaw(s string) {
 // Replace is Insert as one undo step that never coalesces with typing: a
 // paste, an autocorrect, a programmatic change.
 func (e *Editor) Replace(s string) {
+	if s == "" && !e.HasSelection() {
+		return // nothing changes, so nothing to undo (see deleteTo)
+	}
 	e.snapshot(opReplace)
 	e.insertRaw(s)
 }
