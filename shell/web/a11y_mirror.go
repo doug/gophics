@@ -90,6 +90,14 @@ func describeNode(n shell.A11yNode, scale float64) mirrorElement {
 		el.Attrs["aria-roledescription"] = "secure text field"
 	}
 	el.Focus = n.Focused
+	if n.Focused && el.Tag != "button" {
+		// focus() on a plain div is a no-op, so a focused text field — a
+		// <div role=textbox> — never took screen-reader focus and the AT
+		// stayed on whatever was focused before typing began. tabindex=-1
+		// makes it focusable by script without adding it to the tab order,
+		// which the button already has for free.
+		el.Attrs["tabindex"] = "-1"
+	}
 
 	// Nodes are absolutely positioned in page coordinates rather than nested
 	// boxes: in gophics the semantic hierarchy and the visual geometry are

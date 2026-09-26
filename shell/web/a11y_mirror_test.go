@@ -159,10 +159,23 @@ func TestParentOf(t *testing.T) {
 
 // The focused node is the one the AT should land on after a republish.
 func TestDescribeFocusFollowsGophics(t *testing.T) {
-	if !describeNode(shell.A11yNode{Role: "textfield", Focused: true}, 1).Focus {
+	d := describeNode(shell.A11yNode{Role: "textfield", Focused: true}, 1)
+	if !d.Focus {
 		t.Error("focused node not marked for DOM focus")
+	}
+	// Marking it is not enough: focus() on a div that is not focusable is a
+	// no-op, so a focused non-button must carry a tabindex.
+	if d.Tag != "button" && d.Attrs["tabindex"] != "-1" {
+		t.Errorf("focused %s has tabindex %q, want -1 so focus() takes", d.Tag, d.Attrs["tabindex"])
 	}
 	if describeNode(shell.A11yNode{Role: "textfield"}, 1).Focus {
 		t.Error("unfocused node marked for DOM focus")
+	}
+	if _, ok := describeNode(shell.A11yNode{Role: "textfield"}, 1).Attrs["tabindex"]; ok {
+		t.Error("unfocused node given a tabindex; only the focused one should be script-focusable")
+	}
+	// A button is focusable on its own; a tabindex would only repeat that.
+	if _, ok := describeNode(shell.A11yNode{Role: "button", Tappable: true, Focused: true}, 1).Attrs["tabindex"]; ok {
+		t.Error("focused button given a tabindex it does not need")
 	}
 }
