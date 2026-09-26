@@ -259,8 +259,9 @@ func (h *shellHandler) Event(w shell.Window, e shell.Event) {
 		w.Invalidate()
 	case shell.Focus:
 		// Losing focus mid-interaction (alt-tab while dragging) must not leave a
-		// gesture or a held key stuck down: cancel the press/drag and clear the
-		// input state.
+		// gesture or a held key stuck down. The cancel ends the press or drag
+		// and, in Input, releases the buttons; Clear is for the keys, which no
+		// pointer event covers.
 		if !e.Focused {
 			h.core.Pointer(shell.Pointer{Kind: shell.PointerCancel})
 			if in := h.core.Owner.Input; in != nil {
