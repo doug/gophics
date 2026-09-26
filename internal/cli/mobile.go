@@ -209,11 +209,10 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "gophics: binding Go → "+fw+".xcframework")
-	if err := gomobileBind(o, "ios,iossimulator", filepath.Join(host, fw+".xcframework")); err != nil {
-		return err
-	}
-
+	// The project and the permission check come before the bind, which is the
+	// minutes-long step: xcodegen does not need the framework to exist, and a
+	// missing usage description should be reported before the wait, not
+	// after it.
 	if fileExists(filepath.Join(host, "project.yml")) {
 		if !have("xcodegen") {
 			return fmt.Errorf("xcodegen not found — install with: brew install xcodegen")
@@ -228,6 +227,11 @@ func runIOS(o buildOpts, host string) error {
 	if err := checkIOSPermissions(o, host); err != nil {
 		return err
 	}
+	fmt.Fprintln(os.Stderr, "gophics: binding Go → "+fw+".xcframework")
+	if err := gomobileBind(o, "ios,iossimulator", filepath.Join(host, fw+".xcframework")); err != nil {
+		return err
+	}
+
 	proj, err := findByExt(host, ".xcodeproj")
 	if err != nil {
 		return err
