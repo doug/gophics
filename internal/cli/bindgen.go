@@ -126,8 +126,12 @@ func generateBindPkg(o buildOpts, dir string) (string, error) {
 		return "", err
 	}
 
+	appPath, err := importPath(dir)
+	if err != nil {
+		return "", err
+	}
 	app := filepath.Base(dir)
-	data := bindData{Pkg: goIdent(app) + "mobile", App: app, UI: uiPath}
+	data := bindData{Pkg: bindPkgName(appPath), App: app, UI: uiPath}
 
 	out := filepath.Join(dir, "build", "bind")
 	if err := os.MkdirAll(out, 0o755); err != nil {
@@ -145,10 +149,6 @@ func generateBindPkg(o buildOpts, dir string) (string, error) {
 		return "", err
 	}
 
-	appPath, err := importPath(dir)
-	if err != nil {
-		return "", err
-	}
 	return appPath + "/build/bind", nil
 }
 
@@ -206,6 +206,44 @@ func joinPkg(pkg, sub string) string {
 	return strings.TrimSuffix(pkg, "/") + "/" + sub
 }
 
+// bindPkgName is the name of the generated bind package for the app at
+// appPath, e.g. "hnmobile" for .../examples/hn. A host project imports it by
+// this name, so create, the generated package and the stock host must all
+// agree on it — and it must not change when the project does.
+//
+// That rules out the two names that were used before. The directory basename
+// changes whenever a project is cloned or moved under another name, and the
+// name typed at `gophics create` is gone by build time; a project scaffolded as
+// lingo and checked out as gophics_lingo had a host importing lingomobile
+// while the build produced gophicslingomobile, which surfaced as a Kotlin
+// "Unresolved reference" in a file the user never wrote. The last element of
+// the import path is the same wherever the checkout lives — and for every
+// app whose directory is its import path's leaf, as all of the examples are,
+// it is the same name as before.
+//
+// A major-version suffix is skipped, so example.com/app/v2 is appmobile rather
+// than v2mobile.
+func bindPkgName(appPath string) string {
+	elems := strings.Split(strings.TrimSuffix(appPath, "/"), "/")
+	leaf := elems[len(elems)-1]
+	if len(elems) > 1 && isMajorVersion(leaf) {
+		leaf = elems[len(elems)-2]
+	}
+	return goIdent(leaf) + "mobile"
+}
+
+func isMajorVersion(s string) bool {
+	if len(s) < 2 || s[0] != 'v' {
+		return false
+	}
+	for _, r := range s[1:] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // goIdent makes a directory name usable as the start of a package identifier:
 // lowercase, letters and digits only, never starting with a digit.
 func goIdent(s string) string {
@@ -250,8 +288,12 @@ func ensureHost(o buildOpts) (string, error) {
 		return "", err
 	}
 	name := filepath.Base(dir)
-	slug := goIdent(name)
-	mobilePkg := slug + "mobile"
+	appPath, err := importPath(dir)
+	if err != nil {
+		return "", err
+	}
+	mobilePkg := bindPkgName(appPath)
+	slug := strings.TrimSuffix(mobilePkg, "mobile")
 	bundleID := "com.example." + slug
 	data := map[string]string{
 		"Name":           name,

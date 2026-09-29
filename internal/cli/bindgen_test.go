@@ -166,9 +166,9 @@ func TestFrameworkNameFollowsTheBindPackage(t *testing.T) {
 // An app that carries no ios/ directory still has to be runnable, or "one
 // main.go and a ui package" is not actually a whole app.
 func TestHostIsGeneratedWhenAbsent(t *testing.T) {
-	// The app name — and so the framework name the host imports — comes from the
-	// directory, so the temp dir needs a real name rather than TempDir's numeric
-	// leaf.
+	// The framework name the host imports comes from the module path, and the
+	// app's display name from the directory, so both are given a real name
+	// rather than TempDir's numeric leaf.
 	dir := filepath.Join(t.TempDir(), "scratchapp")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

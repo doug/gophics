@@ -48,7 +48,9 @@ func cmdCreate(args []string) error {
 		return fmt.Errorf("%q already exists", name)
 	}
 	slug := sanitizeIdent(name)
-	mobilePkg := slug + "mobile"
+	// Named from the module path by the same function the build uses, so the
+	// host this writes imports the package the build will produce.
+	mobilePkg := bindPkgName(module)
 	bundleID := "com.example." + slug
 	data := map[string]string{
 		"Module":         module,

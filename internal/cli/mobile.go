@@ -209,6 +209,9 @@ func runIOS(o buildOpts, host string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkHostBindImport(host, fw, true); err != nil {
+		return err
+	}
 	// The project and the permission check come before the bind, which is the
 	// minutes-long step: xcodegen does not need the framework to exist, and a
 	// missing usage description should be reported before the wait, not
@@ -480,6 +483,9 @@ func runAndroid(o buildOpts, host string) error {
 	}
 	name, err := packageName(bindPkg)
 	if err != nil {
+		return err
+	}
+	if err := checkHostBindImport(host, name, false); err != nil {
 		return err
 	}
 	if err := syncAndroidPermissions(o, host); err != nil {
