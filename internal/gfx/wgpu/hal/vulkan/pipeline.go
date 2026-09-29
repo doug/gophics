@@ -267,7 +267,7 @@ func (d *Device) CreateRenderPipeline(desc *hal.RenderPipelineDescriptor) (hal.R
 	// This is required for Intel drivers that don't properly support VK_KHR_dynamic_rendering.
 	var depthFormat vk.Format
 	if desc.DepthStencil != nil {
-		depthFormat = textureFormatToVk(desc.DepthStencil.Format)
+		depthFormat = d.vkFormat(desc.DepthStencil.Format)
 	}
 
 	// Build render pass key for pipeline-compatible render pass

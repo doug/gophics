@@ -153,6 +153,7 @@ func (a *Adapter) open(requestedQueueFamily *uint32) (hal.OpenDevice, error) {
 		supportsMultiDrawIndirect:  a.features.MultiDrawIndirect != 0,
 		maxDrawIndirectCount:       a.properties.Limits.MaxDrawIndirectCount,
 		supportsIncrementalPresent: hasIncrementalPresent,
+		depth:                      queryDepthFormats(a.instance, a.physicalDevice),
 	}
 
 	// Initialize synchronization fence (VK-IMPL-001 / VK-IMPL-003).
@@ -245,7 +246,7 @@ func selectGraphicsQueueFamily(families []vk.QueueFamilyProperties, requested *u
 
 // TextureFormatCapabilities returns capabilities for a texture format.
 func (a *Adapter) TextureFormatCapabilities(format gputypes.TextureFormat) hal.TextureFormatCapabilities {
-	vkFormat := textureFormatToVk(format)
+	vkFormat := queryDepthFormats(a.instance, a.physicalDevice).resolve(format)
 	if vkFormat == vk.FormatUndefined {
 		return hal.TextureFormatCapabilities{}
 	}

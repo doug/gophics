@@ -701,7 +701,7 @@ func (e *CommandEncoder) BeginRenderPass(desc *hal.RenderPassDescriptor) hal.Ren
 	if desc.DepthStencilAttachment != nil {
 		dsa := desc.DepthStencilAttachment
 		if dsView, ok := dsa.View.(*TextureView); ok && dsView.texture != nil {
-			rpKey.DepthFormat = textureFormatToVk(dsView.texture.format)
+			rpKey.DepthFormat = e.device.vkFormat(dsView.texture.format)
 			rpKey.DepthLoadOp = loadOpToVk(dsa.DepthLoadOp)
 			rpKey.DepthStoreOp = storeOpToVk(dsa.DepthStoreOp)
 			rpKey.StencilLoadOp = loadOpToVk(dsa.StencilLoadOp)

@@ -74,6 +74,9 @@ type Device struct {
 	// compositor about which surface regions changed (damage rects).
 	supportsIncrementalPresent bool
 
+	// depth is which Vulkan formats back the depth24plus formats here.
+	depth depthFormats
+
 	// Timeline semaphore fence (VK-IMPL-001).
 	// When available (Vulkan 1.2+), replaces both frame fences and transfer fence
 	// with a single timeline semaphore. Falls back to binary fences on older drivers.
@@ -544,7 +547,7 @@ func (d *Device) CreateTexture(desc *hal.TextureDescriptor) (hal.Texture, error)
 	}
 
 	// Convert parameters
-	vkFormat := textureFormatToVk(desc.Format)
+	vkFormat := d.vkFormat(desc.Format)
 	vkUsage := textureUsageToVk(desc.Usage)
 	imageType := textureDimensionToVkImageType(desc.Dimension)
 
@@ -773,7 +776,7 @@ func (d *Device) CreateTextureView(texture hal.Texture, desc *hal.TextureViewDes
 		SType:    vk.StructureTypeImageViewCreateInfo,
 		Image:    imageHandle,
 		ViewType: viewType,
-		Format:   textureFormatToVk(format),
+		Format:   d.vkFormat(format),
 		Components: vk.ComponentMapping{
 			R: vk.ComponentSwizzleIdentity,
 			G: vk.ComponentSwizzleIdentity,
