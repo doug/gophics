@@ -42,7 +42,16 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	// touch-action:none routes touch drags to pointer events instead of the
 	// browser's own scroll/zoom, so the app owns them (and can distinguish a
 	// scroll drag from a selection long-press).
-	canvas.Get("style").Set("cssText", "width:100vw;height:100vh;display:block;margin:0;cursor:default;touch-action:none")
+	//
+	// user-select:none and -webkit-touch-callout:none stop the *browser*
+	// answering the same gestures the app is answering. The app draws its own
+	// text and its own selection, so a double-click drag that also starts a
+	// DOM selection paints a second, crooked highlight over ours and leaves
+	// the page in a selected state the app cannot see; and on iOS a long press
+	// on a canvas raises the system callout, which lands on top of the edit
+	// menu the long press was meant to open.
+	canvas.Get("style").Set("cssText", "width:100vw;height:100vh;display:block;margin:0;"+
+		"cursor:default;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none")
 	doc.Get("body").Get("style").Set("cssText", "margin:0;overflow:hidden")
 	doc.Get("body").Call("appendChild", canvas)
 
@@ -124,6 +133,11 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		p := e.Get("isPrimary")
 		return p.IsUndefined() || p.Bool()
 	}
+	// A secondary click is the app's: SelectionArea and TextField answer it
+	// with their own edit menu, drawn in the app's own theme and knowing what
+	// is selected. Leaving the browser's native menu enabled would put a
+	// second menu on top of that one for the same click.
+	listen(canvas, "contextmenu", func(e js.Value) { e.Call("preventDefault") })
 	listen(canvas, "pointermove", func(e js.Value) {
 		if !primary(e) {
 			return
@@ -379,6 +393,9 @@ func modBits(e js.Value) shell.Mods {
 }
 
 type window struct {
+	// cursor is the CSS keyword currently set on the canvas, so repeating a
+	// hover does not touch the DOM.
+	cursor      string
 	canvas, doc js.Value
 	handler     shell.Handler
 	renderer    shell.RendererMode // resolved backend for this run
