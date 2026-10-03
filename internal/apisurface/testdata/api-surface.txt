@@ -802,6 +802,26 @@ shell.Connectivity.OnChange method
 shell.Connectivity.Online method
 shell.ConnectivityWindow type
 shell.ConnectivityWindow.Connectivity method
+shell.Cursor type
+shell.Cursor.Set method
+shell.CursorCrosshair const
+shell.CursorCrosshair.String method
+shell.CursorDefault const
+shell.CursorDefault.String method
+shell.CursorMove const
+shell.CursorMove.String method
+shell.CursorNotAllowed const
+shell.CursorNotAllowed.String method
+shell.CursorPointer const
+shell.CursorPointer.String method
+shell.CursorShape type
+shell.CursorShape.String method
+shell.CursorText const
+shell.CursorText.String method
+shell.CursorWait const
+shell.CursorWait.String method
+shell.CursorWindow type
+shell.CursorWindow.Cursor method
 shell.EditBackspace const
 shell.EditEnter const
 shell.EditKey type
@@ -1737,6 +1757,7 @@ widget.Ctx.Camera method
 widget.Ctx.CameraPreview method
 widget.Ctx.Clipboard method
 widget.Ctx.Connectivity method
+widget.Ctx.Cursor method
 widget.Ctx.DarkMode method
 widget.Ctx.FilePicker method
 widget.Ctx.FolderPicker method
@@ -1751,6 +1772,7 @@ widget.Ctx.Lifecycle method
 widget.Ctx.Lifetime method
 widget.Ctx.Links method
 widget.Ctx.Locale method
+widget.Ctx.MacKeys method
 widget.Ctx.Menus method
 widget.Ctx.Message method
 widget.Ctx.Microphone method
@@ -1858,6 +1880,7 @@ widget.GestureTarget type
 widget.GestureTarget.GestureHandler method
 widget.Gestures type
 widget.Gestures.ConsumesTab field
+widget.Gestures.Cursor field
 widget.Gestures.DragAxis field
 widget.Gestures.DragClaims field
 widget.Gestures.DragPriority field
@@ -1978,6 +2001,7 @@ widget.Owner.CameraPreview method
 widget.Owner.Capabilities field
 widget.Owner.Clipboard field
 widget.Owner.Connectivity method
+widget.Owner.Cursor method
 widget.Owner.DarkMode field
 widget.Owner.FilePicker method
 widget.Owner.FlushBuilds method
@@ -2092,6 +2116,7 @@ widget.SelectableText.Wrap field
 widget.SelectionArea type
 widget.SelectionArea.Child field
 widget.SelectionArea.CreateState method
+widget.SelectionArea.OnSelect field
 widget.SelectionArea.SelectionColor field
 widget.Semantics type
 widget.Semantics.Checked field

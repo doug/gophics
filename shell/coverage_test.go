@@ -29,6 +29,9 @@ import (
 // nothing as "hollow", and that is the place to look for it. This gate is only
 // about whether the platform was considered at all.
 var mobileExempt = map[string]string{
+	"Cursor": "a finger has no cursor: there is no pointer on a touch screen " +
+		"to give a shape to, so the capability is nil and widgets that declare " +
+		"a Gestures.Cursor simply get nothing",
 	"Gamepads": "both platforms support controllers (iOS GameController, Android " +
 		"InputDevice) and gophics does not bridge either yet. The Bridge used to " +
 		"publish a Poll that always returned nothing, which is worse than absence: " +
@@ -126,6 +129,7 @@ var terminalExempt = map[string]string{
 	"Camera":        "not yet: devmedia could capture headless, but no TUI has asked",
 	"CameraPreview": "no pixel surface to preview into",
 	"Connectivity":  "readable in principle; no TUI consumer yet",
+	"Cursor":        "the cursor on a TTY is the shell's to place, not the app's",
 	"FilePicker": "no system dialog to present; a TUI picker is an app-level " +
 		"widget, not a platform capability",
 	"FolderPicker": "same as FilePicker: nothing to present from a TTY",

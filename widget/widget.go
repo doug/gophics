@@ -220,6 +220,13 @@ func (c Ctx) DarkMode() bool { return c.el.owner.DarkMode }
 // Non-essential animations (e.g. the text caret blink) go solid when true.
 func (c Ctx) ReduceMotion() bool { return c.el.owner.ReduceMotion }
 
+// MacKeys reports whether this platform uses Apple's editing conventions —
+// Cmd for the clipboard, Option for word movement — rather than a PC's Ctrl.
+// It is the same flag the text widgets follow (shell.GestureTuning.MacKeys),
+// exposed so an app can *name* a shortcut the way the user's keyboard does:
+// a hint that reads "Ctrl+C" on a Mac is worse than no hint at all.
+func (c Ctx) MacKeys() bool { return c.el.owner.Gestures.Resolved().MacKeys }
+
 // SafeInsets are the platform-obstructed edges (status bar, notch,
 // on-screen keyboard) in logical pixels; pad content by them.
 func (c Ctx) SafeInsets() geom.Insets { return c.el.owner.SafeInsets }
@@ -296,6 +303,14 @@ func keyOf(w Widget) any {
 // All callbacks are optional. Positions are in the widget's local
 // coordinates.
 type Gestures struct {
+	// Cursor is the pointer shape over this region: shell.CursorText for
+	// selectable or editable text, CursorPointer for a link. The innermost
+	// region under the pointer wins, and the zero value asks for nothing, so
+	// an unset Cursor leaves whatever an ancestor asked for.
+	//
+	// Nothing happens on a platform with no pointer to shape (mobile, the
+	// terminal), where ctx.Cursor() is nil.
+	Cursor  shell.CursorShape
 	OnTap   func()
 	OnEnter func()
 	OnExit  func()

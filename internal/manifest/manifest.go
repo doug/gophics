@@ -104,6 +104,8 @@ var capabilityManifestPermissions = map[string]Permission{
 	"Haptic": {
 		Android: []string{"android.permission.VIBRATE"},
 	},
+	// Shaping the pointer needs no permission anywhere.
+	"Cursor":    {},
 	"Lifecycle": {},
 	"Links":     {},
 	"Menus":     {},

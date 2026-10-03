@@ -33,6 +33,9 @@ func (o *Owner) WireCapabilities(w shell.Window) {
 	if x, ok := w.(shell.ConnectivityWindow); ok {
 		o.connectivity = postedConnectivityOf(x.Connectivity(), o.Post)
 	}
+	if x, ok := w.(shell.CursorWindow); ok {
+		o.cursor = x.Cursor()
+	}
 	if x, ok := w.(shell.FilePickerWindow); ok {
 		o.filePicker = postedFilePickerOf(x.FilePicker(), o.Post)
 	}
@@ -127,6 +130,10 @@ func (o *Owner) CameraPreview() shell.CameraPreview { return o.cameraPreview }
 // Connectivity returns the platform Connectivity capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.Connectivity().
 func (o *Owner) Connectivity() shell.Connectivity { return o.connectivity }
+
+// Cursor returns the platform Cursor capability, or nil when the running
+// platform cannot provide it. Widgets read it through Ctx.Cursor().
+func (o *Owner) Cursor() shell.Cursor { return o.cursor }
 
 // FilePicker returns the platform FilePicker capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.FilePicker().

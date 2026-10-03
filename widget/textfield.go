@@ -823,6 +823,9 @@ func (s *textFieldState) Build(ctx Ctx) Widget {
 	view := Interactive{
 		Autofocus: f.Autofocus,
 		Gestures: Gestures{
+			// An I-beam over a field, and the ordinary arrow over one that is
+			// disabled: the pointer should say whether typing will land.
+			Cursor: fieldCursor(f),
 			// A multiline field indents with Tab; a single-line one hands it to
 			// focus traversal unless whatever wraps it says otherwise.
 			ConsumesTab: func() bool {
@@ -1688,6 +1691,15 @@ func (s *textFieldState) keyPress(ctx Ctx, f TextField, k shell.Key) {
 			changed()
 		}
 	}
+}
+
+// fieldCursor is the pointer shape over a field: the I-beam that says text
+// goes here, unless the field is disabled, which takes no text at all.
+func fieldCursor(f TextField) shell.CursorShape {
+	if f.Disabled {
+		return shell.CursorDefault
+	}
+	return shell.CursorText
 }
 
 // near reports whether two points are within slop of each other.

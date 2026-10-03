@@ -15,6 +15,7 @@ type Capabilities struct {
 	camera        shell.Camera
 	cameraPreview shell.CameraPreview
 	connectivity  shell.Connectivity
+	cursor        shell.Cursor
 	filePicker    shell.FilePicker
 	folderPicker  shell.FolderPicker
 	gamepads      shell.Gamepads
@@ -63,6 +64,10 @@ func (c Ctx) CameraPreview() shell.CameraPreview { return c.el.owner.cameraPrevi
 // Connectivity returns the platform Connectivity capability (shell.Connectivity), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Connectivity() shell.Connectivity { return c.el.owner.connectivity }
+
+// Cursor returns the platform Cursor capability (shell.Cursor), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) Cursor() shell.Cursor { return c.el.owner.cursor }
 
 // FilePicker returns the platform FilePicker capability (shell.FilePicker), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

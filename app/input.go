@@ -12,6 +12,29 @@ import (
 // Pointer, keyboard and gesture dispatch: how a shell event becomes a tap,
 // drag, focus change or key delivered to the widget tree.
 
+// applyCursor shapes the pointer for whatever it is over. The innermost
+// region that asks for a shape wins — hits arrive deepest-first — so a link
+// inside a paragraph gets the hand while the prose around it keeps the I-beam,
+// and a region that asks for nothing inherits from the one behind it.
+//
+// Set on every hover change rather than on enter/exit alone: the shape belongs
+// to the position, not to a transition, and a box that unmounts under a still
+// pointer would otherwise leave its cursor behind.
+func (c *core) applyCursor(hovered []widget.GestureTarget) {
+	cur := c.Owner.Cursor()
+	if cur == nil {
+		return // no pointer to shape on this platform
+	}
+	shape := shell.CursorDefault
+	for _, b := range hovered {
+		if s := b.GestureHandler().Cursor; s != shell.CursorDefault {
+			shape = s
+			break
+		}
+	}
+	cur.Set(shape)
+}
+
 // longPressPending reports whether a time-based gesture is running — a
 // long-press, a deferred single-tap, or the window in which a third tap makes
 // a triple. The shell keeps frames coming while one is, so the timers
@@ -255,6 +278,7 @@ func (c *core) Pointer(e shell.Pointer) {
 			}
 		}
 		c.hovered, c.hoverScratch = now, c.hovered
+		c.applyCursor(now)
 
 	case shell.PointerScroll:
 		// Route by where the pointer is *now*. Every shell sets Pos on a

@@ -187,6 +187,7 @@ does.
 | `Camera` | yes | yes | yes | — |
 | `CameraPreview` | yes | yes | yes | — |
 | `Connectivity` | — | yes | yes | — |
+| `Cursor` | yes | yes | — | — |
 | `FilePicker` | yes | yes | yes | — |
 | `FolderPicker` | yes | yes | — | — |
 | `Gamepads` | yes | yes | — | — |

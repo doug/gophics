@@ -251,6 +251,9 @@ func modBits(m gpucontext.Modifiers) shell.Mods {
 }
 
 type window struct {
+	// cursor is the shape currently set, so repeating a hover does not cross
+	// to the main thread for nothing.
+	cursor    shell.CursorShape
 	app       *gogpu.App
 	appID     string
 	prefsOnce sync.Once
