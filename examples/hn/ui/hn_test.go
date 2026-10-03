@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/png"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -123,26 +124,34 @@ func awaitFeed(t *testing.T, h *app.Headless, st *feedState) {
 // store every partial and draw "loading…" over all of them until the last
 // item landed.
 func TestFeedPaintsPartialPrefix(t *testing.T) {
-	api := &slowAPI{fakeAPI: fakeAPI{stories: 48}, delay: 20 * time.Millisecond}
-	h, st := slowHarness(t, api, 48)
+	// Driven through the feed's own prefix path rather than through a fake
+	// network. What is being asserted is the UI's decision — a page with some
+	// stories in it and more still coming paints the list, not the loading
+	// placeholder — and the fetcher's prefix reporting is covered on its own
+	// by TestFetchItemsReportsGrowingPrefix.
+	//
+	// A fake API cannot pin this down: requests that wait at a gate hold the
+	// fetch's concurrency slots, so either the gate lets the whole page
+	// through or it starves the very stories the test is waiting for, and
+	// which of the two happens is up to the scheduler.
+	h, st := slowHarness(t, &fakeAPI{stories: 40}, 40)
+	awaitFeed(t, h, st)
 
-	partialShown := false
-	deadline := time.Now().Add(10 * time.Second)
-	for !st.feed.done && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Millisecond)
-		h.Render()
-		if !st.feed.done && len(st.feed.items) > 0 && hasLabel(h, "Story number") {
-			partialShown = true
-		}
+	partial := make([]Item, 3)
+	for i := range partial {
+		partial[i] = Item{ID: i + 1, Title: "Story number " + strconv.Itoa(i+1)}
 	}
-	if !st.feed.done {
-		t.Fatal("feed never finished loading")
+	st.SetState(func() { st.show(partial, false) })
+	h.Render()
+
+	if st.feed.done {
+		t.Fatal("the feed reported itself done for a partial page")
 	}
-	if !partialShown {
-		t.Error("the list was never painted before the last story landed")
+	if len(st.feed.items) != 3 {
+		t.Fatalf("partial page holds %d stories, want 3", len(st.feed.items))
 	}
-	if len(st.feed.items) != 48 {
-		t.Errorf("loaded %d stories, want 48", len(st.feed.items))
+	if !hasLabel(h, "Story number") {
+		t.Error("a partial page painted the loading placeholder instead of the stories it already had")
 	}
 }
 
