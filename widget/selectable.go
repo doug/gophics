@@ -3,6 +3,7 @@ package widget
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/doug/gophics/geom"
 	"github.com/doug/gophics/internal/layoutbox"
@@ -36,11 +37,95 @@ type selectableState struct {
 	// OnPressEnd report no position), and the menu's dismiss.
 	pressGlobal geom.Pt
 	dismissMenu func()
+
+	// Clicks are counted at press time, not taken from the tap dispatcher: a
+	// double-click drag selects by words from the second press, and a tap is
+	// only reported on release, after the drag has begun.
+	clicks       int
+	lastPress    time.Time
+	lastPressPos geom.Pt
+	unit         selUnit
+	unitLo       int
+	unitHi       int
+	// handles is set when a finger made the selection, which is when the grips
+	// are drawn; dragHandle is the one being dragged, -1 for none.
+	handles    bool
+	dragHandle int
 }
 
 type selRef struct{ box *selectableBox }
 
-func (s *selectableState) Init(ctx Ctx) { s.ctx = ctx; s.ref = &selRef{} }
+// unitRange is the span of the unit containing off: the offset itself, the
+// word around it, or the whole line a triple click takes.
+func (s *selectableState) unitRange(off int, u selUnit) (int, int) {
+	b := s.ref.box
+	if b == nil {
+		return off, off
+	}
+	switch u {
+	case selWords:
+		return b.wordAt(off)
+	case selParas:
+		return b.lineAt(off)
+	}
+	return off, off
+}
+
+// selectUnitAt selects the unit under off and remembers it, so a drag that
+// doubles back still covers the unit it started on.
+func (s *selectableState) selectUnitAt(off int, u selUnit) {
+	lo, hi := s.unitRange(off, u)
+	s.anchor, s.focus = lo, hi
+	s.unitLo, s.unitHi, s.unit = lo, hi, u
+}
+
+// extendByUnit grows the selection to cover the unit under off as well as the
+// one the gesture started on, so a word is never cut in half mid-drag.
+func (s *selectableState) extendByUnit(off int) {
+	lo, hi := s.unitRange(off, s.unit)
+	if lo < s.unitLo {
+		s.anchor, s.focus = s.unitHi, lo
+	} else {
+		s.anchor, s.focus = s.unitLo, hi
+	}
+}
+
+// moveHandleTo drags grip h to off, keeping the other end anchored, and
+// reports which grip is being dragged after the move — pulling one end past
+// the other swaps them rather than collapsing the selection.
+func (s *selectableState) moveHandleTo(h, off int) int {
+	lo, hi := s.sel()
+	fixed := hi
+	if h == 1 {
+		fixed = lo
+	}
+	if off == fixed {
+		return h // a zero-width selection would drop the grips mid-drag
+	}
+	s.anchor, s.focus = fixed, off
+	if off < fixed {
+		return 0
+	}
+	return 1
+}
+
+// selectAll takes the whole text, for Cmd/Ctrl+A and the menu.
+func (s *selectableState) selectAll() {
+	if b := s.ref.box; b != nil {
+		s.anchor, s.focus, s.unit = 0, b.linearLen(), selChars
+	}
+}
+
+func (s *selectableState) allSelected() bool {
+	b := s.ref.box
+	if b == nil {
+		return false
+	}
+	lo, hi := s.sel()
+	return lo == 0 && hi >= b.linearLen() && hi > 0
+}
+
+func (s *selectableState) Init(ctx Ctx) { s.ctx = ctx; s.ref = &selRef{}; s.dragHandle = -1 }
 
 // Dispose takes the edit menu down with the text: the menu is an overlay
 // entry beside the tree, not a descendant, so nothing else would.
@@ -58,19 +143,74 @@ func (s *selectableState) Build(ctx Ctx) Widget {
 	lo, hi := s.sel()
 	return Interactive{
 		Gestures: Gestures{
+			// Text the pointer can act on says so before it is touched.
+			Cursor: shell.CursorText,
 			OnPress: func(p geom.Pt) {
 				s.closeMenu()
 				s.pressGlobal = ctx.Input().Pointer()
-				if s.ref.box != nil {
-					o := s.ref.box.offsetAt(p)
-					s.SetState(func() { s.anchor, s.focus = o, o })
+				if s.ref.box == nil {
+					return
 				}
+				// A press on a grip adjusts the selection rather than
+				// replacing it — the only way to fix one on a phone.
+				if h := s.ref.box.handleAt(p); h >= 0 {
+					s.dragHandle = h
+					return
+				}
+				s.dragHandle = -1
+				s.handles = false
+				o := s.ref.box.offsetAt(p)
+				now := time.Now()
+				window := time.Duration(ctx.el.owner.Gestures.Resolved().DoubleTap * float64(time.Second))
+				if now.Sub(s.lastPress) <= window && near(p, s.lastPressPos, 8) {
+					s.clicks++
+				} else {
+					s.clicks = 1
+				}
+				s.lastPress, s.lastPressPos = now, p
+				switch {
+				case s.clicks >= 3:
+					s.SetState(func() { s.selectUnitAt(o, selParas) })
+				case s.clicks == 2:
+					s.SetState(func() { s.selectUnitAt(o, selWords) })
+				case ctx.Input().Mods()&shell.ModShift != 0:
+					// Shift-click keeps the anchor and moves the far end.
+					s.SetState(func() { s.focus, s.unit = o, selChars })
+				default:
+					s.SetState(func() { s.anchor, s.focus, s.unit = o, o, selChars })
+				}
+			},
+			// Right-click selects the word under the pointer when nothing is
+			// selected, then offers the menu.
+			OnSecondaryTap: func(p geom.Pt) {
+				s.closeMenu()
+				s.pressGlobal = ctx.Input().Pointer()
+				if b := s.ref.box; b != nil {
+					if lo, hi := s.sel(); lo == hi {
+						s.SetState(func() { s.selectUnitAt(b.offsetAt(p), selWords) })
+					}
+				}
+				s.showMenu(ctx)
 			},
 			OnDrag: func(pos, _ geom.Pt) {
 				s.closeMenu() // the selection is still moving under it
-				if s.ref.box != nil {
+				if s.ref.box == nil {
+					return
+				}
+				if s.dragHandle >= 0 {
 					o := s.ref.box.offsetAt(pos)
-					s.SetState(func() { s.focus = o })
+					s.SetState(func() { s.dragHandle = s.moveHandleTo(s.dragHandle, o) })
+					return
+				}
+				{
+					o := s.ref.box.offsetAt(pos)
+					s.SetState(func() {
+						if s.unit != selChars {
+							s.extendByUnit(o)
+						} else {
+							s.focus = o
+						}
+					})
 				}
 			},
 			// Long-press takes the word and offers Copy. Without it this text
@@ -79,32 +219,39 @@ func (s *selectableState) Build(ctx Ctx) Widget {
 			OnLongPress: func() {
 				if s.ref.box != nil {
 					lo, hi := s.ref.box.wordAt(s.focus)
-					s.SetState(func() { s.anchor, s.focus = lo, hi })
+					s.SetState(func() { s.anchor, s.focus, s.handles = lo, hi, true })
 				}
 				s.showMenu(ctx)
 			},
 			OnPressEnd: func() {
+				s.dragHandle = -1
 				if lo, hi := s.sel(); lo != hi {
 					s.showMenu(ctx)
 				}
 			},
 			OnKey: func(k shell.Key) {
-				if k.Kind == shell.KeyPress && k.Mods.Command() && k.Code == shell.KeyC {
+				if k.Kind != shell.KeyPress || !k.Mods.Command() {
+					return
+				}
+				switch k.Code {
+				case shell.KeyC:
 					s.copy()
+				case shell.KeyA:
+					s.SetState(s.selectAll)
 				}
 			},
 			// Double-tap selects the word under the pointer (OnPress set
 			// s.focus to the tapped offset on the way in).
 			OnDoubleTap: func() {
 				if s.ref.box != nil {
-					lo, hi := s.ref.box.wordAt(s.focus)
-					s.SetState(func() { s.anchor, s.focus = lo, hi })
+					s.SetState(func() { s.selectUnitAt(s.focus, selWords) })
 				}
 			},
 		},
 		Child: selText{
 			text: t.S, font: t.Font, size: t.size(), color: t.Color,
-			wrap: t.Wrap, selColor: t.selectionColor(), lo: lo, hi: hi, ref: s.ref,
+			wrap: t.Wrap, selColor: t.selectionColor(), lo: lo, hi: hi,
+			handles: s.handles, ref: s.ref,
 		},
 	}
 }
@@ -115,8 +262,9 @@ func (s *selectableState) showMenu(ctx Ctx) {
 	s.closeMenu()
 	acts := editActionsFor(ctx, selectionOps{
 		HasSelection: func() bool { lo, hi := s.sel(); return lo != hi },
-		AllSelected:  func() bool { return false },
+		AllSelected:  s.allSelected,
 		Copy:         s.copy,
+		SelectAll:    func() { s.SetState(s.selectAll) },
 	})
 	if len(acts) > 0 {
 		s.dismissMenu = ShowEditMenu(ctx, s.pressGlobal, acts)
@@ -164,6 +312,7 @@ type selText struct {
 	color, selColor paint.Color
 	wrap            bool
 	lo, hi          int
+	handles         bool
 	ref             *selRef
 }
 
@@ -175,6 +324,7 @@ func (w selText) updateBox(_ Ctx, b layout.Box) {
 	sb.text, sb.font, sb.size = w.text, w.font, w.size
 	sb.color, sb.selColor, sb.wrap = w.color, w.selColor, w.wrap
 	sb.lo, sb.hi = w.lo, w.hi
+	sb.handles = w.handles
 	if w.ref != nil {
 		w.ref.box = sb
 	}
@@ -195,6 +345,7 @@ type selectableBox struct {
 	selColor paint.Color
 	wrap     bool
 	lo, hi   int
+	handles  bool // a finger made this selection, so it gets grips
 
 	lines     []string
 	lineStart []int
@@ -277,6 +428,29 @@ func (b *selectableBox) wordAt(off int) (int, int) {
 	return off, off
 }
 
+// lineAt returns the span of the wrapped line containing off — what a triple
+// click takes.
+func (b *selectableBox) lineAt(off int) (int, int) {
+	for li, v := range slices.Backward(b.lines) {
+		start := b.lineStart[li]
+		if off < start {
+			continue
+		}
+		return start, start + len([]rune(v))
+	}
+	return off, off
+}
+
+// linearLen is the offset one past the last rune, over the wrapped-line model
+// the selection offsets are expressed in.
+func (b *selectableBox) linearLen() int {
+	if len(b.lines) == 0 {
+		return 0
+	}
+	last := len(b.lines) - 1
+	return b.lineStart[last] + len([]rune(b.lines[last]))
+}
+
 // selectedText returns the runes in [lo, hi) joined across lines with "\n".
 func (b *selectableBox) selectedText(lo, hi int) string {
 	if lo >= hi {
@@ -323,6 +497,74 @@ func (b *selectableBox) Paint(c paint.Canvas, at geom.Pt) {
 			}
 		}
 		c.TextIn(b.font, ln, geom.Pt{X: at.X, Y: base}, b.size, b.color)
+	}
+	b.paintHandles(c, at)
+}
+
+// caretPt is the local position of the selection edge at off: the bottom of
+// the line it falls on, which is where a grip hangs from.
+func (b *selectableBox) caretPt(off int) geom.Pt {
+	if len(b.lines) == 0 {
+		return geom.Pt{}
+	}
+	li := len(b.lines) - 1
+	for i, ln := range b.lines {
+		if off <= b.lineStart[i]+len([]rune(ln)) {
+			li = i
+			break
+		}
+	}
+	runes := []rune(b.lines[li])
+	col := min(max(off-b.lineStart[li], 0), len(runes))
+	return geom.Pt{
+		X: b.Painter.MeasureWidthIn(b.font, string(runes[:col]), b.size),
+		Y: float32(li)*b.lineH + b.baseline + b.descent,
+	}
+}
+
+// handleCentres returns the two grip positions in local coordinates, and
+// whether there is a finger-made selection to show them for.
+func (b *selectableBox) handleCentres() (lo, hi geom.Pt, ok bool) {
+	if !b.handles || b.hi <= b.lo {
+		return geom.Pt{}, geom.Pt{}, false
+	}
+	return b.caretPt(b.lo), b.caretPt(b.hi), true
+}
+
+// handleAt reports which grip the local point grabs: -1 none, 0 the start of
+// the selection, 1 the end.
+func (b *selectableBox) handleAt(p geom.Pt) int {
+	lo, hi, ok := b.handleCentres()
+	if !ok {
+		return -1
+	}
+	dl, dh := sqDist(p, lo), sqDist(p, hi)
+	grab := float32(selHandleGrab * selHandleGrab)
+	switch {
+	case dl <= grab && dl <= dh:
+		return 0
+	case dh <= grab:
+		return 1
+	}
+	return -1
+}
+
+// paintHandles draws the grips under a finger-made selection, the same dot and
+// stem the field and the selection area use.
+func (b *selectableBox) paintHandles(c paint.Canvas, at geom.Pt) {
+	lo, hi, ok := b.handleCentres()
+	if !ok {
+		return
+	}
+	col := b.selColor
+	col.A = 1
+	for _, p := range []geom.Pt{lo, hi} {
+		g := at.Add(p)
+		c.Line(geom.Pt{X: g.X, Y: g.Y - selHandleRadius*2}, geom.Pt{X: g.X, Y: g.Y}, 1.5, col)
+		c.FillRRect(geom.Rect{
+			Min: geom.Pt{X: g.X - selHandleRadius, Y: g.Y - selHandleRadius},
+			Max: geom.Pt{X: g.X + selHandleRadius, Y: g.Y + selHandleRadius},
+		}, selHandleRadius, col)
 	}
 }
 

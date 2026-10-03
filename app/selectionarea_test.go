@@ -269,3 +269,218 @@ func TestSelectionAreaSingleFragment(t *testing.T) {
 		t.Fatalf("copied %q, want %q", got, want)
 	}
 }
+
+// Native selection behaviours — the gestures a reader brings from the
+// platform's own text views. Each is driven through the real dispatcher, so a
+// press that must count as the second click really arrives as one.
+
+// doubleClick presses twice at p inside the double-tap window, leaving the
+// button down so a drag can follow, as a double-click-drag does.
+func pressNth(h *Headless, p geom.Pt, n int) {
+	for i := 0; i < n; i++ {
+		h.Press(p)
+		if i < n-1 {
+			h.Release(p)
+		}
+		h.Render()
+	}
+}
+
+// A double click takes the word under it, not a caret, and a drag from there
+// runs by whole words: no half-word is ever left at either end.
+func TestSelectionAreaDoubleClickSelectsWordAndDragsByWord(t *testing.T) {
+	h := selAreaHarness(t, "alpha beta gamma", "delta epsilon")
+	pressNth(h, geom.Pt{X: 10, Y: 6}, 2) // inside "alpha"
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "alpha" {
+		t.Fatalf("double click copied %q, want \"alpha\"", got)
+	}
+	// Drag into the middle of "gamma": the whole word comes with it.
+	h.Move(geom.Pt{X: 92, Y: 6})
+	h.Release(geom.Pt{X: 92, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); !strings.HasPrefix(got, "alpha beta") || !strings.HasSuffix(got, "gamma") {
+		t.Fatalf("word drag copied %q, want it to start at \"alpha beta\" and end on a whole \"gamma\"", got)
+	}
+}
+
+// A third click takes the paragraph — the fragment the pointer is in, which is
+// what a browser's triple click takes.
+func TestSelectionAreaTripleClickSelectsParagraph(t *testing.T) {
+	h := selAreaHarness(t, "alpha beta gamma", "delta epsilon")
+	pressNth(h, geom.Pt{X: 10, Y: 6}, 3)
+	h.Release(geom.Pt{X: 10, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "alpha beta gamma" {
+		t.Fatalf("triple click copied %q, want the whole first line", got)
+	}
+}
+
+// Shift-click keeps the anchor and moves the far end, instead of starting over.
+func TestSelectionAreaShiftClickExtends(t *testing.T) {
+	h := selAreaHarness(t, "alpha beta gamma", "delta epsilon")
+	h.Press(geom.Pt{X: 1, Y: 6})
+	h.Release(geom.Pt{X: 1, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyShift, shell.ModShift) // shift down for the next press
+	h.Press(geom.Pt{X: 40, Y: 6})
+	h.Release(geom.Pt{X: 40, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got == "" || !strings.HasPrefix("alpha beta gamma", got) {
+		t.Fatalf("shift-click copied %q, want a prefix of the first line", got)
+	}
+}
+
+// Cmd/Ctrl+A takes every fragment in the area, which is what the keystroke
+// means everywhere else.
+func TestSelectionAreaSelectAll(t *testing.T) {
+	h := selAreaHarness(t, "Hello", "World")
+	h.Press(geom.Pt{X: 1, Y: 6}) // focus the area
+	h.Release(geom.Pt{X: 1, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyA, shell.ModSuper)
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got, want := clip(h), "Hello\nWorld"; got != want {
+		t.Fatalf("select all copied %q, want %q", got, want)
+	}
+}
+
+// Right-click with nothing selected takes the word under the pointer and
+// offers the menu, as both desktops do.
+func TestSelectionAreaRightClickSelectsWordAndOffersCopy(t *testing.T) {
+	h := selAreaHarness(t, "alpha beta gamma", "delta epsilon")
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 10, Y: 6}, Button: 1})
+	h.Render()
+	var labels []string
+	for _, n := range h.Semantics() {
+		labels = append(labels, n.Label)
+	}
+	if !strings.Contains(strings.Join(labels, "|"), "Copy") {
+		t.Fatalf("no edit menu after a right click; semantics: %v", labels)
+	}
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "alpha" {
+		t.Fatalf("right click selected %q, want the word under it", got)
+	}
+}
+
+// A finger's long-press selection gets grips, and dragging one adjusts the
+// selection rather than replacing it — the only way to fix a selection on a
+// phone, where there is no shift-arrow.
+func TestSelectionAreaTouchHandleAdjustsSelection(t *testing.T) {
+	h := selAreaHarness(t, "alpha beta gamma", "delta epsilon")
+	h.TouchPress(geom.Pt{X: 10, Y: 6}) // inside "alpha"
+	h.Step(shell.GestureTuning{}.Resolved().LongPress + 0.05)
+	h.Render()
+	h.TouchRelease(geom.Pt{X: 10, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "alpha" {
+		t.Fatalf("long press copied %q, want \"alpha\"", got)
+	}
+	grip, ok := gripBelowFirstLine(h)
+	if !ok {
+		t.Fatal("no selection grip drawn after a finger made the selection")
+	}
+	// Grab the right-hand grip and pull it across "beta".
+	h.TouchPress(grip)
+	h.TouchMove(geom.Pt{X: 72, Y: 6})
+	h.TouchRelease(geom.Pt{X: 72, Y: 6})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); !strings.HasPrefix(got, "alpha") || got == "alpha" {
+		t.Fatalf("dragging the grip gave %q, want the selection grown past \"alpha\" from the same start", got)
+	}
+}
+
+// A mouse selection gets no grips: a desktop reader adjusts with shift-click,
+// and two dots under the text would only puzzle them.
+func TestSelectionAreaMouseSelectionHasNoHandles(t *testing.T) {
+	h := selAreaHarness(t, "alpha beta gamma", "delta epsilon")
+	h.DragTo(geom.Pt{X: 1, Y: 6}, geom.Pt{X: 72, Y: 6})
+	h.Release(geom.Pt{X: 72, Y: 6})
+	h.Render()
+	if _, ok := gripBelowFirstLine(h); ok {
+		t.Fatal("a mouse selection drew a selection grip")
+	}
+}
+
+// gripBelowFirstLine finds a drawn grip by its own pixels: the dot is the
+// selection colour at full alpha, which nothing else here paints — the
+// highlight band is the same hue at a third of the alpha, and over the pale
+// background that never reaches full saturation. The rightmost dot is the far
+// end of the selection; its centre is what a finger would aim at.
+func gripBelowFirstLine(h *Headless) (geom.Pt, bool) {
+	img := h.Render()
+	b := img.Bounds()
+	var xs, ys []float32
+	var maxX float32
+	for y := b.Min.Y; y < min(b.Min.Y+30, b.Max.Y); y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			if bl > 0xe000 && bl > r+0x6000 && g > r {
+				xs, ys = append(xs, float32(x)), append(ys, float32(y))
+				maxX = max(maxX, float32(x))
+			}
+		}
+	}
+	if len(xs) == 0 {
+		return geom.Pt{}, false
+	}
+	// Average the rightmost dot alone: anything within one dot width of the
+	// furthest pixel belongs to it.
+	var sx, sy, n float32
+	for i := range xs {
+		if xs[i] > maxX-2*selGripRadius {
+			sx, sy, n = sx+xs[i], sy+ys[i], n+1
+		}
+	}
+	return geom.Pt{X: sx / n, Y: sy / n}, true
+}
+
+// selGripRadius mirrors the widget's own handle radius; the test only needs it
+// to tell one dot from the other.
+const selGripRadius = 7
+
+// Dragging a selection toward the bottom of a scrolling page scrolls it, the
+// way every platform does — otherwise the selection stops at whatever happened
+// to be on screen when the drag began.
+func TestSelectionAreaDragScrollsThePageIntoView(t *testing.T) {
+	items := make([]string, 60)
+	for i := range items {
+		items[i] = "line " + string(rune('a'+i%26))
+	}
+	h, err := NewHeadless(listSelApp{items: items},
+		Config{Size: geom.Size{W: 300, H: 100}, Font: goregular.TTF}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Render()
+
+	// Start on the first line and drag to the bottom edge, holding there.
+	h.Press(geom.Pt{X: 4, Y: 6})
+	h.Move(geom.Pt{X: 120, Y: 96})
+	h.Render()
+	first := len(clipAfterCopy(h))
+	for i := 0; i < 8; i++ {
+		h.Move(geom.Pt{X: 120, Y: 96})
+		h.Render()
+	}
+	grown := len(clipAfterCopy(h))
+	h.Release(geom.Pt{X: 120, Y: 96})
+	if grown <= first {
+		t.Fatalf("holding the drag at the bottom edge selected no further lines: %d then %d", first, grown)
+	}
+}
+
+// clipAfterCopy copies the current selection and returns it.
+func clipAfterCopy(h *Headless) string {
+	h.Clipboard().S = ""
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	return h.Clipboard().S
+}

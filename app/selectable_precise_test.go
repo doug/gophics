@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
@@ -173,4 +174,94 @@ func replaceNewlines(s string) string {
 		out = append(out, r)
 	}
 	return string(out)
+}
+
+// SelectableText carries the same native gestures as a SelectionArea: a
+// standalone label is still text a reader expects to be able to work with.
+
+func TestSelectableTripleClickTakesTheLine(t *testing.T) {
+	h := selHarness(t, "Hello World")
+	pressNth(h, geom.Pt{X: 10, Y: 8}, 3)
+	h.Release(geom.Pt{X: 10, Y: 8})
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "Hello World" {
+		t.Fatalf("triple click copied %q, want the whole line", got)
+	}
+}
+
+func TestSelectableShiftClickExtends(t *testing.T) {
+	const s = "Hello World"
+	h := selHarness(t, s)
+	p := h.core.Painter
+	h.Press(geom.Pt{X: 0, Y: 8})
+	h.Release(geom.Pt{X: 0, Y: 8})
+	h.Render()
+	h.KeyMod(shell.KeyShift, shell.ModShift)
+	x := p.MeasureWidthIn("", s[:5], 14)
+	h.Press(geom.Pt{X: x, Y: 8})
+	h.Release(geom.Pt{X: x, Y: 8})
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "Hello" {
+		t.Fatalf("shift-click copied %q, want \"Hello\"", got)
+	}
+}
+
+func TestSelectableSelectAll(t *testing.T) {
+	h := selHarness(t, "Hello World")
+	h.Press(geom.Pt{X: 2, Y: 8}) // focus it
+	h.Release(geom.Pt{X: 2, Y: 8})
+	h.Render()
+	h.KeyMod(shell.KeyA, shell.ModSuper)
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "Hello World" {
+		t.Fatalf("select all copied %q", got)
+	}
+}
+
+func TestSelectableRightClickTakesTheWord(t *testing.T) {
+	h := selHarness(t, "Hello World")
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: geom.Pt{X: 10, Y: 8}, Button: 1})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "Hello" {
+		t.Fatalf("right click selected %q, want the word under it", got)
+	}
+}
+
+// A finger's selection gets grips here too, so a plain selectable label can be
+// adjusted on a phone rather than only replaced.
+func TestSelectableTouchHandleAdjustsSelection(t *testing.T) {
+	h := selHarness(t, "alpha beta gamma")
+	h.TouchPress(geom.Pt{X: 8, Y: 8})
+	h.Step(shell.GestureTuning{}.Resolved().LongPress + 0.05)
+	h.Render()
+	h.TouchRelease(geom.Pt{X: 8, Y: 8})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); got != "alpha" {
+		t.Fatalf("long press copied %q, want \"alpha\"", got)
+	}
+	grip, ok := gripBelowFirstLine(h)
+	if !ok {
+		t.Fatal("no grip drawn after a finger made the selection")
+	}
+	h.TouchPress(grip)
+	h.TouchMove(geom.Pt{X: 70, Y: 8})
+	h.TouchRelease(geom.Pt{X: 70, Y: 8})
+	h.Render()
+	h.KeyMod(shell.KeyC, shell.ModSuper)
+	if got := clip(h); !strings.HasPrefix(got, "alpha") || got == "alpha" {
+		t.Fatalf("dragging the grip gave %q, want the selection grown from the same start", got)
+	}
+}
+
+// And a mouse selection does not get them.
+func TestSelectableMouseSelectionHasNoHandles(t *testing.T) {
+	h := selHarness(t, "alpha beta gamma")
+	h.DragTo(geom.Pt{X: 1, Y: 8}, geom.Pt{X: 70, Y: 8})
+	h.Release(geom.Pt{X: 70, Y: 8})
+	h.Render()
+	if _, ok := gripBelowFirstLine(h); ok {
+		t.Fatal("a mouse selection drew a grip")
+	}
 }

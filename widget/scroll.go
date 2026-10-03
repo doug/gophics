@@ -831,6 +831,15 @@ func (sp *spinner) Tick(dt float64) bool {
 
 func (s *scrollState) Build(ctx Ctx) Widget {
 	w := s.W()
+	// A SelectionArea above this scroll cannot see the reveal service, which
+	// only flows down — so hand it up. Wrapping a scrolling list in one
+	// SelectionArea is the usual shape, and without this a selection drag
+	// held at the bottom edge stops at whatever was on screen when it began
+	// instead of scrolling on, as it does on every platform. The innermost
+	// scroll builds last and wins, which is the one the text is in.
+	if reg, ok := ctx.Of[*selectionRegistry](); ok {
+		reg.reveal = s.reveal
+	}
 	// Bind on every build, not just Init: a controller handed over on a later
 	// build (created lazily, or swapped) would otherwise never attach, and
 	// its Offset/JumpTo/AnimateTo would silently do nothing.
