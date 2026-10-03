@@ -252,6 +252,8 @@ func sections() []section {
 			sp("Reorderable list", "Uniform rows, reordered by dragging", reorderSection{})},
 		{"Drag & drop", "Carry chips between two bins",
 			sp("Drag & drop", "Draggable payloads and targets that accept them", dragDropSection{})},
+		{"Text selection", "Select, copy and paste the way the platform does",
+			sp("Text selection", "One SelectionArea over three blocks of prose", textSelectionSection{})},
 		{"Rich text & selection", "Styled spans, a link, and drag-to-select",
 			sp("Rich text & selection", "Rich spans inside a SelectionArea", richTextSection{})},
 		{"Transform", "Rotate and scale a still-live widget",
