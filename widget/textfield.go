@@ -656,9 +656,29 @@ func (s *textFieldState) pasteClipboard(ctx Ctx) {
 	if cb == nil || !s.W().editable() {
 		return
 	}
+	// A clipboard that can only answer asynchronously (the web's) is read
+	// through its own path; the insert then happens on the UI goroutine, which
+	// is where every other edit happens.
+	if a, ok := cb.(ClipboardAsyncReader); ok {
+		a.ClipboardReadAsync(func(t string, err error) {
+			if err != nil || t == "" {
+				return
+			}
+			s.PostState(func() { s.insertPaste(ctx, t) })
+		})
+		return
+	}
 	t, err := cb.ClipboardRead()
 	if err != nil || t == "" {
 		return
+	}
+	s.insertPaste(ctx, t)
+}
+
+// insertPaste puts clipboard text into the field, as its own undo step.
+func (s *textFieldState) insertPaste(ctx Ctx, t string) {
+	if !s.W().editable() {
+		return // the field may have been disabled while an async read was out
 	}
 	if s.W().Multiline {
 		t = sanitizeMultiline(t)

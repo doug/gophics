@@ -631,6 +631,50 @@ func (w *window) ClipboardRead() (string, error) {
 	return "", errors.New("web: synchronous clipboard read unsupported")
 }
 
+// ClipboardReadAsync answers the read the browser can actually perform. The
+// widget layer finds this by interface and uses it for the edit menu's Paste;
+// the keyboard chord needs none of it, since the browser pastes into the hidden
+// input itself (see the keydown handler).
+//
+// Call it from inside a user gesture. Chrome hands the clipboard over without a
+// prompt only then, and the menu's own tap is one.
+func (w *window) ClipboardReadAsync(done func(string, error)) {
+	if done == nil {
+		return
+	}
+	// navigator.clipboard exists only in a secure context, and readText is
+	// missing in a few that have writeText; both are reported rather than
+	// left to panic in Value.Call.
+	cb := js.Global().Get("navigator").Get("clipboard")
+	if !cb.Truthy() || !cb.Get("readText").Truthy() {
+		done("", errors.New("web: clipboard read unavailable (insecure context?)"))
+		return
+	}
+	var ok, fail js.Func
+	release := func() { ok.Release(); fail.Release() }
+	ok = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		defer release()
+		text := ""
+		if len(args) > 0 && args[0].Type() == js.TypeString {
+			text = args[0].String()
+		}
+		done(text, nil)
+		return nil
+	})
+	fail = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		defer release()
+		msg := "web: clipboard read refused"
+		if len(args) > 0 {
+			if m := args[0].Get("message"); m.Type() == js.TypeString {
+				msg = "web: " + m.String()
+			}
+		}
+		done("", errors.New(msg))
+		return nil
+	})
+	cb.Call("readText").Call("then", ok, fail)
+}
+
 func (w *window) ClipboardWrite(text string) error {
 	// navigator.clipboard exists only in a secure context. Plain http:// on a
 	// LAN — the usual way a phone is pointed at a dev build — leaves it

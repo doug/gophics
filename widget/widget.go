@@ -162,6 +162,23 @@ type ClipboardPeeker interface {
 	ClipboardHasText() bool
 }
 
+// ClipboardAsyncReader is implemented by a clipboard that can only be read
+// asynchronously. The web's is the one: navigator.clipboard answers with a
+// promise, and a wasm app cannot wait on it without stalling the page it is
+// waiting on, which is why the web shell's synchronous ClipboardRead returns
+// an error instead of a guess.
+//
+// Opt-in for the same reason ClipboardPeeker is: every shell in this module and
+// every out-of-tree host implements Clipboard, and a third method would break
+// all of them at once.
+//
+// The read must be asked for from inside a user gesture — a tap on the menu's
+// Paste — because that is the only time a browser will hand the clipboard over
+// without a prompt.
+type ClipboardAsyncReader interface {
+	ClipboardReadAsync(done func(text string, err error))
+}
+
 // clipboardHasText reports whether Paste has anything to offer.
 //
 // Prefers the peek where a backend can do one; otherwise reads, which is what
@@ -170,6 +187,13 @@ type ClipboardPeeker interface {
 func clipboardHasText(cb Clipboard) bool {
 	if p, ok := cb.(ClipboardPeeker); ok {
 		return p.ClipboardHasText()
+	}
+	if _, ok := cb.(ClipboardAsyncReader); ok {
+		// Unknowable without reading, and reading is asynchronous and asks the
+		// user's permission. Offering Paste and doing nothing when the
+		// clipboard turns out to be empty is the lesser wrong: hiding it makes
+		// a working action unreachable, which is what the web menu did.
+		return true
 	}
 	t, err := cb.ClipboardRead()
 	return err == nil && t != ""
