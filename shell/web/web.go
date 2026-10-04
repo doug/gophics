@@ -138,6 +138,20 @@ func Run(h shell.Handler, cfg shell.Config) error {
 	// is selected. Leaving the browser's native menu enabled would put a
 	// second menu on top of that one for the same click.
 	listen(canvas, "contextmenu", func(e js.Value) { e.Call("preventDefault") })
+	// The browser moves focus on mousedown, and it does so *after* this
+	// shell's pointerdown handler has run — so a tap on a field focused the
+	// hidden input and the browser's own default immediately took it back to
+	// <body>. The field then looked focused, drawn by the app, while the
+	// element that receives text had nothing: Cmd+V pasted into the body,
+	// IME composition went nowhere, and Android showed no keyboard because
+	// nothing editable was focused. Typing still worked, which is what made
+	// it look like a paste bug rather than a focus one — printable keys come
+	// through the document's keydown, not the input.
+	//
+	// Preventing the default is what every in-browser editor does for the
+	// same reason. The app decides what is focused; the canvas itself is
+	// never a focus target.
+	listen(canvas, "mousedown", func(e js.Value) { e.Call("preventDefault") })
 	listen(canvas, "pointermove", func(e js.Value) {
 		if !primary(e) {
 			return
