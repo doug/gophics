@@ -213,6 +213,17 @@ func Run(h shell.Handler, cfg shell.Config) error {
 		}
 		key := e.Get("key").String()
 		mods := modBits(e)
+		// Paste is the browser's to perform. Cmd/Ctrl+V was being mapped like
+		// any other chord and the default prevented, which stopped the browser
+		// pasting into the focused hidden input — so no input event fired and
+		// nothing arrived. The clipboard cannot be read synchronously from
+		// wasm either (navigator.clipboard is promise-only, and ClipboardRead
+		// says so), so the browser's own paste is the only thing that can
+		// deliver the text: let it through and textinput_web.go's input
+		// listener picks it up as ordinary text.
+		if isPasteChord(key, mods) {
+			return
+		}
 		if code := keyCode(key, mods); code != shell.KeyUnknown {
 			e.Call("preventDefault")
 			h.Event(w, shell.Key{Kind: shell.KeyPress, Code: code, Mods: mods})
@@ -373,6 +384,16 @@ func letterKey(c byte) shell.KeyCode {
 		return shell.KeyZ
 	}
 	return shell.KeyUnknown
+}
+
+// isPasteChord reports the key that means paste: Cmd+V on an Apple keyboard,
+// Ctrl+V elsewhere. Shift+Insert, the other spelling, carries no text through
+// a hidden input and is left to the key path.
+func isPasteChord(key string, mods shell.Mods) bool {
+	if mods&(shell.ModCtrl|shell.ModSuper) == 0 {
+		return false
+	}
+	return key == "v" || key == "V"
 }
 
 func modBits(e js.Value) shell.Mods {
