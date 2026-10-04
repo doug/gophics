@@ -178,9 +178,34 @@ func (a *webA11y) SetTree(nodes []shell.A11yNode, activate func(id int)) {
 	// an element that is not yet in the document is a no-op, so doing it in
 	// element(), before the append pass, never focused anything and every
 	// tree rebuild dropped screen-reader focus.
-	if focused.Truthy() {
+	// Not while a field is being edited. The app focuses the hidden <input>
+	// from inside the pointer event so the browser will paste into it, raise a
+	// phone's keyboard for it and compose into it; this publish runs after
+	// that, on the same frame, and focusing the mirror node instead took all
+	// three away. Typing still arrived — that comes through the document's own
+	// keydown — so the field looked focused and simply would not paste, and no
+	// keyboard ever appeared on Android.
+	//
+	// The mirror keeps the node's text and role for the AT either way; what it
+	// must not do is take the DOM focus the text input needs to function.
+	if focused.Truthy() && !a.textInputFocused() {
 		focused.Call("focus", map[string]any{"preventScroll": true})
 	}
+}
+
+// textInputFocused reports whether the shell's hidden text input currently
+// holds DOM focus. It is the only <input> in the document, so the tag alone
+// settles it without reaching across to the text-input state.
+func (a *webA11y) textInputFocused() bool {
+	el := a.doc.Get("activeElement")
+	if !el.Truthy() {
+		return false
+	}
+	switch el.Get("tagName").String() {
+	case "INPUT", "TEXTAREA":
+		return true
+	}
+	return false
 }
 
 // element applies a described mirror node to the DOM. Every decision was made
