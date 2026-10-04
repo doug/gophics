@@ -82,9 +82,16 @@ func (t *webTextInput) ensure() {
 	// resize-and-scroll fight with the browser for the length of the keyboard
 	// animation. At top:0 the element is already in view and revealing it is a
 	// no-op.
+	// Not behind the canvas. It used to carry zIndex:-1, which puts it under
+	// the opaque surface the app draws on, and Chrome on Android declines to
+	// raise the keyboard for an editable it considers hidden — a caret
+	// blinking in a field that cannot be typed into. pointer-events:none keeps
+	// the 1px element from taking a tap meant for the canvas now that it is no
+	// longer underneath it; programmatic focus is unaffected.
 	for k, v := range map[string]string{
 		"position": "fixed", "opacity": "0", "left": "0", "top": "0",
-		"width": "1px", "height": "1px", "border": "0", "padding": "0", "zIndex": "-1",
+		"width": "1px", "height": "1px", "border": "0", "padding": "0",
+		"pointerEvents": "none",
 	} {
 		in.Get("style").Set(k, v)
 	}
