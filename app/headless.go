@@ -198,6 +198,18 @@ func (h *Headless) Tap(p geom.Pt) {
 	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p})
 }
 
+// SecondaryTap dispatches a right-button press+release at p — the desktop
+// gesture that raises a context menu. The runner treats the secondary button
+// as its own gesture rather than a press, so this is not Tap with a button
+// set: nothing is focused, no drag begins, and no tap is reported.
+func (h *Headless) SecondaryTap(p geom.Pt) {
+	h.layoutForInput()
+	h.at(p)
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerDown, Pos: p, Button: 1})
+	h.at(p)
+	h.core.Pointer(shell.Pointer{Kind: shell.PointerUp, Pos: p, Button: 1})
+}
+
 // Type dispatches committed text input. Pending rebuilds are flushed
 // first, mirroring the frame between events in a real shell.
 func (h *Headless) Type(s string) {
