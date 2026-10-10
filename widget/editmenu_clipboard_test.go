@@ -61,3 +61,37 @@ func TestClipboardWithoutPeekFallsBackToReading(t *testing.T) {
 		t.Error("clipboardHasText = true for an empty clipboard")
 	}
 }
+
+// asyncPeekingClipboard is the web's shape: it can only be read
+// asynchronously, and it can say up front whether a read could ever succeed.
+type asyncPeekingClipboard struct {
+	countingClipboard
+	allowed bool
+}
+
+func (c *asyncPeekingClipboard) ClipboardHasText() bool                 { return c.allowed }
+func (c *asyncPeekingClipboard) ClipboardReadAsync(func(string, error)) {}
+
+// An async clipboard is offered optimistically — until the browser refuses.
+//
+// The web cannot know whether the clipboard holds text without reading it, and
+// the read is asynchronous and asks the user's permission, so Paste is offered
+// on the chance that it works. But once the user denies that permission, the
+// read can never succeed again, and the menu went on offering a Paste that was
+// guaranteed to do nothing every time it was built. A peek that reports the
+// refusal takes the item away.
+func TestAsyncClipboardStopsOfferingPasteOnceRefused(t *testing.T) {
+	cb := &asyncPeekingClipboard{allowed: true}
+	if !clipboardHasText(cb) {
+		t.Error("Paste withheld from an async clipboard that has not been refused")
+	}
+
+	cb.allowed = false
+	if clipboardHasText(cb) {
+		t.Error("Paste still offered after the browser refused the clipboard; " +
+			"the item cannot do anything and must not be shown")
+	}
+	if cb.reads != 0 {
+		t.Errorf("the async clipboard was read %d times by the peek", cb.reads)
+	}
+}

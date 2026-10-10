@@ -430,13 +430,18 @@ func modBits(e js.Value) shell.Mods {
 type window struct {
 	// cursor is the CSS keyword currently set on the canvas, so repeating a
 	// hover does not touch the DOM.
-	cursor      string
-	canvas, doc js.Value
-	handler     shell.Handler
-	renderer    shell.RendererMode // resolved backend for this run
-	pres        *presenter         // runtime-selected presentation (CPU blit or GPU surface)
-	cam         *webCamera         // lazily created still-capture capability
-	spk         *webSpeakers       // lazily created audio output capability
+	cursor string
+	// clipRead caches the clipboard-read permission, watched rather than
+	// polled, so the synchronous peek the edit menu makes can answer without
+	// a promise. See ClipboardHasText.
+	clipRead     string
+	clipWatching bool
+	canvas, doc  js.Value
+	handler      shell.Handler
+	renderer     shell.RendererMode // resolved backend for this run
+	pres         *presenter         // runtime-selected presentation (CPU blit or GPU surface)
+	cam          *webCamera         // lazily created still-capture capability
+	spk          *webSpeakers       // lazily created audio output capability
 
 	logical geom.Size
 	// rect is the canvas's on-screen box, cached; see refreshRect.
@@ -645,17 +650,85 @@ func (w *window) ClipboardRead() (string, error) {
 	return "", errors.New("web: synchronous clipboard read unsupported")
 }
 
+// ClipboardHasText reports whether the edit menu should offer Paste.
+//
+// It cannot answer the real question — only a read says whether the clipboard
+// holds text, and that read is asynchronous — so it answers the one that
+// matters: whether a Paste would be able to do anything at all. Optimistic
+// until the browser refuses, because hiding a working action is worse than
+// offering one that turns out to find an empty clipboard.
+//
+// Once the user denies the clipboard-read permission, though, Paste can never
+// do anything again, and a menu item that is guaranteed to do nothing is worse
+// than no menu item. The permission is watched rather than read here: this
+// runs on every build of the menu and must not block.
+func (w *window) ClipboardHasText() bool {
+	w.watchClipboardPermission()
+	return w.clipRead != "denied"
+}
+
+// watchClipboardPermission starts tracking the clipboard-read permission, once.
+// Browsers that do not expose it in the Permissions API (Firefox and Safari do
+// not) leave clipRead empty, which reads as "not denied" — the optimistic
+// answer those browsers had before this existed.
+func (w *window) watchClipboardPermission() {
+	if w.clipWatching {
+		return
+	}
+	w.clipWatching = true
+	perms := js.Global().Get("navigator").Get("permissions")
+	if !perms.Truthy() || !perms.Get("query").Truthy() {
+		return
+	}
+	var ok, fail js.Func
+	release := func() { ok.Release(); fail.Release() }
+	ok = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		defer release()
+		if len(args) == 0 || !args[0].Truthy() {
+			return nil
+		}
+		status := args[0]
+		w.clipRead = status.Get("state").String()
+		// The status object stays live: a permission the user grants or
+		// revokes later in the page's life fires onchange, and the menu is
+		// built fresh every time it opens, so the next one is already right.
+		// This func is deliberately never released — it lives as long as the
+		// page, like the window it writes to.
+		status.Set("onchange", js.FuncOf(func(this js.Value, _ []js.Value) any {
+			w.clipRead = this.Get("state").String()
+			return nil
+		}))
+		return nil
+	})
+	fail = js.FuncOf(func(js.Value, []js.Value) any {
+		// A browser that knows the Permissions API but not this permission
+		// name rejects. Nothing to learn; stay optimistic.
+		release()
+		return nil
+	})
+	// query itself throws synchronously on some engines for an unknown name.
+	defer func() {
+		if r := recover(); r != nil {
+			release()
+		}
+	}()
+	perms.Call("query", map[string]any{"name": "clipboard-read"}).Call("then", ok, fail)
+}
+
 // ClipboardReadAsync answers the read the browser can actually perform. The
 // widget layer finds this by interface and uses it for the edit menu's Paste;
 // the keyboard chord needs none of it, since the browser pastes into the hidden
 // input itself (see the keydown handler).
 //
-// Call it from inside a user gesture. Chrome hands the clipboard over without a
-// prompt only then, and the menu's own tap is one.
+// Call it from inside a user gesture: it is a precondition, not a guarantee.
+// Chrome still gates the first read behind a permission prompt, and until the
+// user answers it the promise simply stays pending — which is why Paste from
+// the menu appears to do nothing the first time and works ever after.
 func (w *window) ClipboardReadAsync(done func(string, error)) {
 	if done == nil {
 		return
 	}
+	w.watchClipboardPermission()
 	// navigator.clipboard exists only in a secure context, and readText is
 	// missing in a few that have writeText; both are reported rather than
 	// left to panic in Value.Call.
