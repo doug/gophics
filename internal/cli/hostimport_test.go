@@ -84,16 +84,10 @@ func TestHostImportMismatchExplainsItself(t *testing.T) {
 func TestExampleHostsMatchTheirBindPackage(t *testing.T) {
 	for _, app := range []string{"mirror", "hn", "health"} {
 		opts := buildOpts{pkg: "github.com/doug/gophics/examples/" + app}
-		t.Cleanup(func() {
-			if dir, err := packageDir(opts.pkg); err == nil && app == "mirror" {
-				os.RemoveAll(filepath.Join(dir, "build"))
-			}
-		})
-		bind, err := resolveBindPkg(opts)
-		if err != nil {
-			t.Fatalf("%s: %v", app, err)
-		}
-		name, err := packageName(bind)
+		// bindName, not resolveBindPkg: the name is all this needs, and
+		// resolving mirror's would write a bind package into examples/ for the
+		// length of the run.
+		name, err := bindName(opts)
 		if err != nil {
 			t.Fatalf("%s: %v", app, err)
 		}

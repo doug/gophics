@@ -104,6 +104,43 @@ func resolveBindPkg(o buildOpts) (string, error) {
 	return generateBindPkg(o, dir)
 }
 
+// bindName reports the name the bind package has, or would have, without
+// generating anything.
+//
+// resolveBindPkg answers an import path, and for a plain main package it can
+// only answer by writing the package first. Callers that want nothing but the
+// name — the iOS framework name, the check that a checked-in host imports the
+// right one — then paid for that name with a Go package written into the
+// middle of the module and deleted again afterwards. The name is a pure
+// function of the import path (see bindPkgName), so it is answered as one.
+//
+// The cases below are resolveBindPkg's, in the same order, and must stay in
+// step with it.
+func bindName(o buildOpts) (string, error) {
+	if o.bindPkg != "" {
+		return packageName(o.bindPkg)
+	}
+	name, err := packageName(o.pkg)
+	if err != nil {
+		return "", err
+	}
+	if name != "main" {
+		return name, nil // already a bind package
+	}
+	dir, err := packageDir(o.pkg)
+	if err != nil {
+		return "", err
+	}
+	if isGoPkg(filepath.Join(dir, "mobile")) {
+		return packageName(joinPkg(o.pkg, "mobile"))
+	}
+	appPath, err := importPath(dir)
+	if err != nil {
+		return "", err
+	}
+	return bindPkgName(appPath), nil
+}
+
 // generateBindPkg writes <app>/build/bind and returns its import path.
 func generateBindPkg(o buildOpts, dir string) (string, error) {
 	uiDir := filepath.Join(dir, "ui")

@@ -180,15 +180,11 @@ func packageName(pkg string) (string, error) {
 // package's name, capitalized (package hnmobile → Hnmobile). The host's
 // project.yml references <Name>.xcframework and Swift `import <Name>`.
 func frameworkName(o buildOpts) (string, error) {
-	// Resolve through the same path the bind itself takes, so a generated bind
-	// package is named the same here as it is there. Reading o.pkg directly
-	// answers "Main" for an app root, and the host then looks for a framework
-	// that was never built under a name nothing produces.
-	pkg, err := resolveBindPkg(o)
-	if err != nil {
-		return "", err
-	}
-	name, err := packageName(pkg)
+	// Decided the same way the bind itself decides, so a generated bind package
+	// is named the same here as it is there. Reading o.pkg directly answers
+	// "Main" for an app root, and the host then looks for a framework that was
+	// never built under a name nothing produces.
+	name, err := bindName(o)
 	if err != nil {
 		return "", err
 	}
