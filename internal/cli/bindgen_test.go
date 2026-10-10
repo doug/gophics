@@ -8,26 +8,41 @@ import (
 	"testing"
 )
 
+// scratchApp is the app the generator is pointed at. It lives under testdata
+// because generating writes a Go package into the app's own build/ directory
+// and the test deletes it again: done inside examples/, that puts a package
+// into the middle of the module for the length of the run, and leaves one
+// behind when the run is interrupted. Either way a concurrent `go build ./...`
+// or `go test ./...` can enumerate a package that is about to vanish. The go
+// tool skips testdata when it expands ./..., so nothing here is ever swept up,
+// while `go build <import path>` still compiles it.
+const scratchApp = "github.com/doug/gophics/internal/cli/testdata/bindapp"
+
+// cleanGenerated removes the build/ directory the generator writes under pkg.
+func cleanGenerated(t *testing.T, pkg string) {
+	t.Helper()
+	t.Cleanup(func() {
+		if dir, err := packageDir(pkg); err == nil {
+			os.RemoveAll(filepath.Join(dir, "build"))
+		}
+	})
+}
+
 // The generated bind package has to compile, and the only way to know that is
 // to compile it. A template that produces plausible-looking Go is worth nothing
 // — the failure would surface as a gomobile error inside a file the user never
 // wrote and cannot find.
 func TestGeneratedBindPackageCompiles(t *testing.T) {
-	pkg := "github.com/doug/gophics/examples/mirror"
-	got, err := resolveBindPkg(buildOpts{pkg: pkg})
+	cleanGenerated(t, scratchApp)
+
+	got, err := resolveBindPkg(buildOpts{pkg: scratchApp})
 	if err != nil {
-		t.Fatalf("resolveBindPkg(%s): %v", pkg, err)
+		t.Fatalf("resolveBindPkg(%s): %v", scratchApp, err)
 	}
-	want := pkg + "/build/bind"
+	want := scratchApp + "/build/bind"
 	if got != want {
 		t.Fatalf("bind package = %q, want %q", got, want)
 	}
-	t.Cleanup(func() {
-		dir, err := packageDir(pkg)
-		if err == nil {
-			os.RemoveAll(filepath.Join(dir, "build"))
-		}
-	})
 
 	out, err := exec.Command("go", "build", got).CombinedOutput()
 	if err != nil {
@@ -146,20 +161,39 @@ func TestHostDirForAppRootAndBindPackage(t *testing.T) {
 // the command-line package answers "Main" for an app root — a framework nothing
 // builds and the host cannot find.
 func TestFrameworkNameFollowsTheBindPackage(t *testing.T) {
-	pkg := "github.com/doug/gophics/examples/mirror"
-	t.Cleanup(func() {
-		if dir, err := packageDir(pkg); err == nil {
-			os.RemoveAll(filepath.Join(dir, "build"))
-		}
-	})
-	got, err := frameworkName(buildOpts{pkg: pkg})
+	cleanGenerated(t, scratchApp)
+
+	got, err := frameworkName(buildOpts{pkg: scratchApp})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// examples/mirror/ios/project.yml links Mirrormobile.xcframework and the
-	// host does `import Mirrormobile`.
-	if got != "Mirrormobile" {
-		t.Errorf("frameworkName = %q, want %q — the checked-in iOS host imports that name", got, "Mirrormobile")
+	if want := "Bindappmobile"; got != want {
+		t.Errorf("frameworkName = %q, want %q", got, want)
+	}
+}
+
+// And the name it would derive for a checked-in app is the name that app's
+// checked-in iOS host actually links. This is the half of the invariant that a
+// scratch app cannot show: mirror's project.yml was written by hand, and if the
+// naming rule ever drifts from it the host links a framework nothing builds.
+//
+// Asserted against the file rather than a string copied out of it, and without
+// generating anything — the rule is a pure function of the import path.
+func TestFrameworkNameMatchesTheCheckedInHost(t *testing.T) {
+	const pkg = "github.com/doug/gophics/examples/mirror"
+	name := bindPkgName(pkg)
+	want := strings.ToUpper(name[:1]) + name[1:]
+
+	dir, err := packageDir(pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yml, err := os.ReadFile(filepath.Join(dir, "ios", "project.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref := want + ".xcframework"; !strings.Contains(string(yml), ref) {
+		t.Errorf("the naming rule gives %q, but mirror's project.yml does not link %s", want, ref)
 	}
 }
 
@@ -267,5 +301,39 @@ func TestADBTargetPicksADevice(t *testing.T) {
 	}
 	if _, err := pickADBSerial([]string{"emulator-5554"}, "nope"); err == nil {
 		t.Error("an unknown serial must be an error")
+	}
+}
+
+// bindName is a second implementation of resolveBindPkg's decision — it answers
+// the name without writing the package — so the two can drift. They are the
+// same decision made for different callers, and a drift would show up as a host
+// importing a framework under a name the bind never produced.
+func TestBindNameAgreesWithResolveBindPkg(t *testing.T) {
+	cleanGenerated(t, scratchApp)
+
+	for _, pkg := range []string{
+		scratchApp,                                   // generated under build/
+		"github.com/doug/gophics/examples/hn",        // hand-written mobile/
+		"github.com/doug/gophics/examples/hn/mobile", // already a bind package
+	} {
+		resolved, err := resolveBindPkg(buildOpts{pkg: pkg})
+		if err != nil {
+			t.Errorf("%s: resolveBindPkg: %v", pkg, err)
+			continue
+		}
+		want, err := packageName(resolved)
+		if err != nil {
+			t.Errorf("%s: packageName(%s): %v", pkg, resolved, err)
+			continue
+		}
+		got, err := bindName(buildOpts{pkg: pkg})
+		if err != nil {
+			t.Errorf("%s: bindName: %v", pkg, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s: bindName = %q, but the resolved package %s is named %q",
+				pkg, got, resolved, want)
+		}
 	}
 }
