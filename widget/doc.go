@@ -39,6 +39,12 @@
 //   - Composition: Stateless/Stateful widgets compose the catalog; this is
 //     the primary way to build apps and covers almost everything.
 //   - Custom painting: Canvas hands user code a paint.Canvas each frame.
+//   - Native content: PlatformView gives a rect of the screen to a real
+//     platform view (a web view, a map, a video surface) the OS composites
+//     above the gophics surface. It is the only extension point where the
+//     pixels are not ours, and it costs what that implies — nothing can be
+//     drawn over the view, and it is absent from every snapshot. See its doc
+//     comment before reaching for it.
 //   - Input: Interactive attaches a Gestures (taps, drags, keys, focus) to
 //     any subtree.
 //   - Gesture dispatch: GestureTarget is the sealed seam through which the

@@ -29,6 +29,7 @@ type Capabilities struct {
 	notifier      shell.Notifier
 	permissions   shell.Permissions
 	photos        shell.Photos
+	platformViews shell.PlatformViews
 	preferences   shell.Preferences
 	secureStorage shell.SecureStorage
 	share         shell.Share
@@ -124,6 +125,10 @@ func (c Ctx) Permissions() shell.Permissions { return c.el.owner.permissions }
 // Photos returns the platform Photos capability (shell.Photos), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.
 func (c Ctx) Photos() shell.Photos { return c.el.owner.photos }
+
+// PlatformViews returns the platform PlatformViews capability (shell.PlatformViews), or nil when the running
+// platform can't provide it. See shell/*.go for its contract.
+func (c Ctx) PlatformViews() shell.PlatformViews { return c.el.owner.platformViews }
 
 // Preferences returns the platform Preferences capability (shell.Preferences), or nil when the running
 // platform can't provide it. See shell/*.go for its contract.

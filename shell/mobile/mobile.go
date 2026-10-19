@@ -74,6 +74,11 @@ type Bridge struct {
 	locOnce     map[int]func(lat, lon, acc float64, err error)
 	locWatch    map[int]func(lat, lon, acc float64)
 	deviceHost  DeviceHost
+	// Native subviews; see platformview.go. pvKinds is what the host said it
+	// can build, so Kinds() answers without a round trip.
+	pvHost      PlatformViewHost
+	pvKinds     []string
+	pvCb        map[int]shell.PlatformViewHandlers
 	wakeCount   int // outstanding screen-wake leases; see device.go
 	photoPermCb map[int]func(shell.Permission)
 	photoSaveCb map[int]func(error)

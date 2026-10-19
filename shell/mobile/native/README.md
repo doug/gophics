@@ -272,3 +272,109 @@ Pixel 10 Pro (Vulkan), in both orientations; the surface is rounded to an
 8-pixel multiple for PowerVR's MSAA resolve — see `alignSurface` in `gpu.go`.
 The iOS Simulator has no usable Metal surface and takes the `Snapshot` path.
 
+
+## PlatformViewHost (native subviews)
+
+`shell.PlatformViews` is the one capability that hands a rectangle of the
+screen to somebody else: the host builds a real `UIView` / Android `View` — a
+`WKWebView`, a map, a video surface — and the OS composites it over the gophics
+surface at a rect the widget tree decides. `GophicsPlatformViews.swift` and
+`GophicsPlatformViews.kt` here are the reference implementations, with a
+`webview` kind. Register with `bridge.setPlatformViewHost(host, kinds)`, where
+`kinds` is a comma-separated list (`"webview,map"`) because gomobile cannot bind
+a `[]string`; until you do, `ctx.PlatformViews()` is nil and the app hides the
+affordance.
+
+Go → native (you implement): `CreateView`(id, kind, params), `SetViewBounds`(id,
+x, y, w, h), `SendToView`(id, msg), `DestroyView`(id).
+
+Native → Go (UI thread): `DeliverViewReady`(id) **or** `FailView`(id, msg) —
+exactly one per created view — and `DeliverViewMessage`(id, msg) any number of
+times.
+
+**Answer every `CreateView`, including for a kind you do not know.** A host that
+ignores an unknown kind leaves the widget waiting on a view that will never
+arrive, which the user sees as a loading state with no end. `FailView` is the
+answer; the widget then shows its placeholder and stops asking.
+
+**Bounds are in physical pixels** — the same units as `SetSurface` and
+`SetInsets`, because the Bridge is on the physical side of the logical/physical
+line. Android view geometry is already in pixels, so use them directly; iOS
+frames are in points, so divide by the screen scale. Getting this wrong is
+invisible on a 1× simulator and three times too large on a real phone.
+
+**A zero width or height means hide, not destroy.** The widget sends it when a
+view scrolls out of its viewport, and the point is that the view keeps its
+state — a scroll position, a half-filled form, a playing video — for when it
+scrolls back. Destroying it there would make a list of maps reload every one on
+every pass.
+
+**Threading has no exception here.** Unlike `MonitorHost` and `PreviewHost`,
+every call in both directions is on the UI thread: the Go → native calls touch
+the view hierarchy, which both platforms require on the main thread, and the
+native → Go calls run app callbacks that mutate the widget tree. There is no
+high-rate path to optimise — `SetViewBounds` fires when the layout moves, not
+per frame.
+
+### iOS needs no restructuring; Android needs a `FrameLayout`
+
+`GophicsView` on iOS is a `UIView` backed by a `CAMetalLayer`, and a UIKit
+subview composites above its superview's own layer content — so `addSubview` on
+the gophics view is the whole mechanism, which is what Flutter does on iOS too.
+
+On Android `GophicsView` is a `SurfaceView` installed as the entire content
+view, so there is no parent `ViewGroup` to put a sibling in. Wrap it:
+
+```kotlin
+val root = FrameLayout(this)
+val v = GophicsView(this)
+root.addView(v)
+setContentView(root)
+bridge.setPlatformViewHost(GophicsPlatformViews(this, bridge, root), "webview")
+```
+
+The z-order then works out for free: a `SurfaceView`'s surface is composited
+below the window's view surface, so ordinary sibling views already draw on top.
+
+**This is purely additive.** gophics never sees the container, never requires
+one to exist and never reaches into the hierarchy — the host decides where a
+subview goes and does its own `addView`. An existing activity that keeps
+`setContentView(v)` and registers no host compiles and runs unchanged; it simply
+never publishes the capability, so the app hides the affordance. That property
+is the reason this is safe to add to a shipped app, and it is worth preserving.
+
+### Accessibility is free here, and traversal order is the loose end
+
+The native model on mobile is *pull* — Android queries an
+`AccessibilityNodeProvider` on the gophics view, iOS asks the view for its
+elements, both answered from `A11yProvider` through the `Bridge.A11y*` methods.
+A native sibling brings its own **real** accessibility nodes, which the platform
+already walks as part of the view hierarchy, so the two coexist with no
+bridging work at all.
+
+The one loose end: the framework's virtual nodes and the native view's real ones
+are siblings in the *host* hierarchy, so the native view's place in the reading
+order follows its index in the container, not its position in the widget tree.
+Inserting it at the right index fixes it. This is **unmeasured** — nobody has
+run a screen reader over a hosted view yet.
+
+### Two things a platform view can never do
+
+Both are in the doc comment on `shell.PlatformViews`, and both are consequences
+of how an OS composites a foreign view rather than work not yet done.
+
+A platform view cannot be interleaved *between* two widget layers. It is one
+view, above everything gophics draws, clipped to a rect — so a sheet, dialog,
+tooltip or drag ghost painted "over" it is painted under it and is invisible.
+Real z-order would mean hybrid composition: converting the `SurfaceView` to a
+`TextureView` and reordering real Android views, giving up the direct-present
+path that is the entire mobile GPU story.
+
+A platform view never appears in `bridge.snapshot()`. That call rasterises a
+frame on the CPU with no OS compositor involved, so **every golden-image test of
+a screen containing a platform view shows a hole** — the widget tree's
+placeholder, or whatever was behind it. This is the one feature in the tree that
+erodes first-class headless testing, which is a real advantage of this project,
+so it is stated here rather than discovered by a failing test. Give the view a
+`Placeholder` so the hole is deliberate, and test the surrounding layout on a
+screen that opens no view.

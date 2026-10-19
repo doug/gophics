@@ -57,10 +57,6 @@ var mobileExempt = map[string]string{
 		"Microphone.Authorize, Notifier.Authorize, Photos.Authorize — which is " +
 		"what both platforms actually model; a generic permission API would have " +
 		"to invent a capability enum that maps onto neither",
-	"WebView": "deliberately unbuilt: a native subview composited over the GPU " +
-		"layer is the most expensive item here and the least useful, because " +
-		"Apple and Google both steer OAuth to ASWebAuthenticationSession and " +
-		"Custom Tabs, which OpenURL already reaches",
 }
 
 // desktopExempt: what desktop deliberately does not get, and why. Entries here
@@ -101,9 +97,6 @@ var desktopExempt = map[string]string{
 	"WakeLock": "IOPMAssertion / SetThreadExecutionState / D-Bus inhibit all " +
 		"exist; no desktop consumer yet, and a stray assertion that outlives " +
 		"its app drains a laptop, so this waits for a real need",
-	"WebView": "deliberately unbuilt for the same reason as mobile: a native " +
-		"subview composited over the GPU layer is maximum cost for a need " +
-		"OpenURL already covers",
 }
 
 // webExempt: what the browser platform does not get.
@@ -151,7 +144,10 @@ var terminalExempt = map[string]string{
 	"TextInput":     "keyboards are hardware here; same reasoning as desktop",
 	"Tray":          "no tray",
 	"WakeLock":      "a TTY does not sleep; the emulator's host might, but that is not ours",
-	"WebView":       "a character grid cannot composite a browser",
+	"PlatformViews": "a character grid cannot composite a native view; this one " +
+		"is a genuine impossibility rather than a cost, and the only entry here " +
+		"that can never be revisited",
+	"WebView": "a character grid cannot composite a browser",
 	"WindowControl": "the emulator owns the window; apps at most set the title, " +
 		"which is not this capability's contract",
 }

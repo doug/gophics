@@ -162,6 +162,18 @@ var capabilityManifestPermissions = map[string]Permission{
 	},
 	"TextInput": {},
 	"Tray":      {},
+	// A platform view is whatever the host builds in it, so the permissions it
+	// needs are the host's and cannot be derived from the capability — a map
+	// kind may want location, a camera kind the camera. What the *registry*
+	// needs is network access, because every kind anyone has asked for so far
+	// loads remote content, and the entry is here rather than empty so that
+	// claim is on the record and gets revisited when a kind arrives that does
+	// not. A host that adds a kind with its own permissions declares them in
+	// its own manifest, the same way it declares the view.
+	"PlatformViews": {
+		Android:         []string{"android.permission.INTERNET"},
+		MacEntitlements: []string{"com.apple.security.network.client"},
+	},
 	"WebView": {
 		Android:         []string{"android.permission.INTERNET"},
 		MacEntitlements: []string{"com.apple.security.network.client"},

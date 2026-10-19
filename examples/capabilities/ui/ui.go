@@ -56,6 +56,8 @@ type state struct {
 	storedNote string
 	geo        string
 	wv         shell.WebViewHandle
+	pvOpen     bool   // the widget-owned platform view is mounted
+	pvErr      string // the last failure the view reported
 }
 
 // subscribe wires up live-update sources the first time capabilities are
@@ -315,6 +317,7 @@ func (s *state) Build(ctx widget.Ctx) widget.Widget {
 		}, s.lastActionFor("Accessibility")),
 
 		webviewCard(th, s, ctx),
+		platformViewCard(th, s, ctx),
 
 		action(th, "Open URL", true, "Open the repo", func() {
 			_ = ctx.OpenURL("https://github.com/doug/gophics")
@@ -439,6 +442,56 @@ func webviewCard(th theme.Theme, s *state, ctx widget.Ctx) widget.Widget {
 	}
 	return action(th, "Web view (iframe)", have, label,
 		onTap, boolStr(s.wv != nil, "open — a real iframe over the canvas", ""))
+}
+
+// platformViewCard is the widget side of the same capability, and the one card
+// in this inspector that shows a hole rather than a value.
+//
+// Two things are worth watching here rather than reading about. The card lists
+// the kinds this build can embed — a nil capability and a registry that offers
+// no kinds are different answers, and an app degrades differently for each.
+// And when the view is open, the native content sits *above* everything gophics
+// draws: scroll the page and the view follows the layout, but nothing in the
+// widget tree can be painted over it. A screenshot of this card shows the
+// placeholder, not the view, which is the headless-testing cost stated out loud
+// in shell/platformview.go.
+func platformViewCard(th theme.Theme, s *state, ctx widget.Ctx) widget.Widget {
+	pv := ctx.PlatformViews()
+	if pv == nil {
+		return liveCard(th, "Platform view", false, "")
+	}
+	kinds := pv.Kinds()
+	if len(kinds) == 0 {
+		// A host is present and builds nothing. Distinguishable from nil, and
+		// the reason Kinds exists at all.
+		return liveCard(th, "Platform view", true, "a host is present but offers no kinds")
+	}
+
+	label := "Embed a web view"
+	if s.pvOpen {
+		label = "Remove it"
+	}
+	card := action(th, "Platform view", true, label, func() {
+		s.SetState(func() { s.pvOpen = !s.pvOpen })
+	}, "kinds: "+strings.Join(kinds, ", ")+boolStr(s.pvErr != "", " — "+s.pvErr, ""))
+	if !s.pvOpen {
+		return card
+	}
+	// Sized, not full-bleed: a platform view that covers the page would cover
+	// the button that closes it, because nothing gophics draws can go on top.
+	hole := theme.Card{Child: widget.Sized{H: 220, Child: widget.PlatformView{
+		Kind:      shell.PlatformViewWebView,
+		Params:    "https://example.com",
+		OnError:   func(err error) { s.SetState(func() { s.pvErr = err.Error() }) },
+		OnMessage: func(msg string) { s.setAction("Platform view: " + msg) },
+		// What a golden image and a snapshot will show where the view is.
+		Placeholder: widget.Fill{Color: th.Muted, Child: widget.Center(
+			theme.Body("native view — not in snapshots"),
+		)},
+	}}}
+	c := widget.Column(card, hole)
+	c.CrossAlign = layout.CrossStretch
+	return c
 }
 
 // --- small helpers -----------------------------------------------------------

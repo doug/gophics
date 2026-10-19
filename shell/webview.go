@@ -2,21 +2,23 @@ package shell
 
 import "github.com/doug/gophics/geom"
 
-// WebView capability: embed external web content — an OAuth flow, a map, a rich
-// document, a video — as a native subview layered over the gophics surface. A
-// Window exposes it by implementing WebViewWindow; widgets reach it via
-// ctx.WebView(), nil where unsupported.
+// WebView capability: embed external web content — an OAuth flow, a map, a
+// rich document, a video — as a native subview layered over the gophics
+// surface. A Window exposes it by implementing WebViewWindow; widgets reach it
+// via ctx.WebView(), nil where unsupported.
 //
-// This is the one capability that deliberately breaks the "gophics draws every
-// pixel" model: the content is a real platform view (an <iframe> on web,
-// WKWebView / Android WebView / WebView2 on native), positioned in gophics
-// coordinates but composited by the OS. It is NOT part of the scene, damage, or
-// screenshots, and it renders above all gophics content. Use it as an escape
-// hatch, not a building block.
+// This is the narrow, older face of PlatformViews (shell/platformview.go): a
+// web view is a *kind* of platform view, so every shell implements the
+// registry and derives this from it with WebViewOf. Read the doc comment there
+// for the model and, in particular, for the two things that are permanently
+// impossible — a platform view cannot be interleaved between widget layers,
+// and it never appears in a snapshot, so a golden test of a screen containing
+// one shows a hole. Both apply here unchanged.
 //
-// STATUS: the web implementation (a positioned <iframe> overlay) is complete.
-// The native implementations are the WebView-per-OS piece; see
-// internal/capgen/README.md.
+// Prefer widget.PlatformView over calling this: it owns the handle for its
+// element's lifetime and pushes bounds from the layout pass, where this
+// interface leaves both to the caller. A handle opened here and not closed
+// outlives whatever opened it.
 
 // WebViewWindow is implemented by a Window that can host an embedded web view.
 type WebViewWindow interface {

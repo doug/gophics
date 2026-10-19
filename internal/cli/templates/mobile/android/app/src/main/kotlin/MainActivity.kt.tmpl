@@ -25,6 +25,7 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.nio.ByteBuffer
@@ -65,7 +66,26 @@ class MainActivity : Activity() {
         bridge.setFilesDir(filesDir.absolutePath)
         val v = GophicsView(this)
         view = v
-        setContentView(v)
+        // Wrap the surface in a FrameLayout so a native subview has a parent
+        // to be added to. A SurfaceView installed as the whole content view has
+        // no sibling slot; once there is one the z-order works out for free,
+        // because a SurfaceView's surface is composited below the window's view
+        // surface and ordinary siblings draw on top.
+        //
+        // Purely additive: nothing is registered here, so ctx.PlatformViews() is
+        // nil in Go and widget.PlatformView paints its placeholder — behaviour
+        // identical to setContentView(v). To embed a web view, map or video,
+        // copy GophicsPlatformViews.kt from shell/mobile/native/ into this
+        // package and add:
+        //
+        //     bridge.setPlatformViewHost(
+        //         GophicsPlatformViews(this, bridge, root), "webview")
+        //
+        // Insets are unaffected: a FrameLayout dispatches window insets to its
+        // children, so the listener below still fires on v.
+        val root = FrameLayout(this)
+        root.addView(v)
+        setContentView(root)
         ViewCompat.setOnApplyWindowInsetsListener(v) { _, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())

@@ -114,6 +114,12 @@ var goSideOnly = map[string]bool{
 	"TextInput": true, "Accessibility": true, "Preferences": true, "Connectivity": true, "Share": true, "Notifier": true, "SecureStorage": true,
 	"FilePicker": true, "WakeLock": true, "Photos": true,
 	"Biometric": true, "Locale": true,
+	// PlatformViews and WebView are the registry and its narrower face (see
+	// platformview.go). A host registers a PlatformViewHost and is called; it
+	// never reads these back, and could not — the result is a shell interface.
+	// The host-facing half of this capability is SetPlatformViewHost,
+	// DeliverViewReady, FailView and DeliverViewMessage, all of which bind.
+	"PlatformViews": true, "WebView": true,
 	// Not a capability, but the same shape of thing: the runner reads it,
 	// the host never does, and a struct result is unbindable regardless.
 	"ScrollPhysics": true, "GestureTuning": true,

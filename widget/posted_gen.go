@@ -3,6 +3,7 @@
 package widget
 
 import (
+	"github.com/doug/gophics/geom"
 	"image"
 	"time"
 
@@ -622,6 +623,45 @@ func (p postedPhotos) Save(a0 []byte, a1 string, a2 func(err error)) {
 		w2 = func(c0 error) { p.post(func() { f2(c0) }) }
 	}
 	p.inner.Save(a0, a1, w2)
+}
+
+// postedPlatformViews wraps inner so every callback it (or anything it hands out)
+// invokes is delivered through post — the app runner passes Owner.Post, making
+// the "callbacks fire on the UI goroutine" contract hold no matter which
+// goroutine the platform implementation completes on. Nil-safe: a nil inner
+// returns nil, and a nil post returns inner unwrapped (callbacks fire inline).
+func postedPlatformViewsOf(inner shell.PlatformViews, post func(func())) shell.PlatformViews {
+	if inner == nil || post == nil {
+		return inner
+	}
+	return postedPlatformViews{inner, post}
+}
+
+type postedPlatformViews struct {
+	inner shell.PlatformViews
+	post  func(func())
+}
+
+func (p postedPlatformViews) Kinds() []string {
+	return p.inner.Kinds()
+}
+
+func (p postedPlatformViews) Open(a0 string, a1 string, a2 geom.Rect, a3 shell.PlatformViewHandlers) shell.PlatformViewHandle {
+	s3 := a3
+	w3 := s3
+	if s3.OnReady != nil {
+		g := s3.OnReady
+		w3.OnReady = func() { p.post(func() { g() }) }
+	}
+	if s3.OnError != nil {
+		g := s3.OnError
+		w3.OnError = func(c0 error) { p.post(func() { g(c0) }) }
+	}
+	if s3.OnMessage != nil {
+		g := s3.OnMessage
+		w3.OnMessage = func(c0 string) { p.post(func() { g(c0) }) }
+	}
+	return p.inner.Open(a0, a1, a2, w3)
 }
 
 // postedRecorder wraps inner so every callback it (or anything it hands out)

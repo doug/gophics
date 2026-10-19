@@ -75,6 +75,9 @@ func (o *Owner) WireCapabilities(w shell.Window) {
 	if x, ok := w.(shell.PhotosWindow); ok {
 		o.photos = postedPhotosOf(x.Photos(), o.Post)
 	}
+	if x, ok := w.(shell.PlatformViewWindow); ok {
+		o.platformViews = postedPlatformViewsOf(x.PlatformViews(), o.Post)
+	}
 	if x, ok := w.(shell.PreferencesWindow); ok {
 		o.preferences = x.Preferences()
 	}
@@ -105,6 +108,7 @@ func (o *Owner) WireCapabilities(w shell.Window) {
 	if x, ok := w.(shell.WindowControlWindow); ok {
 		o.windowControl = x.WindowControl()
 	}
+	o.wireExtCapabilities(w)
 }
 
 // Accessibility returns the platform Accessibility capability, or nil when the running
@@ -186,6 +190,10 @@ func (o *Owner) Permissions() shell.Permissions { return o.permissions }
 // Photos returns the platform Photos capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.Photos().
 func (o *Owner) Photos() shell.Photos { return o.photos }
+
+// PlatformViews returns the platform PlatformViews capability, or nil when the running
+// platform cannot provide it. Widgets read it through Ctx.PlatformViews().
+func (o *Owner) PlatformViews() shell.PlatformViews { return o.platformViews }
 
 // Preferences returns the platform Preferences capability, or nil when the running
 // platform cannot provide it. Widgets read it through Ctx.Preferences().
