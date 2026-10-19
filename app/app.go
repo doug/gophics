@@ -21,6 +21,7 @@ import (
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/text"
 	"github.com/doug/gophics/widget"
 )
 
@@ -130,6 +131,24 @@ type Config struct {
 	// to GraphicsLog and otherwise ignored — the bundled chain still works,
 	// and a missing cache directory is not a reason for the app not to start.
 	SystemFonts bool
+	// WebFonts offers a face per script, fetched on demand, for the web target
+	// only — it is the answer to the gap SystemFonts cannot close there.
+	//
+	// A browser will not give a WebAssembly page the bytes of an installed
+	// font, so "use the machine's fonts" has no implementation on the web at
+	// all. Fetching does: map a script to a URL and a run in that script
+	// resolves from it. Keys are text.Script values (ISO 15924), so
+	// text.ScriptOf reports what a rune needs.
+	//
+	// Nothing is fetched until a rune needs it, and then once per script, so
+	// listing many scripts costs nothing for a page that renders none of them.
+	// A failed fetch is remembered rather than retried. Serve .ttf or .otf:
+	// WOFF2 is what font CDNs default to and the shaper cannot parse it.
+	//
+	// A no-op on every other target, so a Config is still shareable across
+	// them. Runes with no face anywhere are reported through the shaper's
+	// missing-glyph diagnostic rather than drawing silently as boxes.
+	WebFonts map[text.Script]string
 	// Debug draws box-bounds outlines over the app (Flutter's
 	// debugPaintSize). Toggle at runtime via Headless.SetDebugPaint, or on a
 	// live app through the handler returned by NewHandler.
@@ -377,6 +396,15 @@ func newCore(root widget.Widget, cfg Config) (*core, error) {
 	c.Owner.Gestures = cfg.Gestures
 	c.debugPaint = cfg.Debug
 	c.transparent = cfg.Transparent
+	// After the core exists, because the fetch reports back by asking for a
+	// frame. Like loadSystemFonts, a failure here is logged and otherwise
+	// ignored: the bundled chain still renders, and a font that cannot be
+	// fetched is not a reason for the app not to start.
+	if len(cfg.WebFonts) > 0 {
+		if err := loadWebFonts(c, cfg.WebFonts); err != nil && glog != nil {
+			glog.Warn("web fonts unavailable; using bundled fonts only", "err", err)
+		}
+	}
 	applyGraphicsLog(glog)
 	return c, nil
 }

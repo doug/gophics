@@ -591,6 +591,7 @@ func (p *Painter) LoadFallbackFont(data []byte) error {
 
 // ShapeIn is Shape in a named font family ("" = default).
 func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
+	p.applyFontLanding()
 	k := shapeKey{font, s, size}
 	if l, ok := p.shapes[k]; ok {
 		return l
@@ -606,7 +607,10 @@ func (p *Painter) ShapeIn(font, s string, size float32) text.Line {
 // ShapeGen identifies the current shaping configuration; it increments
 // whenever loaded fonts, fallbacks, or system fonts change. Callers caching
 // measured/shaped text outside the Painter include it in their cache key.
-func (p *Painter) ShapeGen() uint64 { return p.shapeGen }
+func (p *Painter) ShapeGen() uint64 {
+	p.applyFontLanding()
+	return p.shapeGen
+}
 
 // MeasureWidthIn is MeasureWidth in a named font family.
 func (p *Painter) MeasureWidthIn(font, s string, size float32) float32 {
@@ -615,6 +619,7 @@ func (p *Painter) MeasureWidthIn(font, s string, size float32) float32 {
 
 // MetricsIn is Metrics in a named font family.
 func (p *Painter) MetricsIn(font string, size float32) TextMetrics {
+	p.applyFontLanding()
 	k := metricsKey{font, size}
 	if m, ok := p.metrics[k]; ok {
 		return m
@@ -641,7 +646,17 @@ func (p *Painter) MetricsIn(font string, size float32) TextMetrics {
 // taller than the primary one. The run cache is sized from it, and scene
 // damage has to cover it, or the overhang is clipped by one and left stale by
 // the other.
+//
+// A colour emoji is counted here by its bitmap's placement box, not by an
+// outline it does not have. That matters more than it sounds. The box is a
+// full em tall against a Latin ink box of roughly 0.75 em, so a mixed run that
+// ignored it under-reported its own top and a partial repaint left a stale
+// band across every emoji — and worse, a label whose text is *only* an emoji
+// had no outlines at all, so ok was false, the run cache returned nil, and the
+// label drew nothing at all with no error anywhere. Counting the bitmap box is
+// what makes an emoji-only label visible.
 func (p *Painter) InkBoundsIn(font, s string, size float32) (r geom.Rect, ok bool) {
+	p.applyFontLanding()
 	k := shapeKey{font, s, size}
 	if b, ok := p.inks[k]; ok {
 		return b.r, b.ok
@@ -1421,9 +1436,6 @@ func (p *Painter) LoadSystemFonts() error {
 			sh.ShareSystemFonts(def)
 		}
 	}
-	clear(p.shapes)
-	clear(p.inks)
-	clear(p.runs)
-	p.shapeGen++
+	p.invalidateShapedText()
 	return nil
 }

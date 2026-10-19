@@ -74,6 +74,21 @@ type systemFontMap interface {
 	ResolveFace(r rune) *font.Face
 }
 
+// pendingFontMap is a systemFontMap whose answer for a rune may arrive later —
+// the web one, which fetches a face over the network and so cannot answer the
+// frame that asks.
+//
+// It exists only to keep the missing-glyph report honest. Without it, the first
+// frame containing a Han rune in an app that has correctly configured
+// UseWebFonts logs "nothing covers this, try UseWebFonts" at a developer who
+// already did, and the one message that should mean something becomes the one
+// that always appears. A map that says it is still working gets the fallback
+// glyph and no complaint; it is only once it has given up that the rune is
+// genuinely uncovered.
+type pendingFontMap interface {
+	pendingFor(r rune) bool
+}
+
 // Font is a parsed font usable for shaping and outline extraction.
 type Font struct {
 	face *font.Face
@@ -281,7 +296,11 @@ func (s *Shaper) resolveFace(r rune) *font.Face {
 		if face := s.system.ResolveFace(r); face != nil {
 			return face
 		}
+		if p, ok := s.system.(pendingFontMap); ok && p.pendingFor(r) {
+			return s.fonts[0].face
+		}
 	}
+	s.reportMissing(r)
 	return s.fonts[0].face
 }
 
