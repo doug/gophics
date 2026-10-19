@@ -1,8 +1,10 @@
 // Package cli implements the gophics developer CLI. It orchestrates the
 // per-platform build incantations (go build with the right tags, GOOS/GOARCH
-// for wasm, gomobile bind for mobile), a hot-reloading dev loop, project
-// scaffolding, and a toolchain doctor — a single tool over the build-tag
-// matrix, in the spirit of the `flutter` command.
+// for wasm, gomobile bind for mobile), desktop packaging (.app bundles, disk
+// images, prefix tarballs, AppImages, Windows installers), a state-preserving
+// hot-restart dev loop for every target including a phone, project scaffolding,
+// and a toolchain doctor — a single tool over the build-tag matrix, in the
+// spirit of the `flutter` command.
 //
 // It depends only on the standard library and the Go toolchain on PATH.
 package cli
@@ -22,7 +24,8 @@ Usage:
 Commands:
   run       build and run the app for a platform
   build     build release artifacts for a platform
-  dev       iterate with live-reload (web) or rebuild + hot-restart (native)
+  package   bundle a desktop app for distribution (.app, .dmg, tarball, installer)
+  dev       iterate with hot restart on any platform: rebuild, relaunch, keep UI state
   create    scaffold a new cross-platform gophics app
   doctor    check the toolchain for each platform
   version   print the gophics CLI version
@@ -45,6 +48,8 @@ func Main(args []string) int {
 		err = cmdRun(rest)
 	case "build":
 		err = cmdBuild(rest)
+	case "package":
+		err = cmdPackage(rest)
 	case "dev":
 		err = cmdDev(rest)
 	case "create":
