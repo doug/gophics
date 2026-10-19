@@ -753,67 +753,12 @@ func (c *ggCanvas) FillRRect(r geom.Rect, radius float32, col Color) {
 	c.dc.Fill()
 }
 
-// FillRRectGradient fills a rounded rect with a linear gradient. On the CPU
-// backend it uses gg's analytic gradient brush (one smooth fill). On the GPU
-// backend, whose tile rasterizer only understands a single solid brush color,
-// it falls back to compositing thin interpolated solid strips clipped to the
-// rounded rect — which the GPU does support — so gradients render correctly on
-// both. (A native GPU gradient shader would remove the strip overdraw; tracked.)
-func (c *ggCanvas) FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool) {
-	if c.gpuActive() {
-		c.gradientStrips(r, radius, from, to, horizontal)
-		return
-	}
-	var brush gg.Brush
-	if horizontal {
-		brush = gg.LinearGradient(from.ggRGBA(), to.ggRGBA(),
-			float64(r.Min.X), float64(r.Min.Y), float64(r.Max.X), float64(r.Min.Y))
-	} else {
-		brush = gg.LinearGradient(from.ggRGBA(), to.ggRGBA(),
-			float64(r.Min.X), float64(r.Min.Y), float64(r.Min.X), float64(r.Max.Y))
-	}
-	c.dc.SetFillBrush(brush)
-	c.dc.DrawRoundedRectangle(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
-	c.dc.Fill()
-	c.dc.SetColor(color.NRGBA{A: 255}) // reset brush to solid
-}
-
 // gpuActive reports whether this canvas rasterizes on the GPU: a process-global
 // accelerator is registered and this context isn't opted out of it. The CPU
 // present path (and the default build, with no accelerator) returns false.
 func (c *ggCanvas) gpuActive() bool {
 	return gg.Accelerator() != nil && !c.dc.GPUDisabled()
 }
-
-// gradientStrips approximates a two-stop linear gradient as a run of solid
-// strips clipped to the rounded rect. gradientStripCount strips over a UI-sized
-// band put each strip well under a pixel of color step, so banding is not
-// visible; the rrect clip keeps the corners crisp.
-func (c *ggCanvas) gradientStrips(r geom.Rect, radius float32, from, to Color, horizontal bool) {
-	const n = gradientStripCount
-	c.dc.Push()
-	c.dc.ClipRoundRect(float64(r.Min.X), float64(r.Min.Y), float64(r.Dx()), float64(r.Dy()), float64(radius))
-	span := r.Dy()
-	if horizontal {
-		span = r.Dx()
-	}
-	step := span / n
-	for i := range n {
-		t := (float32(i) + 0.5) / n
-		c.dc.SetColor(Lerp(from, to, t).nrgba())
-		if horizontal {
-			c.dc.DrawRectangle(float64(r.Min.X+float32(i)*step), float64(r.Min.Y), float64(step)+1, float64(r.Dy()))
-		} else {
-			c.dc.DrawRectangle(float64(r.Min.X), float64(r.Min.Y+float32(i)*step), float64(r.Dx()), float64(step)+1)
-		}
-		c.dc.Fill()
-	}
-	c.dc.Pop() // restores the pre-clip state
-}
-
-// gradientStripCount is the number of solid strips a GPU gradient is composited
-// from — high enough that the color step is sub-pixel for typical UI bands.
-const gradientStripCount = 64
 
 func (c *ggCanvas) FillPath(p *Path, col Color) {
 	if p == nil || len(p.verbs) == 0 {

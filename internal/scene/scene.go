@@ -88,6 +88,7 @@ const (
 	opFillRect
 	opFillRRect
 	opFillRRectGradient
+	opFillGradient
 	opStrokeRRect
 	opLine
 	opFillPath
@@ -129,6 +130,12 @@ const (
 //	sprite sprite blit parameters (opSprite)
 //	xform  affine transform (opPushTransform)
 //	horiz  gradient axis (opFillRRectGradient)
+//	blend  blend mode (opPushBlend)
+//	grad   multi-stop/radial/sweep gradient (opFillGradient), retained by
+//	       pointer like path and marks — a *paint.Gradient is immutable once
+//	       built, which is what makes an identity comparison not merely cheap
+//	       but exact: an equal pointer cannot describe a different ramp, so
+//	       there is nothing a field-by-field walk of its stop list could find
 //	marks  mark batch (opMarks), retained by pointer like path and img — the
 //	       batch is variable-length, and diffing compares it by identity for
 //	       the same reason paths are: re-scanning thousands of coordinates
@@ -148,6 +155,7 @@ type op struct {
 	sprite     paint.Sprite
 	xform      paint.Transform
 	marks      *paint.Marks
+	grad       *paint.Gradient
 }
 
 func (o *op) replay(c paint.Canvas) {
@@ -160,6 +168,13 @@ func (o *op) replay(c paint.Canvas) {
 		c.FillRRect(o.r, o.f1, o.col)
 	case opFillRRectGradient:
 		c.FillRRectGradient(o.r, o.f1, o.col, o.col2, o.horiz)
+	case opFillGradient:
+		// Back through paint.FillGradient rather than straight to the
+		// capability, so the replay target decides again: a painter canvas
+		// takes its analytic brush, a canvas with no gradient support falls
+		// back to bands sized for *its* device scale, and a recorder records
+		// the single op once more.
+		paint.FillGradient(c, o.r, o.f1, o.grad)
 	case opStrokeRRect:
 		c.StrokeRRect(o.r, o.f1, o.f2, o.col)
 	case opLine:
@@ -256,6 +271,27 @@ func (r recorder) DrawMarks(m *paint.Marks) {
 
 func (r recorder) FillRRectGradient(rect geom.Rect, radius float32, from, to paint.Color, horizontal bool) {
 	r.l.ops = append(r.l.ops, op{kind: opFillRRectGradient, r: rect, f1: radius, col: from, col2: to, horiz: horizontal})
+}
+
+// FillGradientRRect implements paint.GradientFiller, which is what makes
+// paint.FillGradient record one op here instead of approximating the ramp.
+//
+// Without it a recorder took the band fallback: up to 256 ordinary fills (or
+// retained paths, for an oblique axis or a sweep) per gradient, every one of
+// them an op the differ then walks and compares each frame, and all of them
+// chosen against a guessed device scale because the recorder does not know
+// the surface it will be replayed onto. One op carrying the *Gradient defers
+// both decisions — how finely to resolve the ramp, and whether to resolve it
+// analytically at all — to the canvas that actually has the pixels.
+//
+// The gradient is kept by pointer, like a path or a mark batch, and a
+// Gradient is immutable once built, so holding it across the frame cannot
+// show a ramp that has since changed underneath the op.
+func (r recorder) FillGradientRRect(rect geom.Rect, radius float32, g *paint.Gradient) {
+	if g == nil || rect.IsEmpty() {
+		return
+	}
+	r.l.ops = append(r.l.ops, op{kind: opFillGradient, grad: g, r: rect, f1: radius})
 }
 
 func (r recorder) StrokeRRect(rect geom.Rect, radius, width float32, col paint.Color) {

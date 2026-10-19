@@ -284,6 +284,16 @@ func opEqual(a, b *op) bool {
 		return a.r == b.r && a.f1 == b.f1 && a.col == b.col
 	case opFillRRectGradient:
 		return a.r == b.r && a.f1 == b.f1 && a.col == b.col && a.col2 == b.col2 && a.horiz == b.horiz
+	case opFillGradient:
+		// By identity, like a path or a mark batch — but for a stronger
+		// reason than either. A Gradient is immutable once built, so an equal
+		// pointer *is* an equal ramp: unlike a retained *Path, it cannot have
+		// been mutated behind the op, which is why no generation counter and
+		// no recorded-bounds fallback are needed here. A caller that rebuilds
+		// its gradient every frame gets a new pointer and a repaint, which is
+		// the price of not keeping one; a caller that keeps one gets the
+		// no-change answer it should.
+		return a.grad == b.grad && a.r == b.r && a.f1 == b.f1
 	case opStrokeRRect:
 		return a.r == b.r && a.f1 == b.f1 && a.f2 == b.f2 && a.col == b.col
 	case opLine:
@@ -328,7 +338,8 @@ func opEqual(a, b *op) bool {
 
 func opBounds(o *op, m Measurer) geom.Rect {
 	switch o.kind {
-	case opBackdropBlur, opFillRect, opFillRRect, opFillRRectGradient, opImage:
+	case opBackdropBlur, opFillRect, opFillRRect, opFillRRectGradient,
+		opFillGradient, opImage:
 		return o.r
 	case opStrokeRRect:
 		return inflate(o.r, o.f2)
