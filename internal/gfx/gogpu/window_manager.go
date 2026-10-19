@@ -416,6 +416,21 @@ func (a *App) PrimaryWindow() *Window {
 	return a.primaryWindow
 }
 
+// NativeHandles returns the platform's raw display and window handles:
+// (hinstance, HWND) on Windows, (Display*, Window) on X11,
+// (wl_display, wl_surface) on Wayland, and (0, CAMetalLayer*) on macOS.
+// Both are zero before the surface exists.
+//
+// This is the same pair PlatformWindow.GetHandle already hands the WebGPU
+// instance for surface creation; the accessor exists so an embedder can parent
+// a native child view or subsurface to the window it is drawing into.
+func (w *Window) NativeHandles() (display, window uintptr) {
+	if w.surface == nil || w.surface.platWindow == nil {
+		return 0, 0
+	}
+	return w.surface.platWindow.GetHandle()
+}
+
 // WindowCount returns the number of open windows.
 // Returns 0 if called before Run().
 func (a *App) WindowCount() int {
