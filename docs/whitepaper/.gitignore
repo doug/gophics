@@ -1,0 +1,3 @@
+# The PDF is a build output: `typst compile gophics-whitepaper.typ` regenerates
+# it from the .typ beside it. Tracking it would put a binary in every diff.
+*.pdf
