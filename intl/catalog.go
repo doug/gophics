@@ -1,7 +1,6 @@
 package intl
 
 import (
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -87,13 +86,17 @@ type Catalog struct {
 	lang string
 	mu   sync.RWMutex
 	msgs map[string]Forms
+	// ords is a second namespace for ordinal forms. CLDR keeps cardinal and
+	// ordinal rules apart because they are different rule sets, and a key can
+	// need both — see SetOrdinalForms in ordinal.go.
+	ords map[string]Forms
 }
 
 // NewCatalog creates an empty catalog for a language tag. Only the language
 // subtag is kept: "pt-BR" and "pt" share grammar, and a message looked up under
 // either should find the other.
 func NewCatalog(tag string) *Catalog {
-	return &Catalog{lang: language(tag), msgs: map[string]Forms{}}
+	return &Catalog{lang: language(tag), msgs: map[string]Forms{}, ords: map[string]Forms{}}
 }
 
 // Lang returns the catalog's language subtag.
@@ -138,17 +141,11 @@ func (c *Catalog) Plural(key string, n int) string {
 	if !ok {
 		return key
 	}
-	cat := PluralFor(c.lang, n)
-	s, ok := f[cat]
-	if !ok {
-		// Every language has Other; a catalog missing the form its own rules
-		// selected is an authoring gap, and the required form is the best
-		// available answer.
-		if s, ok = f[Other]; !ok {
-			return key
-		}
-	}
-	return strings.ReplaceAll(s, "{n}", strconv.Itoa(n))
+	// Every language has Other; a catalog missing the form its own rules
+	// selected is an authoring gap, and the required form is the best available
+	// answer. renderForm holds that rule, shared with Ordinal and the
+	// relative-time renderer.
+	return renderForm(f, PluralFor(c.lang, n), n, key)
 }
 
 // language extracts the language subtag from a BCP-47 tag.
@@ -190,9 +187,9 @@ func PluralFor(tag string, n int) Plural {
 		}
 		return Other
 
-	// Russian, Ukrainian, Serbo-Croatian: by last digit, with the teens
-	// exception that catches naive implementations.
-	case "ru", "uk", "be", "sr", "hr", "bs":
+	// Russian, Ukrainian, Belarusian: by last digit, with the teens exception
+	// that catches naive implementations.
+	case "ru", "uk", "be":
 		switch {
 		case n%10 == 1 && n%100 != 11:
 			return One
@@ -200,6 +197,26 @@ func PluralFor(tag string, n int) Plural {
 			return Few
 		default:
 			return Many
+		}
+
+	// Serbian, Croatian and Bosnian select by the same arithmetic as Russian
+	// but have no Many category at all: the residue is Other.
+	//
+	// They used to be grouped with Russian above, which returned Many for 769
+	// of the first 1201 counts in a language that does not have the category.
+	// It was survivable only because Plural falls back to the Other form, so
+	// the mistake showed up as a Croatian catalog whose Many entry was never
+	// selected — and would have shown up as the wrong form the moment one was
+	// written. TestCardinalMatchesCLDR found it; before that cross-check
+	// existed, nothing in the repo could have.
+	case "sr", "hr", "bs":
+		switch {
+		case n%10 == 1 && n%100 != 11:
+			return One
+		case n%10 >= 2 && n%10 <= 4 && (n%100 < 12 || n%100 > 14):
+			return Few
+		default:
+			return Other
 		}
 
 	// Polish distinguishes Many for the rest, unlike Russian's grouping.
@@ -294,13 +311,22 @@ func PluralFor(tag string, n int) Plural {
 			return Other
 		}
 
-	// Romanian: few covers 0 and n%100 in 2–19. The lower bound is 2, not 1:
-	// 101 and 201 are "other", and a bound of 1 put them in few.
+	// Romanian: few covers 0 and n%100 in 1–19, with 1 itself taken by One
+	// first. So 101, 201 and 1001 are few — their last two digits are 01 — and
+	// 100, 120 and 200 are other.
+	//
+	// The lower bound was 2 here, with a comment asserting that 101 and 201
+	// were other. CLDR says otherwise: the rule is
+	// "v != 0 or n = 0 or n != 1 and n % 100 = 1..19", and the "n != 1" clause
+	// exists precisely because the range starts at 1 and 1 itself has to be
+	// excluded. Raising the bound to 2 is the same thing done the wrong way: it
+	// excludes 1 and also wrongly excludes every hundred-and-one. Verified
+	// against CLDR 47's chart and against x/text's CLDR 32 tables, which agree.
 	case "ro":
 		switch {
 		case n == 1:
 			return One
-		case n == 0 || (n%100 >= 2 && n%100 <= 19):
+		case n == 0 || (n%100 >= 1 && n%100 <= 19):
 			return Few
 		default:
 			return Other

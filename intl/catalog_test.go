@@ -53,15 +53,46 @@ func TestRussianTeensException(t *testing.T) {
 	}
 }
 
-// Romanian's few form is 0 and n%100 in 2..19: 101 and 201 are "other". A
-// lower bound of 1 on the n%100 test put them in few.
-func TestRomanianFewStopsAtHundreds(t *testing.T) {
+// Romanian's few form is 0 and n%100 in 1..19, with 1 itself claimed by One
+// first. So 101 and 201 are few — CLDR's rule is
+// "v != 0 or n = 0 or n != 1 and n % 100 = 1..19" — while 100, 120 and 200 are
+// other.
+//
+// This test previously asserted the opposite, matching a rule whose lower bound
+// had been raised to 2 to exclude n=1. That excluded the hundred-and-ones as
+// well, and the assertion made the mistake look deliberate. Both were wrong;
+// TestCardinalMatchesCLDR in cldr_test.go now cross-checks every count against
+// CLDR's own tables, so neither can be restated.
+func TestRomanianFewIncludesHundredAndOne(t *testing.T) {
 	for n, want := range map[int]Plural{
 		0: Few, 1: One, 2: Few, 19: Few, 20: Other,
-		100: Other, 101: Other, 102: Few, 119: Few, 120: Other, 201: Other,
+		100: Other, 101: Few, 102: Few, 119: Few, 120: Other,
+		200: Other, 201: Few, 1001: Few,
 	} {
 		if got := PluralFor("ro", n); got != want {
 			t.Errorf("PluralFor(ro, %d) = %v, want %v", n, got, want)
+		}
+	}
+}
+
+// Serbian, Croatian and Bosnian share Russian's arithmetic and do not have
+// Russian's Many category. They were grouped with Russian, which returned Many
+// for most counts in a language that has no such form.
+func TestSerboCroatianHasNoManyForm(t *testing.T) {
+	for _, lang := range []string{"sr", "hr", "bs"} {
+		for n, want := range map[int]Plural{
+			1: One, 21: One, 101: One,
+			2: Few, 3: Few, 4: Few, 22: Few,
+			0: Other, 5: Other, 11: Other, 12: Other, 14: Other, 100: Other,
+		} {
+			if got := PluralFor(lang, n); got != want {
+				t.Errorf("PluralFor(%s, %d) = %v, want %v", lang, n, got, want)
+			}
+		}
+		for _, p := range Categories(lang) {
+			if p == Many {
+				t.Errorf("Categories(%s) includes Many, which the language does not use", lang)
+			}
 		}
 	}
 }

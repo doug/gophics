@@ -6,7 +6,11 @@
 // data table — because showing a German reader "1,234.56" doesn't merely look
 // foreign, it reads as one and a bit rather than twelve hundred.
 //
-// # Why not x/text
+// Alongside the formatters there is a message catalog with CLDR plural
+// agreement — cardinal ("3 items") and ordinal ("3rd place") — and relative
+// time ("3 days ago", "yesterday"). See catalog.go, ordinal.go and reltime.go.
+//
+// # Why not x/text, and how its data gets here anyway
 //
 // golang.org/x/text/message does this properly, from CLDR, and is the right answer
 // for an app that needs full localization. It also carries a large data table into
@@ -16,9 +20,24 @@
 // that differ in practice, with no data beyond a compact table. Apps that need
 // full CLDR should use x/text directly — nothing here prevents it.
 //
+// Measured on this repo's wasm builds: linking x/text/feature/plural costs about
+// 412KB and x/text/currency about 403KB, against roughly 3KB for everything
+// this package carries.
+//
+// That leaves the question of how rules written out by hand are kept honest,
+// because wrong locale data is worse than absent locale data: it ships silently
+// and reads as machine-translation to the only people who can tell. The answer
+// is that x/text *is* the source — as a test-only import. cldr_test.go
+// cross-checks every plural and ordinal rule, for every language and every
+// count, and every currency's digit count, against x/text's generated CLDR
+// tables. Test imports do not reach an app's binary, so the data is CLDR's and
+// the payload is this package's. That cross-check found two wrong rules the
+// first time it ran, one of them with a test asserting the wrong answer.
+//
 // Formatting works on decimal *strings* ("-1234.56"), never float64, so money
 // keeps its exact value; callers hand over digits already rounded to the precision
-// they want to show.
+// they want to show — or let Currency round to the currency's own digit count,
+// which is the one function here that changes a value.
 package intl
 
 import (
@@ -241,6 +260,30 @@ func (l Locale) Number(digits string) string {
 
 // Money formats a decimal string with a currency symbol or code, placed and
 // spaced as the locale writes it.
+//
+// The fraction is taken as given. Currency applies the currency's own digit
+// count — JPY has none, KWD has three — and is usually what you want for an
+// amount you are about to show.
+//
+// # Negative amounts
+//
+// CLDR's *standard* currency pattern uses a minus sign in every locale this
+// table carries; parentheses come from the separate *accounting* pattern, which
+// is a house style rather than a property of the place. So Negative stays at
+// MinusPrefix for every entry in the table, and a ledger that wants accounting
+// style sets it on a copy of the locale:
+//
+//	l := ctx.IntlLocale()
+//	l.Negative = intl.Parentheses
+//
+// When it is set, the symbol goes *inside* the brackets — "($1,234.56)", the
+// form every accounting package writes — because the brackets stand in for the
+// sign and the sign belongs next to the amount.
+//
+// The separator honours CurrencySpace on both sides. It used to be hard-coded
+// to a non-breaking space in the suffix position, which happened to be right
+// for every suffix locale in the table and wrong for any locale a caller built
+// by hand.
 func (l Locale) Money(digits, currency string) string {
 	n := l.Number(digits)
 	if currency == "" {
@@ -250,14 +293,18 @@ func (l Locale) Money(digits, currency string) string {
 	if l.CurrencySpace {
 		sep = nbsp
 	}
-	if l.CurrencyBefore {
-		// A leading sign stays outermost: -$5.00, not $-5.00.
-		if strings.HasPrefix(n, "-") {
-			return "-" + currency + sep + n[1:]
-		}
-		return currency + sep + n
+	if !l.CurrencyBefore {
+		return n + sep + currency
 	}
-	return n + nbsp + currency
+	switch {
+	// Accounting style: the bracket is the sign, so it wraps the symbol too.
+	case strings.HasPrefix(n, "(") && strings.HasSuffix(n, ")"):
+		return "(" + currency + sep + n[1:len(n)-1] + ")"
+	// A leading sign stays outermost: -$5.00, not $-5.00.
+	case strings.HasPrefix(n, "-"):
+		return "-" + currency + sep + n[1:]
+	}
+	return currency + sep + n
 }
 
 // Date formats year, month and day in the locale's short style.
