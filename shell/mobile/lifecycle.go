@@ -68,4 +68,12 @@ func (b *Bridge) SetAppState(state int) {
 	for _, f := range subs {
 		f(s)
 	}
+
+	// Last, and only in a `gophics dev` build: write the hot-restart snapshot
+	// (devstate.go). After the subscribers, because an app that persists its
+	// own data on this transition may change widget state while doing it, and
+	// the snapshot should be of what the app finally settled on.
+	if s == shell.StateBackground {
+		b.devSnapshotState()
+	}
 }

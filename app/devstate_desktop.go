@@ -3,13 +3,9 @@
 package app
 
 import (
-	"encoding/json"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/doug/gophics/widget"
 )
 
 // devStateEnv names the file `gophics dev` uses to hand UI state from an
@@ -34,7 +30,7 @@ func setupDevState(sh *shellHandler) {
 		return
 	}
 	sh.devStatePath = path
-	restoreDevState(sh, path)
+	restoreDevSnapshot(sh, path)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, os.Interrupt)
@@ -43,17 +39,4 @@ func setupDevState(sh *shellHandler) {
 		sh.devQuit.Store(true)
 		sh.core.Owner.RequestFrameThreadSafe() // wake a frame to run the snapshot
 	}()
-}
-
-func restoreDevState(sh *shellHandler, path string) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return // no prior state — first launch of the dev session
-	}
-	var snap widget.StateSnapshot
-	if err := json.Unmarshal(data, &snap); err != nil {
-		log.Printf("gophics dev: restore state: %v", err)
-		return
-	}
-	sh.core.Owner.RestoreState(snap)
 }

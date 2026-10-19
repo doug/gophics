@@ -349,10 +349,12 @@ func ensureHost(o buildOpts) (string, error) {
 		return "", fmt.Errorf("generate %s host: %w", o.platform.name, err)
 	}
 	out := filepath.Join(root, o.platform.name)
-	fmt.Fprintf(os.Stderr,
-		"gophics: no %s/ in %s — generated a stock host in %s\n"+
-			"         (bundle id %s; keep your own %s/ directory to customise signing or native code)\n",
-		o.platform.name, name, out, bundleID, o.platform.name)
+	if !o.dev.notedHost() {
+		fmt.Fprintf(os.Stderr,
+			"gophics: no %s/ in %s — generated a stock host in %s\n"+
+				"         (bundle id %s; keep your own %s/ directory to customise signing or native code)\n",
+			o.platform.name, name, out, bundleID, o.platform.name)
+	}
 	return out, nil
 }
 

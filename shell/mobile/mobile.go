@@ -47,6 +47,7 @@ type Bridge struct {
 	opened       []string           // OpenURL requests for the host to perform
 	haptics      []shell.HapticKind // pending haptic events for the host to play
 	prefs        *prefs.Store       // settings store; nil until SetFilesDir (prefs.go)
+	filesDir     string             // the host's private writable directory; also where hot restart hands state over (devstate.go)
 
 	// Platform state the host pushes rather than Go requesting; see
 	// connectivity.go. Each "known" flag distinguishes "the host has not wired

@@ -70,7 +70,17 @@ func sseHandler(b *broadcaster) http.HandlerFunc {
 
 // reloadClient reconnects and reloads the page on each event; EventSource
 // auto-reconnects, so the tab recovers across dev-server restarts too.
-const reloadClient = `<script>new EventSource("/_gophics/reload").onmessage=function(){location.reload()};</script>`
+//
+// The sessionStorage marker is what turns state-preserving reload on in the
+// wasm (app/devstate_web.go): the app snapshots its widget state on pagehide
+// and restores it on the next load, so a save does not cost the open page, the
+// scroll offset and a half-typed field. It is set here and nowhere else, which
+// is also the gate — a wasm build served by anything but `gophics dev` finds no
+// marker and never touches storage. Wrapped, because setItem throws rather
+// than failing in a tab with site data blocked, and a reload loop that cannot
+// remember state is still a reload loop.
+const reloadClient = `<script>try{sessionStorage.setItem("gophics:dev","1")}catch(e){}` +
+	`new EventSource("/_gophics/reload").onmessage=function(){location.reload()};</script>`
 
 // serveIndexWithReload serves dir/index.html with the reload client injected
 // just before </body> (or appended if there's no body tag).

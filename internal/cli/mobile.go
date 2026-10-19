@@ -59,12 +59,9 @@ func gomobileBind(o buildOpts, target, out string) error {
 	args := []string{"bind", "-target", target}
 	if o.platform.name == "android" {
 		args = append(args, "-androidapi", "24")
-		// Align libgojni.so's LOAD segments to 16 KB. Devices from the Pixel 10
-		// on can boot with 16 KB pages, and Android shows a "not compatible"
-		// PageSizeMismatch dialog for apps whose native libs use the toolchain's
-		// 4 KB default. The JNI shim gets the same treatment from its
-		// CMakeLists; both libs have to be aligned for the dialog to go away.
-		args = append(args, "-ldflags", "-extldflags=-Wl,-z,max-page-size=16384")
+	}
+	if ld := bindLDFlags(o); ld != "" {
+		args = append(args, "-ldflags", ld)
 	}
 	args = append(args, "-o", out)
 	if t := tagList(o.platform, o.tags); t != "" {
@@ -97,6 +94,32 @@ func gomobileBind(o buildOpts, target, out string) error {
 // bridgePkg is the shell bridge every gophics mobile app runs on; hosts call
 // its methods directly, so it is bound alongside the app's own package.
 const bridgePkg = "github.com/doug/gophics/shell/mobile"
+
+// devRestartVar is the bridge variable `gophics dev` sets at link time to turn
+// state-preserving hot restart on in that one build. Declared in
+// shell/mobile/devstate.go, which explains why the gate is a linker flag
+// rather than a build tag; TestDevRestartVarExists reads it from there.
+const devRestartVar = bridgePkg + ".devRestart"
+
+// bindLDFlags is the -ldflags value for a `gomobile bind`, or "" when there is
+// nothing to pass. One string because `go build` takes the last -ldflags it is
+// given and silently drops the rest, so the two reasons to have any have to be
+// joined rather than appended separately.
+func bindLDFlags(o buildOpts) string {
+	var ld []string
+	if o.platform.name == "android" {
+		// Align libgojni.so's LOAD segments to 16 KB. Devices from the Pixel 10
+		// on can boot with 16 KB pages, and Android shows a "not compatible"
+		// PageSizeMismatch dialog for apps whose native libs use the toolchain's
+		// 4 KB default. The JNI shim gets the same treatment from its
+		// CMakeLists; both libs have to be aligned for the dialog to go away.
+		ld = append(ld, "-extldflags=-Wl,-z,max-page-size=16384")
+	}
+	if o.dev != nil {
+		ld = append(ld, "-X", devRestartVar+"=1")
+	}
+	return strings.Join(ld, " ")
+}
 
 // runMobile is the `gophics run` path for ios/android: bind the Go side into
 // the host project, build it, and install + launch on a simulator/device — the
@@ -227,7 +250,7 @@ func runIOS(o buildOpts, host string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "gophics: binding Go → "+fw+".xcframework")
-	if err := gomobileBind(o, "ios,iossimulator", filepath.Join(host, fw+".xcframework")); err != nil {
+	if err := gomobileBind(o, iosBindTarget(o), filepath.Join(host, fw+".xcframework")); err != nil {
 		return err
 	}
 
@@ -242,11 +265,28 @@ func runIOS(o buildOpts, host string) error {
 	if o.device {
 		return runIOSOnDevice(o, host, proj, scheme)
 	}
-	return runIOSOnSimulator(host, proj, scheme)
+	return runIOSOnSimulator(o, host, proj, scheme)
+}
+
+// iosBindTarget is the gomobile -target for an iOS run.
+//
+// `run` and `build` cover both slices, because the one artifact has to work
+// wherever it is dropped. The dev loop knows which one it is about to install,
+// and binding only that halves the xcframework (117 MB → 78 MB) and the work
+// that produces it. The bind saving was too noisy to measure honestly on this
+// machine, so this is claimed as a smaller artifact and nothing more.
+func iosBindTarget(o buildOpts) string {
+	if o.dev == nil {
+		return "ios,iossimulator"
+	}
+	if o.device {
+		return "ios"
+	}
+	return "iossimulator"
 }
 
 // runIOSOnSimulator builds for the simulator SDK and installs with simctl.
-func runIOSOnSimulator(host, proj, scheme string) error {
+func runIOSOnSimulator(o buildOpts, host, proj, scheme string) error {
 	udid, dev, err := pickSimulator()
 	if err != nil {
 		return err
@@ -272,6 +312,19 @@ func runIOSOnSimulator(host, proj, scheme string) error {
 		return fmt.Errorf("simctl install: %w", err)
 	}
 	_ = exec.Command("xcrun", "simctl", "terminate", udid, bundleID).Run()
+	if o.dev != nil {
+		// The dev loop has to go on watching the source tree, so it cannot
+		// block on the app's console the way `run` does. It keeps the handle
+		// and ends the stream itself when the next iteration starts.
+		o.dev.installed(devApp{udid: udid, appID: bundleID})
+		cmd, err := start("", nil, "xcrun", "simctl", "launch", "--console-pty", udid, bundleID)
+		if err != nil {
+			return err
+		}
+		o.dev.following(cmd)
+		o.dev.launchedApp()
+		return nil
+	}
 	return run("", nil, "xcrun", "simctl", "launch", "--console-pty", udid, bundleID)
 }
 
@@ -324,6 +377,19 @@ func runIOSOnDevice(o buildOpts, host, proj, scheme string) error {
 	// anything prefixed DEVICECTL_CHILD_ in its own environment, which is how
 	// a knob like GOPHICS_PACING reaches a process on the phone — there is
 	// otherwise no way to set one there.
+	if o.dev != nil {
+		// Same reason as the simulator: don't block the watch loop on the
+		// console. Nothing is recorded for backgrounding — there is no way to
+		// back an app out from devicectl, so a device dev loop rebuilds and
+		// relaunches without preserving state, and devMobile says so up front.
+		cmd, err := start("", childEnv(os.Environ()), "xcrun", "devicectl", "device", "process", "launch",
+			"--device", dev.identifier, "--console", "--terminate-existing", bundleID)
+		if err != nil {
+			return err
+		}
+		o.dev.following(cmd)
+		return nil
+	}
 	return run("", childEnv(os.Environ()), "xcrun", "devicectl", "device", "process", "launch",
 		"--device", dev.identifier, "--console", "--terminate-existing", bundleID)
 }
@@ -500,7 +566,13 @@ func runAndroid(o buildOpts, host string) error {
 	if err := pruneStaleAARs(filepath.Dir(aar), filepath.Base(aar)); err != nil {
 		return err
 	}
-	if err := gomobileBind(o, "android", aar); err != nil {
+	// Resolved before the bind, not after, because the dev loop narrows the
+	// ABI set to what the attached device actually runs and so has to know
+	// which device that is first. A missing device is not an error here: the
+	// build still runs and prints the install command (below).
+	adb := filepath.Join(sdk, "platform-tools", "adb")
+	target, _ := adbTarget(adb, o.serial)
+	if err := gomobileBind(o, androidBindTarget(o, adb, target), aar); err != nil {
 		return err
 	}
 
@@ -517,16 +589,20 @@ func runAndroid(o buildOpts, host string) error {
 	}
 
 	apk := filepath.Join(host, "app", "build", "outputs", "apk", "debug", "app-debug.apk")
-	adb := filepath.Join(sdk, "platform-tools", "adb")
 	if !deviceConnected(adb) {
 		fmt.Fprintf(os.Stderr, "gophics: built %s\n"+
 			"No device/emulator connected. Start one, then:\n"+
 			"  %s install -r %s\n", apk, adb, apk)
 		return nil
 	}
-	target, err := adbTarget(adb, o.serial)
-	if err != nil {
-		return err
+	if target == nil {
+		// adbTarget was called before the bind and its error swallowed so a
+		// device-less build could still finish; a device is attached now, so
+		// ask again and report what is wrong (an unmatched -serial, usually).
+		var err error
+		if target, err = adbTarget(adb, o.serial); err != nil {
+			return err
+		}
 	}
 	appID, err := gradleApplicationID(filepath.Join(host, "app", "build.gradle"))
 	if err != nil {
@@ -536,8 +612,70 @@ func runAndroid(o buildOpts, host string) error {
 	if err := run("", nil, adb, append(append([]string{}, target...), "install", "-r", apk)...); err != nil {
 		return fmt.Errorf("adb install: %w", err)
 	}
+	if o.dev != nil {
+		o.dev.installed(devApp{adb: adb, target: target, appID: appID})
+		// Follow the app's log, once per session. `run` does not, and in a
+		// loop that reinstalls every few seconds the absence is worse: a
+		// panic on launch would otherwise leave a blank screen and no reason
+		// for it. -T 1 starts at the present, so none of the launcher's
+		// backlog arrives; GoLog is the tag gomobile routes Go's log package
+		// to, and *:S silences everything else.
+		o.dev.follow(func() (*exec.Cmd, error) {
+			args := append(append([]string{}, target...), "logcat", "-T", "1", "GoLog:V", "*:S")
+			return start("", nil, adb, args...)
+		})
+	}
 	launch := append(append([]string{}, target...), "shell", "am", "start", "-n", launchActivity(adb, appID))
-	return run("", nil, adb, launch...)
+	if err := run("", nil, adb, launch...); err != nil {
+		return err
+	}
+	o.dev.launchedApp()
+	return nil
+}
+
+// androidBindTarget narrows `gomobile bind` to the ABI the attached device
+// actually runs — for the dev loop only.
+//
+// `-target android` builds four ABIs, 82 MB of libgojni.so, while the
+// scaffolded app/build.gradle keeps two of them and a dev loop needs one.
+// Measured on this machine with the same edit each time: 8.44 s for four,
+// 6.37 s for two, 5.77 s for one. That is ~2.5 s off every iteration of a loop
+// whose total is ~13 s, and the three ABIs it drops were being linked and then
+// thrown away.
+//
+// Not for `run` or `build`: an .aar is distributed, and a developer who swaps
+// an arm64 emulator for an x86 one should get a slow build rather than an
+// install failure. And only for an ABI build.gradle keeps — an armeabi-v7a
+// device would otherwise get a library gradle then filters out of the APK.
+func androidBindTarget(o buildOpts, adb string, target []string) string {
+	if o.dev == nil {
+		return "android"
+	}
+	return androidABITarget(adbProp(adb, target, "ro.product.cpu.abi"))
+}
+
+// androidABITarget maps an Android ABI to the gomobile target that builds only
+// it, or "android" (all four) when narrowing would be wrong or the ABI could
+// not be read.
+func androidABITarget(abi string) string {
+	switch abi {
+	case "arm64-v8a":
+		return "android/arm64"
+	case "x86_64":
+		return "android/amd64"
+	default:
+		return "android"
+	}
+}
+
+// adbProp reads one Android system property, or "" if it cannot.
+func adbProp(adb string, target []string, name string) string {
+	args := append(append([]string{}, target...), "shell", "getprop", name)
+	out, err := exec.Command(adb, args...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // launchActivity resolves the app's launcher activity (e.g.

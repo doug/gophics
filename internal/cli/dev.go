@@ -20,6 +20,10 @@ func cmdDev(args []string) error {
 	addBuildFlags(fs, &o, &platName)
 	fs.IntVar(&port, "port", 8080, "web dev-server port")
 	fs.StringVar(&bind, "bind", defaultBind, "web dev-server interface; 0.0.0.0 to reach it from other devices")
+	fs.StringVar(&o.host, "host", "", "mobile host project dir (default: sibling ios/ or android/ of the package)")
+	fs.BoolVar(&o.device, "device", false, "iterate on a connected device rather than a simulator (ios)")
+	fs.StringVar(&o.serial, "serial", "", "adb serial to target when several Android devices are attached")
+	fs.StringVar(&o.team, "team", "", "Apple Developer team ID for device signing (default: from the codesigning identity)")
 	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return err
 	}
@@ -30,14 +34,20 @@ func cmdDev(args []string) error {
 	case "web":
 		return devWeb(o, bind, port)
 	case "ios", "android":
-		return fmt.Errorf("dev hot reload isn't supported for %s; iterate on web/desktop and use `build` for device tests", o.platform.name)
+		return devMobile(o)
 	default:
 		return devRestart(o)
 	}
 }
 
 // devWeb rebuilds the wasm on every source change and live-reloads the browser
-// over SSE — the fastest iteration loop (Flutter-web-like).
+// over SSE — the fastest iteration loop (Flutter-web-like), ~4 s.
+//
+// UI state survives the reload. The tab hands it to its own next load through
+// sessionStorage, which the reload client below turns on and app/devstate_web.go
+// reads; the snapshot is the same widget.StateSnapshot the desktop and mobile
+// loops use, so "you land back on the same page/scroll/field" means the same
+// thing on all three.
 func devWeb(o buildOpts, bind string, port int) error {
 	if _, err := buildWeb(o); err != nil {
 		return err

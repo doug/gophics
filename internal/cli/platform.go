@@ -53,6 +53,12 @@ type buildOpts struct {
 	device   bool   // run on a connected physical device rather than a simulator/emulator
 	serial   string // adb serial to target when several Android devices are attached
 	team     string // Apple Developer team ID for device signing ("" = detect)
+	// dev is non-nil only for `gophics dev -p ios|android`: the mobile
+	// hot-restart loop (devmobile.go). Its presence tells the bind to link
+	// the state hand-off in and to narrow the ABI set to the one target that
+	// is attached, and the run path fills it in with what the loop needs to
+	// background, stop and follow the app it just installed.
+	dev *devSession
 	// bindPkg is the resolved bind package, filled in by runMobile so the
 	// several steps that need it (permission scan, framework name, the bind
 	// itself) share one answer rather than each running go list twice and

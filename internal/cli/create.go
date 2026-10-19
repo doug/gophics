@@ -91,9 +91,11 @@ func cmdCreate(args []string) error {
 	}
 	if plats["ios"] {
 		next.WriteString("  gophics run -p ios               # iOS Simulator (needs Xcode + xcodegen)\n")
+		next.WriteString("  gophics dev -p ios               # the same, looping on every save\n")
 	}
 	if plats["android"] {
 		next.WriteString("  gophics run -p android           # Android device/emulator (needs the SDK)\n")
+		next.WriteString("  gophics dev -p android           # the same, looping on every save\n")
 	}
 	// gomobile binds from the app's own module, so x/mobile has to be a
 	// dependency of the app rather than of gophics. Printed rather than added
@@ -408,18 +410,43 @@ web, terminal, and mobile.
 
 ## Develop
 
-    gophics dev -p web        # live-reload in the browser (fastest loop)
-    gophics dev -p desktop    # native window, rebuild + hot-restart on save
+    gophics dev -p web        # browser, reload on save (fastest loop)
+    gophics dev -p desktop    # native window, rebuild + relaunch on save
+    gophics dev -p android    # emulator or device
+    gophics dev -p ios        # simulator or device
 
-On desktop, a rebuild preserves your place: the current page, scroll position,
-text fields, and any exported widget state are restored, so you come back to
-exactly where you were. See ui/app.go for the two conventions that enable it.
+"dev" is hot *restart*, not hot reload — Go cannot replace code in a running
+process — and on all four targets it preserves your place: the current page,
+scroll position, text fields, and any exported widget state come back, so you
+land where you were. See ui/app.go for the two conventions that enable it.
+A phone loop costs roughly ten to twenty seconds against one or two on
+desktop; the gomobile bind is most of it.
 
 ## Build
 
     gophics build -p web       # → build/web/  (wasm + html)
     gophics build -p desktop   # → build/desktop/app  (single binary; app.exe on Windows)
     gophics build -p terminal  # → build/terminal/app (app.exe on Windows)
+
+## Ship it
+
+` + "`build`" + ` makes a binary, which is everything a developer needs and nothing a
+user can double-click. ` + "`package`" + ` makes the thing you hand to someone else:
+
+    gophics package                  # host OS → build/package/<os>/
+    gophics package -os linux        # from any host; no cross-toolchain needed
+    gophics package -os windows
+
+You get a real ` + "`.app`" + ` bundle and a ` + "`.dmg`" + ` on macOS, a prefix tree with a
+desktop entry plus a relocatable tarball on Linux, and a staged directory, a zip
+and WiX + NSIS installer sources on Windows. Drop a square ` + "`icon.png`" + ` beside
+` + "`main.go`" + ` and it is converted into ` + "`.icns`" + `, ` + "`.ico`" + ` and the freedesktop icon
+theme sizes.
+
+Signing, notarisation and the installer compilers are all optional: without
+them you still get a working unsigned app, and each skipped step says what it
+would have taken. Pass ` + "`-id com.yourdomain.app`" + ` before you give the result to
+anyone — the default identifier is a placeholder.
 
 Run ` + "`gophics doctor`" + ` to check your toolchain.
 `

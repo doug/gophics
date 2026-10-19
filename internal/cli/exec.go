@@ -20,6 +20,26 @@ func run(dir string, env []string, name string, args ...string) error {
 	return cmd.Run()
 }
 
+// start is run's non-blocking sibling: the same stdio wiring, but the caller
+// keeps the handle and is responsible for reaping the child.
+//
+// The mobile dev loop needs it because every launch command there streams the
+// app's console until the app exits — which is what you want to read, and what
+// you cannot block the file watcher on. No stdin: these are relays, and
+// handing one the terminal's input would take it away from the loop's Ctrl-C.
+func start(dir string, env []string, name string, args ...string) (*exec.Cmd, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
 // goEnv returns `go env <name>`, or "" on error.
 func goEnv(name string) string {
 	out, err := exec.Command("go", "env", name).Output()

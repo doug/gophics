@@ -39,6 +39,7 @@ func (b *Bridge) Preferences() shell.Preferences {
 // nil hides the affordance, while a store that accepts writes and loses them is
 // undetectable.
 func (b *Bridge) SetFilesDir(dir string) {
+	b.filesDir = dir
 	if dir == "" {
 		b.prefs = nil
 		b.capabilitiesChanged()
@@ -46,4 +47,9 @@ func (b *Bridge) SetFilesDir(dir string) {
 	}
 	b.prefs = prefs.New(filepath.Join(dir, "preferences.json"))
 	b.capabilitiesChanged()
+	// The same directory is where `gophics dev` hands UI state from one
+	// process to its rebuilt successor, and this is the first moment the app
+	// knows where that is — so the restore happens here rather than in
+	// NewBridge. A no-op in anything but a dev build; see devstate.go.
+	b.devRestoreState()
 }
