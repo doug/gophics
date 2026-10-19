@@ -200,6 +200,14 @@ type Shaper struct {
 	hb     shaping.HarfbuzzShaper
 	seg    shaping.Segmenter
 	wrap   shaping.LineWrapper
+
+	// Missing-glyph reporting (see missing.go). missingSet distinguishes
+	// "never configured", which gets the default report, from an explicit
+	// OnMissingGlyph(nil), which is a request for silence — a bare nil
+	// onMissing cannot tell those apart.
+	onMissing   func(rune, Script)
+	missingSet  bool
+	missingSeen map[Script]bool
 }
 
 // ShareSystemFonts gives s the system font map other loaded with
@@ -254,6 +262,11 @@ func (f fontmap) ResolveFace(r rune) *font.Face { return f.s.resolveFace(r) }
 
 // resolveFace picks a face for r: first explicit font with a glyph for it, then
 // the system font map (if enabled), else the primary.
+//
+// Reaching the primary at the end means nothing covers r, so the glyph about to
+// be drawn is the wrong one. That is the only place in the stack that knows it,
+// and it used to keep the knowledge to itself; reportMissing is what lets a
+// developer looking at a box find out why. See missing.go.
 func (s *Shaper) resolveFace(r rune) *font.Face {
 	for _, f := range s.fonts {
 		if f.HasGlyph(r) {
