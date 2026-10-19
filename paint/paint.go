@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"math"
 	"reflect"
+	"sync/atomic"
 
 	"github.com/doug/gophics/internal/gfx/gg"
 	ggtext "github.com/doug/gophics/internal/gfx/gg/text"
@@ -328,16 +329,38 @@ type Painter struct {
 	// so shaped lines are memoized (cleared on font change or when the
 	// cache grows past a bound).
 	shapes   map[shapeKey]text.Line
-	inks     map[shapeKey]inkBounds // outline bounds of shaped lines, see InkBoundsIn
+	inks     map[shapeKey]inkBounds // ink bounds of shaped lines, see InkBoundsIn
 	metrics  map[metricsKey]TextMetrics
 	imgBufs  map[image.Image]*gg.ImageBuf
 	tintBufs map[tintKey]*gg.ImageBuf // per (atlas, src rect, quantized tint)
+
+	// Colour emoji are bitmaps, not outlines: they are blitted from one packed
+	// sheet rather than filled. colorBoxes memoizes which glyphs are bitmaps
+	// (the answer is "no" for nearly every glyph, and the question is asked per
+	// glyph per frame), emoji is the sheet. Both in coloremoji.go.
+	colorBoxes map[colorGlyphKey]colorGlyphBox
+	emoji      *emojiAtlas
 
 	// shapeGen counts shaping-affecting changes (font/fallback/system-font
 	// loads). Callers that memoize measured or shaped text outside the
 	// Painter (e.g. layout.TextBox/RichBox) key on it so their caches cannot
 	// outlive a font swap; the Painter's own caches are cleared directly.
 	shapeGen uint64
+
+	// fontLanded is set when a font fetched by UseWebFonts has arrived, and
+	// cleared by applyFontLanding, which does the invalidating. It is atomic
+	// and the two halves are split because the notify callback text hands the
+	// fetch runs on the *fetch goroutine*, while every cache above belongs to
+	// the UI goroutine — clearing a map from there would be a data race, and
+	// text/webfont_js.go uses a channel rather than a mutex for the same
+	// reason (a mutex makes the map safe and leaves the face unsafe). A flag
+	// is the one thing that crosses safely; the clearing waits for the next
+	// call that could serve a stale answer, which is the first moment it
+	// could matter.
+	//
+	// nil until UseWebFonts installs it, so a Painter that never asks for web
+	// fonts pays one nil comparison per shaping call and nothing else.
+	fontLanded *atomic.Bool
 
 	// Rendering glyph outlines is ~80% of raster cost, so each distinct
 	// text run (font, string, size, color, scale) is rasterized once into a
@@ -392,16 +415,18 @@ const shapeCacheLimit = 1 << 13
 // owns it). app.Run and app.Headless each hold one.
 func NewPainter() *Painter {
 	return &Painter{
-		families:  map[string]*text.Font{},
-		shapers:   map[string]*text.Shaper{"": text.NewShaper()},
-		shapes:    map[shapeKey]text.Line{},
-		inks:      map[shapeKey]inkBounds{},
-		metrics:   map[metricsKey]TextMetrics{},
-		imgBufs:   map[image.Image]*gg.ImageBuf{},
-		tintBufs:  map[tintKey]*gg.ImageBuf{},
-		runs:      map[runKey]*cachedRun{},
-		ggSources: map[string]*ggtext.FontSource{},
-		ggFaces:   map[ggFaceKey]ggtext.Face{},
+		families: map[string]*text.Font{},
+		shapers:  map[string]*text.Shaper{"": text.NewShaper()},
+		shapes:   map[shapeKey]text.Line{},
+		inks:     map[shapeKey]inkBounds{},
+		metrics:  map[metricsKey]TextMetrics{},
+		imgBufs:  map[image.Image]*gg.ImageBuf{},
+		tintBufs: map[tintKey]*gg.ImageBuf{},
+		runs:     map[runKey]*cachedRun{},
+
+		colorBoxes: map[colorGlyphKey]colorGlyphBox{},
+		ggSources:  map[string]*ggtext.FontSource{},
+		ggFaces:    map[ggFaceKey]ggtext.Face{},
 	}
 }
 
@@ -428,11 +453,52 @@ func (p *Painter) rebuildShapers() {
 		}
 		sh.SetFonts(chain...)
 	}
+	p.invalidateShapedText()
+}
+
+// invalidateShapedText drops everything the Painter has memoized about shaped
+// text and bumps shapeGen so that caches outside the Painter — layout's text
+// boxes, which key on ShapeGen — follow it.
+//
+// Every entry here is an answer about what some string looks like in some
+// family at some size, and a change to the fallback chain can change any of
+// them. The run cache matters most and is the least obvious: it holds
+// *rasterized* pixels, keyed by (font, string, size, colour, scale) with no
+// generation in the key, so a stale entry is not a stale measurement but a
+// stale picture — the tofu that was drawn before the font arrived, blitted
+// again for as long as the entry lives.
+func (p *Painter) invalidateShapedText() {
 	clear(p.shapes)
 	clear(p.inks)
 	clear(p.runs)
 	clear(p.metrics)
+	// The emoji sheet and the colour-glyph predicate are keyed by *text.Font,
+	// which a reload replaces, so stale entries cannot be read back as wrong
+	// answers — only held. Dropping them keeps a swapped-out font's sheet from
+	// outliving it. A newly arrived font can also *be* the colour-emoji face,
+	// in which case these are the caches that said "no bitmap here".
+	clear(p.colorBoxes)
+	p.emoji = nil
 	p.shapeGen++
+}
+
+// applyFontLanding invalidates the shaping caches if a web font has landed
+// since the last call, and is why UseWebFonts's notify does not clear them
+// itself — see the fontLanded field.
+//
+// It sits at the top of every call that could otherwise return a memoized
+// answer about text (ShapeIn, MetricsIn, InkBoundsIn, runFor) and at ShapeGen,
+// which is how a cache outside the Painter learns the same news. A cache hit
+// returns before shaperFor is reached, so there is no single lower choke point
+// to put this in.
+func (p *Painter) applyFontLanding() {
+	// Swap, not Load-then-Store: the fetch goroutine may set the flag again
+	// between the two, and a set that is read and then overwritten with false
+	// is a font that never invalidates anything.
+	if p.fontLanded == nil || !p.fontLanded.Swap(false) {
+		return
+	}
+	p.invalidateShapedText()
 }
 
 func (p *Painter) shaperFor(font string) *text.Shaper {
@@ -585,6 +651,12 @@ func (p *Painter) InkBoundsIn(font, s string, size float32) (r geom.Rect, ok boo
 	}
 	var sink boundsSink
 	for _, g := range p.ShapeIn(font, s, size).Glyphs {
+		if box, isColor := p.colorBox(g.Font, g.GID, size); isColor {
+			at := box.Translate(geom.Pt{X: g.X, Y: g.Y})
+			sink.pt(at.Min.X, at.Min.Y)
+			sink.pt(at.Max.X, at.Max.Y)
+			continue
+		}
 		g.Font.AppendGlyphPath(&sink, g.GID, size, g.X, g.Y)
 	}
 	b := inkBounds{r: sink.r, ok: sink.any}
@@ -935,26 +1007,83 @@ func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) 
 	})
 }
 
-// fillGlyphs shapes s and fills its glyph outlines directly on the GPU-backed
-// context at logical coordinates (the context's device scale maps them to
-// physical pixels). pos.Y is the baseline. One Fill per run keeps the whole
-// run a single multi-contour path, which the analytic/SDF filler resolves with
-// nonzero winding — glyphs solid, gaps empty.
+// fillGlyphs shapes s and draws it directly on the GPU-backed context at
+// logical coordinates (the context's device scale maps them to physical
+// pixels). pos.Y is the baseline.
+//
+// The run is partitioned into maximal spans of outline glyphs with the colour
+// bitmap glyphs between them, and the pieces are emitted in glyph order. Glyph
+// order is what makes it correct: the substrate composites its draw list in
+// queue order, so a blit queued between two outline spans lands between them
+// visually too.
+//
+// Splitting also undoes a cost bug that predates emoji. glyphsFromFamily is
+// all-or-nothing, so one glyph from a fallback font dropped the *whole* run off
+// gg's cached glyph-mask tier onto per-frame outline re-tessellation — one
+// emoji degraded the entire line. Each span is now tested on its own, so the
+// Latin spans either side of an emoji keep the mask tier. Splitting a run was
+// measured at 1-2 us, against the 10-12 us the blit itself costs, so it pays
+// for itself the first time it avoids a re-tessellation.
 func (c *ggCanvas) fillGlyphs(font, s string, pos geom.Pt, size float32, col Color) {
 	line := c.p.ShapeIn(font, s, size)
 	if len(line.Glyphs) == 0 {
 		return
 	}
+	// Cells are physical pixels: the strike is chosen from the logical size
+	// times the context's device scale, so a 2x screen blits the 2x strike.
+	// Read off the context rather than the Painter, because a Canvas handed a
+	// context directly (GPUCanvas, which the desktop present path uses) never
+	// went through begin() and the Painter's own copy can still be zero there.
+	scale := c.deviceScale()
+	for i := 0; i < len(line.Glyphs); {
+		g := line.Glyphs[i]
+		if box, isColor := c.p.colorBox(g.Font, g.GID, size); isColor {
+			if src, ok := c.p.emojiCell(g.Font, g.GID, emojiPpem(g.Font, size, scale)); ok {
+				c.drawColorGlyph(src, box, pos, g)
+				i++
+				continue
+			}
+			// No decodable bitmap after all (a COLR font, or a format the
+			// standard library cannot read). Fall through and let the span
+			// code emit whatever outline the font carries — usually nothing,
+			// which is the pre-existing blank, not a new failure.
+		}
+		j := i
+		for j < len(line.Glyphs) {
+			if _, isColor := c.p.colorBox(line.Glyphs[j].Font, line.Glyphs[j].GID, size); isColor && j > i {
+				break
+			}
+			j++
+		}
+		c.fillOutlineSpan(font, line.Glyphs[i:j], pos, size, col)
+		i = j
+	}
+}
+
+// fillOutlineSpan draws one span of outline glyphs, preferring gg's cached
+// glyph-mask tier and falling back to filling the outlines.
+//
+// The span is filled as a single multi-contour path, which the analytic/SDF
+// filler resolves with nonzero winding — glyphs solid, gaps empty. Filling
+// each glyph separately would be correct too but costs a draw apiece; filling
+// a span rather than the whole run costs nothing extra, because glyphs within
+// a line never overlap, so no winding interaction is lost at a span boundary.
+func (c *ggCanvas) fillOutlineSpan(font string, glyphs []text.Glyph, pos geom.Pt, size float32, col Color) {
+	if len(glyphs) == 0 {
+		return
+	}
+	// Set the colour per span: a sprite blit between two spans goes through
+	// the image pipeline, which sets its own fill source.
 	c.dc.SetColor(col.nrgba())
 
 	// Preferred: gg's glyph-mask GPU text tier. It rasterizes each glyph once
 	// into a device-resolution atlas (crisp AA, cached across frames) and
 	// batches the quads into the render pass. Needs a gg face with matching
 	// GIDs, so only when every glyph came from that family's font.
-	if face := c.p.ggFaceFor(font, size); face != nil && c.p.glyphsFromFamily(font, line.Glyphs) {
-		glyphs := make([]ggtext.ShapedGlyph, len(line.Glyphs))
-		for i, g := range line.Glyphs {
-			glyphs[i] = ggtext.ShapedGlyph{
+	if face := c.p.ggFaceFor(font, size); face != nil && c.p.glyphsFromFamily(font, glyphs) {
+		shaped := make([]ggtext.ShapedGlyph, len(glyphs))
+		for i, g := range glyphs {
+			shaped[i] = ggtext.ShapedGlyph{
 				GID:      ggtext.GlyphID(g.GID),
 				Cluster:  g.Cluster,
 				X:        float64(g.X),
@@ -964,7 +1093,7 @@ func (c *ggCanvas) fillGlyphs(font, s string, pos geom.Pt, size float32, col Col
 		}
 		// DrawShapedGlyphs self-falls-back to outline fills if the mask tier is
 		// unavailable, so this is never worse than the manual path below.
-		c.dc.DrawShapedGlyphs(glyphs, face, float64(pos.X), float64(pos.Y))
+		c.dc.DrawShapedGlyphs(shaped, face, float64(pos.X), float64(pos.Y))
 		return
 	}
 
@@ -972,7 +1101,7 @@ func (c *ggCanvas) fillGlyphs(font, s string, pos geom.Pt, size float32, col Col
 	// re-tessellated per frame). Used for fallback-font runs (CJK, symbols).
 	c.dc.ClearPath()
 	sink := ggSink{c.dc}
-	for _, g := range line.Glyphs {
+	for _, g := range glyphs {
 		g.Font.AppendGlyphPath(sink, g.GID, size, pos.X+g.X, pos.Y+g.Y)
 	}
 	c.dc.Fill()
@@ -985,6 +1114,7 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 	if s == "" {
 		return nil
 	}
+	p.applyFontLanding()
 	scale := float32(p.scale)
 	if scale <= 0 {
 		scale = 1
@@ -1033,10 +1163,43 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 	scratch.SetColor(col.nrgba())
 	scratch.ClearPath()
 	sink := ggSink{scratch}
+	var emoji []text.Glyph
 	for _, g := range line.Glyphs {
+		if _, isColor := p.colorBox(g.Font, g.GID, size); isColor {
+			emoji = append(emoji, g)
+			continue
+		}
 		g.Font.AppendGlyphPath(sink, g.GID, size*scale, g.X*scale-float32(left), g.Y*scale-float32(top))
 	}
 	scratch.Fill()
+	// Colour emoji are blitted into the same scratch bitmap as the outlines,
+	// so this path needs no atlas and costs nothing per frame: the glyph is
+	// baked into the cached run image and every later frame is the one blit it
+	// already was. Drawn after the outline fill rather than interleaved with
+	// it because a single Fill is what the multi-contour winding rule above
+	// depends on, and glyphs within a line do not overlap, so the order
+	// between a glyph and its neighbours cannot show.
+	//
+	// scratch has the GPU accelerator disabled, so DrawImageEx here takes the
+	// CPU pattern-fill path, which is correct and has nothing to flush.
+	for _, g := range emoji {
+		box, _ := p.colorBox(g.Font, g.GID, size)
+		ppem := emojiPpem(g.Font, size, scale)
+		img, ok := g.Font.ColorGlyphImage(g.GID, ppem)
+		if !ok {
+			continue
+		}
+		dst := box.Translate(geom.Pt{X: g.X, Y: g.Y})
+		scratch.DrawImageEx(gg.ImageBufFromImage(img), gg.DrawImageOptions{
+			X:         float64(dst.Min.X*scale) - float64(left),
+			Y:         float64(dst.Min.Y*scale) - float64(top),
+			DstWidth:  float64(dst.Dx() * scale),
+			DstHeight: float64(dst.Dy() * scale),
+			// Opacity must be set explicitly: the zero value is fully
+			// transparent, so leaving it unset blits nothing. See Image.
+			Interpolation: gg.InterpBilinear, Opacity: 1, BlendMode: gg.BlendNormal,
+		})
+	}
 	r := &cachedRun{
 		buf:  gg.ImageBufFromImage(scratch.Image()),
 		dstW: float32(wDev) / scale,

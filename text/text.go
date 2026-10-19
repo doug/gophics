@@ -121,8 +121,12 @@ type PathSink interface {
 }
 
 // AppendGlyphPath emits gid's outline at the given size into sink, with the
-// glyph origin (baseline pen position) at (dx, dy). Bitmap and SVG glyphs
-// (color emoji) are not yet supported and emit nothing.
+// glyph origin (baseline pen position) at (dx, dy). It emits nothing for a
+// glyph that is not an outline: a colour bitmap glyph (sbix, CBDT), an SVG
+// glyph, or a COLR paint graph. A caller that wants those drawn must ask
+// separately — ColorGlyphBox and ColorGlyphImage handle the bitmap kind, which
+// is what colour emoji are on macOS, iOS and Android; see coloremoji.go for
+// why COLR is out of scope and what that costs on Windows.
 func (f *Font) AppendGlyphPath(sink PathSink, gid uint32, size float32, dx, dy float32) {
 	data := f.face.GlyphData(font.GID(gid))
 	outline, ok := data.(font.GlyphOutline)
