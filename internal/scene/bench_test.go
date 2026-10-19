@@ -46,7 +46,7 @@ func BenchmarkRecordFrame(b *testing.B) {
 		LineTo(geom.Pt{X: 570, Y: 15}).Close()
 
 	var list scene.List
-	rec := list.Recorder()
+	rec := list.Recorder(nil)
 	recordFrame(rec, path) // size the op slice
 	b.Logf("ops per frame: %d", list.Len())
 	b.ReportAllocs()
@@ -64,8 +64,8 @@ func BenchmarkDiffUnchanged(b *testing.B) {
 	path.MoveTo(geom.Pt{X: 545, Y: 5}).LineTo(geom.Pt{X: 595, Y: 5}).
 		LineTo(geom.Pt{X: 570, Y: 15}).Close()
 	var a, c scene.List
-	recordFrame(a.Recorder(), path)
-	recordFrame(c.Recorder(), path)
+	recordFrame(a.Recorder(nil), path)
+	recordFrame(c.Recorder(nil), path)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

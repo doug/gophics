@@ -54,8 +54,8 @@ func TestDiffBlurReachMatchesTheKernel(t *testing.T) {
 				c.BackdropBlur(panel, r)
 			}
 			var a, b scene.List
-			frame(a.Recorder(), paint.RGB(0, 0, 0))
-			frame(b.Recorder(), paint.RGB(1, 1, 1))
+			frame(a.Recorder(nil), paint.RGB(0, 0, 0))
+			frame(b.Recorder(nil), paint.RGB(1, 1, 1))
 			damage, same := incrementalMatchesFull(t, &a, &b, func(c paint.Canvas) { frame(c, paint.RGB(1, 1, 1)) })
 			if got := damage.Union(panel) == damage; got != tc.want {
 				t.Errorf("gap %v: damage %v includes the panel = %v, want %v", tc.gap, damage, got, tc.want)
@@ -80,8 +80,8 @@ func TestDiffRotatedSpriteDamageCoversItsCorners(t *testing.T) {
 		c.DrawSprite(atlas, paint.Sprite{Src: atlas.Bounds(), Dst: dst, Rotation: rot})
 	}
 	var a, b scene.List
-	frame(a.Recorder(), 0)
-	frame(b.Recorder(), math.Pi/4)
+	frame(a.Recorder(nil), 0)
+	frame(b.Recorder(nil), math.Pi/4)
 	damage, same := incrementalMatchesFull(t, &a, &b, func(c paint.Canvas) { frame(c, math.Pi/4) })
 	reach := float32(20*math.Sqrt2) - 20 // how far a 45° corner sticks out of Dst
 	if damage.Min.X > dst.Min.X-reach || damage.Max.X < dst.Max.X+reach ||

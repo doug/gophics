@@ -63,7 +63,7 @@ func TestDecorationsPaintLines(t *testing.T) {
 	tb.Layout(layout.Loose(geom.Size{W: 80, H: 1000}))
 
 	var list scene.List
-	tb.Paint(list.Recorder(), geom.Pt{})
+	tb.Paint(list.Recorder(nil), geom.Pt{})
 	// Each painted line contributes one text op + two line ops.
 	if list.Len()%3 != 0 || list.Len() < 6 {
 		t.Fatalf("ops = %d, want 3 per wrapped line (≥2 lines)", list.Len())

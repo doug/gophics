@@ -19,8 +19,8 @@ func TestDamageReplayCoversTextInkAboveTheAscender(t *testing.T) {
 		c.TextIn("", s, geom.Pt{X: 20, Y: 80}, 40, paint.RGB(0, 0, 0))
 	}
 	var a, b scene.List
-	frame(a.Recorder(), "ǺǺǺǺ")
-	frame(b.Recorder(), "OOOO")
+	frame(a.Recorder(nil), "ǺǺǺǺ")
+	frame(b.Recorder(nil), "OOOO")
 	damage, changed := b.Diff(&a, measurer(t))
 	if !changed {
 		t.Fatal("changed text must report change")

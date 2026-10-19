@@ -44,7 +44,7 @@ func TestDamageReplayKeepsTransformedContent(t *testing.T) {
 	direct := render(t, draw) // ground truth: painted directly
 
 	var list scene.List
-	draw(list.Recorder())
+	draw(list.Recorder(nil))
 
 	surface := geom.RectXYWH(0, 0, 200, 160)
 	damaged := renderWith(t, func(c paint.Canvas, m scene.Measurer) {
@@ -75,8 +75,8 @@ func TestDamageReplayOpacityIncrementalMatchesFull(t *testing.T) {
 	}
 
 	var a, b scene.List
-	frame(a.Recorder(), 0.3)
-	frame(b.Recorder(), 0.7)
+	frame(a.Recorder(nil), 0.3)
+	frame(b.Recorder(nil), 0.7)
 	if a.HasLayers() || b.HasLayers() {
 		t.Fatal("opacity-only frames must allow partial replay")
 	}

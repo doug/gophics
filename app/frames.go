@@ -184,7 +184,7 @@ func (c *core) bg() paint.Color {
 
 func (c *core) recordScene(size geom.Size, scale float32, gpu bool) (changed bool, damage geom.Rect) {
 	c.cur.Reset()
-	rec := c.cur.Recorder()
+	rec := c.cur.Recorder(c.Painter)
 	surface := geom.RectFromSize(size)
 	// Background as FillRect, not Clear: Clear ignores clips, which would
 	// wipe retained pixels outside the damage region during partial replay.

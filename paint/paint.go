@@ -107,15 +107,57 @@ func evictHalf[K comparable, V any](m map[K]V) {
 	}
 }
 
+// Measurer answers how much room shaped text takes, in logical pixels. It is
+// the measuring half of the text stack, separated from drawing because three
+// different callers need it: a Canvas (so a widget can lay out the label it is
+// about to draw), the scene differ (so damage covers a run's real ink), and
+// layout. *Painter implements it.
+//
+// It is part of Canvas rather than an opt-in capability because it passes
+// neither test for one: no real platform can legitimately lack text
+// measurement, and nothing here calls back. A Canvas that could not measure
+// would make every custom painter guess.
+type Measurer interface {
+	// MeasureWidthIn returns the advance width of s shaped in the named font
+	// family ("" = the default family).
+	MeasureWidthIn(font, s string, size float32) float32
+	// MetricsIn returns the family's vertical metrics at size — ascent,
+	// descent and line gap, for positioning baselines.
+	MetricsIn(font string, size float32) TextMetrics
+	// InkBoundsIn returns where s actually paints, relative to the
+	// baseline-left origin; see Painter.InkBoundsIn for why this differs from
+	// the advance box. ok is false when s draws nothing.
+	InkBoundsIn(font, s string, size float32) (geom.Rect, bool)
+}
+
 // Canvas is the drawing interface for one frame, in logical pixels.
 // Implemented by the gg-backed painter canvas and by scene.Recorder.
+//
+// Two pieces of drawing live beside Canvas rather than in it, because Canvas is
+// implemented outside this package and a method added here is a breaking
+// change for every backend. Gradients beyond the two-stop axis ramp below go
+// through the FillGradient function, which uses a canvas's own gradient
+// support when it has any (GradientFiller) and approximates the ramp with
+// ordinary fills when it does not — so they work everywhere. Blend modes are
+// an opt-in capability (Blender, found with Blends), because unlike drawing
+// they cannot be approximated: blending needs a destination to read, and a
+// canvas that only records drawing has none.
 type Canvas interface {
+	// Measurer lets a custom painter size the text it is about to draw —
+	// TextIn's counterpart. Both implementations answer from the same Painter
+	// that will shape the run, so a measurement always matches what draws.
+	Measurer
+
 	// Clear fills the whole surface with c.
 	Clear(c Color)
 	FillRect(r geom.Rect, c Color)
 	FillRRect(r geom.Rect, radius float32, c Color)
 	// FillRRectGradient fills with a linear gradient from 'from' at the
-	// top/left to 'to' at the bottom/right (by axis).
+	// top/left to 'to' at the bottom/right (by axis). It is the two-stop
+	// axis-aligned shorthand; for more than two stops, an oblique axis, or a
+	// radial or sweep ramp, use the FillGradient function with a Gradient —
+	// it works on any Canvas, this one included, and goes through the same
+	// machinery.
 	FillRRectGradient(r geom.Rect, radius float32, from, to Color, horizontal bool)
 	StrokeRRect(r geom.Rect, radius, width float32, c Color)
 	// FillPath fills a retained path (non-zero winding). Pass the same *Path
@@ -843,14 +885,43 @@ func (c *ggCanvas) Line(a, b geom.Pt, width float32, col Color) {
 // and blits its cached device-resolution image (the run cache), which is
 // rasterized once by filling the glyph outlines — correct scripts,
 // measurement/rendering parity, gg's analytic AA quality.
+// MeasureWidthIn, MetricsIn and InkBoundsIn satisfy Measurer by delegating to
+// the Painter that owns this canvas's fonts — the same one TextIn shapes
+// through, so a measurement and the draw that follows it cannot disagree.
+func (c *ggCanvas) MeasureWidthIn(font, s string, size float32) float32 {
+	return c.p.MeasureWidthIn(font, s, size)
+}
+
+func (c *ggCanvas) MetricsIn(font string, size float32) TextMetrics {
+	return c.p.MetricsIn(font, size)
+}
+
+func (c *ggCanvas) InkBoundsIn(font, s string, size float32) (geom.Rect, bool) {
+	return c.p.InkBoundsIn(font, s, size)
+}
+
 func (c *ggCanvas) TextIn(font, s string, pos geom.Pt, size float32, col Color) {
 	if c.gpuActive() {
 		// GPU path: fill the shaped glyph outlines directly into the frame's
-		// shape queue (one fill per run) so text composites to the surface with
-		// every other shape in a single render pass. The bitmap-blit path below
-		// draws each run as a DrawImage, which forces a mid-frame accelerator
-		// flush that drops the queued shapes — fatal on the direct-surface path.
-		// Filling outlines is also resolution-independent (no per-scale raster).
+		// shape queue so text composites to the surface with every other shape
+		// in a single render pass, and because filling outlines is
+		// resolution-independent (no per-scale raster to rebuild on a DPI
+		// change). The bitmap-blit path below is a texture upload per run per
+		// colour per scale, which is the wrong trade when the outlines are
+		// already on the GPU.
+		//
+		// This comment used to say that an image draw forces a mid-frame
+		// accelerator flush that drops the queued shapes. It does not, and
+		// saying so is what made colour emoji look unimplementable. Measured in
+		// all three build configurations and on the direct-surface path: an
+		// image interleaved between two text runs drops nothing, because
+		// DrawImageEx tries the GPU textured-quad tier first and that tier
+		// queues into the same ordered draw list as shapes and text. The
+		// warning predates the substrate being vendored into internal/gfx; the
+		// remaining mid-frame flushes in it are in gg's own CPU text fallbacks,
+		// which gophics does not use. See internal/gfx/gg's DrawImageEx, whose
+		// own comment says it avoids the pattern-fill path for exactly this
+		// reason, and the ADR it cites upstream.
 		c.fillGlyphs(font, s, pos, size, col)
 		return
 	}

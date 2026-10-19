@@ -43,7 +43,7 @@ func TestFlexViewportCulling(t *testing.T) {
 	vp.Offset = offset
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	// Screen y of row i is rowH*i - offset; it's visible if that span overlaps
 	// [0, viewH). At offset 310 that is rows 6, 7, 8 (6 and 8 straddle the edges).
@@ -86,7 +86,7 @@ func TestTranslatedInkNotCulled(t *testing.T) {
 	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	if inked.paints == 0 {
 		t.Error("Translated child with visible ink was culled — dropped visible content")
@@ -113,7 +113,7 @@ func TestNestedTranslatedTransformedInkNotCulled(t *testing.T) {
 	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	if inked.paints == 0 {
 		t.Error("Translated(Transformed(x)) with visible ink was culled — nested ink bounds broken")
@@ -140,7 +140,7 @@ func TestGridCulling(t *testing.T) {
 	vp.Offset = offset
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	for i, c := range counters {
 		top := float32(cellH*(i/2)) - offset
@@ -175,7 +175,7 @@ func TestWrapCulling(t *testing.T) {
 	vp.Offset = offset
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	for i, c := range counters {
 		top := float32(childH*(i/2)) - offset
@@ -207,7 +207,7 @@ func TestStackCulling(t *testing.T) {
 	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	if visible.paints == 0 {
 		t.Error("Stack child with visible ink was culled — Stack ink bounds or child cull broken")
@@ -229,7 +229,7 @@ func TestUnboundedInkNeverCulled(t *testing.T) {
 	vp.Layout(layout.Tight(sz(100, 100)))
 
 	var list scene.List
-	vp.Paint(list.Recorder(), geom.Pt{})
+	vp.Paint(list.Recorder(nil), geom.Pt{})
 
 	if c.paints == 0 {
 		t.Error("box with layout.Unbounded ink was culled — unclipped-Canvas semantics broken")

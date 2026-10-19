@@ -22,8 +22,8 @@ func TestDiffChangeUnderBackdropBlurDamagesThePanel(t *testing.T) {
 		c.FillRRect(panel, 8, paint.Color{R: 1, G: 1, B: 1, A: 0.3})
 	}
 	var a, b scene.List
-	glass(a.Recorder(), paint.RGB(1, 0, 0))
-	glass(b.Recorder(), paint.RGB(0, 0, 1))
+	glass(a.Recorder(nil), paint.RGB(1, 0, 0))
+	glass(b.Recorder(nil), paint.RGB(0, 0, 1))
 	damage, changed := b.Diff(&a, m)
 	if !changed {
 		t.Fatal("changed scene must report change")
@@ -40,8 +40,8 @@ func TestDiffChangeUnderBackdropBlurDamagesThePanel(t *testing.T) {
 		c.FillRect(content, col)
 	}
 	var x, y scene.List
-	over(x.Recorder(), paint.RGB(1, 0, 0))
-	over(y.Recorder(), paint.RGB(0, 0, 1))
+	over(x.Recorder(nil), paint.RGB(1, 0, 0))
+	over(y.Recorder(nil), paint.RGB(0, 0, 1))
 	if damage, _ := y.Diff(&x, m); damage != content {
 		t.Fatalf("damage for a change above the blur = %v, want just %v", damage, content)
 	}
@@ -54,8 +54,8 @@ func TestDiffChangeUnderBackdropBlurDamagesThePanel(t *testing.T) {
 		c.BackdropBlur(panel, 12)
 	}
 	var u, v scene.List
-	farOff(u.Recorder(), paint.RGB(1, 0, 0))
-	farOff(v.Recorder(), paint.RGB(0, 0, 1))
+	farOff(u.Recorder(nil), paint.RGB(1, 0, 0))
+	farOff(v.Recorder(nil), paint.RGB(0, 0, 1))
 	if damage, _ := v.Diff(&u, m); damage != far {
 		t.Fatalf("damage for a change out of the blur's reach = %v, want just %v", damage, far)
 	}

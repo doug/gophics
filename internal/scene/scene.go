@@ -25,13 +25,17 @@ type List struct {
 	xformDepth int
 }
 
-// Recorder returns a paint.Canvas that appends into the list.
-func (l *List) Recorder() paint.Canvas { return recorder{l} }
+// Recorder returns a paint.Canvas that appends into the list. m answers the
+// Measurer half of the canvas: recording does not shape text, but a widget
+// painting into the recorder may ask how wide its label is before placing it,
+// and it must get the same answer the eventual draw will.
+func (l *List) Recorder(m Measurer) paint.Canvas { return recorder{l, m} }
 
 // Reset clears the list for re-recording, keeping capacity.
 func (l *List) Reset() {
 	// Zero the retained ops so pointers held by dead entries (*paint.Path,
-	// image.Image, text strings) don't outlive their frame in the reused array.
+	// *paint.Gradient, *paint.Marks, image.Image, text strings) don't outlive
+	// their frame in the reused array.
 	clear(l.ops)
 	l.ops, l.hasLayers = l.ops[:0], false
 	l.clipStack, l.xformDepth = l.clipStack[:0], 0
@@ -245,7 +249,34 @@ func imageKey(img image.Image) uintptr {
 	return imageKeyCounter.Add(1)*2 + 1
 }
 
-type recorder struct{ l *List }
+type recorder struct {
+	l *List
+	m Measurer
+}
+
+// MeasureWidthIn, MetricsIn and InkBoundsIn forward to the measurer handed to
+// Recorder. A nil measurer answers zero rather than panicking: the scene tests
+// record op streams without a Painter, and no op's bounds depend on these.
+func (r recorder) MeasureWidthIn(font, s string, size float32) float32 {
+	if r.m == nil {
+		return 0
+	}
+	return r.m.MeasureWidthIn(font, s, size)
+}
+
+func (r recorder) MetricsIn(font string, size float32) paint.TextMetrics {
+	if r.m == nil {
+		return paint.TextMetrics{}
+	}
+	return r.m.MetricsIn(font, size)
+}
+
+func (r recorder) InkBoundsIn(font, s string, size float32) (geom.Rect, bool) {
+	if r.m == nil {
+		return geom.Rect{}, false
+	}
+	return r.m.InkBoundsIn(font, s, size)
+}
 
 func (r recorder) Clear(col paint.Color) {
 	r.l.ops = append(r.l.ops, op{kind: opClear, col: col})

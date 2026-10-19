@@ -50,7 +50,7 @@ func TestReplayMatchesDirect(t *testing.T) {
 	direct := render(t, drawScene)
 
 	var list scene.List
-	drawScene(list.Recorder())
+	drawScene(list.Recorder(nil))
 	if list.Len() == 0 {
 		t.Fatal("nothing recorded")
 	}
@@ -63,13 +63,13 @@ func TestReplayMatchesDirect(t *testing.T) {
 
 func TestResetKeepsWorking(t *testing.T) {
 	var list scene.List
-	drawScene(list.Recorder())
+	drawScene(list.Recorder(nil))
 	n := list.Len()
 	list.Reset()
 	if list.Len() != 0 {
 		t.Fatal("reset should clear ops")
 	}
-	drawScene(list.Recorder())
+	drawScene(list.Recorder(nil))
 	if list.Len() != n {
 		t.Fatalf("re-record op count = %d, want %d", list.Len(), n)
 	}
@@ -87,7 +87,7 @@ func TestTransformReplayMatchesDirect(t *testing.T) {
 	direct := render(t, drawTransformed)
 
 	var list scene.List
-	drawTransformed(list.Recorder())
+	drawTransformed(list.Recorder(nil))
 	if !list.HasLayers() {
 		t.Fatal("a recorded transform must set HasLayers (full-repaint frame)")
 	}

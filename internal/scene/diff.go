@@ -10,11 +10,11 @@ import (
 
 // Measurer supplies text extents for damage computation; paint.Painter
 // implements it.
-type Measurer interface {
-	MeasureWidthIn(font, s string, size float32) float32
-	MetricsIn(font string, size float32) paint.TextMetrics
-	InkBoundsIn(font, s string, size float32) (geom.Rect, bool)
-}
+//
+// It is an alias, not a second declaration: the same three methods are now
+// part of paint.Canvas (so a custom painter can measure what it draws), and
+// two identical interfaces would drift.
+type Measurer = paint.Measurer
 
 // Diff compares l against prev and returns the damage: the union of the
 // bounds of every op that changed, was added, or was removed, plus whether

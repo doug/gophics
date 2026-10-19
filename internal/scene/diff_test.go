@@ -24,8 +24,8 @@ func measurer(t *testing.T) *paint.Painter {
 func TestDiffIdenticalNoDamage(t *testing.T) {
 	m := measurer(t)
 	var a, b scene.List
-	drawScene(a.Recorder())
-	drawScene(b.Recorder())
+	drawScene(a.Recorder(nil))
+	drawScene(b.Recorder(nil))
 	if _, changed := b.Diff(&a, m); changed {
 		t.Fatal("identical scenes must report no change")
 	}
@@ -40,8 +40,8 @@ func TestDiffLocalizedChange(t *testing.T) {
 		c.FillRRect(geom.RectXYWH(10, 60, 100, 40), 4, hoverColor) // the change
 		c.FillRRect(geom.RectXYWH(10, 110, 100, 40), 4, paint.RGB(0.5, 0.5, 0.5))
 	}
-	base(a.Recorder(), paint.RGB(0.5, 0.5, 0.5))
-	base(b.Recorder(), paint.RGB(0.9, 0.9, 0.9))
+	base(a.Recorder(nil), paint.RGB(0.5, 0.5, 0.5))
+	base(b.Recorder(nil), paint.RGB(0.9, 0.9, 0.9))
 
 	damage, changed := b.Diff(&a, m)
 	if !changed {
@@ -56,8 +56,8 @@ func TestDiffLocalizedChange(t *testing.T) {
 func TestDiffTextChangeUsesMeasuredBounds(t *testing.T) {
 	m := measurer(t)
 	var a, b scene.List
-	a.Recorder().TextIn("", "old", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
-	b.Recorder().TextIn("", "new longer text", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
+	a.Recorder(nil).TextIn("", "old", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
+	b.Recorder(nil).TextIn("", "new longer text", geom.Pt{X: 20, Y: 50}, 14, paint.RGB(1, 1, 1))
 
 	damage, changed := b.Diff(&a, m)
 	if !changed {
@@ -89,10 +89,10 @@ func TestDiffMutatedPathUnionsOldAndNewBounds(t *testing.T) {
 	path := paint.NewPath()
 	tri(path, 10, 10) // old frame: near the top-left
 	var a, b scene.List
-	a.Recorder().FillPath(path, paint.RGB(1, 0, 0))
+	a.Recorder(nil).FillPath(path, paint.RGB(1, 0, 0))
 	path.Reset()
 	tri(path, 100, 100) // new frame: same pointer, moved far away
-	b.Recorder().FillPath(path, paint.RGB(1, 0, 0))
+	b.Recorder(nil).FillPath(path, paint.RGB(1, 0, 0))
 
 	damage, changed := b.Diff(&a, m)
 	if !changed {
@@ -125,8 +125,8 @@ func TestStructImageDiffsWithoutPanic(t *testing.T) {
 	m := measurer(t)
 	img := sliceImage{pix: []uint8{200, 10, 10, 255}, w: 4}
 	var a, b scene.List
-	a.Recorder().Image(img, geom.RectXYWH(10, 10, 40, 40))
-	b.Recorder().Image(img, geom.RectXYWH(10, 10, 40, 40))
+	a.Recorder(nil).Image(img, geom.RectXYWH(10, 10, 40, 40))
+	b.Recorder(nil).Image(img, geom.RectXYWH(10, 10, 40, 40))
 
 	damage, changed := b.Diff(&a, m) // must not panic
 	if !changed {
@@ -139,8 +139,8 @@ func TestStructImageDiffsWithoutPanic(t *testing.T) {
 	// Same for a sprite atlas.
 	var c, d scene.List
 	sp := paint.Sprite{Src: image.Rect(0, 0, 2, 2), Dst: geom.RectXYWH(0, 0, 8, 8)}
-	c.Recorder().DrawSprite(img, sp)
-	d.Recorder().DrawSprite(img, sp)
+	c.Recorder(nil).DrawSprite(img, sp)
+	d.Recorder(nil).DrawSprite(img, sp)
 	if _, changed := d.Diff(&c, m); !changed {
 		t.Fatal("a non-pointer atlas must always diff as changed")
 	}
@@ -153,14 +153,14 @@ func TestPointerImageDiffsByIdentity(t *testing.T) {
 	m := measurer(t)
 	dst := geom.RectXYWH(10, 10, 40, 40)
 	var a, b scene.List
-	a.Recorder().Image(testImage, dst)
-	b.Recorder().Image(testImage, dst)
+	a.Recorder(nil).Image(testImage, dst)
+	b.Recorder(nil).Image(testImage, dst)
 	if _, changed := b.Diff(&a, m); changed {
 		t.Fatal("same image pointer must not diff as changed")
 	}
 	other := image.NewRGBA(image.Rect(0, 0, 8, 8))
 	var c scene.List
-	c.Recorder().Image(other, dst)
+	c.Recorder(nil).Image(other, dst)
 	if _, changed := c.Diff(&a, m); !changed {
 		t.Fatal("a different image value must diff as changed")
 	}
@@ -179,8 +179,8 @@ func TestDiffOpacityAlphaChangeDamagesGroupBounds(t *testing.T) {
 		c.FillRect(geom.RectXYWH(0, 380, 400, 20), paint.RGB(0.2, 0.2, 0.2))
 	}
 	var a, b scene.List
-	frame(a.Recorder(), 0.3)
-	frame(b.Recorder(), 0.7)
+	frame(a.Recorder(nil), 0.3)
+	frame(b.Recorder(nil), 0.7)
 	if b.HasLayers() {
 		t.Fatal("an opacity group must not force full-surface repaint (HasLayers)")
 	}
@@ -208,8 +208,8 @@ func TestDiffContentChangeInsideOpacityGroupIsTight(t *testing.T) {
 		c.PopOpacity()
 	}
 	var a, b scene.List
-	frame(a.Recorder(), paint.RGB(1, 0, 0))
-	frame(b.Recorder(), paint.RGB(0, 1, 0))
+	frame(a.Recorder(nil), paint.RGB(1, 0, 0))
+	frame(b.Recorder(nil), paint.RGB(0, 1, 0))
 	damage, changed := b.Diff(&a, m)
 	if !changed {
 		t.Fatal("content change must report change")
@@ -232,8 +232,8 @@ func TestDiffTransformInsideOpacityGroupIsUnbounded(t *testing.T) {
 		c.PopOpacity()
 	}
 	var a, b scene.List
-	frame(a.Recorder(), 0.3)
-	frame(b.Recorder(), 0.7)
+	frame(a.Recorder(nil), 0.3)
+	frame(b.Recorder(nil), 0.7)
 	if !b.HasLayers() {
 		t.Fatal("a transform must still set HasLayers")
 	}
@@ -249,8 +249,8 @@ func TestDiffTransformInsideOpacityGroupIsUnbounded(t *testing.T) {
 func TestDiffClipStructureChangeIsFullDamage(t *testing.T) {
 	m := measurer(t)
 	var a, b scene.List
-	a.Recorder().FillRect(geom.RectXYWH(0, 0, 10, 10), paint.RGB(1, 0, 0))
-	rb := b.Recorder()
+	a.Recorder(nil).FillRect(geom.RectXYWH(0, 0, 10, 10), paint.RGB(1, 0, 0))
+	rb := b.Recorder(nil)
 	rb.PushClip(geom.RectXYWH(0, 0, 5, 5))
 	rb.FillRect(geom.RectXYWH(0, 0, 10, 10), paint.RGB(1, 0, 0))
 	rb.PopClip()
