@@ -39,6 +39,10 @@ type Capabilities struct {
 	wakeLock      shell.WakeLock
 	webView       shell.WebView
 	windowControl shell.WindowControl
+	// extCaps holds the capabilities registered from outside this module, in
+	// registration order (see NewCapability). Nil until a Window is wired, and
+	// re-read on every WireCapabilities, exactly like the fields above.
+	extCaps []any
 }
 
 // Accessibility returns the platform Accessibility capability (shell.Accessibility), or nil when the running

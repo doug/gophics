@@ -17,6 +17,13 @@
 //	                              from any goroutine and the documented
 //	                              "callbacks fire on the UI goroutine" contract
 //	                              is enforced centrally, not per platform
+//	widget/extension_gen.go     — the out-of-tree seam: widget.NewCapability and
+//	                              the registry Owner.WireCapabilities reads, so a
+//	                              package in another module can declare a
+//	                              capability without patching this tree. Only the
+//	                              hollow probe derives from shell.Window; the rest
+//	                              is invariant, and lives in the generator because
+//	                              it reads generated plumbing (see writeExtension)
 //
 // The posted wrappers are recursive: a callback argument or method result whose
 // type is itself a callback-carrying shell interface (e.g. the Recorder
@@ -135,6 +142,7 @@ func main() {
 	g.writeWidget(root)
 	g.writeApp(root)
 	g.writePosted(root)
+	g.writeExtension(root)
 }
 
 // moduleRoot walks up from the working directory to the dir holding go.mod.
@@ -461,6 +469,15 @@ func (g *gen) writeWidget(root string) {
 	for _, c := range g.caps {
 		fmt.Fprintf(&b, "\t%s shell.%s\n", lowerFirst(c.Field), c.Type)
 	}
+	// The out-of-tree capabilities cannot be fields: this file is generated from
+	// shell/*.go, and a capability declared in somebody else's module is by
+	// definition not in there. They live in one slice indexed by registration
+	// slot instead, which is why Capability[T].Of is a type assertion rather
+	// than a field read. See extension_gen.go for the whole mechanism.
+	b.WriteString("\t// extCaps holds the capabilities registered from outside this module, in\n")
+	b.WriteString("\t// registration order (see NewCapability). Nil until a Window is wired, and\n")
+	b.WriteString("\t// re-read on every WireCapabilities, exactly like the fields above.\n")
+	b.WriteString("\textCaps []any\n")
 	b.WriteString("}\n\n")
 	for _, c := range g.caps {
 		fmt.Fprintf(&b, "// %s returns the platform %s capability (shell.%s), or nil when the running\n", c.Field, c.Field, c.Type)
@@ -497,6 +514,11 @@ func (g *gen) writeApp(root string) {
 		}
 		b.WriteString("\t}\n")
 	}
+	// Out-of-tree capabilities are wired from the registry rather than from a
+	// generated type-assert, because their <X>Window interfaces are not in this
+	// module and so cannot be named here. Same contract: published when the
+	// window provides one, left nil when it does not.
+	b.WriteString("\to.wireExtCapabilities(w)\n")
 	b.WriteString("}\n")
 	// The runtime reads a few capabilities directly — the app runner publishes
 	// the accessibility tree, for instance — and it is a different package, so
@@ -567,6 +589,373 @@ func (g *gen) writePosted(root string) {
 	}
 	writeFormatted(filepath.Join(root, "widget", "posted_gen.go"), b.Bytes())
 }
+
+// writeExtension emits widget/extension_gen.go: the seam through which a
+// package *outside* this module can declare a capability and have it reach the
+// widget tree.
+//
+// Why this file is generated at all, when almost none of it varies with the
+// shell interfaces: the storage it reads (Capabilities.extCaps) and the wiring
+// that fills it (Owner.WireCapabilities) are generated, and a hand-written file
+// that reached into generated plumbing would make the generator's output no
+// longer self-contained — change the field name and a hand-written file breaks
+// at a distance. The one genuinely derived part is capProbe, whose method set
+// is shell.Window's: it is the window handed to a provider at registration
+// time to prove the provider is answering the *window* rather than inventing a
+// capability out of nothing, so it has to track shell.Window exactly. Writing
+// those stubs by hand means a new Window method silently turns the hollow gate
+// into a compile error in a file nobody associates with it.
+func (g *gen) writeExtension(root string) {
+	win := g.ifaces["Window"]
+	if win == nil {
+		fail(fmt.Errorf("capgen: shell.Window not found; the hollow probe cannot be generated"))
+	}
+
+	// capProbe's signatures may name types from the files Window is declared
+	// in (geom, image, ...), so carry their imports across.
+	// "fmt" is used by CheckAbsent's message; the rest come from shell.Window's
+	// own signatures, since capProbe restates them.
+	importPaths := map[string]bool{"fmt": true}
+	for _, m := range win.it.Methods.List {
+		ast.Inspect(m.Type, func(nn ast.Node) bool {
+			if sel, ok := nn.(*ast.SelectorExpr); ok {
+				if x, ok := sel.X.(*ast.Ident); ok {
+					if path, ok := win.imports[x.Name]; ok {
+						importPaths[path] = true
+					}
+				}
+			}
+			return true
+		})
+	}
+	paths := make([]string, 0, len(importPaths))
+	for p := range importPaths {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	var b bytes.Buffer
+	b.WriteString("// Code generated by internal/capgen; DO NOT EDIT.\n\n")
+	b.WriteString("package widget\n\n")
+	b.WriteString("import (\n")
+	for _, p := range paths {
+		fmt.Fprintf(&b, "\t%q\n", p)
+	}
+	b.WriteString("\n\t\"github.com/doug/gophics/shell\"\n")
+	b.WriteString(")\n\n")
+	b.WriteString(extensionBody)
+
+	// capProbe: a Window that can do nothing but be a Window. Generated from
+	// shell.Window so it cannot drift from it.
+	b.WriteString("// capProbe is a Window that implements the base contract and nothing else:\n")
+	b.WriteString("// no <X>Window, in this module or any other. Its methods are generated from\n")
+	b.WriteString("// shell.Window, so adding a method there does not quietly stop the probe from\n")
+	b.WriteString("// compiling as one.\n")
+	b.WriteString("//\n")
+	b.WriteString("// It is never a real window and never reaches a shell; it exists only so\n")
+	b.WriteString("// NewCapability can ask a provider what it answers for a window that provides\n")
+	b.WriteString("// nothing. The honest answer is nil.\n")
+	b.WriteString("type capProbe struct{}\n\n")
+	// Asserted, not assumed: if the probe stopped satisfying shell.Window the
+	// hollow gate would still compile — capProbe{} would simply fail to be
+	// passed — and this says so at the declaration instead.
+	b.WriteString("var _ shell.Window = capProbe{}\n\n")
+	for _, m := range win.it.Methods.List {
+		if len(m.Names) != 1 {
+			fail(fmt.Errorf("capgen: embedded interface in shell.Window not supported"))
+		}
+		ft, ok := m.Type.(*ast.FuncType)
+		if !ok {
+			fail(fmt.Errorf("capgen: shell.Window member %v is not a method", m.Names))
+		}
+		var params []string
+		for _, p := range fieldTypes(ft.Params) {
+			params = append(params, fmt.Sprintf("_ %s", g.qualify(g.exprStr(p))))
+		}
+		results := fieldTypes(ft.Results)
+		var res []string
+		for i, r := range results {
+			res = append(res, fmt.Sprintf("r%d %s", i, g.qualify(g.exprStr(r))))
+		}
+		fmt.Fprintf(&b, "func (capProbe) %s(%s)", m.Names[0].Name, strings.Join(params, ", "))
+		if len(res) > 0 {
+			// Named results plus a bare return is the one spelling that yields
+			// the zero value of every type — including an interface, a struct
+			// and a channel — without the generator having to know how to write
+			// a zero literal for each.
+			fmt.Fprintf(&b, " (%s) { return }\n", strings.Join(res, ", "))
+		} else {
+			b.WriteString(" {}\n")
+		}
+	}
+	writeFormatted(filepath.Join(root, "widget", "extension_gen.go"), b.Bytes())
+}
+
+// extensionBody is the invariant half of extension_gen.go. It is a literal
+// rather than a template because nothing in it derives from the shell
+// interfaces; keeping it verbatim means the file reads, and reviews, like the
+// hand-written code it would otherwise be.
+const extensionBody = `// Out-of-tree capabilities.
+//
+// The capabilities in capabilities_gen.go are generated by parsing shell/*.go,
+// which makes this module's own source the single source of truth — and means a
+// package outside it could not add a capability at all without patching the
+// tree. That caps the ecosystem at whatever lives in this repository. This file
+// is the seam that lifts the cap.
+//
+// A declaring package writes the same two declarations an in-tree capability
+// does — the capability interface and its <X>Window opt-in — in its own
+// package, then registers a key:
+//
+//	package barcode // example.com/barcode, a different module
+//
+//	type Scanner interface{ Scan(func(code string)) }
+//	type ScannerWindow interface{ Scanner() Scanner }
+//
+//	var Cap = widget.NewCapability[Scanner]("example.com/barcode.Scanner",
+//	    func(w shell.Window, post func(func())) Scanner {
+//	        x, ok := w.(ScannerWindow)
+//	        if !ok {
+//	            return nil // this platform's shell cannot scan
+//	        }
+//	        return postedScanner(x.Scanner(), post)
+//	    })
+//
+// and an app reads it exactly as it reads a built-in one, nil and all:
+//
+//	if s := barcode.Cap.Of(ctx); s != nil { s.Scan(onCode) }
+//
+// Four properties are worth being explicit about, because they are the ones
+// that would otherwise rot:
+//
+// Nil stays a real answer. T must be an interface type, enforced at
+// registration, so that a nil T can carry "this platform cannot" the way
+// ctx.Battery() == nil does. A pointer or struct capability has no value that
+// means absent — a nil *Scanner boxed in an any is not nil — so those are
+// refused rather than quietly reported as present everywhere.
+//
+// A hollow capability is refused, loudly. The provider is called once at
+// registration with capProbe, a window that implements the base contract and
+// no capability at all. A provider that answers *that* with a capability is
+// answering regardless of what the platform can do, which is the one shape a
+// caller cannot detect: the nil check passes, the calls succeed, nothing
+// happens. NewCapability panics, during package initialization, before any
+// window exists — so the declaring package's own tests fail on it rather than
+// its users' apps misbehaving.
+//
+// That gate catches the hollow provider; it cannot, by construction, catch a
+// hollow *wrapper*. The second way absence leaks away is a posted wrapper that
+// is not nil-safe: the provider asserts the window correctly, the window
+// implements the opt-in and returns nil (the ordinary way a shell says "not on
+// this device"), and the wrapper hands back a live-looking wrapper around
+// nothing. Reaching that branch needs a window implementing the declaring
+// package's own <X>Window interface, which this package cannot name. So the
+// declaring package tests it, with CheckAbsent, naming every window shape that
+// should answer nil. Treat that as part of registering a capability, not as
+// optional polish.
+//
+// Callbacks still fire on the UI goroutine, but the declaring package owns
+// that. capgen generates the Posted wrappers for in-tree capabilities by
+// parsing their source, which it cannot do for a type in another module, so
+// the scheduler is handed to the provider as post instead and the provider
+// wraps its own callbacks with it. post is nil on a headless Owner with no
+// runner, and a wrapper must then return its inner value unwrapped — callbacks
+// fire inline — which is what the generated in-tree wrappers do.
+//
+// No reflection and no plugin loading is involved: registration is an ordinary
+// package-level var in a package the app imports, so an app that does not
+// import it links none of it, and the lookup is a type assertion on an
+// interface value rather than a reflect.Type key.
+
+// Capability is the key for a platform capability declared outside this
+// module. NewCapability returns one; Of reads it for an app.
+//
+// A key, rather than a generated accessor method on Ctx, because a method on
+// Ctx can only be written in this package. The key is the only way a type in
+// somebody else's module can be named in the lookup's type while staying
+// statically typed.
+type Capability[T any] struct {
+	name string
+	slot int
+	// provide is the registered provider, still typed. The registry below
+	// holds a type-erased copy for the wiring loop; this one is what lets
+	// ProvidedBy hand a declaring package its own type back.
+	provide func(w shell.Window, post func(func())) T
+}
+
+// extProvider is one registration: the declaring package's name for the
+// capability, and the type-erased provider the wiring calls per window.
+//
+// Type-erased because the registry is one slice holding every registered
+// capability and they have different types; the type comes back on the way out,
+// in Capability[T].Of, where T is known statically again.
+type extProvider struct {
+	name    string
+	provide func(w shell.Window, post func(func())) any
+}
+
+// extProviders is the registry, in registration order — a Capability's slot is
+// its index.
+//
+// Appended to only from NewCapability, which a declaring package calls from a
+// package-level var, so every registration happens during program
+// initialization and is complete before main runs. It is read afterwards, from
+// the UI goroutine, and never written again; that is what makes a plain slice
+// with no lock correct here.
+var extProviders []extProvider
+
+// NewCapability registers an out-of-tree capability and returns its key. Call
+// it once, from a package-level var in the package that declares the
+// capability.
+//
+// name identifies the capability for diagnostics and duplicate detection; use
+// a fully qualified one (import path plus type) so two modules cannot collide.
+//
+// provide is handed the live Window and the UI-goroutine scheduler and returns
+// the capability, or nil when the running platform's shell does not provide it.
+// It must be a type assertion and a wrap, nothing more: it runs once at
+// registration against a probe window, and again for every window the app
+// wires, so it must have no side effects.
+//
+// It panics — at initialization, deterministically, in the declaring package's
+// own tests — when T is not an interface type, when name is empty or already
+// registered, or when provide answers a window that provides nothing. The last
+// is the hollow check; see the package notes above for why it is a panic and
+// not a returned error.
+func NewCapability[T any](name string, provide func(w shell.Window, post func(func())) T) *Capability[T] {
+	if name == "" {
+		panic("widget.NewCapability: a capability needs a name; use its import path and type, e.g. \"example.com/barcode.Scanner\"")
+	}
+	if provide == nil {
+		panic("widget.NewCapability: " + name + ": provide must not be nil")
+	}
+	var zero T
+	if any(zero) != nil {
+		panic("widget.NewCapability: " + name + ": T must be an interface type, so that a nil T can mean \"this platform cannot provide it\"; a struct or pointer capability has no value that means absent")
+	}
+	for _, p := range extProviders {
+		if p.name == name {
+			panic("widget.NewCapability: " + name + " is already registered; two packages cannot share a capability name")
+		}
+	}
+	if v := provide(capProbe{}, func(fn func()) { fn() }); any(v) != nil {
+		panic("widget.NewCapability: " + name + " is hollow: it returned a capability for a Window that provides nothing, so every platform would report it as present and none of it would work. Return nil when the Window does not implement your <X>Window interface, and make any posted wrapper nil-safe")
+	}
+	k := &Capability[T]{name: name, slot: len(extProviders), provide: provide}
+	extProviders = append(extProviders, extProvider{
+		name: name,
+		provide: func(w shell.Window, post func(func())) any {
+			// A nil T converts to a nil any, so absence survives the erasure.
+			return provide(w, post)
+		},
+	})
+	return k
+}
+
+// Of returns the capability for ctx's app, or nil when the running platform
+// does not provide it — the same contract as the generated Ctx accessors, and
+// the same caveat: capabilities are nil while the tree mounts and appear on the
+// build after the shell wires them.
+func (k *Capability[T]) Of(c Ctx) T {
+	var zero T
+	if k == nil || c.el == nil {
+		return zero
+	}
+	ext := c.el.owner.extCaps
+	if k.slot >= len(ext) {
+		return zero // no window wired yet, or this Owner predates the registration
+	}
+	v, _ := ext[k.slot].(T)
+	return v
+}
+
+// ProvidedBy returns what this capability's provider answers for w, without an
+// Owner, a tree or a running app — the primitive a declaring package's tests
+// are written on. CheckAbsent is the assertion built from it, and is what most
+// tests want; this one also answers the other direction, that a window which
+// does provide the capability gets it.
+//
+// Callbacks delivered during the call run inline, so a test needs no
+// scheduler. Nothing is registered or published; it only calls the provider.
+func (k *Capability[T]) ProvidedBy(w shell.Window) T {
+	var zero T
+	if k == nil || k.provide == nil {
+		return zero
+	}
+	return k.provide(w, func(fn func()) { fn() })
+}
+
+// CheckAbsent reports an error when the capability answers any of windows with
+// something other than nil. It is the hollow assertion, named so that a
+// declaring package makes it in one line rather than inventing its own wording:
+//
+//	func TestNotHollow(t *testing.T) {
+//	    err := Cap.CheckAbsent(
+//	        bareWindow{},                // a platform with no scanner at all
+//	        scannerWindow{scanner: nil}, // one whose scanner is disabled
+//	    )
+//	    if err != nil {
+//	        t.Fatal(err)
+//	    }
+//	}
+//
+// Pass every window shape that must answer nil. The disabled-scanner window is
+// the one NewCapability cannot build for itself — it needs the declaring
+// package's own opt-in interface — and the one that catches a wrapper that is
+// not nil-safe. A plugin whose test omits it is a plugin that can go hollow
+// without anybody noticing.
+func (k *Capability[T]) CheckAbsent(windows ...shell.Window) error {
+	if k == nil {
+		return fmt.Errorf("widget: CheckAbsent on a nil capability key")
+	}
+	for _, w := range windows {
+		if v := k.ProvidedBy(w); any(v) != nil {
+			return fmt.Errorf("widget: capability %s is hollow: %T cannot provide it, yet the provider answered with %T — an app's nil check passes, the calls succeed and nothing happens", k.name, w, v)
+		}
+	}
+	return nil
+}
+
+// Name returns the name the capability was registered under.
+func (k *Capability[T]) Name() string {
+	if k == nil {
+		return ""
+	}
+	return k.name
+}
+
+// RegisteredCapabilities returns the names of every out-of-tree capability
+// registered in this binary, in registration order.
+//
+// For diagnostics: it answers "is the plugin I imported actually linked in",
+// which is otherwise invisible — an unused import is a compile error, so the
+// usual way to get this wrong is to forget the import entirely and read nil
+// forever.
+func RegisteredCapabilities() []string {
+	names := make([]string, len(extProviders))
+	for i, p := range extProviders {
+		names[i] = p.name
+	}
+	return names
+}
+
+// wireExtCapabilities re-reads every registered out-of-tree capability from w.
+// WireCapabilities calls it last, so one event (shell.CapabilitiesChanged)
+// refreshes in-tree and out-of-tree capabilities together.
+func (o *Owner) wireExtCapabilities(w shell.Window) {
+	if len(extProviders) == 0 {
+		o.extCaps = nil
+		return
+	}
+	if len(o.extCaps) != len(extProviders) {
+		o.extCaps = make([]any, len(extProviders))
+	}
+	for i, p := range extProviders {
+		o.extCaps[i] = p.provide(w, o.Post)
+	}
+}
+
+`
 
 // writeWrapper emits Posted<T> + the forwarding struct for one interface.
 func (g *gen) writeWrapper(b *bytes.Buffer, name string) {
@@ -680,8 +1069,16 @@ func writeFormatted(path string, src []byte) {
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		fail(err)
 	}
-	fmt.Println("capgen: wrote", path)
+	if !quiet {
+		fmt.Println("capgen: wrote", path)
+	}
 }
+
+// quiet silences the per-file progress lines. They are what `go generate` has
+// always printed and worth keeping there; the generator's own tests write four
+// files into a temp dir and the lines are then only noise in front of a
+// failure.
+var quiet bool
 
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "capgen:", err)

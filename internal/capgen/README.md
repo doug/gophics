@@ -64,9 +64,13 @@ URIs expose no stable filesystem path, so bytes are the one portable currency.
 - **`widget/capabilities_gen.go`** — a `Capabilities` struct (embedded in
   `Owner`, so its fields are promoted) plus a `Ctx.<Cap>()` accessor per
   capability.
-- **`app/capabilities_gen.go`** — `wireCapabilities(owner, window)`: one
-  `if x, ok := w.(shell.<X>Window); ok { owner.<Cap> = … }` per window.
-- **`shell/posted_gen.go`** — `Posted<Cap>` adapters that deliver every callback
+- **`widget/wire_gen.go`** — `Owner.WireCapabilities(window)`: one
+  `if x, ok := w.(shell.<X>Window); ok { owner.<Cap> = … }` per window, plus an
+  `Owner.<Cap>()` reader per capability for the app runner.
+- **`widget/extension_gen.go`** — the out-of-tree seam: `widget.NewCapability`,
+  `Capability[T]`, and the registry the wiring reads. See *Capabilities from
+  outside this module* below.
+- **`widget/posted_gen.go`** — `Posted<Cap>` adapters that deliver every callback
   through a `post func(func())`. The wiring wraps each callback-carrying
   capability with `Owner.Post`, so the documented **"all callbacks fire on the
   UI goroutine"** contract is enforced *centrally* — platform implementations
@@ -127,6 +131,123 @@ if objc.SendInt(panel, "runModal") == 1 { … }
 These helper packages (`objc`, a COM `vtbl` helper, the mobile `bridge` base) are
 shared infrastructure — the per-capability native body is typically ~10 lines.
 
+## Capabilities from outside this module
+
+Everything above reads this repository's own source as the single source of
+truth, which is exactly what makes it tight — and what, until now, capped the
+whole capability set at whatever the core team wrote. A package in another
+module could not add a capability at all: `Capabilities`' fields are
+unexported, `Ctx.<Cap>()` is a method on a type in `widget`, and `capgen` only
+parses `shell/`. A plugin's only route was a patch to this tree.
+
+`widget/extension_gen.go` is the seam. A declaring package writes the same two
+declarations an in-tree capability does — the capability interface and its
+`<X>Window` opt-in — in **its own** package, and registers a key:
+
+```go
+package barcode // example.com/barcode, a different module
+
+type Scanner interface{ Scan(found func(code string)) }
+type ScannerWindow interface{ Scanner() Scanner }
+
+var Cap = widget.NewCapability[Scanner]("example.com/barcode.Scanner",
+    func(w shell.Window, post func(func())) Scanner {
+        x, ok := w.(ScannerWindow)
+        if !ok {
+            return nil // this platform's shell cannot scan
+        }
+        return postedScanner(x.Scanner(), post) // nil-safe
+    })
+```
+
+An app imports the plugin and reads it the way it reads a built-in, nil and
+all: `if s := barcode.Cap.Of(ctx); s != nil { … }`. `Owner.WireCapabilities`
+fills the registry from the live window last, after the generated type-asserts,
+so one `shell.CapabilitiesChanged` refreshes both halves together.
+
+The worked example is `internal/capgen/testdata/extcap` (and the two ways to get
+it wrong, in `testdata/hollowcap`). It is under `testdata/` because `go test
+./...` skips those directories while an import or `go build` of the path still
+compiles them — this repository's way of keeping a fixture that must compile and
+must not run as a test of its own. It imports only `widget` and `shell`;
+`TestFixtureUsesOnlyPublicAPI` asserts that, because "it would work from another
+module" is the entire claim.
+
+### Why a typed key and not the alternatives
+
+Four mechanisms were on the table. The constraints that decided it: no cgo, no
+runtime reflection (it defeats dead-code elimination and the wasm binary pays
+for it), `nil` must stay a real answer, and a third-party capability must not be
+able to go hollow quietly.
+
+- **A `map[reflect.Type]any` keyed lookup** is the obvious shape and the one
+  that loses. `reflect.TypeOf` on an interface type needs a typed nil to name
+  the type, the map is a runtime lookup the linker cannot see through, and it
+  buys nothing over a key the registration already holds.
+- **Code generation the third party runs themselves** is what Flutter does
+  (`GeneratedPluginRegistrant`), and it is the right answer for the *wrappers* —
+  but not for the lookup, which would then need the app to run a generator over
+  its own dependency graph before it could build. Go's answer to that is an
+  import, not a build step.
+- **An app-level option** (`app.Run(…, app.WithCapability(barcode.Provider))`)
+  is the most explicit and has no init-order surface at all. It was rejected
+  because it puts the work on the wrong person: the ecosystem argument for this
+  whole mechanism is that somebody else closes a gap *for* you, and an option
+  every app must remember to pass is a gap that stays open. A plugin should work
+  when imported.
+- **A typed key plus init-time registration** is what shipped.
+  `NewCapability[T]` returns a `*Capability[T]`; the key holds its slot in a
+  package-level registry, the Owner holds one `[]any` indexed by slot, and
+  `Of(ctx)` is a type assertion on an interface value. No reflection, no plugin
+  loading, one generic instantiation per capability, and an app that does not
+  import the plugin links none of it.
+
+The registry is a plain slice with no lock, which is correct for exactly one
+reason: `NewCapability` is called from a package-level var, so every
+registration completes during program initialization and the slice is read-only
+afterwards. Registering from anywhere else — lazily, from a goroutine — breaks
+that and is not supported.
+
+### The three guarantees, and which one you own
+
+**`nil` stays a real answer.** `T` must be an interface type, checked at
+registration. A pointer or struct capability has no value that means absent once
+it is boxed in an `any` — a nil `*Scanner` is not a nil `any` — so it would
+report as present on every platform. Refused rather than allowed to lie.
+
+**A hollow provider is refused, loudly.** `NewCapability` calls the provider
+once with `capProbe`, a window that implements `shell.Window` and no capability
+at all (its methods are generated from `shell.Window`, so it cannot drift from
+it). A provider that answers *that* with a capability is answering regardless of
+what the platform can do — the one shape a caller cannot detect. It panics
+during package initialization, so the plugin's own tests fail on it rather than
+its users' apps. `testdata/hollowapp` is an app built on such a plugin, and the
+test that runs it asserts it does not start.
+
+**A hollow *wrapper* is yours to check.** The registration probe cannot reach
+it: turning an absent capability into a live-looking wrapper around nil needs a
+window that implements the plugin's own `<X>Window` and returns nil from it, and
+`widget` cannot name that interface. So the mechanism hands the check over
+instead — `Cap.CheckAbsent(bareWindow{}, scannerWindow{scanner: nil})` — and a
+plugin that does not make that assertion is a plugin that can go hollow. This is
+the one place the invariant rests on the declaring package rather than on the
+framework, and it is stated rather than hidden for that reason.
+
+**Callbacks on the UI goroutine are yours too, with the scheduler provided.**
+`capgen` builds the Posted wrappers by parsing the capability's source, which it
+cannot do for a type in another module. The provider is handed `post` and wraps
+its own callbacks with it; `post` is nil on a headless `Owner`, and a wrapper
+must then return its inner value unwrapped, exactly as the generated in-tree
+wrappers do. `extcap`'s `postedScanner` is the whole pattern in a dozen lines.
+
+### Known gap
+
+`internal/capgen` is internal, so a third party cannot `go run` it to generate
+their own Posted wrappers — they write them by hand (a dozen lines, and the
+fixture is a template). Promoting the command to `cmd/capgen` and teaching it to
+emit wrappers for a named package is the follow-up that closes it; the seam
+itself does not depend on it.
+
 ## Adding a capability, end to end
 
 1. **Write the interface** in `shell/<cap>.go` — the `<Cap>Window` marker + the
@@ -146,7 +267,8 @@ shared infrastructure — the per-capability native body is typically ~10 lines.
 |---|---|---|
 | Capability interface (`shell/<cap>.go`) | hand | no |
 | `widget.Capabilities` + `Ctx` accessors | **generated** | yes |
-| `app.wireCapabilities` | **generated** | yes |
+| `Owner.WireCapabilities` | **generated** | yes |
+| `widget.NewCapability` + the out-of-tree registry | **generated** | yes |
 | Per-platform impl (`shell/<platform>/…`) | hand | no |
 | FFI/bridge helpers (`objc`, COM, mobile bridge) | hand (shared) | no |
 
@@ -154,6 +276,8 @@ The interface is the single source of truth; codegen owns all the wiring; the
 only hand-written platform code is the leaf native call on a shared helper.
 
 ## Future extensions
+
+Out-of-tree capabilities shipped; see *Capabilities from outside this module*.
 
 The generator can also emit, when a capability lacks one, a **build-tagged stub**
 per platform (returning nil with a `// TODO(<platform>)` marker) and the mobile
@@ -201,6 +325,7 @@ does.
 | `Notifier` | yes | yes | yes | — |
 | `Permissions` | — | yes | — | — |
 | `Photos` | — | — | yes | — |
+| `PlatformViews` | yes | yes | yes | — |
 | `Preferences` | yes | yes | yes | yes |
 | `SecureStorage` | yes | yes | yes | — |
 | `Share` | — | yes | yes | — |
@@ -209,7 +334,7 @@ does.
 | `TextInput` | — | yes | yes | — |
 | `Tray` | yes | — | — | — |
 | `WakeLock` | — | — | yes | — |
-| `WebView` | — | yes | — | — |
+| `WebView` | yes | yes | yes | — |
 | `WindowControl` | yes | yes | — | — |
 
 *Generated. `yes` means the shell publishes the accessor; `—` means `ctx.<Cap>()` is nil there, which is how an app is meant to ask. `hollow` means it returns a value whose methods do nothing — the one shape a caller cannot detect.*
@@ -255,9 +380,48 @@ the way it does is judgment, so it stays here by hand:
   `AccessibilityNodeProvider`; the mobile Bridge answers both from
   `A11yProvider`). Mobile's `SetTree` is therefore a deliberate no-op and
   `Announce` is the part the pull model cannot carry.
-- **WebView** — web is an iframe overlay. A native subview composited over the
-  GPU layer is unbuilt on purpose: Apple and Google both steer OAuth to
-  `ASWebAuthenticationSession` and Custom Tabs, which `OpenURL` already reaches.
+- **PlatformViews / WebView** — one mechanism, two names. `PlatformViews` is
+  the registry (`shell/platformview.go`): the host names the *kinds* of native
+  view it can build — `webview`, `map`, `video` — and gophics asks for one by
+  kind, positions it in widget coordinates and never touches it again.
+  `shell.WebView` is now a thin adapter over the `webview` kind
+  (`shell.WebViewOf`), so there is a single implementation per platform rather
+  than one per name. Web builds the view as a positioned `<iframe>`; mobile
+  asks a native `PlatformViewHost` the app registers, because the native leaf
+  (`WKWebView`, `MapView`, `ExoPlayer`) belongs in the host project where every
+  other mobile capability's native leaf already lives.
+
+  On desktop only macOS has it, and only the `webview` kind: a real `WKWebView`
+  added as a subview of the window gophics draws into, through the pure-Go objc
+  bridge (`shell/desktop/platformview_darwin.go`). The window is identified
+  exactly rather than guessed — `gogpu.Window.NativeHandles` answers with the
+  `CAMetalLayer` gophics renders into, and the one `NSWindow` whose
+  `contentView.layer` is that pointer is this one. Windows and Linux stay nil:
+  the handle is no longer the obstacle there (`NativeHandles` returns the right
+  parent on Win32, X11 and Wayland alike), but WebView2's COM handshake and
+  WebKitGTK's second main loop are each a piece of work of their own. On every
+  desktop platform a native subview is **invisible to a screen reader**, for a
+  reason that is in the code: the desktop a11y model publishes a virtual tree
+  by replacing the content view's accessibility children, which cuts the real
+  subview out. Splicing it back in is inside the vendored fork, in all three
+  backends, and is the larger half of this feature.
+
+  Two limits are structural, not backlog, and they are in the capability's doc
+  comment for that reason. A platform view cannot be interleaved *between* two
+  widget layers — the OS composites it above the whole gophics surface, so it
+  is one view, on top, clipped to a rect; buying real z-order would mean giving
+  up Android's `SurfaceView` direct-present path, which is the mobile GPU
+  story. And a platform view never appears in `Bridge.Snapshot`, so every
+  golden-image test of a screen containing one shows a hole. That second one is
+  the only feature in the tree that erodes first-class headless testing, which
+  is why it is said out loud rather than left to be discovered by a failing
+  test.
+
+  `OpenURL` remains the right answer for an OAuth flow: Apple and Google both
+  steer it to `ASWebAuthenticationSession` and Custom Tabs. What `OpenURL`
+  never covered — an inline map, a video player, an ad unit, a rich document
+  staying inside the app — is what this is for, and citing OAuth as the reason
+  not to build it was answering a different question.
 
 **Web live-verification (2026-08-10).** The `examples/capabilities` inspector now
 wires every capability, so the web implementations were exercised in a real
@@ -324,7 +488,33 @@ are marked `TODO(platform)` — not written speculatively — because they can't
 compiled or run on the current host; each is a small fill-in on the shared
 FFI/bridge helpers when a device is available.
 
-**Not yet declared** (roadmap, need the WebView-class subview decision or deep
-native work): Video playback, Biometrics (Face/Touch ID), Sensors, Push
-notifications, System tray, native menu bar, global hotkeys, and the full
-accessibility AT-tree (Accessibility.SetTree) + mobile IME composition.
+**Not yet declared** (roadmap, deep native work): Sensors, Push notifications,
+global hotkeys, and the full accessibility AT-tree (Accessibility.SetTree) +
+mobile IME composition.
+
+This list used to be twice as long and attribute all of it to “the
+WebView-class subview decision”. Checked item by item, that was wrong about
+seven entries, so they have been removed from it rather than reworded:
+
+- **Biometrics had already shipped** when the list still called it blocked —
+  `shell/biometric.go`, `Bridge.Biometric()` in `shell/mobile/device.go`, and
+  the generated matrix above has carried its `yes` on mobile for months. A
+  hand-written roadmap beside a generated status table is a promise to notice,
+  which is the same failure mode the matrix itself was generated to fix.
+- **Sensors, push notifications and global hotkeys** need a host interface in
+  the `DeviceHost` / `NotifyHost` shape. Nothing about them touches
+  compositing, so a subview decision never gated them either way.
+- **System tray and the native menu bar** are not blocked at all: both exist on
+  desktop (gogpu's `tray_darwin.go`, `menu_{linux,windows}.go`) and both are
+  decided *against* on mobile, recorded in `shell/coverage_test.go` as “no
+  mobile equivalent exists”.
+- **The accessibility AT-tree and IME composition** are independent; mobile a11y
+  is the pull model and already works.
+
+**Video playback is the one real dependency**, and it is narrower than the old
+line implied: it falls out of a `video` kind on `PlatformViews`, on mobile, and
+only if hole-punch compositing is acceptable for it. Video that has to composite
+*under* widget content needs the texture route instead (the `CameraPreview`
+shape — frames crossing as CPU `*image.RGBA`), which is a different piece of
+work and is not closed off: it is the only route that keeps a platform view
+visible to golden tests.
