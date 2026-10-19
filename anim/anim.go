@@ -68,6 +68,21 @@ type Controller struct {
 //
 // The damping ratio is 0.72, giving about 4% overshoot, and the frequency is
 // chosen so it has settled by the end of the duration.
+//
+// It is a Curve, not a spring simulation, and the difference matters. This
+// function is the *shape* of a spring's step response baked into a fixed
+// duration: it is sampled at a progress value, it always starts from rest, and
+// it always takes exactly the Controller's Duration however far it has to
+// travel. SpringSimulation is the actual solver — it integrates position and
+// velocity through real elapsed time, it has no duration, and it can be handed
+// the speed of a gesture that was released mid-flight. A Curve cannot accept a
+// velocity at all, which is precisely the gap SpringSimulation fills.
+//
+// So: Spring for a settle whose start is a known rest position and whose
+// timing you want to state, SpringSimulation for anything continuing a
+// gesture. The names are deliberately not Spring and SpringCurve — see
+// SpringSimulation's own doc comment for why renaming this one was the worse
+// of the two options.
 func Spring(t float32) float32 {
 	if t <= 0 {
 		return 0

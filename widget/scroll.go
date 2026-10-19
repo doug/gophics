@@ -109,9 +109,13 @@ type scrollState struct {
 	// stays consistent frame to frame.
 	overscroll float32
 	overRaw    float32
-	overSpring overspring // critically-damped spring that settles overscroll to 0
-	refreshing bool       // latched true from trigger until the app clears it
-	spin       spinner    // continuous rotation ticker for the indicator
+	// overSpring is the critically damped spring that settles overscroll back
+	// to 0, seeded with the velocity the band was travelling at. It used to
+	// be a private solver here; it is anim.SpringSimulation now, so there is
+	// one spring integrator in the tree rather than one per caller.
+	overSpring *anim.SpringSimulation
+	refreshing bool    // latched true from trigger until the app clears it
+	spin       spinner // continuous rotation ticker for the indicator
 	snap       *anim.Controller
 	snapFrom   float32
 	snapTo     float32
@@ -211,8 +215,32 @@ func (s *scrollState) Init(ctx Ctx) {
 	ctx.AddTicker(s.snap)
 	s.spin.s = s
 	ctx.AddTicker(&s.spin)
-	s.overSpring.s = s
-	ctx.AddTicker(&s.overSpring)
+	// Rest/RestVelocity are stated rather than left to the solver's defaults
+	// because these two numbers are the shipped bounce: 0.4 logical px and
+	// 6 px/s is where the band stops being distinguishable from flat, and
+	// the solver's default tolerance is scaled for a 0..1 driver.
+	s.overSpring = &anim.SpringSimulation{
+		Spec:   anim.SpringSpec{Stiffness: overStiffness},
+		Target: 0,
+		// One integration step per frame, which is how this bounce was
+		// integrated while it was being tuned against native scroll views
+		// with tools/uitrace. The solver's default subdivides four ways and
+		// is the more faithful integration of the same differential
+		// equation — and that is the problem: it covers more ground in the
+		// first frames of a bounce, so the measured numbers in
+		// shell/physics.go would no longer produce the measured motion.
+		// Integrating this one coarsely is deliberate. A dropped frame still
+		// subdivides, because above 20ms a single step diverges rather than
+		// settles, and that was a latent bug here before the promotion.
+		MaxStep:      0.02,
+		Rest:         0.4,
+		RestVelocity: 6,
+		OnChange: func() {
+			s.setOverscroll(s.overSpring.Value())
+			s.ctx.Invalidate()
+		},
+	}
+	ctx.AddTicker(s.overSpring)
 	s.barTick.s = s
 	ctx.AddTicker(&s.barTick)
 	s.reveal = &scrollReveal{s: s}
@@ -227,7 +255,7 @@ func (s *scrollState) Dispose() {
 	s.ctx.RemoveTicker(s.glide)
 	s.ctx.RemoveTicker(s.snap)
 	s.ctx.RemoveTicker(&s.spin)
-	s.ctx.RemoveTicker(&s.overSpring)
+	s.ctx.RemoveTicker(s.overSpring)
 	s.ctx.RemoveTicker(&s.barTick)
 }
 
@@ -639,7 +667,7 @@ const (
 	flingMinStart = 80 // px/s needed to start a fling
 	flingMinSpeed = 20 // px/s considered at rest
 
-	// Rubber-band + bounce tuning (see rubberBand / overspring).
+	// Rubber-band + bounce tuning (see rubberBand / startSpringBack).
 	rubberC       = 0.55 // elastic resistance factor (macOS ≈ 0.55)
 	overStiffness = 220  // spring constant for the settle-to-zero bounce
 	maxBounceVel  = 2000 // px/s cap on velocity fed into an edge bounce
@@ -695,37 +723,12 @@ func (f *flinger) tickSpline(dt float64) bool {
 	return f.active
 }
 
-// overspring is a critically-damped spring that settles the elastic overscroll
-// back to zero. It is seeded with an initial velocity — the leftover fling
-// speed at an edge, or the finger speed at drag release — so the band shoots
-// out and eases back the way a native scroll view rebounds.
-type overspring struct {
-	s      *scrollState
-	v      float32 // px/s of the overscroll displacement
-	active bool
-}
-
-func (o *overspring) Tick(dt float64) bool {
-	if !o.active {
-		return false
-	}
-	x := o.s.overscroll
-	const k = overStiffness
-	d := 2 * float32(math.Sqrt(k)) // critical damping: c = 2√k
-	// Semi-implicit Euler (velocity first) stays stable at 60Hz.
-	o.v += (-k*x - d*o.v) * float32(dt)
-	x += o.v * float32(dt)
-	if x > -0.4 && x < 0.4 && o.v > -6 && o.v < 6 {
-		x, o.v, o.active = 0, 0, false
-	}
-	o.s.setOverscroll(x)
-	o.s.ctx.Invalidate()
-	return o.active
-}
-
 // startSpringBack settles the elastic overscroll back to zero, seeded with
 // velocity v (capped): the leftover fling speed for an edge bounce, or the
-// finger's release velocity for a pulled-then-let-go rebound.
+// finger's release velocity for a pulled-then-let-go rebound. This is the
+// velocity handoff — the band keeps the speed it was already moving at, so
+// the release instant has no step in it, which is the whole reason the
+// settle is a simulation and not a tween.
 func (s *scrollState) startSpringBack(v float32) {
 	if v > maxBounceVel {
 		v = maxBounceVel
@@ -733,8 +736,7 @@ func (s *scrollState) startSpringBack(v float32) {
 		v = -maxBounceVel
 	}
 	s.overRaw = 0
-	s.overSpring.v = v
-	s.overSpring.active = true
+	s.overSpring.Start(s.overscroll, v)
 	s.ctx.Invalidate()
 }
 
@@ -865,16 +867,16 @@ func (s *scrollState) Build(ctx Ctx) Widget {
 				// is not a drag's (dragMain leaves it alone): the spinner
 				// vanished while Refreshing was still true and went on
 				// invalidating every frame with nothing to draw.
-				if !s.refreshing && (s.overSpring.active || s.overscroll != 0) {
-					s.overSpring.active = false
+				if !s.refreshing && (s.overSpring.Running() || s.overscroll != 0) {
+					s.overSpring.Stop()
 					s.overRaw = 0
 					s.setOverscroll(0)
 				}
 				s.contentDelta(s.mainDelta(d))
 			},
 			OnPress: func(geom.Pt) {
-				s.fling.active = false      // grab stops the fling
-				s.overSpring.active = false // ...and any in-flight bounce
+				s.fling.active = false // grab stops the fling
+				s.overSpring.Stop()    // ...and any in-flight bounce
 				// ...and a programmatic glide (AnimateTo), which would
 				// otherwise keep rewriting the offset under the finger, and
 				// override a wheel scroll on its next tick. The same stop is
