@@ -23,8 +23,10 @@ type Measurer interface {
 // The comparison is positional over the longest common prefix and suffix —
 // cheap and tight for localized changes (the common case: one widget
 // repainted). Ops between the prefix and suffix contribute their bounds
-// from both lists. A changed opacity push/pop damages its whole group's
-// content bounds (both lists), so a fading widget repaints only its rect.
+// from both lists. A changed opacity or blend push/pop damages its whole
+// group's content bounds (both lists), so a fading widget repaints only its
+// rect — and a widget that changes blend mode repaints everything that mode
+// governs, which is the part the bounds of the boundary op alone would miss.
 // Any other difference in clip/transform structure inside the changed
 // window falls back to unbounded damage (the caller clamps to the surface).
 func (l *List) Diff(prev *List, m Measurer) (geom.Rect, bool) {
@@ -68,9 +70,25 @@ func (l *List) Diff(prev *List, m Measurer) (geom.Rect, bool) {
 			case opPushOpacity:
 				// A changed/added/removed group boundary: the whole group's
 				// content is (re)composited, so damage its content bounds.
-				r = groupBounds(ops, k, +1, m, &unbounded)
+				r = groupBounds(ops, k, +1, opPushOpacity, opPopOpacity, m, &unbounded)
 			case opPopOpacity:
-				r = groupBounds(ops, k, -1, m, &unbounded)
+				r = groupBounds(ops, k, -1, opPushOpacity, opPopOpacity, m, &unbounded)
+			case opPushBlend, opPopBlend:
+				// A blend boundary paints nothing of its own, so its bounds
+				// are empty — and taking them literally is the trap this
+				// case exists to avoid. A mode change leaves every shape
+				// inside the group byte-identical, so the positional diff
+				// matches them all in its common suffix and the only op in
+				// the changed window is the boundary itself: empty damage,
+				// and the frame keeps the shapes it painted under the old
+				// mode. The fix is the one opacity already uses — damage the
+				// group's content, because changing the mode changes what
+				// all of it paints.
+				dir := +1
+				if ops[k].kind == opPopBlend {
+					dir = -1
+				}
+				r = groupBounds(ops, k, dir, opPushBlend, opPopBlend, m, &unbounded)
 			default:
 				r = opBounds(&ops[k], m)
 			}
@@ -144,28 +162,42 @@ func (s blurSet) extend(damage geom.Rect) geom.Rect {
 	return damage
 }
 
-// groupBounds returns the union of the content bounds of the opacity group
-// whose push (dir=+1) or pop (dir=-1) sits at ops[k], scanning toward the
-// matching partner. Bounds are valid because opacity groups record in
-// surface coordinates. Clip ops inside the group are skipped — clips only
-// shrink content, so the un-clipped union is a conservative superset. A
-// transform or clear inside the group, or an unbalanced group, sets
-// *unbounded instead (the transform's content bounds are in another space).
-func groupBounds(ops []op, k, dir int, m Measurer, unbounded *bool) geom.Rect {
+// groupBounds returns the union of the content bounds of the group whose push
+// (dir=+1) or pop (dir=-1) sits at ops[k], scanning toward the matching
+// partner. push/pop name the pair that delimits it — opacity groups and blend
+// groups are both measured this way, and nesting is counted only in the kind
+// asked about, so an opacity group containing a blend group (or the reverse)
+// still finds its own partner.
+//
+// Bounds are valid because both group kinds record in surface coordinates.
+// Clip ops inside the group are skipped — clips only shrink content, so the
+// un-clipped union is a conservative superset. A transform or clear inside
+// the group, or an unbalanced group, sets *unbounded instead (the transform's
+// content bounds are in another space).
+func groupBounds(ops []op, k, dir int, push, pop opKind, m Measurer, unbounded *bool) geom.Rect {
 	var b geom.Rect
 	depth := 1
+	// Cases test o.kind rather than switching on it: push and pop are
+	// parameters here, and a switch on o.kind would need them as case
+	// expressions beside the fixed kinds below, which overlap them.
 	for j := k + dir; j >= 0 && j < len(ops); j += dir {
 		o := &ops[j]
-		switch o.kind {
-		case opPushOpacity:
+		switch {
+		case o.kind == push:
 			depth += dir
-		case opPopOpacity:
+		case o.kind == pop:
 			depth -= dir
-		case opPushTransform, opPopTransform, opClear:
+		case o.kind == opPushTransform, o.kind == opPopTransform, o.kind == opClear:
 			*unbounded = true
 			return geom.Rect{}
-		case opPushClip, opPushClipRRect, opPopClip:
+		case o.kind == opPushClip, o.kind == opPushClipRRect, o.kind == opPopClip:
 			// Clips only shrink; ignoring them keeps a superset.
+		case o.kind == opPushOpacity, o.kind == opPopOpacity,
+			o.kind == opPushBlend, o.kind == opPopBlend:
+			// The other group kind's boundary. It paints nothing itself and
+			// its own content is visited op by op here anyway, so it
+			// contributes no bounds — and must not be sent back through
+			// groupBounds, which would rescan the same ops.
 		default:
 			b = b.Union(opBounds(o, m))
 		}
@@ -178,12 +210,37 @@ func groupBounds(ops []op, k, dir int, m Measurer, unbounded *bool) geom.Rect {
 }
 
 // ReplayDamage replays only the ops intersecting damage onto c. Clip,
-// opacity, and transform structure is always preserved; other ops are culled
-// by bounds. The caller is expected to clip c to damage first — culling saves
-// command execution (text shaping, path setup), clipping guarantees pixel
-// correctness (including opacity groups: draws into the layer honor the clip,
-// and the layer composites source-over, so pixels outside damage are
+// opacity, blend, and transform structure is always preserved; other ops are
+// culled by bounds. The caller is expected to clip c to damage first — culling
+// saves command execution (text shaping, path setup), clipping guarantees
+// pixel correctness (including opacity groups: draws into the layer honor the
+// clip, and the layer composites source-over, so pixels outside damage are
 // untouched).
+//
+// # Blend modes and partial replay
+//
+// A blend mode reads the destination, so it is fair to ask whether a damaged
+// replay can reproduce a full repaint at all. It can, for every mode, and the
+// reason is worth writing down because the answer for opBackdropBlur — the
+// other destination-reading op — is the opposite.
+//
+// Every blend mode is a pure per-pixel function of (source, destination) at
+// one pixel: no mode samples a neighbourhood. So clipping the replay to the
+// damage rect does not change what any op does at a pixel *inside* the rect —
+// the clip only removes coverage outside it — and the ops that were culled
+// paint nothing inside it by definition of their bounds. Both paths start
+// from the same retained surface and apply the same sequence, so inside
+// damage the pixels are identical; outside it the retained pixels are correct
+// because Diff puts every changed pixel inside. A backdrop blur breaks that
+// argument only because its footprint is wider than its own bounds, which is
+// what blursFrom has to compensate for; blending has no such reach and needs
+// no widening.
+//
+// The three things that do have to hold are all here or in Diff: push/pop
+// blend are never culled (below), so the stack stays balanced however much of
+// the list is skipped; a changed mode damages the group's whole content (see
+// Diff); and an op whose destination changed is itself replayed, because the
+// change is inside damage and so the op's bounds intersect it.
 func (l *List) ReplayDamage(c paint.Canvas, damage geom.Rect, m Measurer) {
 	transformDepth := 0
 	for i := range l.ops {
@@ -195,7 +252,8 @@ func (l *List) ReplayDamage(c paint.Canvas, damage geom.Rect, m Measurer) {
 		case opPopTransform:
 			transformDepth--
 			o.replay(c)
-		case opPushClip, opPushClipRRect, opPopClip, opClear, opPushOpacity, opPopOpacity:
+		case opPushClip, opPushClipRRect, opPopClip, opClear,
+			opPushOpacity, opPopOpacity, opPushBlend, opPopBlend:
 			o.replay(c)
 		default:
 			// opBounds is in record space; while a transform is active it does
@@ -250,10 +308,16 @@ func opEqual(a, b *op) bool {
 		return a.r == b.r
 	case opPushClipRRect:
 		return a.r == b.r && a.f1 == b.f1
-	case opPopClip, opPopOpacity, opPopTransform:
+	case opPopClip, opPopOpacity, opPopTransform, opPopBlend:
 		return true
 	case opPushOpacity:
 		return a.f1 == b.f1
+	case opPushBlend:
+		// The mode is part of the op, so two frames that differ only in it
+		// diff as changed. It has to be: a blend mode decides what every
+		// shape in the group paints, so the same shapes under a different
+		// mode are a different picture, not an interchangeable one.
+		return a.blend == b.blend
 	case opPushTransform:
 		return a.xform == b.xform
 	case opBackdropBlur:

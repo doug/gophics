@@ -690,6 +690,10 @@ type ggCanvas struct {
 	// push/pop keeps them consistent across a frame. See ClipBounds.
 	clipStack  []geom.Rect
 	xformDepth int
+	// blend is the mode in force and blendStack the modes to return to; see
+	// PushBlend for why gg's own Push/Pop cannot hold them.
+	blend      BlendMode
+	blendStack []BlendMode
 }
 
 // ClipBounds implements Canvas.

@@ -102,6 +102,8 @@ const (
 	opPopOpacity
 	opPushTransform
 	opPopTransform
+	opPushBlend
+	opPopBlend
 	opBackdropBlur
 	opMarks
 )
@@ -134,6 +136,7 @@ const (
 type op struct {
 	kind       opKind
 	horiz      bool
+	blend      paint.BlendMode
 	f1, f2     float32
 	r          geom.Rect
 	col, col2  paint.Color
@@ -187,6 +190,18 @@ func (o *op) replay(c paint.Canvas) {
 		c.PushTransform(o.xform)
 	case opPopTransform:
 		c.PopTransform()
+	case opPushBlend:
+		// A Canvas that cannot blend drops the mode and paints the group
+		// normally — the same answer paint.Blends gives a caller directly.
+		// Push and pop ask the same canvas the same question, so they either
+		// both run or both do nothing and the stack stays balanced.
+		if b := paint.Blends(c); b != nil {
+			b.PushBlend(o.blend)
+		}
+	case opPopBlend:
+		if b := paint.Blends(c); b != nil {
+			b.PopBlend()
+		}
 	case opBackdropBlur:
 		c.BackdropBlur(o.r, o.f1)
 	}
@@ -323,6 +338,28 @@ func (r recorder) PushOpacity(alpha float32) {
 	r.l.ops = append(r.l.ops, op{kind: opPushOpacity, f1: alpha})
 }
 func (r recorder) PopOpacity() { r.l.ops = append(r.l.ops, op{kind: opPopOpacity}) }
+
+// PushBlend and PopBlend implement paint.Blender, so paint.Blends(recorder)
+// answers with a working Blender and a widget's Draw can set a blend mode on
+// the canvas a real frame hands it.
+//
+// Recording a mode is not the contradiction it first looks like. The objection
+// to it was that blending reads the destination and a display list has no
+// pixels — but the list does not have to do the blending. It records the
+// *intent*, and the replay target supplies the destination, exactly as it
+// supplies the pixels every other op is missing.
+//
+// A blend group does NOT set hasLayers, so a frame that uses one is still
+// eligible for damage-culled partial replay. That is sound because every mode
+// is a pure per-pixel function of (source, destination) with no spatial
+// reach — unlike opBackdropBlur, which samples a whole neighbourhood and is
+// why blursFrom exists in diff.go. See the partial-replay note on opPushBlend
+// in diff.go for the argument in full.
+func (r recorder) PushBlend(m paint.BlendMode) {
+	r.l.ops = append(r.l.ops, op{kind: opPushBlend, blend: m})
+}
+
+func (r recorder) PopBlend() { r.l.ops = append(r.l.ops, op{kind: opPopBlend}) }
 
 func (r recorder) PushTransform(t paint.Transform) {
 	// A transform reshapes the coordinate space of every op inside it, so
