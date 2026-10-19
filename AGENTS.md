@@ -24,8 +24,14 @@ record the reason.
 `internal/apisurface/testdata/api-surface.txt` and fails when the tree drifts
 from it. Adding a name is fine; regenerate with
 `GOPHICS_UPDATE_API=1 go test ./internal/apisurface` and let the diff be
-reviewed. Note the manifest records names and kinds but *not* signatures, so it
-will not catch a signature-only break.
+reviewed. The manifest records each name's **full signature**, so a
+signature-only break — a changed parameter type, an added result, a retyped
+struct field, a method added to an interface — is caught rather than passing a
+green build. `Delta.Breaking()` classifies which changes are breaks, and
+`internal/apisurface/tiers.go` records which packages are proposed as
+v1-committed versus explicitly unstable. See `internal/apisurface/README.md`
+for the format and its one known blind spot (the surface is a union over six
+targets, so a target-dependent signature would be recorded only once).
 
 ## Before you push
 
