@@ -13,6 +13,9 @@
   <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
   <a class="link" href="gallery.html">Gallery</a>
   <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="learn.html">Learn</a>
+  <a class="link" href="cookbook.html">Cookbook</a>
+  <a class="link" href="api-tour.html">API tour</a>
   <a class="link" href="architecture.html">Architecture</a>
   <span class="spacer"></span>
   <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
@@ -90,6 +93,17 @@
 </div></section>
 
 <section><div class="wrap">
+  <h2>Learning it</h2>
+  <p class="lead">Four ways in, depending on what you already know.</p>
+  <div class="pillars">
+    <div class="pillar"><h3><span class="em">The</span> learning path</h3><p>Eleven steps from "never used this" to a real app, each ending in something you can point at — and an honest list of the walls you will hit. <a href="learn.html">Start here →</a></p></div>
+    <div class="pillar"><h3><span class="em">The</span> API tour</h3><p>Which packages exist, what each is for, which ones you never open, and how one tap becomes one frame. The orientation generated docs can't give. <a href="api-tour.html">Take the tour →</a></p></div>
+    <div class="pillar"><h3><span class="em">The</span> cookbook</h3><p>Eight task-shaped recipes — a scrolling list, a gesture, a transition, a custom painter, accessibility, text selection, capabilities, theming. Each a complete runnable program. <a href="cookbook.html">Open it →</a></p></div>
+    <div class="pillar"><h3><span class="em">From</span> Flutter or Compose</h3><p>What maps directly, what looks the same and isn't, and what has no equivalent at all. Read the third part before you commit to a port. <a href="migrate.html">The differences →</a></p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
   <h2>Where it fits</h2>
   <p class="lead">Most cross-platform stacks make you pick two of three. Gophics takes the corner nobody else occupies.</p>
   <div class="fit">
@@ -105,7 +119,7 @@
   <p class="lead">Young and moving fast — so, the real caveats up front (the architecture is the hard part, and it's done):</p>
   <div class="pillars">
     <div class="pillar"><h3>Web ships the renderer</h3><p>A WASM build carries the whole rendering stack. Every demo here lands between 3.4 and 3.9&nbsp;MB gzipped — a networked client, a roguelike and an EPUB reader all within half a megabyte of each other, because the floor is the renderer and your code is a rounding error on it. That is an application download, not a web-page one: right for an app, wrong for a content site.</p></div>
-    <div class="pillar"><h3>No hot reload</h3><p>Go can't match the Dart VM — the answer is fast rebuild + an opt-in state snapshot ("hot restart that remembers") and headless preview. Not sub-second; close.</p></div>
+    <div class="pillar"><h3>Hot restart, everywhere</h3><p>Go can't swap code in a running process, so there is no hot reload — but <code>gophics dev</code> rebuilds, relaunches and puts you back on the same screen with the same state, on desktop, web, an Android emulator and an iOS simulator. 1.4&nbsp;s desktop, ~11&nbsp;s on a phone.</p></div>
     <div class="pillar"><h3>The catalog compounds</h3><p>You compose primitives rather than assemble hundreds of pre-built widgets. It grows every release, and app-specific widgets are cheap to write.</p></div>
     <div class="pillar"><h3>Bridges are filling in</h3><p>The capability layer — clean Go interfaces, generated wiring, graceful degradation — ships and its web impls are browser-verified; the native desktop/mobile leaves (objc, portals, COM, Kotlin, Swift) land per release. Missing bridges read as <code>nil</code>, so the UI just hides the affordance.</p></div>
   </div>

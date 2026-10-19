@@ -13,6 +13,9 @@
   <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
   <a class="link" href="gallery.html">Gallery</a>
   <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="learn.html">Learn</a>
+  <a class="link" href="cookbook.html">Cookbook</a>
+  <a class="link" href="api-tour.html">API tour</a>
   <a class="link" href="architecture.html">Architecture</a>
   <span class="spacer"></span>
   <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
@@ -131,10 +134,13 @@ go run ./examples/hn       # a HackerNews client: feed → comments, scroll, lin
   <pre class="code">go install github.com/doug/gophics/cmd/gophics@latest
 
 gophics run  -p desktop .                  # native window
-gophics dev  -p web     .                   # browser, live-reload
-gophics run  -p android ./examples/hn/mobile  # device/emulator (needs the SDK)
-gophics create my-app                       # scaffold a new cross-platform app
-gophics doctor                              # check the toolchain per platform</pre>
+gophics dev  -p web     .                  # browser; reload keeps your UI state
+gophics dev  -p android .                  # emulator; rebuild + relaunch, state kept
+gophics dev  -p ios     .                  # simulator; same loop
+gophics run  -p android ./examples/hn/mobile  # one-shot install (needs the SDK)
+gophics create my-app                      # scaffold a new cross-platform app
+gophics doctor                             # check the toolchain per platform</pre>
+  <p><code>dev</code> is hot <em>restart</em>, not hot reload: Go cannot replace code in a running process, so the app is rebuilt and relaunched. What it does carry across is your UI state &mdash; the open page, the scroll offset, what you had typed &mdash; keyed by position in the widget tree, on all four targets. Measured on an Apple&nbsp;Silicon Mac: 1.4&nbsp;s desktop, ~4&nbsp;s web, ~11&nbsp;s on an Android emulator, ~20&nbsp;s on a pre-booted iOS simulator.</p>
 
   <h3>Test the whole UI with <code>go test</code></h3>
   <p>This is the part no other GUI framework gives you. Mount a widget tree headless, drive it, and assert on the rendered pixels — no window, no emulator, no device farm:</p>
@@ -183,6 +189,10 @@ gophics doctor                              # check the toolchain per platform</
 
   <h3>Next</h3>
   <ul>
+    <li><a href="learn.html">The learning path</a> — the ordered route from here to a real app, and the walls it is worth knowing about in advance.</li>
+    <li><a href="cookbook.html">The cookbook</a> — eight recipes for the things you will need next: a scrolling list, a gesture, a transition, a custom painter, accessibility, text selection, capabilities, theming.</li>
+    <li><a href="api-tour.html">The API tour</a> — which packages exist, which you never open, and how a tap becomes a frame.</li>
+    <li><a href="migrate.html">Coming from Flutter or Compose</a> — what transfers, what only looks like it does, and what is missing.</li>
     <li><a href="gallery.html">The live gallery</a> — real apps running in your browser, with source.</li>
     <li><a href="architecture.html">Architecture</a> — how the three trees fit together.</li>
     <li><a href="https://github.com/doug/gophics">GitHub</a> — the code, issues, and the full examples.</li>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — the learning path</title>
+<meta name="description" content="An ordered route from never having used Gophics to shipping a real app: eleven steps, each with a concrete outcome, and an honest list of the walls you will hit.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="learn.html">Learn</a>
+  <a class="link" href="cookbook.html">Cookbook</a>
+  <a class="link" href="api-tour.html">API tour</a>
+  <a class="link" href="architecture.html">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap prose">
+  <h2>The learning path</h2>
+  <p class="lead">Eleven steps from never having used Gophics to shipping a real app. Each one ends in something you can point at — a running program, a passing test, a screen that survives a resize — rather than a topic you have read about.</p>
+
+  <h3>Before you start</h3>
+  <p>This path assumes things, and it is cheaper to say so than to let you discover it at step 4.</p>
+  <ul>
+    <li><b>You know Go.</b> Not expertly, but you should be comfortable with structs, methods, interfaces, closures, type parameters and <code>go test</code>. Gophics is a library, not a platform: it does not hide Go from you, and the mental model leans on pointers-versus-values and on who owns a mutable field. If you are learning Go <em>and</em> learning a UI toolkit at once, learn Go first.</li>
+    <li><b>Go 1.27 or newer.</b> That is the whole toolchain. No SDK, no Node, no C compiler. <code>ctx.Of[T]()</code> is a method with a type parameter, which is why the floor is that high.</li>
+    <li><b>You have not written a GUI before — that is fine.</b> Nothing here assumes Flutter or Compose. If you <em>do</em> know one of them, read the <a href="migrate.html">migration guide</a> first: most of your instincts transfer, and the three or four that do not will cost you an afternoon each if nobody tells you.</li>
+    <li><b>A browser with WebGPU</b> (recent Chrome, Edge or Safari) only matters at step 11, and only for the web target.</li>
+  </ul>
+
+  <div class="note">
+    <p><b>This is a young project.</b> It is at <code>v0.1.0</code> with no compatibility promise, no third-party package ecosystem, and a short list of real gaps — see <a href="#walls">the walls</a> at the end. The path below is honest about where each one sits, because finding out at step 9 that the thing you planned your app around is unimplemented is a bad afternoon.</p>
+  </div>
+
+  <h3>The path</h3>
+  <ol class="steps">
+
+    <li>
+      <h3>Put a window on the screen</h3>
+      <p>Clone the repo and run <code>go run ./examples/hello</code>. Then <code>go run ./examples/todo</code> and <code>go run ./examples/hn</code>. Nothing to write yet; the point is to confirm that <code>go run</code> really is the entire build.</p>
+      <p class="out"><b>Outcome:</b> three windows, opened with no toolchain step you had to install, and a reference set of working apps you will come back to all the way through this list.</p>
+    </li>
+
+    <li>
+      <h3>Make something respond to a tap</h3>
+      <p>Follow <a href="get-started.html">Get started</a> and type out the counter yourself rather than copying it. Then break it deliberately: mutate <code>s.n++</code> <em>outside</em> <code>SetState</code> and watch the number not change.</p>
+      <p class="out"><b>Outcome:</b> a stateful widget of your own, and a first-hand answer to why <code>SetState</code> exists rather than a remembered rule.</p>
+    </li>
+
+    <li>
+      <h3>Learn the two-tree model well enough to predict rebuilds</h3>
+      <p>Read <a href="architecture.html">Architecture</a>, then the first half of the <a href="api-tour.html">API tour</a>. The one idea to come away with: a widget is an immutable value you throw away every frame, and an element is the retained node behind it that holds your state. Run any example with <code>app.Config{Debug: true}</code> to see the box bounds.</p>
+      <p class="out"><b>Outcome:</b> you can look at a tree and say which parts rebuild when one field changes — and you stop trying to mutate widgets.</p>
+    </li>
+
+    <li>
+      <h3>Write a test for what you just built</h3>
+      <p>This step is deliberately this early. Mount your counter with <code>apptest.New</code>, tap it by label, assert the label changed, and commit a golden image. Copy <code>examples/counter/counter_test.go</code> — including its <code>apptest.Tol(apptest.AntiAliased)</code>, for the reason that file explains.</p>
+      <p class="out"><b>Outcome:</b> your UI is under test with no window, no emulator and no device farm. Forming the habit now costs an hour; retrofitting it onto a finished app costs a week.</p>
+    </li>
+
+    <li>
+      <h3>Lay out a screen that survives a resize</h3>
+      <p>Build a screen with a header, a body and a footer using <code>Column</code>, <code>Row</code>, <code>Expand</code>, <code>Padding</code>, <code>Align</code> and <code>Sized</code>. Then resize the window small, and resize it very wide. Read <code>go doc ./layout Constraints</code> once the layout misbehaves — constraints down, sizes up is the whole protocol, and it explains every surprise you will have had.</p>
+      <p class="out"><b>Outcome:</b> a layout that does not break at either extreme, and the vocabulary (<code>CrossStretch</code>, <code>MainSpaceBetween</code>, flex weights) to describe what you wanted.</p>
+    </li>
+
+    <li>
+      <h3>Put real data in a scrolling list, and navigate off it</h3>
+      <p>Use the <a href="cookbook.html#list">scrolling-list recipe</a> for the list, then add a <code>widget.Navigator</code> and push a detail page from a row — <code>examples/hn</code> is the worked version of exactly this. Key your rows with <code>WithKey</code> and then insert an item at the top to see why.</p>
+      <p class="out"><b>Outcome:</b> a two-screen app with a list long enough that only the visible rows are built, and state that stays with the right row when the list changes.</p>
+    </li>
+
+    <li>
+      <h3>Delete every colour literal</h3>
+      <p>Work through the <a href="cookbook.html#theme">theming recipe</a>: derive a theme from <code>theme.Light()</code>/<code>theme.Dark()</code>, provide it above your tree, and read it with <code>theme.Of(ctx)</code>. Then flip your OS to dark mode with the app running.</p>
+      <p class="out"><b>Outcome:</b> no <code>paint.RGB</code> call anywhere in your widget tree, and an app that follows the system colour scheme without you handling it.</p>
+    </li>
+
+    <li>
+      <h3>Reach the platform once, and handle <code>nil</code></h3>
+      <p>Pick one capability your app would actually use — <code>ctx.Preferences()</code>, <code>ctx.FilePicker()</code>, <code>ctx.Share()</code> — and wire it with the <a href="cookbook.html#capability">capability recipe</a>. Then run the same binary somewhere that does not have it and confirm the affordance disappears instead of failing.</p>
+      <p class="out"><b>Outcome:</b> one platform service in your app, and the habit that <code>nil</code> is an answer about the platform rather than an error to swallow.</p>
+    </li>
+
+    <li>
+      <h3>Draw the thing widgets cannot</h3>
+      <p>Every real app has one: a chart, a gauge, a board, a sparkline. Use <code>widget.Canvas</code> and the <a href="cookbook.html#paint">custom-painter recipe</a>, and position your labels from <code>MeasureWidthIn</code> rather than from a guessed glyph width. If what you need is a conventional chart, look at the <code>chart</code> package before drawing it yourself.</p>
+      <p class="out"><b>Outcome:</b> a custom-painted widget whose text is placed by measurement, so it is still correct at a different font size.</p>
+    </li>
+
+    <li>
+      <h3>Make it usable without sight, and prove it in CI</h3>
+      <p>Label your drawn controls with <code>Interactive.Sem</code>, mark decoration <code>Hidden</code>, size touch targets to <code>theme.MinTouchTarget</code>, and add a semantics test from the <a href="cookbook.html#a11y">accessibility recipe</a>. Accessibility is implemented on macOS, Windows, Linux, the web and Android, so this is a real check and not a gesture.</p>
+      <p class="out"><b>Outcome:</b> a test in CI that fails when a control loses its name — the defect that is otherwise found by a procurement review.</p>
+    </li>
+
+    <li>
+      <h3>Ship it to a second platform</h3>
+      <p><code>gophics dev -p web .</code> and open it in a browser. Then <code>GOOS=windows GOARCH=arm64 go build ./...</code> from whatever machine you are on. Read the <a href="#walls">walls</a> below before you promise anyone a mobile release.</p>
+      <p class="out"><b>Outcome:</b> the same source running on a second target, and a realistic idea of what the remaining distance to a distributable artifact is.</p>
+    </li>
+
+  </ol>
+
+  <h3>Where to look when you are stuck</h3>
+  <p>In this order, because that is the order that works:</p>
+  <ul>
+    <li><b><code>go doc</code>.</b> The package documentation is where this project puts its reasoning — <code>go doc ./widget Gestures</code> and <code>go doc ./app Config</code> are each several pages of why, not a field list. Explaining decisions in the doc comment is a house rule, so the answer is usually there.</li>
+    <li><b><code>examples/</code>.</b> Thirty applications that compile in CI and are tested. <code>hn</code> for a networked list-and-detail app, <code>notes</code> for local storage, <code>todo</code> for interaction, <code>telemetry</code> for large data, <code>gallery</code> for a tour of every widget.</li>
+    <li><b>The <a href="cookbook.html">cookbook</a>.</b> Eight task-shaped recipes, each a complete runnable program.</li>
+    <li><b>The source.</b> It is one module, nine direct dependencies, and no code generation in the paths you would be reading. Following a call into <code>widget/</code> is a realistic thing to do here in a way it is not in a toolkit with an engine underneath it.</li>
+  </ul>
+
+  <h3 id="walls">The walls, named in advance</h3>
+  <p>Honest version, so you can plan around them rather than discover them. The first group will stop you; the second will cost you.</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Wall</th><th>What happens</th><th>Work around it by</th></tr>
+    <tr><td>Colour emoji</td><td>Bitmap and SVG glyphs are not emitted, so a colour emoji draws <em>nothing</em> — not a box, nothing. Any app with user-entered text will show invisible characters.</td><td>Nothing, yet. Monochrome symbol fonts work; plan for emoji to be absent.</td></tr>
+    <tr><td>Fonts on the web</td><td>System font fallback is a deliberate no-op in a WebAssembly page — there is no font directory to scan. Runes outside your registered faces fall back to the primary face and draw as boxes.</td><td>Bundling the faces you need in <code>Config.Fallbacks</code>. A full CJK face is tens of megabytes, so this is a real budget decision.</td></tr>
+    <tr><td>Native platform views</td><td>You cannot embed a native subview — a map, a video player, an in-app browser — in the widget tree on native targets. It is unimplemented.</td><td>Opening the platform browser via <code>ctx.Links()</code>, or redesigning around it. If your app's core is an embedded map, this framework is the wrong choice today.</td></tr>
+    <tr><td>Hot reload (any platform)</td><td>There is none, and there cannot be: Go has no way to replace code in a running process. What <code>gophics dev</code> does instead is state-preserving hot <em>restart</em> — rebuild, relaunch, land back on the same screen with the same scroll offset, field contents and navigator stack. That works on desktop, web, the Android emulator and the iOS simulator.</td><td>Accepting the loop time. Measured on an Apple&nbsp;Silicon Mac: 1.4&nbsp;s desktop, ~4&nbsp;s web, ~11&nbsp;s on an Android emulator, ~20&nbsp;s on a pre-booted iOS simulator. Flutter's reload is ~1&nbsp;s everywhere, so a mobile-first app with a lot of visual iteration will feel this.</td></tr>
+    <tr><td>Desktop packaging</td><td>The CLI builds a binary and stops. No <code>.app</code> bundle, no disk image, no installer, no AppImage, no notarisation. Mobile scaffolding, by contrast, is thorough.</td><td>Writing the packaging yourself. A single static binary is genuinely easy to distribute to a technical audience and not to anyone else.</td></tr>
+    <tr><td>API stability</td><td><code>v0.1.0</code>, no compatibility promise. The generated API manifest records names but not signatures, so a signature-only change can pass a green build.</td><td>Pinning a version in <code>go.mod</code> and reading the diff before you upgrade.</td></tr>
+    <tr><td>No package ecosystem</td><td>Zero third-party packages, and no extension point for them: the capability generator reads this repository's own source, so a capability cannot be added from outside the tree.</td><td>Writing it yourself, or patching the tree. Everything Go-side — HTTP, databases, parsing — is of course unaffected, which is most of an app.</td></tr>
+    <tr><td>Painting expressiveness</td><td>Two-stop linear gradients by axis only; no radial or sweep, no blend modes, no dash patterns, no arbitrary-path clipping, no custom shaders.</td><td>Composing from what is there. Most of these are approximable; none is as expressive as Flutter's painting API.</td></tr>
+    <tr><td>Animation velocity</td><td>No velocity handoff: a gesture released mid-flight cannot pass its speed into the animation that continues it, so flick-to-dismiss does not carry momentum.</td><td>Using duration-based transitions and accepting the loss of feel, for now.</td></tr>
+    <tr><td>Internationalisation</td><td>29 locales with hand-written plural rules. No ordinal plurals, no relative time, no locale-aware currency patterns, no message extraction tooling.</td><td><code>intl</code> for the common cases and your own formatting for the rest.</td></tr>
+  </table>
+  </div>
+
+  <p>What is <em>not</em> on that list is worth saying too: accessibility on all five targets, per-platform scroll physics derived from device measurement, headless testing, terminal rendering, and a nine-dependency supply chain are all done, and several of them are ahead of the incumbents.</p>
+
+  <p style="margin-top:28px"><a href="get-started.html">Start at step 1 →</a> &nbsp;·&nbsp; <a href="cookbook.html">The cookbook</a> &nbsp;·&nbsp; <a href="migrate.html">Coming from Flutter or Compose</a></p>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>

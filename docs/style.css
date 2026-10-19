@@ -158,6 +158,57 @@ pre.code, .code { background: #100d08; border: 1px solid var(--line); border-rad
   font-size: 13px; border: 1px solid var(--line); color: var(--accent-hi); }
 .prose ul { padding-left: 20px; } .prose li { margin: 4px 0; }
 
+/* Reference tables (the API tour and the migration maps). Borderless with a
+   zebra wash rather than gridlines: these tables are read row by row, and a
+   full grid makes a three-column concept map harder to scan, not easier. */
+.prose table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: 14.5px; }
+.prose table th { text-align: left; font-weight: 600; color: var(--ink);
+  border-bottom: 1px solid var(--line); padding: 8px 10px; font-size: 13px;
+  letter-spacing: 0.02em; text-transform: uppercase; }
+.prose table td { padding: 9px 10px; color: var(--ink-dim); vertical-align: top;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 55%, transparent); }
+/* The first column names the thing; it reads as the row's label. It is
+   allowed to wrap — several of these cells are phrases rather than symbols,
+   and nowrap there pushed a three-column table well past the page width. */
+.prose table td:first-child { color: var(--ink); }
+/* A table is the widest thing on these pages; let it scroll on a narrow
+   screen rather than squeezing a column of code names to nothing. */
+.tablewrap { overflow-x: auto; }
+
+.prose h4 { margin: 26px 0 6px; font-size: 16px; line-height: 1.2;
+  letter-spacing: -0.01em; color: var(--ink); }
+
+/* Numbered learning path. The number is generated so a reordered step cannot
+   end up labelled wrong — the mistake a hand-numbered list always eventually
+   makes. */
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 18px 0 0; }
+.steps > li { counter-increment: step; position: relative; padding: 0 0 22px 46px;
+  margin: 0; border-left: 1px solid var(--line); }
+.steps > li:last-child { border-left-color: transparent; padding-bottom: 4px; }
+.steps > li::before { content: counter(step); position: absolute; left: -15px; top: 0;
+  width: 30px; height: 30px; border-radius: 50%; background: var(--card);
+  border: 1px solid var(--line); color: var(--accent); font: 600 13px/28px var(--mono);
+  text-align: center; }
+.steps > li h3 { margin: 3px 0 6px; font-size: 17px; }
+.steps > li p { margin: 0 0 8px; }
+.steps .out { color: var(--ink-dim); font-size: 14px; }
+.steps .out b { color: var(--accent-hi); font-weight: 600; }
+
+/* A short aside: a limitation, a trap, or a thing the docs would rather you
+   heard now than discovered later. */
+.note { background: var(--bg-soft); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
+  padding: 12px 16px; margin: 16px 0; }
+.note p { margin: 0; color: var(--ink-dim); font-size: 14.5px; }
+.note p + p { margin-top: 8px; }
+.note b { color: var(--ink); }
+
+/* Cookbook recipe heading: the title, and the path of the file it is cut from. */
+.rechead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin: 36px 0 2px; }
+.rechead h3 { margin: 0; }
+.rechead .src { font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); }
+
 /* source page header */
 .srchead { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
 .srchead .sp { flex: 1; } .srchead .links { display: flex; gap: 16px; font-size: 14px; }

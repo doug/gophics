@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — the cookbook</title>
+<meta name="description" content="Eight task-shaped recipes for Gophics: a scrolling list, gestures, transitions, a custom painter, accessibility, text selection, platform capabilities, and theming. Each one a complete runnable program.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="learn.html">Learn</a>
+  <a class="link" href="cookbook.html">Cookbook</a>
+  <a class="link" href="api-tour.html">API tour</a>
+  <a class="link" href="architecture.html">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap prose">
+  <h2>The cookbook</h2>
+  <p class="lead">Eight recipes for the things an app actually needs. Each one is a complete program under <code>docs/recipes/</code> — not a fragment — so you can run it, change it, and read the parts the listing here cuts away.</p>
+
+  <div class="note">
+    <p><b>Every listing on this page is generated from the program it names.</b> Nothing here is hand-typed HTML, because a sample that only exists as markup drifts from the API — this site has shipped that drift twice, once showing a <code>StateBase</code> method that did not exist. <code>./docs/build-embeds.sh -check</code> runs in <code>./scripts/gates.sh</code> and fails the build when a listing goes stale, and the programs themselves are compiled by <code>go build ./...</code>.</p>
+    <p>Each listing is the body of the program, with the package doc, the imports and <code>main</code> cut. Follow the path above a recipe to read the whole thing.</p>
+  </div>
+
+  <ul>
+    <li><a href="#list">Lay out a scrolling list</a></li>
+    <li><a href="#gesture">Handle a gesture</a></li>
+    <li><a href="#animate">Animate a transition</a></li>
+    <li><a href="#paint">Draw with a custom painter</a></li>
+    <li><a href="#a11y">Make something accessible</a></li>
+    <li><a href="#select">Select and copy text</a></li>
+    <li><a href="#capability">Read a platform capability, and handle <code>nil</code></a></li>
+    <li><a href="#theme">Theme an app</a></li>
+  </ul>
+
+
+  <div class="rechead" id="list"><h3>Lay out a scrolling list</h3><span class="src">docs/recipes/scrolllist/main.go</span></div>
+  <p>Past a few dozen rows, build only what is visible. <code>LazyList</code> mounts the rows in the viewport plus a little overscan, measures their heights as they appear, and self-corrects the scrollbar maths as you go — so <code>Count</code> can be ten thousand without the frame cost following it. A <code>ScrollController</code> held in your state gives you the position and programmatic scrolling.</p>
+  <!-- generated:docs/recipes/scrolllist/main.go from="// List is the root widget" to="func main()" -->
+  <pre class="code"><code><span class="t-com">// List is the root widget: immutable configuration, of which there is none.</span>
+<span class="t-kw">type</span> List <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (List) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;listState{} }
+
+<span class="t-kw">type</span> listState <span class="t-kw">struct</span> {
+	widget.StateBase[List]
+	rows []<span class="t-typ">string</span>
+	<span class="t-com">// The controller is a plain struct the state owns, not a widget. It has to</span>
+	<span class="t-com">// outlive a rebuild — the list reads its position through it and the app</span>
+	<span class="t-com">// drives it — so it lives here and Build passes its address.</span>
+	ctrl     widget.ScrollController
+	selected <span class="t-typ">int</span>
+}
+
+<span class="t-kw">func</span> (s *listState) <span class="t-fn">Init</span>(widget.Ctx) {
+	s.selected = -<span class="t-num">1</span>
+	s.rows = <span class="t-typ">make</span>([]<span class="t-typ">string</span>, <span class="t-num">10000</span>)
+	<span class="t-kw">for</span> i := <span class="t-kw">range</span> s.rows {
+		s.rows[i] = fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;Row %d&#34;</span>, i+<span class="t-num">1</span>)
+	}
+}
+
+<span class="t-kw">func</span> (s *listState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+
+	<span class="t-com">// LazyList mounts the rows in the viewport plus a little overscan and</span>
+	<span class="t-com">// nothing else, so Count can be large without the frame cost following</span>
+	<span class="t-com">// it. Build is called for one index at a time and must not assume it runs</span>
+	<span class="t-com">// in order, or that it runs at all for a given row.</span>
+	list := widget.LazyList{
+		Count:           <span class="t-typ">len</span>(s.rows),
+		EstimatedExtent: <span class="t-num">56</span>, <span class="t-com">// assumed height of a row not yet measured</span>
+		Controller:      &amp;s.ctrl,
+		Build: <span class="t-kw">func</span>(i <span class="t-typ">int</span>) widget.Widget {
+			<span class="t-com">// WithKey ties the row&#39;s element — and so its state and any</span>
+			<span class="t-com">// animation in flight — to the item rather than to the index.</span>
+			<span class="t-com">// Without it, inserting at the top slides every row&#39;s state down</span>
+			<span class="t-com">// by one and the wrong row stays highlighted.</span>
+			<span class="t-kw">return</span> widget.WithKey{Key: s.rows[i], Child: theme.ListTile{
+				Title:    s.rows[i],
+				Subtitle: <span class="t-str">&#34;built only while visible&#34;</span>,
+				Selected: i == s.selected,
+				OnTap:    <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.selected = i }) },
+			}}
+		},
+	}
+
+	col := widget.<span class="t-fn">Column</span>(
+		theme.Button{Label: <span class="t-str">&#34;Back to top&#34;</span>, OnTap: <span class="t-kw">func</span>() {
+			s.ctrl.<span class="t-fn">AnimateTo</span>(<span class="t-num">0</span>, <span class="t-num">250</span>*time.Millisecond)
+		}},
+		widget.Sized{H: <span class="t-num">12</span>},
+		<span class="t-com">// Expand is the part worth remembering. A scrollable child handed</span>
+		<span class="t-com">// unbounded height tries to be as tall as its content and then never</span>
+		<span class="t-com">// scrolls; inside a Column it must be given the leftover space.</span>
+		widget.<span class="t-fn">Expand</span>(list),
+	)
+	col.CrossAlign = layout.CrossStretch
+
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">16</span>, Child: col}}}
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/scrolllist</code></p>
+  <p><b>The two mistakes.</b> Forgetting <code>Expand</code> around the list: a scrollable handed unbounded height tries to be as tall as its content and then never scrolls. And forgetting <code>WithKey</code>: without it an insert at the top slides every row's state down by one, and the wrong row stays selected. Use <code>widget.Scroll</code> instead when the content is a fixed, modest amount — a settings page — where windowing buys nothing.</p>
+
+
+  <div class="rechead" id="gesture"><h3>Handle a gesture</h3><span class="src">docs/recipes/gesture/main.go</span></div>
+  <p><code>widget.Interactive</code> adds no visuals and takes its child's size, so a gesture goes on anything — a chart, a game board, a drawn control. Positions in every callback are local to the widget, so nothing has to walk up the tree subtracting parents' offsets.</p>
+  <!-- generated:docs/recipes/gesture/main.go from="// Pad is a drag surface" to="func main()" -->
+  <pre class="code"><code><span class="t-com">// Pad is a drag surface with a dot on it.</span>
+<span class="t-kw">type</span> Pad <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Pad) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;padState{} }
+
+<span class="t-kw">type</span> padState <span class="t-kw">struct</span> {
+	widget.StateBase[Pad]
+	at      geom.Pt <span class="t-com">// the dot, in the pad&#39;s own coordinates</span>
+	hovered <span class="t-typ">bool</span>
+	last    <span class="t-typ">string</span> <span class="t-com">// the most recent callback, for the readout</span>
+}
+
+<span class="t-kw">func</span> (s *padState) <span class="t-fn">Init</span>(widget.Ctx) { s.at = geom.Pt{X: <span class="t-num">120</span>, Y: <span class="t-num">90</span>} }
+
+<span class="t-kw">func</span> (s *padState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+
+	<span class="t-com">// Positions in every callback are local to the widget, so the dot can be</span>
+	<span class="t-com">// stored exactly as it arrives — no walking up the tree to subtract</span>
+	<span class="t-com">// parents&#39; offsets.</span>
+	pad := widget.Interactive{
+		Gestures: widget.Gestures{
+			<span class="t-com">// Cursor is a request, not a command: the innermost widget under</span>
+			<span class="t-com">// the pointer wins, and on a platform with no pointer to shape</span>
+			<span class="t-com">// (mobile, the terminal) ctx.Cursor() is nil and nothing happens.</span>
+			Cursor: shell.CursorCrosshair,
+
+			OnPress: <span class="t-kw">func</span>(pos geom.Pt) {
+				s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.at, s.last = pos, <span class="t-str">&#34;OnPress&#34;</span> })
+			},
+			<span class="t-com">// A drag past the tap slop cancels the pending tap, so these two</span>
+			<span class="t-com">// do not both fire for one gesture.</span>
+			OnDrag: <span class="t-kw">func</span>(pos, delta geom.Pt) {
+				s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.at, s.last = pos, <span class="t-str">&#34;OnDrag&#34;</span> })
+			},
+			OnTap:       <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.last = <span class="t-str">&#34;OnTap&#34;</span> }) },
+			OnDoubleTap: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.last = <span class="t-str">&#34;OnDoubleTap&#34;</span> }) },
+			OnLongPress: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.last = <span class="t-str">&#34;OnLongPress&#34;</span> }) },
+
+			OnEnter: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.hovered, s.last = <span class="t-typ">true</span>, <span class="t-str">&#34;OnEnter&#34;</span> }) },
+			OnExit:  <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.hovered, s.last = <span class="t-typ">false</span>, <span class="t-str">&#34;OnExit&#34;</span> }) },
+
+			<span class="t-com">// Setting OnKey (without OnText) makes the widget focusable and</span>
+			<span class="t-com">// claims focus when nothing else holds it, so the arrows work from</span>
+			<span class="t-com">// the first frame with no Autofocus and no tap.</span>
+			OnKey: <span class="t-kw">func</span>(k shell.Key) {
+				<span class="t-kw">if</span> k.Kind != shell.KeyPress {
+					<span class="t-kw">return</span>
+				}
+				<span class="t-kw">const</span> step = <span class="t-num">8</span>
+				d, name := geom.Pt{}, <span class="t-str">&#34;&#34;</span>
+				<span class="t-kw">switch</span> k.Code {
+				<span class="t-kw">case</span> shell.KeyLeft:
+					d, name = geom.Pt{X: -step}, <span class="t-str">&#34;KeyLeft&#34;</span>
+				<span class="t-kw">case</span> shell.KeyRight:
+					d, name = geom.Pt{X: step}, <span class="t-str">&#34;KeyRight&#34;</span>
+				<span class="t-kw">case</span> shell.KeyUp:
+					d, name = geom.Pt{Y: -step}, <span class="t-str">&#34;KeyUp&#34;</span>
+				<span class="t-kw">case</span> shell.KeyDown:
+					d, name = geom.Pt{Y: step}, <span class="t-str">&#34;KeyDown&#34;</span>
+				<span class="t-kw">default</span>:
+					<span class="t-kw">return</span>
+				}
+				s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.at, s.last = s.at.<span class="t-fn">Add</span>(d), name })
+			},
+		},
+		Child: widget.Canvas{H: <span class="t-num">220</span>, Clip: <span class="t-typ">true</span>, Draw: <span class="t-kw">func</span>(c paint.Canvas, size geom.Size) {
+			fill := th.Surface
+			<span class="t-kw">if</span> s.hovered {
+				fill = th.SurfaceHover
+			}
+			c.<span class="t-fn">FillRRect</span>(geom.Rect{Max: size.<span class="t-fn">Pt</span>()}, <span class="t-num">12</span>, fill)
+			c.<span class="t-fn">FillRRect</span>(geom.<span class="t-fn">RectXYWH</span>(s.at.X-<span class="t-num">9</span>, s.at.Y-<span class="t-num">9</span>, <span class="t-num">18</span>, <span class="t-num">18</span>), <span class="t-num">9</span>, th.Primary)
+		}},
+	}
+
+	col := widget.<span class="t-fn">Column</span>(
+		theme.<span class="t-fn">Label</span>(<span class="t-str">&#34;Drag, tap, double-tap, hold, or use the arrow keys&#34;</span>),
+		widget.Sized{H: <span class="t-num">10</span>},
+		pad,
+		widget.Sized{H: <span class="t-num">10</span>},
+		widget.Text{
+			Value: fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;last: %s   at: %.0f, %.0f&#34;</span>, s.last, s.at.X, s.at.Y),
+			Size:  th.Type.Caption,
+			Color: th.Muted,
+		},
+	)
+	col.CrossAlign = layout.CrossStretch
+
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">16</span>, Child: col}}}
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/gesture</code></p>
+  <p><b>What to know.</b> A drag past the tap slop cancels the pending tap, so <code>OnTap</code> and <code>OnDrag</code> do not both fire for one gesture. Setting <code>OnDoubleTap</code> defers that handler's single tap by the double-tap window to disambiguate — which is why it is worth scoping to the one child that needs it rather than putting it on a whole row. A key-only widget (<code>OnKey</code> without <code>OnText</code>) claims focus when nothing else holds it; a text-capturing one never does, because a focused field raises the soft keyboard, so <code>Autofocus</code> is the only way a field starts focused. For nesting a horizontal swipe inside a vertical scroll, see <code>DragAxis</code>, <code>DragPriority</code> and <code>DragClaims</code> in <code>go doc ./widget Gestures</code> — that doc comment is the real reference for this recipe.</p>
+
+
+  <div class="rechead" id="animate"><h3>Animate a transition</h3><span class="src">docs/recipes/transition/main.go</span></div>
+  <p>Two ways, and choosing between them is the only real decision. <b>Implicit:</b> set a new <code>Value</code> on an <code>Animated</code> wrapper and it tweens there from wherever it currently is — no controller, no ticker, no <code>Dispose</code>. <b>Explicit:</b> hold an <code>*anim.Controller</code>, register it as a ticker, read <code>Value()</code> in <code>Build</code>. Reach for the second only when the motion is not a tween between two states.</p>
+  <!-- generated:docs/recipes/transition/main.go from="type Demo struct{}" to="func main()" -->
+  <pre class="code"><code><span class="t-kw">type</span> Demo <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Demo) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;demoState{} }
+
+<span class="t-kw">type</span> demoState <span class="t-kw">struct</span> {
+	widget.StateBase[Demo]
+	ctx  widget.Ctx
+	open <span class="t-typ">bool</span>
+	<span class="t-com">// pulse is the explicit side: a controller the state owns, ticked by the</span>
+	<span class="t-com">// runtime, read in Build.</span>
+	pulse *anim.Controller
+}
+
+<span class="t-kw">func</span> (s *demoState) <span class="t-fn">Init</span>(ctx widget.Ctx) {
+	s.ctx = ctx
+	s.pulse = &amp;anim.Controller{
+		Duration: <span class="t-num">900</span> * time.Millisecond,
+		Curve:    anim.EaseInOut,
+		<span class="t-com">// OnChange fires every frame the value moves, and once at the end.</span>
+		<span class="t-com">// SetState(nil) means &#34;nothing to mutate, just repaint&#34;.</span>
+		OnChange: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-typ">nil</span>) },
+	}
+	ctx.<span class="t-fn">AddTicker</span>(s.pulse)
+	s.pulse.<span class="t-fn">Forward</span>()
+}
+
+<span class="t-com">// Dispose is not optional for a ticker. An element that goes away without</span>
+<span class="t-com">// removing its ticker leaves the runtime calling into dead state, and the app</span>
+<span class="t-com">// never reaches an idle frame.</span>
+<span class="t-kw">func</span> (s *demoState) <span class="t-fn">Dispose</span>() { s.ctx.<span class="t-fn">RemoveTicker</span>(s.pulse) }
+
+<span class="t-kw">func</span> (s *demoState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+
+	<span class="t-com">// --- implicit: three tweens driven by one bool -----------------------</span>
+	<span class="t-com">//</span>
+	<span class="t-com">// Each wrapper compares its Value to the one it last saw. Changed, it</span>
+	<span class="t-com">// animates from the current interpolated point — not from the old target —</span>
+	<span class="t-com">// so reversing mid-flight is continuous rather than a jump.</span>
+	target, tint := <span class="t-typ">float32</span>(<span class="t-num">1</span>), th.Surface
+	<span class="t-kw">if</span> s.open {
+		target, tint = <span class="t-num">1.6</span>, th.Primary
+	}
+
+	grow := widget.<span class="t-fn">AnimatedScale</span>(target, <span class="t-num">220</span>*time.Millisecond,
+		<span class="t-fn">swatch</span>(th, <span class="t-str">&#34;AnimatedScale&#34;</span>))
+
+	recolour := widget.<span class="t-fn">AnimateColor</span>(tint, <span class="t-num">220</span>*time.Millisecond, <span class="t-kw">func</span>(c paint.Color) widget.Widget {
+		<span class="t-kw">return</span> widget.Decorated{Color: c, Radius: <span class="t-num">10</span>,
+			Child: widget.Sized{W: <span class="t-num">96</span>, H: <span class="t-num">56</span>}}
+	})
+
+	<span class="t-com">// A scalar tween is the general case: feed it anything that lerps, here</span>
+	<span class="t-com">// an opacity. Duration 0 means the 150ms default.</span>
+	fade := widget.<span class="t-fn">AnimateFloat</span>(<span class="t-fn">boolTo</span>(s.open, <span class="t-num">1</span>, <span class="t-num">0.25</span>), <span class="t-num">0</span>, <span class="t-kw">func</span>(a <span class="t-typ">float32</span>) widget.Widget {
+		<span class="t-kw">return</span> widget.Opacity{Alpha: a, Child: <span class="t-fn">swatch</span>(th, <span class="t-str">&#34;AnimateFloat&#34;</span>)}
+	})
+
+	<span class="t-com">// --- explicit: one clock, two properties -----------------------------</span>
+	<span class="t-com">//</span>
+	<span class="t-com">// Value() is in [0,1]. Everything derived from it moves on the same frame,</span>
+	<span class="t-com">// which is the thing two independent implicit tweens cannot promise.</span>
+	v := s.pulse.<span class="t-fn">Value</span>()
+	pulse := widget.Transform{
+		T:      paint.Transform{Rotation: v * <span class="t-num">0.5</span>},
+		Center: <span class="t-typ">true</span>,
+		Child: widget.Decorated{
+			Color:  paint.<span class="t-fn">Lerp</span>(th.Surface, th.Warning, v),
+			Radius: <span class="t-num">10</span>,
+			Child:  widget.Sized{W: <span class="t-num">96</span>, H: <span class="t-num">56</span>},
+		},
+	}
+
+	row := widget.<span class="t-fn">Row</span>(grow, widget.Sized{W: <span class="t-num">14</span>}, recolour, widget.Sized{W: <span class="t-num">14</span>}, fade)
+	row.CrossAlign = layout.CrossCenter
+
+	col := widget.<span class="t-fn">Column</span>(
+		theme.<span class="t-fn">Label</span>(<span class="t-str">&#34;Implicit — one bool, three tweens&#34;</span>),
+		widget.Sized{H: <span class="t-num">12</span>},
+		row,
+		widget.Sized{H: <span class="t-num">20</span>},
+		theme.Button{Label: <span class="t-str">&#34;Toggle&#34;</span>, Primary: <span class="t-typ">true</span>,
+			OnTap: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.open = !s.open }) }},
+		widget.Sized{H: <span class="t-num">24</span>},
+		theme.<span class="t-fn">Label</span>(<span class="t-str">&#34;Explicit — one controller, two properties&#34;</span>),
+		widget.Sized{H: <span class="t-num">12</span>},
+		pulse,
+		widget.Sized{H: <span class="t-num">12</span>},
+		theme.Button{Label: <span class="t-str">&#34;Run again&#34;</span>, OnTap: <span class="t-kw">func</span>() {
+			<span class="t-com">// Jump(0) rewinds and repaints; Forward() starts the run.</span>
+			s.pulse.<span class="t-fn">Jump</span>(<span class="t-num">0</span>)
+			s.pulse.<span class="t-fn">Forward</span>()
+		}},
+	)
+	col.CrossAlign = layout.CrossCenter
+
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">20</span>, Child: widget.<span class="t-fn">Center</span>(col)}}}
+}
+
+<span class="t-kw">func</span> <span class="t-fn">swatch</span>(th theme.Theme, label <span class="t-typ">string</span>) widget.Widget {
+	<span class="t-kw">return</span> widget.Decorated{
+		BorderColor: th.Border, BorderWidth: <span class="t-num">1.5</span>, Radius: <span class="t-num">10</span>,
+		Child: widget.Sized{W: <span class="t-num">96</span>, H: <span class="t-num">56</span>, Child: widget.<span class="t-fn">Center</span>(
+			widget.Text{Value: label, Size: th.Type.Caption, Color: th.Muted})},
+	}
+}
+
+<span class="t-kw">func</span> <span class="t-fn">boolTo</span>(b <span class="t-typ">bool</span>, yes, no <span class="t-typ">float32</span>) <span class="t-typ">float32</span> {
+	<span class="t-kw">if</span> b {
+		<span class="t-kw">return</span> yes
+	}
+	<span class="t-kw">return</span> no
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/transition</code></p>
+  <p><b>What to know.</b> An implicit wrapper reversing mid-flight continues from the current interpolated point, not from the old target, so a toggle flipped twice quickly is smooth rather than jumpy. A ticker you register must be removed in <code>Dispose</code>, or the runtime keeps calling into dead state and the app never reaches an idle frame. <code>anim.Spring</code> is for motion that comes to rest <em>against</em> something; use <code>EaseOut</code> for motion that leaves, because a card being dismissed should not come back a few pixels before it goes.</p>
+  <div class="note">
+    <p><b>Honest limitation.</b> There is no velocity handoff. A drag released mid-flight cannot pass its speed into the animation that continues it, so flick-to-dismiss will not carry the gesture's momentum, and that is a real difference in feel from Flutter or Compose. A proper critically-damped solver exists in the scroll implementation but is private to it.</p>
+  </div>
+
+
+  <div class="rechead" id="paint"><h3>Draw with a custom painter</h3><span class="src">docs/recipes/custompaint/main.go</span></div>
+  <p>For graphics that do not decompose into widgets — a chart, a gauge, a board, generative art — <code>widget.Canvas</code> hands you a <code>paint.Canvas</code> whose origin is the surface's top-left. The same primitives the framework paints with, running through the same rasterizer.</p>
+  <!-- generated:docs/recipes/custompaint/main.go from="type bar struct {" to="func main()" -->
+  <pre class="code"><code><span class="t-kw">type</span> bar <span class="t-kw">struct</span> {
+	label <span class="t-typ">string</span>
+	value <span class="t-typ">float32</span>
+}
+
+<span class="t-kw">var</span> bars = []bar{
+	{<span class="t-str">&#34;Desktop&#34;</span>, <span class="t-num">0.82</span>},
+	{<span class="t-str">&#34;Web&#34;</span>, <span class="t-num">0.64</span>},
+	{<span class="t-str">&#34;iOS&#34;</span>, <span class="t-num">0.47</span>},
+	{<span class="t-str">&#34;Android&#34;</span>, <span class="t-num">0.55</span>},
+	{<span class="t-str">&#34;Terminal&#34;</span>, <span class="t-num">0.21</span>},
+}
+
+<span class="t-com">// Chart is stateless: it has no mutable state, so it implements Build</span>
+<span class="t-com">// directly rather than CreateState. Most custom painters are like this —</span>
+<span class="t-com">// the drawing is a pure function of the data above it.</span>
+<span class="t-kw">type</span> Chart <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Chart) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Of</span>(ctx)
+
+	<span class="t-kw">return</span> widget.Canvas{H: <span class="t-num">220</span>, Clip: <span class="t-typ">true</span>, Draw: <span class="t-kw">func</span>(c paint.Canvas, size geom.Size) {
+		<span class="t-kw">const</span> (
+			size0 = <span class="t-typ">float32</span>(<span class="t-num">12</span>) <span class="t-com">// label size</span>
+			gap   = <span class="t-typ">float32</span>(<span class="t-num">10</span>) <span class="t-com">// between label and bar</span>
+			rowH  = <span class="t-typ">float32</span>(<span class="t-num">34</span>)
+		)
+
+		<span class="t-com">// Measure every label and lay the chart out around the widest, so the</span>
+		<span class="t-com">// bars all start at the same x and no label is clipped. This is the</span>
+		<span class="t-com">// whole reason measurement belongs on the canvas: the gutter is a</span>
+		<span class="t-com">// property of the text, not a number someone picked.</span>
+		gutter := <span class="t-typ">float32</span>(<span class="t-num">0</span>)
+		<span class="t-kw">for</span> _, b := <span class="t-kw">range</span> bars {
+			<span class="t-kw">if</span> w := c.<span class="t-fn">MeasureWidthIn</span>(<span class="t-str">&#34;&#34;</span>, b.label, size0); w &gt; gutter {
+				gutter = w
+			}
+		}
+
+		<span class="t-com">// MetricsIn gives the vertical metrics of the face at this size.</span>
+		<span class="t-com">// Centring text on a row means centring the ink between ascent and</span>
+		<span class="t-com">// descent — not placing the baseline at the row&#39;s middle, which sits</span>
+		<span class="t-com">// every label noticeably low.</span>
+		m := c.<span class="t-fn">MetricsIn</span>(<span class="t-str">&#34;&#34;</span>, size0)
+		baseline := (rowH + m.Ascent - m.Descent) / <span class="t-num">2</span>
+
+		trackX := gutter + gap
+		trackW := size.W - trackX
+		<span class="t-kw">if</span> trackW &lt; <span class="t-num">1</span> {
+			<span class="t-kw">return</span> <span class="t-com">// too narrow to draw anything honest</span>
+		}
+
+		<span class="t-kw">for</span> i, b := <span class="t-kw">range</span> bars {
+			top := <span class="t-typ">float32</span>(i) * rowH
+
+			<span class="t-com">// Right-align the label against the gutter.</span>
+			lw := c.<span class="t-fn">MeasureWidthIn</span>(<span class="t-str">&#34;&#34;</span>, b.label, size0)
+			c.<span class="t-fn">TextIn</span>(<span class="t-str">&#34;&#34;</span>, b.label, geom.Pt{X: gutter - lw, Y: top + baseline}, size0, th.Muted)
+
+			track := geom.<span class="t-fn">RectXYWH</span>(trackX, top+<span class="t-num">9</span>, trackW, <span class="t-num">16</span>)
+			c.<span class="t-fn">FillRRect</span>(track, <span class="t-num">8</span>, th.SurfaceHover)
+			c.<span class="t-fn">FillRRect</span>(geom.<span class="t-fn">RectXYWH</span>(trackX, top+<span class="t-num">9</span>, trackW*b.value, <span class="t-num">16</span>), <span class="t-num">8</span>, th.<span class="t-fn">ChartAt</span>(i))
+
+			<span class="t-com">// The value sits just inside the bar&#39;s end when it fits there, and</span>
+			<span class="t-com">// just outside when it does not — a decision that needs the width</span>
+			<span class="t-com">// of the text and the width of the bar in the same breath.</span>
+			v := fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%.0f%%&#34;</span>, b.value*<span class="t-num">100</span>)
+			vw := c.<span class="t-fn">MeasureWidthIn</span>(<span class="t-str">&#34;&#34;</span>, v, size0)
+			x, col := trackX+trackW*b.value-vw-<span class="t-num">8</span>, th.OnPrimary
+			<span class="t-kw">if</span> x &lt; trackX+<span class="t-num">4</span> {
+				x, col = trackX+trackW*b.value+<span class="t-num">8</span>, th.Muted
+			}
+			c.<span class="t-fn">TextIn</span>(<span class="t-str">&#34;&#34;</span>, v, geom.Pt{X: x, Y: top + baseline}, size0, col)
+		}
+	}}
+}
+
+<span class="t-kw">type</span> Root <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Root) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+	col := widget.<span class="t-fn">Column</span>(
+		theme.<span class="t-fn">Title</span>(<span class="t-str">&#34;Platform coverage&#34;</span>),
+		widget.Sized{H: <span class="t-num">6</span>},
+		theme.<span class="t-fn">Caption</span>(<span class="t-str">&#34;drawn in one Canvas, laid out from measured text&#34;</span>),
+		widget.Sized{H: <span class="t-num">16</span>},
+		theme.Card{Child: Chart{}},
+	)
+	col.CrossAlign = layout.CrossStretch
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">20</span>, Child: col}}}
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/custompaint</code></p>
+  <p><b>Measure, do not guess.</b> <code>paint.Canvas</code> embeds <code>paint.Measurer</code>, so the canvas you are given can be asked how wide a run will be before you draw it — and it answers from the same painter that will shape it, so a measurement and the draw that follows cannot disagree. Until recently this was impossible: measurement lived only on the painter, not on the canvas interface, and a custom painter had to assume an average glyph width. Centring text on a row means centring the ink between <code>Ascent</code> and <code>Descent</code> from <code>MetricsIn</code>, not putting the baseline at the row's middle — that sits every label noticeably low.</p>
+  <p><b>Other things worth knowing.</b> Drawing may overflow the surface unless you set <code>Clip</code>. Scene diffing compares images, paths and mark batches <em>by identity</em>, so pass the same <code>*Path</code> or <code>image.Image</code> across frames to avoid spurious repaints — and pass a <em>new</em> image value after mutating pixels in place, or the change is not detected. Before drawing a conventional chart by hand, look at the <code>chart</code> package.</p>
+
+
+  <div class="rechead" id="a11y"><h3>Make something accessible</h3><span class="src">docs/recipes/accessible/main.go</span></div>
+  <p>The framework derives semantics from the tree it already has: a <code>Text</code> contributes its string, an <code>Interactive</code> with <code>OnTap</code> contributes a button. That covers most screens. It cannot cover a control painted inside a <code>Canvas</code>, because there is nothing in the tree to read — which is what <code>Sem</code> and <code>Semantics</code> are for.</p>
+  <!-- generated:docs/recipes/accessible/main.go from="const stars = 5" to="func main()" -->
+  <pre class="code"><code><span class="t-kw">const</span> stars = <span class="t-num">5</span>
+
+<span class="t-kw">type</span> Rating <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Rating) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;ratingState{} }
+
+<span class="t-kw">type</span> ratingState <span class="t-kw">struct</span> {
+	widget.StateBase[Rating]
+	picked <span class="t-typ">int</span> <span class="t-com">// 0 = unrated</span>
+}
+
+<span class="t-kw">func</span> (s *ratingState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+
+	kids := <span class="t-typ">make</span>([]widget.Widget, <span class="t-num">0</span>, stars)
+	<span class="t-kw">for</span> i := <span class="t-num">1</span>; i &lt;= stars; i++ {
+		n, on := i, i &lt;= s.picked
+		kids = <span class="t-typ">append</span>(kids, widget.Interactive{
+			<span class="t-com">// Sem, not a Semantics wrapper around the Interactive. Both work,</span>
+			<span class="t-com">// but Sem keeps the control as one node: a radio nested inside a</span>
+			<span class="t-com">// button is worse for a screen-reader user than either alone,</span>
+			<span class="t-com">// because it has to be stepped through twice.</span>
+			<span class="t-com">//</span>
+			<span class="t-com">// Label is required here. Without it this node is a button with</span>
+			<span class="t-com">// no name — announced as &#34;button&#34;, which tells the user nothing.</span>
+			<span class="t-com">// OnActivate defaults to Gestures.OnTap, so the control is</span>
+			<span class="t-com">// operable by a VoiceOver double-tap without saying so twice.</span>
+			Sem: &amp;layout.SemInfo{
+				Role:    layout.RoleRadio,
+				Label:   fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%d of %d stars&#34;</span>, n, stars),
+				Checked: &amp;on,
+			},
+			Gestures: widget.Gestures{
+				OnTap: <span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.picked = n }) },
+			},
+			<span class="t-com">// theme.MinTouchTarget is the platform minimum (44pt). A glyph</span>
+			<span class="t-com">// drawn at 20px is a 20px tap target unless something says</span>
+			<span class="t-com">// otherwise, and that is the single most common accessibility</span>
+			<span class="t-com">// defect in a hand-drawn control.</span>
+			Child: widget.Sized{W: theme.MinTouchTarget, H: theme.MinTouchTarget,
+				Child: widget.<span class="t-fn">Center</span>(<span class="t-fn">star</span>(th, on))},
+		})
+	}
+
+	row := widget.<span class="t-fn">Row</span>(kids...)
+	row.CrossAlign = layout.CrossCenter
+
+	col := widget.<span class="t-fn">Column</span>(
+		<span class="t-com">// A heading is a landmark: it is how a screen-reader user skims a</span>
+		<span class="t-com">// page instead of reading all of it.</span>
+		widget.Semantics{Role: layout.RoleHeading, Label: <span class="t-str">&#34;Rate this recipe&#34;</span>,
+			Child: theme.<span class="t-fn">Title</span>(<span class="t-str">&#34;Rate this recipe&#34;</span>)},
+		widget.Sized{H: <span class="t-num">8</span>},
+
+		<span class="t-com">// Hidden removes a subtree from the semantics tree entirely. A</span>
+		<span class="t-com">// decorative rule carries no information, and announcing it is noise.</span>
+		widget.Semantics{Hidden: <span class="t-typ">true</span>, Child: widget.Canvas{H: <span class="t-num">6</span>, Draw: <span class="t-kw">func</span>(c paint.Canvas, size geom.Size) {
+			c.<span class="t-fn">FillRRect</span>(geom.<span class="t-fn">RectXYWH</span>(<span class="t-num">0</span>, <span class="t-num">2</span>, size.W, <span class="t-num">2</span>), <span class="t-num">1</span>, th.Border)
+		}}},
+
+		widget.Sized{H: <span class="t-num">14</span>},
+		row,
+		widget.Sized{H: <span class="t-num">14</span>},
+
+		<span class="t-com">// Live text is announced when it changes, so the status line is also</span>
+		<span class="t-com">// the confirmation that a tap did something.</span>
+		widget.Text{Value: <span class="t-fn">statusLine</span>(s.picked), Size: th.Type.Body, Color: th.Muted},
+	)
+	col.CrossAlign = layout.CrossStart
+
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">20</span>, Child: col}}}
+}
+
+<span class="t-kw">func</span> <span class="t-fn">statusLine</span>(n <span class="t-typ">int</span>) <span class="t-typ">string</span> {
+	<span class="t-kw">if</span> n == <span class="t-num">0</span> {
+		<span class="t-kw">return</span> <span class="t-str">&#34;Not rated yet&#34;</span>
+	}
+	<span class="t-kw">return</span> fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;Rated %d of %d&#34;</span>, n, stars)
+}
+
+<span class="t-com">// star is the drawn part. Nothing here contributes semantics — that is the</span>
+<span class="t-com">// whole reason the Interactive above has to declare them.</span>
+<span class="t-kw">func</span> <span class="t-fn">star</span>(th theme.Theme, on <span class="t-typ">bool</span>) widget.Widget {
+	col := th.Outline
+	<span class="t-kw">if</span> on {
+		col = th.Primary
+	}
+	<span class="t-kw">return</span> widget.Canvas{W: <span class="t-num">22</span>, H: <span class="t-num">22</span>, Draw: <span class="t-kw">func</span>(c paint.Canvas, size geom.Size) {
+		c.<span class="t-fn">FillRRect</span>(geom.<span class="t-fn">RectXYWH</span>(<span class="t-num">3</span>, <span class="t-num">3</span>, size.W-<span class="t-num">6</span>, size.H-<span class="t-num">6</span>), <span class="t-num">3</span>, col)
+	}}
+}
+</code></pre>
+  <!-- /generated -->
+  <p>And the test, which is the point as much as the program is — semantics are an ordinary value under <code>go test</code>, with no screen reader, no emulator and no device:</p>
+  <!-- generated:docs/recipes/accessible/accessible_test.go -->
+  <pre class="code"><code><span class="t-kw">package</span> main
+
+<span class="t-kw">import</span> (
+	<span class="t-str">&#34;testing&#34;</span>
+
+	<span class="t-str">&#34;github.com/doug/gophics/apptest&#34;</span>
+	<span class="t-str">&#34;github.com/doug/gophics/layout&#34;</span>
+)
+
+<span class="t-com">// TestSemantics asserts on the accessibility tree the app publishes — the same</span>
+<span class="t-com">// tree the macOS, Windows, Linux, web and Android backends hand to the</span>
+<span class="t-com">// platform. It needs no window, no GPU and no assistive technology installed.</span>
+<span class="t-kw">func</span> <span class="t-fn">TestSemantics</span>(t *testing.T) {
+	a := apptest.<span class="t-fn">New</span>(t, Rating{}, apptest.<span class="t-fn">WithConfig</span>(<span class="t-fn">config</span>()))
+
+	<span class="t-com">// Every star is named. A control announced as a bare &#34;radio button&#34; is</span>
+	<span class="t-com">// the defect this test exists to catch.</span>
+	<span class="t-kw">for</span> _, label := <span class="t-kw">range</span> []<span class="t-typ">string</span>{
+		<span class="t-str">&#34;1 of 5 stars&#34;</span>, <span class="t-str">&#34;2 of 5 stars&#34;</span>, <span class="t-str">&#34;3 of 5 stars&#34;</span>,
+		<span class="t-str">&#34;4 of 5 stars&#34;</span>, <span class="t-str">&#34;5 of 5 stars&#34;</span>,
+	} {
+		a.<span class="t-fn">AssertLabel</span>(label)
+	}
+
+	<span class="t-com">// The role is what decides how the platform announces and operates it.</span>
+	<span class="t-kw">if</span> n := a.<span class="t-fn">MustNode</span>(<span class="t-str">&#34;3 of 5 stars&#34;</span>); n.Role != layout.RoleRadio {
+		t.<span class="t-fn">Errorf</span>(<span class="t-str">&#34;star role = %v, want RoleRadio&#34;</span>, n.Role)
+	}
+
+	<span class="t-com">// The heading is the landmark a screen-reader user navigates by.</span>
+	<span class="t-kw">if</span> a.<span class="t-fn">Role</span>(layout.RoleHeading) == <span class="t-typ">nil</span> {
+		t.<span class="t-fn">Errorf</span>(<span class="t-str">&#34;no heading in the tree. Labels: %v&#34;</span>, a.<span class="t-fn">Labels</span>())
+	}
+
+	<span class="t-com">// Tapping by label is how the test finds the control, rather than by a</span>
+	<span class="t-com">// pixel that moves the moment the layout changes — and it only works</span>
+	<span class="t-com">// because the control is labelled, so this doubles as the check.</span>
+	a.<span class="t-fn">TapLabel</span>(<span class="t-str">&#34;4 of 5 stars&#34;</span>)
+	a.<span class="t-fn">AssertLabel</span>(<span class="t-str">&#34;Rated 4 of 5&#34;</span>)
+
+	<span class="t-com">// Checked has to follow the state, or a screen reader reads the rating</span>
+	<span class="t-com">// the user had before the tap.</span>
+	n := a.<span class="t-fn">MustNode</span>(<span class="t-str">&#34;4 of 5 stars&#34;</span>)
+	<span class="t-kw">if</span> n.Checked == <span class="t-typ">nil</span> || !*n.Checked {
+		t.<span class="t-fn">Errorf</span>(<span class="t-str">&#34;4th star Checked = %v, want true&#34;</span>, n.Checked)
+	}
+	<span class="t-kw">if</span> n := a.<span class="t-fn">MustNode</span>(<span class="t-str">&#34;5 of 5 stars&#34;</span>); n.Checked == <span class="t-typ">nil</span> || *n.Checked {
+		t.<span class="t-fn">Errorf</span>(<span class="t-str">&#34;5th star Checked = %v, want false&#34;</span>, n.Checked)
+	}
+
+	<span class="t-com">// The decorative rule is hidden, so it must not appear as a node. Nothing</span>
+	<span class="t-com">// labels it, which is exactly why a positive assertion is impossible here</span>
+	<span class="t-com">// and the count of nodes is the available check.</span>
+	<span class="t-kw">for</span> _, got := <span class="t-kw">range</span> a.<span class="t-fn">Nodes</span>() {
+		<span class="t-kw">if</span> got.Role == layout.RoleImage {
+			t.<span class="t-fn">Errorf</span>(<span class="t-str">&#34;decorative canvas reached the semantics tree as %v&#34;</span>, got)
+		}
+	}
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/accessible</code> &nbsp;·&nbsp; <code>go test ./docs/recipes/accessible</code></p>
+  <p><b>What to know.</b> Prefer <code>Interactive.Sem</code> over wrapping the control in a <code>Semantics</code>: both work, but <code>Sem</code> keeps it as one node, and a checkbox nested inside a button is worse for a screen-reader user than either alone because it has to be stepped through twice. <code>OnActivate</code> defaults to <code>Gestures.OnTap</code>, so you rarely set it. Size drawn controls to <code>theme.MinTouchTarget</code> — a glyph drawn at 20px is a 20px tap target unless something says otherwise, and that is the most common defect in a hand-drawn control. Mark decoration <code>Hidden</code>; announcing a divider is noise.</p>
+  <p>Accessibility is implemented on macOS (<code>NSAccessibility</code>), Windows (UI Automation), Linux (AT-SPI), the web (a DOM mirror) and Android (<code>AccessibilityNodeProvider</code>), so this is a real check rather than a gesture. The terminal backend has none.</p>
+
+
+  <div class="rechead" id="select"><h3>Select and copy text</h3><span class="src">docs/recipes/selecttext/main.go</span></div>
+  <p>Selection is framework-level, not platform-level: gophics paints the highlight, tracks the range and writes to the platform clipboard itself. So double-click-for-a-word, triple-click-for-a-paragraph, shift-click to extend and Cmd/Ctrl+C behave the same on desktop, web, a phone and a terminal, with no DOM text and no native text view involved.</p>
+  <!-- generated:docs/recipes/selecttext/main.go from="const (" to="func main()" -->
+  <pre class="code"><code><span class="t-kw">const</span> (
+	title = <span class="t-str">&#34;Selecting text&#34;</span>
+	body  = <span class="t-str">&#34;Selection is the quietest part of an interface and the first &#34;</span> +
+		<span class="t-str">&#34;thing a reader reaches for. Three Text widgets inside one &#34;</span> +
+		<span class="t-str">&#34;SelectionArea select as a single range, the way a browser does.&#34;</span>
+	attrib = <span class="t-str">&#34;— the gophics cookbook&#34;</span>
+)
+
+<span class="t-kw">type</span> Reader <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Reader) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;readerState{} }
+
+<span class="t-kw">type</span> readerState <span class="t-kw">struct</span> {
+	widget.StateBase[Reader]
+	selected <span class="t-typ">string</span>
+	note     <span class="t-typ">string</span>
+}
+
+<span class="t-kw">func</span> (s *readerState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+
+	passage := widget.<span class="t-fn">Column</span>(
+		widget.Text{Value: title, Font: theme.FontBold, Size: th.Type.Title, Color: th.Text, Wrap: <span class="t-typ">true</span>},
+		widget.Sized{H: <span class="t-num">8</span>},
+		widget.Text{Value: body, Size: th.Type.Body, Color: th.Text, Wrap: <span class="t-typ">true</span>},
+		widget.Sized{H: <span class="t-num">8</span>},
+		widget.Text{Value: attrib, Size: th.Type.Caption, Color: th.Muted, Wrap: <span class="t-typ">true</span>},
+	)
+	passage.CrossAlign = layout.CrossStart
+
+	<span class="t-com">// The area wraps the padding rather than sitting inside it. An area drawn</span>
+	<span class="t-com">// tightly around the glyphs never sees a press that begins in the margin,</span>
+	<span class="t-com">// so a drag starting just left of the first line would select nothing —</span>
+	<span class="t-com">// where a browser would extend to the nearest line.</span>
+	<span class="t-com">//</span>
+	<span class="t-com">// Text widgets in the subtree opt in by reading the area&#39;s registry from</span>
+	<span class="t-com">// context. Nothing about the children changes.</span>
+	selectable := widget.SelectionArea{
+		Child: widget.Padding{Insets: geom.<span class="t-fn">InsetsAll</span>(<span class="t-num">14</span>), Child: passage},
+		<span class="t-com">// OnSelect fires on every change, and with &#34;&#34; when the selection is</span>
+		<span class="t-com">// cleared — which is how a Copy button knows to disable itself.</span>
+		OnSelect: <span class="t-kw">func</span>(t <span class="t-typ">string</span>) { s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.selected = t }) },
+	}
+
+	col := widget.<span class="t-fn">Column</span>(
+		theme.<span class="t-fn">Caption</span>(<span class="t-str">&#34;Drag across any of it — the three blocks select as one&#34;</span>),
+		widget.Sized{H: <span class="t-num">10</span>},
+		theme.Card{Pad: <span class="t-num">0</span>, Child: selectable},
+		widget.Sized{H: <span class="t-num">16</span>},
+		widget.Text{Value: <span class="t-fn">readout</span>(s.selected), Size: th.Type.Caption, Color: th.Muted, Wrap: <span class="t-typ">true</span>},
+		widget.Sized{H: <span class="t-num">12</span>},
+		theme.Button{
+			Label:   <span class="t-str">&#34;Copy selection&#34;</span>,
+			Primary: s.selected != <span class="t-str">&#34;&#34;</span>,
+			OnTap:   <span class="t-kw">func</span>() { s.<span class="t-typ">copy</span>(ctx) },
+		},
+		widget.Sized{H: <span class="t-num">8</span>},
+		widget.Text{Value: s.note, Size: th.Type.Caption, Color: th.Muted},
+	)
+	col.CrossAlign = layout.CrossStretch
+
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">18</span>, Child: col}}}
+}
+
+<span class="t-com">// copy writes the selection to the platform clipboard. Cmd/Ctrl+C already does</span>
+<span class="t-com">// this without any code; this exists for the app&#39;s own Copy affordance.</span>
+<span class="t-com">//</span>
+<span class="t-com">// ctx.Clipboard() is nil before the runner has provided one, and the write can</span>
+<span class="t-com">// fail — a browser refuses a clipboard write that is not tied to a user</span>
+<span class="t-com">// gesture. Both are ordinary conditions to report, not to panic on.</span>
+<span class="t-kw">func</span> (s *readerState) <span class="t-typ">copy</span>(ctx widget.Ctx) {
+	<span class="t-kw">if</span> s.selected == <span class="t-str">&#34;&#34;</span> {
+		<span class="t-kw">return</span>
+	}
+	cb := ctx.<span class="t-fn">Clipboard</span>()
+	<span class="t-kw">if</span> cb == <span class="t-typ">nil</span> {
+		s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.note = <span class="t-str">&#34;no clipboard on this platform&#34;</span> })
+		<span class="t-kw">return</span>
+	}
+	<span class="t-kw">if</span> err := cb.<span class="t-fn">ClipboardWrite</span>(s.selected); err != <span class="t-typ">nil</span> {
+		s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.note = <span class="t-str">&#34;copy refused: &#34;</span> + err.<span class="t-fn">Error</span>() })
+		<span class="t-kw">return</span>
+	}
+	s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.note = fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;copied %d characters&#34;</span>, <span class="t-typ">len</span>([]<span class="t-typ">rune</span>(s.selected))) })
+}
+
+<span class="t-kw">func</span> <span class="t-fn">readout</span>(sel <span class="t-typ">string</span>) <span class="t-typ">string</span> {
+	<span class="t-kw">if</span> sel == <span class="t-str">&#34;&#34;</span> {
+		<span class="t-kw">return</span> <span class="t-str">&#34;Nothing selected yet.&#34;</span>
+	}
+	n := <span class="t-typ">len</span>([]<span class="t-typ">rune</span>(sel))
+	shown := sel
+	<span class="t-kw">if</span> r := []<span class="t-typ">rune</span>(shown); <span class="t-typ">len</span>(r) &gt; <span class="t-num">64</span> {
+		shown = <span class="t-typ">string</span>(r[:<span class="t-num">30</span>]) + <span class="t-str">&#34; … &#34;</span> + <span class="t-typ">string</span>(r[<span class="t-typ">len</span>(r)-<span class="t-num">30</span>:])
+	}
+	<span class="t-kw">return</span> fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;%d characters selected: %q&#34;</span>, n, shown)
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/selecttext</code></p>
+  <p><b>What to know.</b> Wrap the padding with the <code>SelectionArea</code>, not the other way round: an area drawn tightly around the glyphs never sees a press that begins in the margin, so a drag starting just left of the first line selects nothing where a browser would extend to the nearest line. <code>Text</code> widgets in the subtree opt in by reading the area's registry from context — nothing about the children changes. For a single read-only label, <code>widget.SelectableText</code> is the smaller tool. <code>ctx.Clipboard()</code> is nil before the runner has provided one, and the write can fail: a browser refuses a clipboard write not tied to a user gesture.</p>
+
+
+  <div class="rechead" id="capability"><h3>Read a platform capability, and handle <code>nil</code></h3><span class="src">docs/recipes/capability/main.go</span></div>
+  <p>Platform services are plain Go interfaces reached through the build context. <code>ctx.Battery()</code> returns a <code>shell.Battery</code> or <code>nil</code>, and <code>nil</code> means "this platform cannot tell you". That is an answer about the platform, not an error: a build that cannot see controllers must not be confused with a machine that has none, or the app shows a pairing prompt forever. So the right response is almost always to hide the affordance.</p>
+  <!-- generated:docs/recipes/capability/main.go from="type Panel struct{}" to="func main()" -->
+  <pre class="code"><code><span class="t-kw">type</span> Panel <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (Panel) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;panelState{} }
+
+<span class="t-kw">type</span> panelState <span class="t-kw">struct</span> {
+	widget.StateBase[Panel]
+	subscribed <span class="t-typ">bool</span>
+	note       <span class="t-typ">string</span>
+}
+
+<span class="t-kw">func</span> (s *panelState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	th := theme.<span class="t-fn">Auto</span>(ctx)
+	s.<span class="t-fn">subscribe</span>(ctx)
+
+	rows := []widget.Widget{
+		theme.<span class="t-fn">Title</span>(<span class="t-str">&#34;What this platform can do&#34;</span>),
+		widget.Sized{H: <span class="t-num">4</span>},
+		theme.<span class="t-fn">Caption</span>(<span class="t-str">&#34;Rows that are missing are not broken — the platform does not offer them&#34;</span>),
+		widget.Sized{H: <span class="t-num">16</span>},
+	}
+
+	<span class="t-com">// Battery: present, so show it. A capability&#39;s own methods are the live</span>
+	<span class="t-com">// source; the subscription below is only what tells us to rebuild.</span>
+	<span class="t-kw">if</span> b := ctx.<span class="t-fn">Battery</span>(); b != <span class="t-typ">nil</span> {
+		state := <span class="t-str">&#34;on battery&#34;</span>
+		<span class="t-kw">if</span> b.<span class="t-fn">Charging</span>() {
+			state = <span class="t-str">&#34;charging&#34;</span>
+		}
+		rows = <span class="t-typ">append</span>(rows, theme.ListTile{
+			Title:    fmt.<span class="t-fn">Sprintf</span>(<span class="t-str">&#34;Battery — %.0f%%&#34;</span>, b.<span class="t-fn">Level</span>()*<span class="t-num">100</span>),
+			Subtitle: state,
+		})
+	} <span class="t-kw">else</span> {
+		<span class="t-com">// Saying so is right for a demo. A real app deletes the row.</span>
+		rows = <span class="t-typ">append</span>(rows, theme.ListTile{
+			Title:    <span class="t-str">&#34;Battery&#34;</span>,
+			Subtitle: <span class="t-str">&#34;not reported here&#34;</span>,
+		})
+	}
+
+	<span class="t-com">// Share: the affordance only exists where the platform has a share sheet.</span>
+	<span class="t-com">// There is no fallback worth writing — a hand-rolled share menu that</span>
+	<span class="t-com">// cannot reach the OS targets is worse than no button.</span>
+	<span class="t-kw">if</span> sh := ctx.<span class="t-fn">Share</span>(); sh != <span class="t-typ">nil</span> {
+		rows = <span class="t-typ">append</span>(rows, theme.ListTile{
+			Title:    <span class="t-str">&#34;Share this recipe&#34;</span>,
+			Subtitle: <span class="t-str">&#34;opens the platform share sheet&#34;</span>,
+			OnTap: <span class="t-kw">func</span>() {
+				sh.<span class="t-fn">Share</span>(shell.ShareItem{
+					Title: <span class="t-str">&#34;gophics cookbook&#34;</span>,
+					Text:  <span class="t-str">&#34;Reading a platform capability, and handling nil.&#34;</span>,
+					URL:   <span class="t-str">&#34;https://github.com/doug/gophics&#34;</span>,
+				}, <span class="t-kw">func</span>(err <span class="t-typ">error</span>) {
+					<span class="t-com">// Completion, not success: most platforms give no</span>
+					<span class="t-com">// reliable &#34;shared&#34; signal, and a dismissal arrives here</span>
+					<span class="t-com">// with a nil error.</span>
+					s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() {
+						<span class="t-kw">if</span> err != <span class="t-typ">nil</span> {
+							s.note = <span class="t-str">&#34;share failed: &#34;</span> + err.<span class="t-fn">Error</span>()
+							<span class="t-kw">return</span>
+						}
+						s.note = <span class="t-str">&#34;share sheet closed&#34;</span>
+					})
+				})
+			},
+		})
+	}
+
+	<span class="t-com">// Haptics: the common case for a capability that *enriches* an action</span>
+	<span class="t-com">// rather than being the action. The tap must still work without it, so the</span>
+	<span class="t-com">// nil check guards one line and not the handler.</span>
+	rows = <span class="t-typ">append</span>(rows, theme.ListTile{
+		Title:    <span class="t-str">&#34;Tap me&#34;</span>,
+		Subtitle: <span class="t-fn">hapticNote</span>(ctx),
+		OnTap: <span class="t-kw">func</span>() {
+			<span class="t-kw">if</span> h := ctx.<span class="t-fn">Haptic</span>(); h != <span class="t-typ">nil</span> {
+				h.<span class="t-fn">Play</span>(shell.HapticSelection)
+			}
+			s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() { s.note = <span class="t-str">&#34;tapped&#34;</span> })
+		},
+	})
+
+	<span class="t-kw">if</span> s.note != <span class="t-str">&#34;&#34;</span> {
+		rows = <span class="t-typ">append</span>(rows,
+			widget.Sized{H: <span class="t-num">12</span>},
+			widget.Text{Value: s.note, Size: th.Type.Caption, Color: th.Muted})
+	}
+
+	col := widget.<span class="t-fn">Column</span>(rows...)
+	col.CrossAlign = layout.CrossStretch
+
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">18</span>, Child: col}}}
+}
+
+<span class="t-com">// subscribe registers for change notifications once.</span>
+<span class="t-com">//</span>
+<span class="t-com">// Capabilities are nil at mount — the tree builds before the shell is wired —</span>
+<span class="t-com">// and arrive on the first frame, with a rebuild when they do. So this belongs</span>
+<span class="t-com">// in Build and not in Init, guarded to run exactly once. Getting that wrong is</span>
+<span class="t-com">// the standard way an app concludes a capability is missing when it is not.</span>
+<span class="t-kw">func</span> (s *panelState) <span class="t-fn">subscribe</span>(ctx widget.Ctx) {
+	<span class="t-kw">if</span> s.subscribed {
+		<span class="t-kw">return</span>
+	}
+	b := ctx.<span class="t-fn">Battery</span>()
+	<span class="t-kw">if</span> b == <span class="t-typ">nil</span> {
+		<span class="t-kw">return</span> <span class="t-com">// either not wired yet, or genuinely absent — retry next frame</span>
+	}
+	s.subscribed = <span class="t-typ">true</span>
+	<span class="t-com">// OnChange takes no argument: it says something moved, and the app reads</span>
+	<span class="t-com">// Level() and Charging() again on the next build.</span>
+	b.<span class="t-fn">OnChange</span>(<span class="t-kw">func</span>() { s.<span class="t-fn">SetState</span>(<span class="t-typ">nil</span>) })
+}
+
+<span class="t-kw">func</span> <span class="t-fn">hapticNote</span>(ctx widget.Ctx) <span class="t-typ">string</span> {
+	<span class="t-kw">if</span> ctx.<span class="t-fn">Haptic</span>() == <span class="t-typ">nil</span> {
+		<span class="t-kw">return</span> <span class="t-str">&#34;no haptics here — the tap still works&#34;</span>
+	}
+	<span class="t-kw">return</span> <span class="t-str">&#34;with a selection tick&#34;</span>
+}
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/capability</code> &nbsp;·&nbsp; or see <code>examples/capabilities</code> for every capability at once</p>
+  <p><b>The timing trap.</b> Capabilities are <code>nil</code> at mount — the tree builds before the shell is wired — and arrive on the first frame, with a rebuild when they do. So a subscription belongs in <code>Build</code>, guarded to run once, and <em>not</em> in <code>Init</code>. Checking in <code>Init</code> is the standard way an app concludes a capability is missing when it is not.</p>
+  <p>The framework will not publish a capability whose implementation always returns nothing, for the same reason: desktop connectivity used to report <code>online = true</code> unconditionally and is now <code>nil</code> instead, which is the honest answer. The per-platform matrix lives in <code>internal/capgen/README.md</code> and is generated from the source, so it cannot claim support that is not there.</p>
+
+
+  <div class="rechead" id="theme"><h3>Theme an app</h3><span class="src">docs/recipes/themed/main.go</span></div>
+  <p>A theme is a plain struct of design tokens — colours, a corner radius, a type scale. No registry, no inheritance, no cascade: the nearest <code>Provide</code> above a widget wins, which is the one rule. Components call <code>theme.Of(ctx)</code> to find it.</p>
+  <!-- generated:docs/recipes/themed/main.go from="// brand is the whole customisation" to="func main()" -->
+  <pre class="code"><code><span class="t-com">// brand is the whole customisation: start from a built-in theme and move the</span>
+<span class="t-com">// tokens that are actually yours.</span>
+<span class="t-kw">func</span> <span class="t-fn">brand</span>(dark <span class="t-typ">bool</span>) theme.Theme {
+	t := theme.<span class="t-fn">Light</span>()
+	<span class="t-kw">if</span> dark {
+		t = theme.<span class="t-fn">Dark</span>()
+	}
+	t.Primary = paint.<span class="t-fn">RGB</span>(<span class="t-num">0.25</span>, <span class="t-num">0.47</span>, <span class="t-num">0.84</span>)
+	t.OnPrimary = paint.<span class="t-fn">RGB</span>(<span class="t-num">1</span>, <span class="t-num">1</span>, <span class="t-num">1</span>)
+	t.Radius = <span class="t-num">14</span>
+	t.Type.Body = <span class="t-num">15</span>
+	t.Type.Heading = <span class="t-num">19</span>
+	<span class="t-kw">return</span> t
+}
+
+<span class="t-kw">type</span> App <span class="t-kw">struct</span>{}
+
+<span class="t-kw">func</span> (App) <span class="t-fn">CreateState</span>() widget.State { <span class="t-kw">return</span> &amp;appState{} }
+
+<span class="t-kw">type</span> appState <span class="t-kw">struct</span> {
+	widget.StateBase[App]
+	<span class="t-com">// override is nil to follow the platform, or a pinned choice. An app with</span>
+	<span class="t-com">// a theme setting needs all three states — light, dark, follow — and a</span>
+	<span class="t-com">// bare bool cannot express the third.</span>
+	override *<span class="t-typ">bool</span>
+}
+
+<span class="t-kw">func</span> (s *appState) <span class="t-fn">Build</span>(ctx widget.Ctx) widget.Widget {
+	<span class="t-com">// ctx.DarkMode() is the platform&#39;s current colour scheme, and it changes</span>
+	<span class="t-com">// while the app runs: the subtree under this Provide rebuilds when it</span>
+	<span class="t-com">// does. That is why a derived value like a theme belongs in the tree and</span>
+	<span class="t-com">// not in app.Config.Provide, which is for things built once at startup.</span>
+	dark := ctx.<span class="t-fn">DarkMode</span>()
+	<span class="t-kw">if</span> s.override != <span class="t-typ">nil</span> {
+		dark = *s.override
+	}
+	th := <span class="t-fn">brand</span>(dark)
+
+	label := <span class="t-str">&#34;Following the system&#34;</span>
+	<span class="t-kw">switch</span> {
+	<span class="t-kw">case</span> s.override != <span class="t-typ">nil</span> &amp;&amp; *s.override:
+		label = <span class="t-str">&#34;Pinned dark&#34;</span>
+	<span class="t-kw">case</span> s.override != <span class="t-typ">nil</span>:
+		label = <span class="t-str">&#34;Pinned light&#34;</span>
+	}
+
+	col := widget.<span class="t-fn">Column</span>(
+		theme.<span class="t-fn">Heading</span>(<span class="t-str">&#34;Themed components&#34;</span>),
+		widget.Sized{H: <span class="t-num">4</span>},
+		theme.<span class="t-fn">Caption</span>(<span class="t-str">&#34;every colour, radius and text size below comes from the theme&#34;</span>),
+		widget.Sized{H: <span class="t-num">16</span>},
+
+		<span class="t-com">// Nothing here names a colour. theme.Of(ctx) inside each component</span>
+		<span class="t-com">// finds the Provide below, so re-theming the app is one struct change</span>
+		<span class="t-com">// rather than a sweep through the tree.</span>
+		theme.Card{Child: widget.<span class="t-fn">Column</span>(
+			theme.Button{Label: <span class="t-str">&#34;Primary action&#34;</span>, Primary: <span class="t-typ">true</span>, OnTap: <span class="t-kw">func</span>() {}},
+			widget.Sized{H: <span class="t-num">10</span>},
+			theme.Button{Label: <span class="t-str">&#34;Secondary&#34;</span>, OnTap: <span class="t-kw">func</span>() {}},
+			widget.Sized{H: <span class="t-num">10</span>},
+			theme.Checkbox{Label: <span class="t-str">&#34;Outline is a different token from Border&#34;</span>, Checked: <span class="t-typ">true</span>},
+			widget.Sized{H: <span class="t-num">10</span>},
+			theme.Field{Placeholder: <span class="t-str">&#34;A themed field&#34;</span>},
+		)},
+
+		widget.Sized{H: <span class="t-num">18</span>},
+		theme.Segmented{
+			Options:  []<span class="t-typ">string</span>{<span class="t-str">&#34;Light&#34;</span>, <span class="t-str">&#34;Dark&#34;</span>, <span class="t-str">&#34;System&#34;</span>},
+			Selected: <span class="t-fn">selectedIndex</span>(s.override),
+			OnChange: <span class="t-kw">func</span>(i <span class="t-typ">int</span>) {
+				s.<span class="t-fn">SetState</span>(<span class="t-kw">func</span>() {
+					<span class="t-kw">switch</span> i {
+					<span class="t-kw">case</span> <span class="t-num">0</span>:
+						s.override = <span class="t-fn">boolPtr</span>(<span class="t-typ">false</span>)
+					<span class="t-kw">case</span> <span class="t-num">1</span>:
+						s.override = <span class="t-fn">boolPtr</span>(<span class="t-typ">true</span>)
+					<span class="t-kw">default</span>:
+						s.override = <span class="t-typ">nil</span>
+					}
+				})
+			},
+		},
+		widget.Sized{H: <span class="t-num">8</span>},
+		theme.<span class="t-fn">Caption</span>(label),
+	)
+	col.CrossAlign = layout.CrossStretch
+
+	<span class="t-com">// Provide sits above everything that reads the theme, including the Fill</span>
+	<span class="t-com">// that paints the background. Put it below the Fill and the page keeps the</span>
+	<span class="t-com">// old background for one frame after a scheme change.</span>
+	<span class="t-kw">return</span> widget.Provide[theme.Theme]{Value: th, Child: widget.Fill{Color: th.Bg,
+		Child: widget.Padding{All: <span class="t-num">20</span>, Child: col}}}
+}
+
+<span class="t-kw">func</span> <span class="t-fn">selectedIndex</span>(override *<span class="t-typ">bool</span>) <span class="t-typ">int</span> {
+	<span class="t-kw">switch</span> {
+	<span class="t-kw">case</span> override == <span class="t-typ">nil</span>:
+		<span class="t-kw">return</span> <span class="t-num">2</span>
+	<span class="t-kw">case</span> *override:
+		<span class="t-kw">return</span> <span class="t-num">1</span>
+	<span class="t-kw">default</span>:
+		<span class="t-kw">return</span> <span class="t-num">0</span>
+	}
+}
+
+<span class="t-kw">func</span> <span class="t-fn">boolPtr</span>(b <span class="t-typ">bool</span>) *<span class="t-typ">bool</span> { <span class="t-kw">return</span> &amp;b }
+</code></pre>
+  <!-- /generated -->
+  <p><code>go run ./docs/recipes/themed</code></p>
+  <p><b>Derive, do not construct.</b> <code>theme.Theme</code> has around twenty colour fields, and the two that catch people out are <code>Border</code> (decorative chrome — dividers, a panel's hairline, allowed to be very faint) and <code>Outline</code> (the edge of an <em>interactive</em> control, which must stay legible because it is the only thing telling the user the control exists). A theme written field by field for pretty panel edges erases its own checkboxes; the built-in glass presets did exactly that before the two tokens were separated.</p>
+  <p><b>Where the theme goes.</b> In the tree, as a <code>Provide</code> — not in <code>app.Config.Provide</code>. <code>Config.Provide</code> is for app-lifetime values built once at startup: an API client, a database handle, a clock. A theme is <em>derived</em> from the platform's colour scheme, which changes while the app runs, and the subtree below a <code>Provide</code> rebuilds when its value does. Set <code>Config.Background</code> and <code>Config.BackgroundDark</code> together, too: the window background is resolved per frame from the same signal the theme is, so a single fixed colour there renders dark-theme text over a light page the moment the viewer prefers dark — and nothing errors.</p>
+
+
+  <h3>Recipes that are not here, and why</h3>
+  <ul>
+    <li><b>Hot restart, navigation, drag and drop, overlays, tables, charts</b> — all implemented, all better learned from <code>examples/gallery</code>, which is a live tour of every widget with the source beside it. The <a href="gallery.html">gallery</a> runs in your browser.</li>
+    <li><b>Embedding a native view</b> — a map, a video player, an in-app browser. Unimplemented on native targets; there is no recipe because there is no answer. See <a href="learn.html#walls">the walls</a>.</li>
+    <li><b>Colour emoji</b> — draws nothing today, so a recipe would be a workaround rather than a technique.</li>
+    <li><b>Desktop packaging</b> — the CLI builds a binary and stops. Writing the <code>.app</code> bundle, the installer and the notarisation is yours for now.</li>
+  </ul>
+
+  <p style="margin-top:28px"><a href="learn.html">The learning path →</a> &nbsp;·&nbsp; <a href="api-tour.html">The API tour</a> &nbsp;·&nbsp; <a href="migrate.html">Coming from Flutter or Compose</a></p>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>

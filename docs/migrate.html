@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — coming from Flutter or Jetpack Compose</title>
+<meta name="description" content="Which Flutter and Jetpack Compose concepts map directly onto Gophics, which are superficially similar but differ, and which have no equivalent at all.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="learn.html">Learn</a>
+  <a class="link" href="cookbook.html">Cookbook</a>
+  <a class="link" href="api-tour.html">API tour</a>
+  <a class="link" href="architecture.html">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap prose">
+  <h2>Coming from Flutter or Jetpack Compose</h2>
+  <p class="lead">Gophics reimplements the rendering architecture behind both — immutable widgets, element reconciliation, constraint layout, GPU layer compositing — in idiomatic Go. So most of what you know transfers. This page is about the parts that do not, because those are what cost you a day each.</p>
+
+  <p>Read it in three passes. <b>What maps directly</b> is reassurance: skim it and move on. <b>What looks the same and is not</b> is the part worth actually reading — superficial familiarity is more expensive than unfamiliarity, because you will not go looking. <b>What has no equivalent</b> is the part to read <em>before</em> you commit to a port.</p>
+
+  <div class="note">
+    <p><b>If you are coming from Compose specifically:</b> the closer relative is Flutter, so read the Flutter column even where the Compose one is blank. Compose is a compiler-assisted reactive system with a snapshot state model and fine-grained recomposition; Gophics is explicit, value-based and Flutter-shaped. The <code>Modifier</code> chain has no counterpart at all — layout here is nesting, as in Flutter.</p>
+  </div>
+
+  <h3>What maps directly</h3>
+  <p>Same idea, different spelling. If your instinct is from the left two columns, it is right.</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Flutter</th><th>Compose</th><th>Gophics</th></tr>
+    <tr><td><code>StatelessWidget</code></td><td><code>@Composable fun</code></td><td>A struct with <code>Build(ctx widget.Ctx) widget.Widget</code></td></tr>
+    <tr><td><code>StatefulWidget</code> + <code>State</code></td><td><code>remember { mutableStateOf() }</code></td><td><code>CreateState() widget.State</code> + a struct embedding <code>widget.StateBase[W]</code></td></tr>
+    <tr><td><code>setState(() {})</code></td><td>assignment to a <code>MutableState</code></td><td><code>s.SetState(func() { … })</code></td></tr>
+    <tr><td><code>BuildContext</code></td><td><code>LocalContext</code>, composition scope</td><td><code>widget.Ctx</code>, passed to <code>Build</code></td></tr>
+    <tr><td><code>InheritedWidget</code>, Provider</td><td><code>CompositionLocalProvider</code></td><td><code>widget.Provide[T]{Value, Child}</code> + <code>ctx.Of[T]()</code> / <code>ctx.MustOf[T]()</code></td></tr>
+    <tr><td><code>Column</code>, <code>Row</code>, <code>Expanded</code>, <code>Flexible</code></td><td><code>Column</code>, <code>Row</code>, <code>Modifier.weight</code></td><td><code>widget.Column</code>, <code>Row</code>, <code>Expand</code>, <code>Flexible</code></td></tr>
+    <tr><td><code>Padding</code>, <code>Center</code>, <code>Align</code>, <code>SizedBox</code></td><td><code>Modifier.padding</code>, <code>Box</code> alignment, <code>Spacer</code></td><td><code>widget.Padding</code>, <code>Center</code>, <code>Align</code>, <code>Sized</code></td></tr>
+    <tr><td><code>Stack</code></td><td><code>Box</code></td><td><code>widget.Stack</code></td></tr>
+    <tr><td><code>BoxConstraints</code></td><td><code>Constraints</code></td><td><code>layout.Constraints</code> — the protocol is Flutter's, kept exactly</td></tr>
+    <tr><td><code>LayoutBuilder</code></td><td><code>BoxWithConstraints</code></td><td><code>widget.LayoutBuilder</code></td></tr>
+    <tr><td><code>ListView.builder</code></td><td><code>LazyColumn</code></td><td><code>widget.LazyList</code></td></tr>
+    <tr><td><code>GridView</code>, <code>Wrap</code></td><td><code>LazyVerticalGrid</code>, <code>FlowRow</code></td><td><code>widget.Grid</code>, <code>widget.Wrap</code></td></tr>
+    <tr><td><code>SingleChildScrollView</code>, <code>ScrollController</code></td><td><code>verticalScroll</code>, <code>ScrollState</code></td><td><code>widget.Scroll</code>, <code>widget.ScrollController</code></td></tr>
+    <tr><td><code>GestureDetector</code>, <code>MouseRegion</code></td><td><code>Modifier.clickable</code> / <code>pointerInput</code></td><td><code>widget.Interactive{Gestures: …}</code></td></tr>
+    <tr><td><code>Focus</code>, <code>autofocus</code></td><td><code>FocusRequester</code></td><td><code>Gestures.OnFocus</code>, <code>Interactive.Autofocus</code></td></tr>
+    <tr><td><code>Key</code>, <code>ValueKey</code></td><td><code>key(…) { }</code></td><td><code>widget.WithKey{Key, Child}</code></td></tr>
+    <tr><td><code>CustomPaint</code> + <code>Canvas</code></td><td><code>Canvas(modifier)</code> + <code>DrawScope</code></td><td><code>widget.Canvas</code> + <code>paint.Canvas</code></td></tr>
+    <tr><td><code>AnimatedContainer</code>, <code>TweenAnimationBuilder</code></td><td><code>animateFloatAsState</code>, <code>animateColorAsState</code></td><td><code>widget.Animated[T]</code>, <code>AnimateColor</code>, <code>AnimateFloat</code>, <code>AnimatedScale</code></td></tr>
+    <tr><td><code>AnimationController</code>, <code>Curves</code></td><td><code>Animatable</code>, <code>Easing</code></td><td><code>anim.Controller</code>, <code>anim.EaseInOut</code> / <code>EaseOut</code> / <code>Spring</code></td></tr>
+    <tr><td><code>Opacity</code>, <code>Transform</code>, <code>ClipRRect</code></td><td><code>Modifier.alpha</code> / <code>graphicsLayer</code> / <code>clip</code></td><td><code>widget.Opacity</code>, <code>widget.Transform</code>, <code>Canvas{Clip: true}</code></td></tr>
+    <tr><td><code>Theme.of(context)</code></td><td><code>MaterialTheme.colorScheme</code></td><td><code>theme.Of(ctx)</code></td></tr>
+    <tr><td><code>Navigator.push</code>, routes</td><td><code>NavHost</code>, <code>navController</code></td><td><code>widget.Navigator{Home}</code>, then <code>ctx.MustOf[widget.Nav]().Push(page)</code></td></tr>
+    <tr><td><code>Hero</code></td><td>shared element transitions</td><td><code>widget.Hero</code></td></tr>
+    <tr><td><code>Dismissible</code>, <code>ReorderableListView</code></td><td><code>SwipeToDismissBox</code>, reorderable modifiers</td><td><code>widget.Dismissible</code>, <code>widget.Reorderable</code></td></tr>
+    <tr><td><code>Draggable</code> / <code>DragTarget</code></td><td><code>dragAndDropSource</code> / <code>Target</code></td><td><code>widget.Draggable</code> / <code>widget.DropTarget</code></td></tr>
+    <tr><td><code>Semantics</code>, <code>ExcludeSemantics</code></td><td><code>Modifier.semantics</code>, <code>clearAndSetSemantics</code></td><td><code>widget.Semantics</code>, <code>Interactive.Sem</code>, <code>Semantics{Hidden: true}</code></td></tr>
+    <tr><td><code>SelectableText</code>, <code>SelectionArea</code></td><td><code>SelectionContainer</code></td><td><code>widget.SelectableText</code>, <code>widget.SelectionArea</code></td></tr>
+    <tr><td><code>TextField</code></td><td><code>TextField</code></td><td><code>widget.TextField</code> (unstyled), <code>theme.Field</code> (styled)</td></tr>
+    <tr><td><code>SafeArea</code>, <code>MediaQuery.padding</code></td><td><code>WindowInsets</code></td><td><code>widget.SafeArea</code>, <code>ctx.SafeInsets()</code></td></tr>
+    <tr><td><code>debugPaintSizeEnabled</code></td><td>Layout Inspector bounds</td><td><code>app.Config{Debug: true}</code></td></tr>
+    <tr><td>widget tests</td><td>Compose UI tests</td><td><code>apptest</code> — and this one is <em>stronger</em>: see below</td></tr>
+  </table>
+  </div>
+
+  <h3>What looks the same and is not</h3>
+  <p>This is the section that matters. Each of these is a place where your existing instinct produces code that compiles, runs, and is subtly wrong.</p>
+
+  <h4>1. <code>SetState</code> is not optional, and nothing warns you</h4>
+  <p>There is no snapshot system and no observable state. A field mutated outside <code>SetState</code> simply does not repaint: no error, no warning, no lint. If you come from Compose, where assigning to a <code>MutableState</code> is the whole mechanism, this is the single most likely first bug. The rule has one more part worth memorising: <code>SetState</code> from the UI goroutine, <code>PostState</code> from anywhere else.</p>
+  <p>Signals and fine-grained reactivity were evaluated for this project and deliberately rejected — in Go, without a compiler plugin, they cost more in ceremony than the explicit call does.</p>
+
+  <h4>2. Rebuilding is subtree-scoped, not read-tracked</h4>
+  <p>Flutter developers already know this. Compose developers should recalibrate: there is no recomposition scope, no skippability analysis, no <code>derivedStateOf</code>. <code>SetState</code> marks that element dirty, its <code>Build</code> runs again, and the reconciler diffs the returned description against the element tree — stopping where the description is unchanged. Performance work here means hoisting state <em>downward</em> so the dirty subtree is small, which is the Flutter habit, not the Compose one.</p>
+
+  <h4>3. There is no <code>didUpdateWidget</code> and no <code>remember(key)</code></h4>
+  <p>The State lifecycle is <code>Init(ctx)</code> once at mount and <code>Dispose()</code> once at unmount. That is all. If you need to react to a changed configuration, compare against what you last saw inside <code>Build</code> — <code>W()</code> gives you the current widget value, typed, with no cast. There is no hook that fires on reconfiguration, and no keyed memoisation primitive.</p>
+
+  <h4>4. Capabilities return <code>nil</code>, and <code>nil</code> is an answer</h4>
+  <p>A Flutter plugin that is not available throws <code>MissingPluginException</code>; a Compose app calls an Android API that exists because it is on Android. Here, <code>ctx.Battery()</code> returns <code>nil</code> when the running platform cannot tell you — and the framework refuses to publish a capability whose implementation always returns nothing, precisely so that <code>nil</code> keeps meaning "unsupported" rather than "no data". The consequence for your code is that the correct response to <code>nil</code> is usually to <em>remove the affordance</em>, not to show a disabled one or to catch an error.</p>
+  <p>There is a timing wrinkle with no analogue in either toolkit: capabilities are <code>nil</code> during <code>Init</code> and the first <code>Build</code>, because the tree mounts before the shell is wired. They arrive on the first frame and the runner marks the tree dirty. So read them in <code>Build</code> and guard a subscription to run once — never in <code>Init</code>. See the <a href="cookbook.html#capability">capability recipe</a>.</p>
+
+  <h4>5. Background work is a goroutine, not a Future or a coroutine</h4>
+  <p>No <code>FutureBuilder</code>, no <code>StreamBuilder</code>, no <code>LaunchedEffect</code>, no <code>rememberCoroutineScope</code>. Start a goroutine and deliver the result with <code>s.PostState(func(){ … })</code>, which applies on the UI goroutine at the top of the next frame and is dropped if the widget has left the tree. Streaming live data into a view — awkward in most UI stacks — is the easy case here.</p>
+  <p>Prefer <code>SetState</code> wherever it applies: <code>PostState</code> defers to the next frame, so a handler that reads the state back after writing it would see the old value.</p>
+
+  <h4>6. Numbers are <code>float32</code> logical pixels — there is no <code>Dp</code></h4>
+  <p>No <code>.dp</code> suffix, no density parameter to thread, no <code>double</code>. Every coordinate in <code>geom</code>, in the widget tree and in a gesture callback is a <code>float32</code> in logical pixels, and the conversion to physical pixels happens once at the presenter. The upside is that nothing has to be converted at a boundary; the trap is the mirror image of Compose's — if you ever find yourself multiplying by a scale factor in app code, you are about to introduce a bug that is invisible at 1× and wrong at 2×. See <a href="api-tour.html">the API tour</a> for the full version of that warning.</p>
+
+  <h4>7. The widget catalog is small on purpose, and there is no Material library</h4>
+  <p><code>widget</code> is unstyled primitives; <code>theme</code> is a small styled layer — buttons, cards, fields, list tiles, tabs, pickers, a table. It is not Material 3, there is no Cupertino set, and there are no slot-based component APIs. A "Button" or "Card" you need and cannot find is built from <code>Fill</code> + <code>Padding</code> + <code>Interactive</code> + <code>Text</code>, which is five lines. The corollary: do not invent widget names from memory. <code>go doc ./widget</code> is the whole catalog on one screen, and a plausible-sounding widget frequently does not exist.</p>
+
+  <h4>8. Text needs a font, explicitly</h4>
+  <p>Flutter bundles Roboto; Compose has the platform's fonts. Here <code>app.Config.Font</code> is required <code>[]byte</code> of a TTF or OTF, and without it <em>nothing draws</em> — which looks like a rendering failure and is not. Named faces go in <code>FontFamilies</code>, per-rune fallbacks in <code>Fallbacks</code>, and <code>SystemFonts: true</code> reaches the OS fonts on desktop only. The Go fonts cover Latin, Greek and Cyrillic, so <code>✓ ✕ ⋮ ↩</code>, CJK and emoji come out as boxes until you add a face that has them. On the web and mobile, bundled faces are the whole answer.</p>
+
+  <h4>9. Theming is struct copying, not a composable scope</h4>
+  <p>A theme is a plain value: derive from <code>theme.Light()</code> or <code>theme.Dark()</code>, change the tokens that are yours, provide it. The one non-obvious part is that <code>Border</code> (decorative chrome) and <code>Outline</code> (the edge of an interactive control) are separate tokens, and conflating them erases your own form controls — the built-in glass presets did exactly that before they were split.</p>
+
+  <h4>10. Hot reload is restart, everywhere</h4>
+  <p>There is no hot reload on any platform, and the reason is Go rather than Apple: nothing in the language or runtime can replace code in a running process, and <code>-buildmode=plugin</code> — the one mechanism that comes close — needs cgo and does not exist for <code>android/*</code> or <code>ios/*</code> at any setting. (The usual "iOS forbids dynamic code loading" argument is too strong: Flutter's iOS debug builds run the Dart JIT, which Apple permits. It is not the obstacle here.)</p>
+  <p>What <code>gophics dev</code> gives you instead is state-preserving hot <em>restart</em>, keyed by position in the widget tree, on every target: desktop, web, the Android emulator and the iOS simulator. Save, and the app comes back on the same page with the same scroll offset and the same field contents. What a widget does not expose resets (see <code>widget.Snapshottable</code>), and a structural edit above a widget drops its state.</p>
+  <p>The honest difference is the clock, measured on an Apple Silicon Mac: 1.4&nbsp;s desktop, ~4&nbsp;s web, ~11&nbsp;s on an Android emulator and ~20&nbsp;s on a pre-booted iOS simulator, against roughly a second for a Flutter reload anywhere. <code>gomobile bind</code> is 60–70% of the mobile figure and is not incrementally rebuildable. Against that, test binaries cross-compile and run on a real device over <code>adb</code> or SSH with no application wrapper, no JNI and no emulator — a different thing, not a replacement, but a faster feedback loop for logic than either incumbent offers.</p>
+
+  <h4>11. Testing is better than you are used to, and worth re-learning</h4>
+  <p>Do not port your Flutter widget-test habits unchanged. <code>apptest</code> mounts the real tree, drives taps, keys, drags, scrolls and IME composition, and asserts on <b>actual rendered pixels</b> against a committed golden image — headlessly, deterministically, with no device and no emulator. It also exposes the semantics tree as an ordinary value, so accessibility is unit-testable. Tap by label rather than by coordinate (<code>a.TapLabel("Increment")</code>), and use <code>apptest.Tol(apptest.AntiAliased)</code> rather than <code>Exact</code> for any golden committed from one machine and checked on another.</p>
+
+  <h3>What has no equivalent</h3>
+  <p>Read this before porting, not during. Several of these are load-bearing for a large class of commercial apps, and the honest answer to some of them is "choose a different toolkit for this app".</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Flutter / Compose</th><th>Status here</th></tr>
+    <tr><td><code>AndroidView</code>, <code>UiKitView</code>, <code>PlatformView</code></td><td><b>Absent on native targets.</b> You cannot embed a native subview — a map, a video player, an advertisement, an in-app browser — in the widget tree. The stated reasoning covers authentication (which belongs in the platform's own browser session) and does not cover the rest. If an embedded map is your app's core, this is a blocker and not a workaround.</td></tr>
+    <tr><td>pub.dev / Maven Central</td><td><b>No package ecosystem</b>, and no extension point for one: the capability generator parses this repository's own source as its single source of truth, so a third party cannot ship a package that adds a capability without patching the tree. Go's own ecosystem — HTTP, databases, parsing, everything non-UI — is of course unaffected, which is most of an app.</td></tr>
+    <tr><td><code>RenderObject</code> subclassing, custom <code>Layout</code></td><td><b>Not available from outside the module.</b> <code>layout.Box</code> is a public protocol, but the bridge from a widget to a box is unexported and the concrete boxes live in <code>internal/layoutbox</code>, so you cannot write a custom render widget. Compose from the primitives, or drop to <code>widget.Canvas</code> and draw. <code>LayoutBuilder</code> and <code>LayoutObserver</code> cover most of what people actually wanted a custom layout for.</td></tr>
+    <tr><td>Slivers — <code>CustomScrollView</code>, <code>SliverAppBar</code></td><td><b>No sliver protocol.</b> A collapsing app bar driven by scroll offset has to be assembled by hand from <code>Scroll.OnOffset</code> and an animated header.</td></tr>
+    <tr><td><code>FragmentProgram</code>, <code>BlendMode</code>, <code>ShaderMask</code>, radial and sweep gradients</td><td><b>Absent.</b> Two-stop linear gradients by axis only; no blend modes exposed, no colour or image filters beyond a backdrop blur, round caps and joins only, no dash patterns, no arbitrary-path clipping, no custom shaders. This is the biggest single gap in expressive power against both incumbents.</td></tr>
+    <tr><td>Colour emoji in text</td><td><b>Draws nothing.</b> Bitmap and SVG glyph formats are not emitted, so a colour emoji is invisible — not tofu, nothing. Any app with user-entered text will show it. Monochrome symbol fonts work fine.</td></tr>
+    <tr><td>Velocity-aware springs, <code>flutter_physics</code>-style handoff</td><td><b>Absent.</b> A gesture released mid-flight cannot pass its velocity into the animation that continues it. The real solver exists inside the scroll implementation and is private to it.</td></tr>
+    <tr><td>ARB / <code>stringResource</code>, message extraction, full ICU</td><td><b>Partial.</b> 29 locales with hand-written plural rules in <code>intl</code>; no ordinal plurals, no relative-time formatting, no locale-aware currency patterns, no extraction tooling.</td></tr>
+    <tr><td>DevTools, Layout Inspector, a widget inspector GUI</td><td><b>No GUI.</b> What exists instead: <code>Config.Debug</code> box bounds, <code>app.FrameSummary</code> percentiles, <code>Config.GraphicsLog</code> for every rendering fallback taken, and <code>tools/uitrace</code> for scroll measurement. All useful, none of it a timeline view.</td></tr>
+    <tr><td>Desktop packaging — <code>.app</code>, MSIX, AppImage, notarisation</td><td><b>Not built.</b> The CLI produces a binary and stops. Mobile scaffolding, by contrast, generates Xcode and Gradle projects with Kotlin and Swift hosts.</td></tr>
+    <tr><td>A stability guarantee</td><td><b>None.</b> <code>v0.1.0</code>. The generated API manifest records names and kinds but not signatures, so a signature-only break can pass a green build. Pin your version and read the diff.</td></tr>
+  </table>
+  </div>
+
+  <h3>What you gain, which is the reason to do this at all</h3>
+  <p>Stated plainly, because a migration page that only lists losses is not useful.</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Gain</th><th>Against Flutter and Compose</th></tr>
+    <tr><td><code>go build</code> is the entire toolchain</td><td>No SDK, no engine artifact, no toolchain doctor, no Gradle. A dependency line in <code>go.mod</code> and a static binary out the other end. <code>GOOS=windows go build</code> from a Mac.</td></tr>
+    <tr><td>Headless, pixel-exact testing</td><td>Golden images, fuzzing, benchmarks and profiling through ordinary <code>go test</code>, with no emulator and no bespoke harness. Flutter's widget tests are weaker and its integration tests need a device.</td></tr>
+    <tr><td>Test binaries on real devices with no wrapper</td><td><code>go test -c</code> for <code>GOOS=android</code>, push over <code>adb</code>, run. No app, no JNI, no gomobile. Neither incumbent can do this, and a second backend's opinion has repeatedly disagreed with the development machine's.</td></tr>
+    <tr><td>Desktop accessibility on all three platforms</td><td>macOS, Windows and Linux are all implemented. This is a known weak point for Flutter and a procurement requirement in enterprise and government.</td></tr>
+    <tr><td>Honest capabilities</td><td><code>nil</code> distinguishes "unsupported" from "no data", so apps degrade correctly instead of showing dead affordances. A stronger contract than the plugin model offers.</td></tr>
+    <tr><td>Goroutines with one UI thread</td><td>Streaming live data into a view is the easy case rather than the awkward one.</td></tr>
+    <tr><td>A terminal target</td><td>The same widget tree, rasterized to a terminal over the kitty graphics protocol — including over SSH. Neither competitor has one.</td></tr>
+    <tr><td>Nine direct dependencies</td><td>A supply chain a security team can review in an afternoon, with no engine artifact and no CGo anywhere.</td></tr>
+  </table>
+  </div>
+
+  <h3>A realistic porting order</h3>
+  <p>If you are moving an existing app rather than starting fresh:</p>
+  <ul>
+    <li><b>Check the blockers first.</b> Platform views, colour emoji and desktop packaging are the three that end ports. Half a day spent here is worth it.</li>
+    <li><b>Port one screen, with its test.</b> Pick the second-simplest screen in the app — the simplest teaches you nothing. Write the <code>apptest</code> golden before you port the next one, so you have a regression net from the start.</li>
+    <li><b>Port the data layer unchanged.</b> It is already Go, or it is a Dart/Kotlin rewrite that is mechanical and testable without any UI. <code>fetch</code> instead of <code>net/http</code> if you will target the web.</li>
+    <li><b>Do the theme early, not late.</b> Every ported screen that hardcodes a colour is a screen you will revisit.</li>
+    <li><b>Leave animation polish until last.</b> With no velocity handoff, some of your gesture-driven motion will not translate, and you want to know how much before you spend a week on it.</li>
+  </ul>
+
+  <p style="margin-top:28px"><a href="learn.html">The learning path →</a> &nbsp;·&nbsp; <a href="cookbook.html">The cookbook</a> &nbsp;·&nbsp; <a href="api-tour.html">The API tour</a></p>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gophics — the API tour</title>
+<meta name="description" content="An orienting tour of the Gophics packages: which exist, what each is for, which ones a beginner never opens, and how one tap becomes one frame.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">gophics<span class="dot">.</span></a>
+  <a class="link" href="gallery.html">Gallery</a>
+  <a class="link" href="get-started.html">Get started</a>
+  <a class="link" href="learn.html">Learn</a>
+  <a class="link" href="cookbook.html">Cookbook</a>
+  <a class="link" href="api-tour.html">API tour</a>
+  <a class="link" href="architecture.html">Architecture</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/doug/gophics">GitHub ↗</a>
+</div></nav>
+
+<section><div class="wrap prose">
+  <h2>The API tour</h2>
+  <p class="lead">This is not generated API documentation. Go already gives you that, and it is good here — the house rule is that reasoning goes in the doc comment, so <code>go doc ./widget Gestures</code> is several pages of <em>why</em>. What <code>go doc</code> cannot tell you is which of the module's packages you should ever open, and in what order. That is this page.</p>
+
+  <div class="note">
+    <p><b>The authoritative references, for when this page and the code disagree.</b> <code>go doc &lt;package&gt;</code> for any symbol; <code>internal/apisurface/testdata/api-surface.txt</code> for the complete list of every exported name in the module, which is generated and fails the build when it drifts. Trust those over this page, which is prose and can rot.</p>
+  </div>
+
+  <h3>The packages, in four tiers</h3>
+  <p>Grouped by when you first need them, not alphabetically. Most apps only ever import the first tier.</p>
+
+  <h4>Tier 1 — you import these on day one</h4>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Package</th><th>What it is for</th><th>The names you will use</th></tr>
+    <tr><td><code>app</code></td><td>The runtime. It binds a widget tree to a platform and runs frames. Also the headless driver, which is the same core with no display — so behaviour verified in a test is the shipping behaviour.</td><td><code>Run</code>, <code>Config</code>, <code>Headless</code></td></tr>
+    <tr><td><code>widget</code></td><td>The declarative layer: immutable widget values, the retained element tree they reconcile into, state, keys, focus and gestures. This is where you will spend your time.</td><td><code>Widget</code>, <code>State</code>, <code>StateBase[W]</code>, <code>Ctx</code>, <code>Column</code>, <code>Row</code>, <code>Text</code>, <code>Interactive</code>, <code>LazyList</code>, <code>Canvas</code>, <code>WithKey</code>, <code>Provide</code></td></tr>
+    <tr><td><code>geom</code></td><td>Points, sizes, rectangles and insets. Small immutable <code>float32</code> values; methods return new ones. In <b>logical</b> pixels — see the trap below.</td><td><code>Pt</code>, <code>Size</code>, <code>Rect</code>, <code>RectXYWH</code>, <code>Insets</code>, <code>InsetsAll</code></td></tr>
+    <tr><td><code>paint</code></td><td>The drawing layer. For most apps this means colours; for a custom painter it also means the <code>Canvas</code> interface of primitives.</td><td><code>Color</code>, <code>RGB</code>, <code>Lerp</code>, <code>Canvas</code>, <code>Path</code>, <code>Transform</code></td></tr>
+    <tr><td><code>theme</code></td><td>The styled layer: a token struct plus components wired to consult it. Deliberately a separate package from <code>widget</code>, which stays unstyled primitives — the material/widgets split, as two ordinary Go packages.</td><td><code>Theme</code>, <code>Of</code>, <code>Auto</code>, <code>Light</code>, <code>Dark</code>, <code>Button</code>, <code>Card</code>, <code>Field</code>, <code>ListTile</code></td></tr>
+  </table>
+  </div>
+
+  <h4>Tier 2 — once the app is real</h4>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Package</th><th>What it is for</th><th>When you reach for it</th></tr>
+    <tr><td><code>apptest</code></td><td>Drives a UI in a test and asserts on pixels or on the semantics tree. Golden-image plumbing, tolerance, and legible failures.</td><td>Step 4 of the <a href="learn.html">learning path</a> — earlier than you think.</td></tr>
+    <tr><td><code>layout</code></td><td>The render-layer protocol: the <code>Box</code> interface, <code>Constraints</code>, hit testing and semantics. You do not implement boxes; you import this for the enum values the widget layer takes.</td><td><code>CrossStretch</code>, <code>MainSpaceBetween</code>, <code>SemInfo</code>, <code>RoleButton</code> — and <code>Constraints</code> when a layout surprises you.</td></tr>
+    <tr><td><code>anim</code></td><td>Curves and a <code>Controller</code> driven by the app's frame tickers. Only for explicit animation; the implicit wrappers live in <code>widget</code>.</td><td>Motion that loops, reverses mid-flight, or drives several properties off one clock.</td></tr>
+    <tr><td><code>shell</code></td><td>The platform contract — <em>and</em> the home of every capability interface and its event types. Apps import it for the types, not to implement it.</td><td><code>shell.Key</code>, <code>shell.ShareItem</code>, <code>shell.HapticKind</code>, <code>shell.CursorShape</code>.</td></tr>
+    <tr><td><code>shell/{desktop,web,mobile,terminal}</code></td><td>The backends. The framework never imports these; <code>app.Run</code> picks one for your target, so you normally do not name them either.</td><td>Only when embedding gophics in a host that already owns the window.</td></tr>
+    <tr><td><code>chart</code></td><td>A built-in declarative charting library — bars, lines, points, rules, heatmaps, ranges over scales. Depends only on gophics's own layers and the standard library.</td><td>Before you draw a conventional chart by hand.</td></tr>
+    <tr><td><code>fetch</code></td><td>One HTTP request, without linking <code>net/http</code> into a browser build. On every platform but the browser it <em>is</em> <code>net/http</code>; on <code>js/wasm</code> it is the browser's <code>fetch()</code>, and the difference is 2MB of binary.</td><td>Any app that talks to a network and might target the web.</td></tr>
+    <tr><td><code>intl</code></td><td>Locale-correct numbers, money and dates. Not a full CLDR pipeline, deliberately — see the package doc for the size argument, and <a href="learn.html#walls">the walls</a> for what is missing.</td><td>Anything where numbers are the content: a ledger, a dashboard, a table.</td></tr>
+  </table>
+  </div>
+
+  <h4>Tier 3 — specialised, and most apps never open them</h4>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Package</th><th>What it is for</th></tr>
+    <tr><td><code>text</code></td><td>The text stack: shaping, bidi, font fallback, line breaking, built on go-text/typesetting. The widget layer calls it for you. You come here to measure or to lay out a paragraph by hand.</td></tr>
+    <tr><td><code>input</code></td><td>Per-frame poll-style input state for games: which keys are held <em>right now</em>, what was pressed this frame, where the pointer is. Held state is global, so a game canvas can poll WASD without focus. Reached via <code>ctx.Input()</code>.</td></tr>
+    <tr><td><code>sound</code> (<code>/device</code>, <code>/mp3</code>, <code>/ogg</code>, <code>/pitch</code>, <code>/procedural</code>)</td><td>A pure-Go DSP mixer for game and UI audio. No device dependency in the core, so mixing is deterministic and unit-testable with no audio hardware.</td></tr>
+    <tr><td><code>tools/uitrace</code></td><td>The scroll-measurement harness: it records one real flick on a device and replays the identical finger deltas through <code>app.Headless</code>. This is where the per-platform scroll curves came from, and it is a tool rather than an API.</td></tr>
+  </table>
+  </div>
+
+  <h4>Tier 4 — never. These are not public API.</h4>
+  <p>Everything under <code>internal/</code> is off limits, and Go enforces it. Two are worth naming because you will see them in stack traces and wonder:</p>
+  <ul>
+    <li><code>internal/gfx/</code> is a <b>vendored fork</b> of a pure-Go WebGPU and 2D-rendering substrate — about 350,000 lines of it, under an MIT lineage (see <code>THIRD_PARTY.md</code>). It is not this project's API and should not be treated as one. Its comments cite <code>ADR-NNN</code> documents that live upstream and are not readable in this repository; that is expected.</li>
+    <li><code>internal/scene</code> records and diffs the draw-command stream to compute a damage rectangle. It implements <code>paint.Canvas</code>, which is why a custom painter's measurements come back identical whether the frame is being recorded or drawn.</li>
+  </ul>
+  <p>The public surface is measured: <code>internal/apisurface</code> generates a manifest of every exported name and the build fails when the tree drifts from it. Worth knowing what that does and does not buy you — it records names and kinds but <em>not signatures</em>, so a signature-only break can pass a green build.</p>
+
+  <h3>How one tap becomes one frame</h3>
+  <p>The thing generated docs cannot show you: what actually happens, in order, and which package owns each step. Follow a tap on a button in a list.</p>
+
+  <pre class="code">  <b>1. shell</b>        a platform backend delivers a Pointer event to the Handler
+  <b>2. widget</b>       hit testing walks the layout boxes; the deepest
+                 Interactive whose rect contains the point wins
+  <b>3. your code</b>    its OnTap closure runs — SetState(func(){ s.n++ })
+  <b>4. widget</b>       SetState marks that <i>element</i> dirty and asks for a frame
+        ↓                (nothing has been rebuilt or drawn yet)
+  <b>5. app</b>          the next vsync tick starts a frame; tickers advance first,
+                 so animations can dirty more elements
+        ↓
+  <b>6. widget</b>       <i>build</i> — dirty elements call Build again and the
+                 reconciler diffs the returned values against the tree,
+                 matching on concrete type, sibling position and key.
+                 An unchanged subtree stops the walk; state survives a
+                 match and is disposed on a miss.
+        ↓
+  <b>7. layout</b>       <i>layout</i> — Constraints flow down, sizes flow up, parents
+                 position children. One pass. A node whose constraints
+                 did not move is a relayout boundary and is skipped.
+        ↓
+  <b>8. paint</b>        <i>paint</i> — boxes record draw commands into a Canvas.
+                 internal/scene diffs that command stream against the
+                 previous frame's and produces a damage rectangle — from
+                 real glyph ink, not advance boxes.
+        ↓
+  <b>9. internal/gfx</b> <i>composite</i> — the layer tree becomes GPU commands
+                 (Metal, Vulkan, OpenGL ES, or the CPU rasterizer)
+        ↓
+ <b>10. shell</b>        present: the damaged region is handed to the platform
+                 in <b>physical</b> pixels</pre>
+
+  <p>Two consequences are worth drawing out, because they explain most of what feels unusual here.</p>
+  <p><b><code>Build</code> is not a draw call.</b> It returns a fresh description and nothing more. That is what makes rebuilding a whole subtree on every tap cheap, and it is why a widget tree can be constructed, compared and asserted on in a test with no window anywhere near it. If you catch yourself wanting to know <em>where</em> a widget is during <code>Build</code>, you want <code>LayoutBuilder</code> or <code>LayoutObserver</code>, because the answer does not exist yet.</p>
+  <p><b>Only what changed is redone, and that is the architecture rather than an optimisation on top of it.</b> Each of the three phases has its own boundary: a rebuild stops where the description is unchanged, a relayout stops at a node whose constraints did not move, a repaint stops at the layer whose damage rectangle covers it. Typing a character in a field does not re-lay-out the page around it.</p>
+
+  <h3>The trap: logical pixels above, physical below</h3>
+  <p>If you remember one thing from this page, make it this one. It is invisible at 1× and wrong at 2×, and it has shipped in this repository before.</p>
+  <ul>
+    <li><b>Logical pixels</b> — everything in <code>geom</code>, everything in the widget tree, <code>Config.Size</code>, every coordinate in a gesture callback, every rect a <code>widget.Canvas</code> draws into.</li>
+    <li><b>Physical pixels</b> — the painter's surface, damage rectangles handed to a presenter, and anything touching a texture. Physical is logical multiplied by the device scale factor.</li>
+  </ul>
+  <p>Mixing them is correct at 1× and wrong at 2×, where a logical rectangle names the top-left quadrant of a physical surface. The symptom when this went wrong on the web presenter was that half the height of every frame was uploaded and the rest kept showing the previous frame — which does not look like a units bug to anyone debugging it.</p>
+  <p>For application code the rule is simple, because the boundary is not yours: <b>stay in logical pixels and never multiply by a scale factor.</b> If a number you are holding came from <code>geom</code> or from a callback, it is logical, and the framework converts once at the presenter. You only need the distinction when reading an image back out, or when writing a shell.</p>
+
+  <h3>Four things that are not where you would guess</h3>
+  <div class="tablewrap">
+  <table>
+    <tr><th>You want</th><th>It is in</th><th>Why</th></tr>
+    <tr><td>A button, a card, a text field, a dialog</td><td><code>theme</code>, not <code>widget</code></td><td><code>widget</code> is unstyled primitives on purpose. <code>theme.Button</code> is built from <code>Fill</code> + <code>Padding</code> + <code>Interactive</code> + <code>Text</code>, and so is yours when the catalog does not have it.</td></tr>
+    <tr><td>Implicit animation (<code>AnimateColor</code>, <code>AnimatedScale</code>)</td><td><code>widget</code>, not <code>anim</code></td><td>They are widgets — wrappers that hold a controller for you. <code>anim</code> is the curves and the controller itself.</td></tr>
+    <tr><td>Capability interfaces (<code>Battery</code>, <code>Share</code>, <code>FilePicker</code>)</td><td><code>shell</code>, reached through <code>widget.Ctx</code></td><td>They are the platform contract, so they are declared where the platform is. You call <code>ctx.Battery()</code> and never import a backend.</td></tr>
+    <tr><td>The concrete layout boxes (<code>Flex</code>, <code>Padded</code>, <code>Aligned</code>)</td><td><code>internal/layoutbox</code></td><td>They used to sit in <code>layout</code> beside the protocol that describes them, shadowing the widget layer name for name — <code>layout.Aligned</code> against <code>widget.Align</code>. Moving them out is why <code>layout</code> is now readable.</td></tr>
+  </table>
+  </div>
+
+  <h3>The ten names to learn first</h3>
+  <p>If the catalog feels large: it is, and you do not need most of it. These ten cover the great majority of real code.</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Name</th><th>What it does</th></tr>
+    <tr><td><code>app.Run(root, cfg)</code></td><td>Starts the app. <code>cfg.Font</code> is required or no text draws at all.</td></tr>
+    <tr><td><code>widget.StateBase[W]</code></td><td>Embed it in your state struct for <code>W()</code> (the current config, typed) and <code>SetState</code>. It does <em>not</em> give you a <code>Context()</code> — the build context arrives as <code>Build</code>'s argument.</td></tr>
+    <tr><td><code>widget.Column</code> / <code>Row</code></td><td>Flex stacks. They return a <code>Flex</code> value, so you can set <code>CrossAlign</code> on the result.</td></tr>
+    <tr><td><code>widget.Expand(child)</code></td><td>Give a child the leftover space. The fix for a scrollable that will not scroll.</td></tr>
+    <tr><td><code>widget.Padding</code> / <code>Sized</code> / <code>Center</code></td><td>Insets, fixed extents, and positioning. <code>Sized{H: 8}</code> with no child is the idiomatic gap.</td></tr>
+    <tr><td><code>widget.Text</code></td><td>Text. <code>Wrap: true</code> for anything that is a sentence; <code>Font</code> names a family registered in <code>Config.FontFamilies</code>.</td></tr>
+    <tr><td><code>widget.Interactive</code></td><td>Makes a child respond to input. Adds no visuals and takes its child's size, so it goes on anything.</td></tr>
+    <tr><td><code>widget.LazyList</code></td><td>A long list that only builds what is visible. Reach for it past a few dozen rows.</td></tr>
+    <tr><td><code>widget.WithKey</code></td><td>Stable identity across a reorder or an insert. Without it, state follows the index instead of the item.</td></tr>
+    <tr><td><code>theme.Of(ctx)</code></td><td>The theme in scope. Every colour and text size in your tree should come from here.</td></tr>
+  </table>
+  </div>
+
+  <p>And the one habit that matters more than any of them: <b>check rather than guess.</b> The catalog is intentionally small and composed from primitives, so a plausible-sounding widget frequently does not exist. <code>go doc ./widget</code> lists all of it in one screen.</p>
+
+  <p style="margin-top:28px"><a href="cookbook.html">The cookbook →</a> &nbsp;·&nbsp; <a href="architecture.html">Architecture, in more depth</a> &nbsp;·&nbsp; <a href="migrate.html">Coming from Flutter or Compose</a></p>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Gophics — cross-platform native UI in pure Go.</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/doug/gophics">GitHub</a>
+  <a href="index.html">Home</a>
+</div></footer>
+
+</body>
+</html>
