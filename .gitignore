@@ -63,6 +63,18 @@ docs/source/
 /.claude/settings.local.json
 /build/
 
+# Agent worktrees. Each is a full checkout of this repo plus whatever it built,
+# so a handful of them carry every kind of output the rules above exist to keep
+# out — .aar files, example binaries, a built PDF, .DS_Store — and `git status`
+# reports the lot as one untracked `.claude/` entry that hides all of it.
+#
+# Scoped to worktrees/ rather than ignoring .claude/ outright, so shared agent
+# config under it stays trackable; settings.local.json is listed separately
+# above because only the *local* half of that config is personal. Must sit
+# below the negations for the reason the comment above gives: `!/*/` re-admits
+# every root directory, .claude/ among them.
+/.claude/worktrees/
+
 # gomobile bind output. These were tracked and reached ~200 MB across their
 # versions before being purged from history; package/ios.sh regenerates them.
 examples/*/ios/*.xcframework/
