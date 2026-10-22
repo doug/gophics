@@ -248,16 +248,42 @@ def trim(text):
     return cut.rstrip()
 
 
+def doc_comment_lines(src):
+    """The contiguous // block immediately above the package clause, if any.
+
+    Scanned line by line rather than matched with a regex. The pattern this
+    replaces — ((?:^// ?.*\n)+)^package \\w+ — backtracked catastrophically: the
+    repeated group would consume a long comment block, fail to find `package`
+    after it, and retry from every line of the block, with the engine re-walking
+    the whole run each time. A file with a few hundred comment lines and no
+    package clause directly beneath them pinned a core indefinitely.
+
+    It was latent for a long time, because package_doc returns at the first file
+    that yields a doc comment and so never reached a pathological one. Adding
+    files changed which file in a package is read first, which is a dependency
+    no caller could see. A linear scan has no such cliff.
+    """
+    lines = src.splitlines()
+    for i, l in enumerate(lines):
+        if not l.startswith("package "):
+            continue
+        j = i
+        while j > 0 and lines[j - 1].startswith("//"):
+            j -= 1
+        return lines[j:i]
+    return []
+
+
 def package_doc(pkg):
     """The one-line summary from the package's doc comment, if it has one."""
     if pkg in CONTAINERS:
         return CONTAINERS[pkg]
     for f in go_files(pkg):
         src = read(f)
-        m = re.search(r"((?:^// ?.*\n)+)^package \w+", src, re.M)
-        if not m:
+        doc = doc_comment_lines(src)
+        if not doc:
             continue
-        lines = [l.lstrip("/ ").rstrip() for l in m.group(1).strip().split("\n")]
+        lines = [l.lstrip("/ ").rstrip() for l in doc]
         text = " ".join(l for l in lines if l)
         if not text:
             continue
