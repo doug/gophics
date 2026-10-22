@@ -114,7 +114,10 @@ func (s *formState) Build(ctx widget.Ctx) widget.Widget {
 	var switchState widget.Widget = theme.Body("Notifications are off.")
 	if s.notify {
 		switchState = theme.Card{Child: widget.Row(
-			widget.Text{Value: "🔔", Size: th.Type.Heading},
+			// theme.Icon, not a 🔔: the bundled Go faces are Latin and
+			// have no glyph for U+1F514, so the emoji drew as a box on
+			// every platform. The stroked glyph needs no font at all.
+			theme.Icon{Glyph: theme.IconBell, Size: 24, Color: th.Primary},
 			widget.Sized{W: 8},
 			widget.Text{Value: "You'll be notified.", Size: th.Type.Body, Color: th.Text},
 		)}

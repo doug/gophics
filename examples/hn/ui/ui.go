@@ -411,7 +411,7 @@ func storyHeaderCell(th theme.Theme, st Item, openURL func(string)) widget.Widge
 	}
 	if st.URL != "" {
 		kids = append(kids, widget.Sized{H: 6}, widget.Rich{
-			Spans:  []layout.RichSpan{{Text: domain(st.URL) + " ↗", Color: th.Primary, Link: st.URL}},
+			Spans:  []layout.RichSpan{{Text: domain(st.URL) + " →", Color: th.Primary, Link: st.URL}},
 			Size:   th.Type.Label,
 			OnLink: openURL,
 		})

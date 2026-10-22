@@ -103,7 +103,7 @@ func selectionReadout(sel string) string {
 		return "Nothing selected yet."
 	}
 	n := len([]rune(sel))
-	shown := strings.ReplaceAll(sel, "\n", " ⏎ ")
+	shown := strings.ReplaceAll(sel, "\n", " ¶ ")
 	if r := []rune(shown); len(r) > 72 {
 		shown = string(r[:34]) + " … " + string(r[len(r)-34:])
 	}
