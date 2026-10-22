@@ -371,10 +371,21 @@ DEVICES = [
 def goos_files(pkg, goos):
     """The files `go build` would include for pkg on goos, per the toolchain."""
     env = dict(os.environ, GOOS=goos, GOARCH="amd64" if goos != "darwin" else "arm64")
-    out = subprocess.run(
-        ["go", "list", "-f", "{{range .GoFiles}}{{.}}\n{{end}}", "./" + pkg],
-        capture_output=True, text=True, env=env,
-    )
+    # Timed out rather than left to block. `go list` takes the module cache
+    # lock, so a second build in the same tree makes it wait, and a suspended
+    # or wedged child makes it wait forever — a check that hangs is worse than
+    # one that fails, because gates.sh prints the step name before running it
+    # and so looks merely slow. Two minutes is far above a cold `go list` and
+    # far below anyone's patience.
+    try:
+        out = subprocess.run(
+            ["go", "list", "-f", "{{range .GoFiles}}{{.}}\n{{end}}", "./" + pkg],
+            capture_output=True, text=True, env=env, timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        raise SystemExit(
+            "planfacts: go list %s for %s timed out after 120s — another `go` "
+            "command in this tree may hold the module cache lock" % (pkg, goos))
     if out.returncode != 0:
         raise SystemExit("planfacts: go list %s for %s failed:\n%s" % (pkg, goos, out.stderr))
     return [l.strip() for l in out.stdout.splitlines() if l.strip()]
