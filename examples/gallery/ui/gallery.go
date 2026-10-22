@@ -258,6 +258,8 @@ func sections() []section {
 			sp("Rich text & selection", "Rich spans inside a SelectionArea", richTextSection{})},
 		{"Transform", "Rotate and scale a still-live widget",
 			sp("Transform", "A transformed subtree that still takes taps", transformSection{})},
+		{"Custom painting", "Gradients, blend modes, measured text",
+			sp("Custom painting", "Drawing straight onto a paint.Canvas", paintSection{})},
 		{"Right to left", "Mirror a layout, not its glyphs",
 			sp("Right to left", "Directionality flipping a whole subtree", rtlSection{})},
 	}
