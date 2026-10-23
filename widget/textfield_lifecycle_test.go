@@ -1,7 +1,6 @@
 package widget_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -21,11 +20,13 @@ func TestObscureFieldPaintsBulletsInBothLayouts(t *testing.T) {
 			Value: "secretword", Obscure: true, Multiline: multi,
 		}}, 320, 240)
 		h.Render()
-		scene := fmt.Sprintf("%+v", h.Scene())
-		if strings.Contains(scene, "secretword") {
+		// Joined on a NUL so a needle cannot straddle two runs that were
+		// drawn separately.
+		drawn := strings.Join(h.Scene().Texts(), "\x00")
+		if strings.Contains(drawn, "secretword") {
 			t.Errorf("Multiline=%v: an Obscure field painted its plaintext", multi)
 		}
-		if !strings.Contains(scene, "••••") {
+		if !strings.Contains(drawn, "••••") {
 			t.Errorf("Multiline=%v: an Obscure field painted no bullets", multi)
 		}
 	}

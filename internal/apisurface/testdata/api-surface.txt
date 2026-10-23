@@ -147,7 +147,7 @@ app.Headless.Press method func(*app.Headless, geom.Pt)
 app.Headless.Release method func(*app.Headless, geom.Pt)
 app.Headless.Render method func(*app.Headless) image.Image
 app.Headless.Resize method func(*app.Headless, geom.Size)
-app.Headless.Scene method func(*app.Headless) *internal/scene.List
+app.Headless.Scene method func(*app.Headless) app.Scene
 app.Headless.Scroll method func(*app.Headless, geom.Pt)
 app.Headless.ScrollAt method func(*app.Headless, geom.Pt, geom.Pt)
 app.Headless.SecondaryTap method func(*app.Headless, geom.Pt)
@@ -182,6 +182,11 @@ app.RendererCPU const shell.RendererMode = 2
 app.RendererGPU const shell.RendererMode = 1
 app.RendererMode alias shell.RendererMode
 app.Run func func(widget.Widget, app.Config) error
+app.Scene type struct
+app.Scene.BackdropBlurs method func(app.Scene) int
+app.Scene.HasLayers method func(app.Scene) bool
+app.Scene.Len method func(app.Scene) int
+app.Scene.Texts method func(app.Scene) []string
 apptest.AntiAliased var apptest.Tolerance
 apptest.App type struct
 apptest.App.AssertLabel method func(*apptest.App, string)
@@ -213,7 +218,7 @@ apptest.App.Release method func(apptest.App, geom.Pt)
 apptest.App.Render method func(apptest.App) image.Image
 apptest.App.Resize method func(apptest.App, geom.Size)
 apptest.App.Role method func(*apptest.App, layout.Role) *layout.SemNode
-apptest.App.Scene method func(apptest.App) *internal/scene.List
+apptest.App.Scene method func(apptest.App) app.Scene
 apptest.App.Scroll method func(apptest.App, geom.Pt)
 apptest.App.ScrollAt method func(apptest.App, geom.Pt, geom.Pt)
 apptest.App.ScrollTo method func(*apptest.App, string)

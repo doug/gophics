@@ -303,12 +303,61 @@ func (h *Headless) TouchRelease(p geom.Pt) {
 // assert past the input/render surface.
 func (h *Headless) Owner() *widget.Owner { return h.core.Owner }
 
-// Scene returns the display list recorded for the last frame, for tests that
-// need to assert on what was drawn rather than on what it looked like.
+// Scene returns what the last frame drew, for tests that need to assert on the
+// commands rather than on what they looked like.
 //
 // It is prev, not cur: recordScene swaps the two once it has diffed them, so
 // the frame just recorded is the one now called previous.
-func (h *Headless) Scene() *scene.List { return h.core.prev }
+func (h *Headless) Scene() Scene { return Scene{h.core.prev} }
+
+// Scene is a read-only projection of one recorded frame's display list.
+//
+// It is a projection rather than the list itself because the list is an
+// internal type. A signature naming an unimportable type is a promise with a
+// hole in it: the committed name cannot be used without the uncommitted one,
+// so nobody outside this module could act on it. What is exported here is what
+// the assertions actually reach for — a count, the layer flag, the blur count,
+// and the text that was painted.
+//
+// The zero value answers for a frame that was never recorded: Render has not
+// run yet, and asking what it drew is a reasonable question with the answer
+// "nothing". The display list itself panics on that, which is a worse answer
+// to the same question.
+type Scene struct{ l *scene.List }
+
+// Len is the number of paint commands the frame recorded.
+func (s Scene) Len() int {
+	if s.l == nil {
+		return 0
+	}
+	return s.l.Len()
+}
+
+// HasLayers reports whether the frame recorded a transform group, which forces
+// a full repaint instead of a damage-culled partial replay.
+func (s Scene) HasLayers() bool { return s.l != nil && s.l.HasLayers() }
+
+// BackdropBlurs is how many backdrop blurs the frame records.
+//
+// It is the one op whose cost is not its own — a blur re-reads everything drawn
+// behind it — so a frame can grow one without any visible change and lose
+// several milliseconds to it. That is what makes the count worth asserting on.
+func (s Scene) BackdropBlurs() int {
+	if s.l == nil {
+		return 0
+	}
+	return s.l.BackdropBlurs()
+}
+
+// Texts returns every text run the frame drew, in record order. A test for
+// what a widget did or did not paint wants this rather than a formatted dump
+// of the op slice, which also prints font names and cache keys.
+func (s Scene) Texts() []string {
+	if s.l == nil {
+		return nil
+	}
+	return s.l.Texts()
+}
 
 // Semantics returns the semantics tree for assertions. Pending rebuilds are
 // flushed and laid out first, so it is current after an event as well as

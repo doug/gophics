@@ -77,6 +77,23 @@ func (l *List) BackdropBlurs() int {
 	return n
 }
 
+// Texts returns every text run the frame drew, in record order.
+//
+// It exists so a test can assert on what a widget painted without matching a
+// formatted dump of the op slice. The dump route worked, but it coupled the
+// assertion to the field layout of an unexported struct and it could not
+// distinguish a string that was drawn from one that merely appeared in a font
+// name or a key — both of which %+v prints.
+func (l *List) Texts() []string {
+	var out []string
+	for _, o := range l.ops {
+		if o.kind == opText {
+			out = append(out, o.str2)
+		}
+	}
+	return out
+}
+
 // Replay draws the recorded commands onto c in order.
 func (l *List) Replay(c paint.Canvas) {
 	for i := range l.ops {
