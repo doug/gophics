@@ -286,3 +286,36 @@ func TestColorBoxRejectsOutlineGlyphs(t *testing.T) {
 		t.Errorf("plain text drew %d dark pixels", dark)
 	}
 }
+
+// A space next to an emoji must advance like a space, not like an emoji.
+//
+// The segmenter splits runs by face and keeps the face it is already using for
+// as long as that face covers the next rune. A space is covered by nearly every
+// font, so a space after an emoji stayed in the emoji's run — and colour emoji
+// faces advance everything by a full em, so at 32px the space measured 32.0
+// against a real space advance of 8.9. A 23px hole mid-line, repeated in every
+// caret position and hit rectangle derived from the same measurement.
+//
+// Measured against the plain advance rather than a constant, because the whole
+// point is that the two agree; a hard-coded number would also pass if both were
+// wrong.
+func TestSpaceNextToEmojiAdvancesLikeASpace(t *testing.T) {
+	p := emojiPainter(t)
+	const sz = 32
+	w := func(s string) float32 { return p.MeasureWidthIn("", s, sz) }
+
+	space := w("a a") - w("aa")
+	if space <= 0 {
+		t.Fatalf("a space measured %.3f; the control is broken", space)
+	}
+	for _, c := range []struct{ name, with, without string }{
+		{"after", "a" + emoji + " b", "a" + emoji + "b"},
+		{"before", "a " + emoji + "b", "a" + emoji + "b"},
+		{"between two", emoji + " " + emoji, emoji + emoji},
+	} {
+		if got := w(c.with) - w(c.without); got-space > 0.5 || space-got > 0.5 {
+			t.Errorf("space %s emoji advanced %.3f, want the plain space advance %.3f",
+				c.name, got, space)
+		}
+	}
+}

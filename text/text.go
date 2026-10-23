@@ -322,12 +322,64 @@ func (s *Shaper) shapeRuns(runes []rune, size float32, base di.Direction) []shap
 	if base == di.DirectionLTR {
 		inputs = splitNumbers(inputs, runes)
 	}
+	inputs = s.splitSpaces(inputs, runes)
 	outs := make([]shaping.Output, len(inputs))
 	for i, in := range inputs {
 		outs[i] = s.hb.Shape(in)
 	}
 	return outs
 }
+
+// splitSpaces moves a space out of a run the segmenter assigned to some other
+// face, when the fallback chain would have picked a different face for the
+// space itself.
+//
+// The segmenter splits runs by face, and it keeps the face it is already using
+// for as long as that face covers the next rune. A space is covered by very
+// nearly every font, so a space following an emoji stays in the emoji's run and
+// is advanced by the emoji's face. Colour emoji faces advance *everything* by a
+// full em, so at 32px a space after an emoji measured 32.0 instead of 8.9 — a
+// 23px hole in the middle of a line, and the same error again in the caret
+// positions and the hit rectangles derived from it.
+//
+// Scoped to spaces on purpose. Carrying a rune into the current face is right
+// in general: it keeps combining marks with the base they attach to and keeps
+// shaping continuous across a fallback. A space has neither property — nothing
+// shapes against it and nothing combines with it — so it is the one case where
+// the advance should come from the text face rather than from whatever drew
+// last. Anything wider than this is a change to how fallback works.
+//
+// A no-op unless a run actually mixes a space with a face that did not want it,
+// which for Latin-only text is never.
+func (s *Shaper) splitSpaces(inputs []shaping.Input, runes []rune) []shaping.Input {
+	out := make([]shaping.Input, 0, len(inputs))
+	for _, in := range inputs {
+		start := in.RunStart
+		misfit := func(i int) bool {
+			return isSpaceRune(runes[i]) && s.resolveFace(runes[i]) != in.Face
+		}
+		for i := in.RunStart; i < in.RunEnd; i++ {
+			// Cut only where the classification changes, so a run with no
+			// such space is emitted whole.
+			if i+1 < in.RunEnd && misfit(i) == misfit(i+1) {
+				continue
+			}
+			piece := in
+			piece.RunStart, piece.RunEnd = start, i+1
+			if misfit(i) {
+				piece.Face = s.resolveFace(runes[i])
+			}
+			out = append(out, piece)
+			start = i + 1
+		}
+	}
+	return out
+}
+
+// isSpaceRune is the set splitSpaces applies to: the space characters that
+// appear inside a shaped run and carry no shaping of their own. Line and
+// paragraph separators are not here because a run never spans one.
+func isSpaceRune(r rune) bool { return r == ' ' || r == '\t' || r == '\u00a0' }
 
 // splitNumbers cuts a left-to-right run that follows right-to-left text where
 // its leading number ends, so the number can be reordered on its own.
