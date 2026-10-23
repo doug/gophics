@@ -84,16 +84,22 @@ var tiers = map[string]Tier{
 // somebody else's package — so the leak is recorded here with a reason and the
 // test fails on a *new* one. An empty map is the goal.
 //
-// These two are the first thing the signature manifest found, and neither was
-// visible while the manifest recorded names only.
+// Both entries here were the first thing the signature manifest found, and
+// neither was visible while the manifest recorded names only. app.Headless.Scene
+// has since been fixed — it returns the exported app.Scene projection — which
+// leaves one, and that one is not fixable from inside this package.
 var tierExceptions = map[string]string{
-	"app.Headless.Scene": "returns *internal/scene.List; the retained display list is " +
-		"a debugging and test affordance and no outside caller can name the type. " +
-		"Either it takes an exported projection of the scene or it leaves v1.",
 	"paint.Painter.GPUCanvas": "takes *internal/gfx/gg.Context, a handle from the " +
-		"vendored substrate. Reaching the GPU canvas is a real need and the parameter " +
-		"should be a gpucontext token — the same shape the shells already pass across " +
-		"package boundaries — rather than a vendored type.",
+		"vendored substrate. This is a permitted exclusion rather than a thing to " +
+		"fix: no caller outside this module can obtain a *gg.Context in the first " +
+		"place, so the method is unreachable from outside and excluding it from the " +
+		"promise costs nobody anything. " +
+		"An earlier note here proposed passing a gpucontext token instead. That does " +
+		"not work: internal/gfx/gpucontext is itself part of the vendored tree, so " +
+		"the parameter would still name something no caller can import, and exporting " +
+		"it would mean restructuring a fork AGENTS.md says to leave alone. Closing it " +
+		"properly needs an exported substrate handle, which is a decision about the " +
+		"fork boundary and not an API cleanup.",
 }
 
 // TierOf returns the tier of a module-relative package path, or the empty
