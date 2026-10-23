@@ -192,24 +192,40 @@ func TestRefreshKeepsTheListUntilTheNewPageLands(t *testing.T) {
 	}
 }
 
-// gatedAPI serves each TopStories call its own page of ids, and once the first
-// four stories of a page are in, holds the rest behind a gate the test opens.
-// Two loads can then overlap and finish in the order the test chooses, which
-// a slow API cannot promise on a loaded machine. Items past the fourth are not
-// held until the first four are in because the fetch runs eight at a time:
-// eight held items would fill that and starve the four the test waits for.
+// gatedAPI serves each TopStories call its own page of ids and holds exactly
+// one of them — the fifth — behind a gate the test opens. Two loads can then
+// overlap and finish in the order the test chooses, which a slow API cannot
+// promise on a loaded machine.
+//
+// One item, and that one, because of how fetchItems reports progress: onPrefix
+// fires for the finished run *from the front*, so the feed sits at four
+// stories for exactly as long as item 4 has not resolved, no matter what the
+// tail does. Holding the whole tail instead looks more thorough and is worse
+// in both directions. The fetch runs eight at a time, so eight blocked items
+// fill the semaphore and starve the front four the test is waiting for — the
+// symptom is "2 stories, done=false". Holding the tail only *after* the front
+// four return avoids that but reintroduces a race: the loader fetches
+// concurrently, so on a loaded machine items 4..39 all arrive before the front
+// four finish, find nothing holding them, and the page completes whole — "40
+// stories, done=true; want a partial page", from a test that reads as merely
+// slow. One designated item has neither failure: nothing to starve, and
+// nothing to race.
+// gatedIndex is the one item per page held behind the gate. It is the first
+// item past the four the test wants to see, so the reported prefix stops
+// exactly there.
+const gatedIndex = 4
+
 type gatedAPI struct {
 	fakeAPI
 	mu    sync.Mutex
 	pages int
 	gates map[int]chan struct{} // by page
-	front map[int]int           // of the first four items, how many returned, by page
 	done  map[int]int           // items returned, by page
 }
 
 func newGatedAPI() *gatedAPI {
 	return &gatedAPI{fakeAPI: fakeAPI{stories: 40},
-		gates: map[int]chan struct{}{}, front: map[int]int{}, done: map[int]int{}}
+		gates: map[int]chan struct{}{}, done: map[int]int{}}
 }
 
 func (g *gatedAPI) TopStories(context.Context) ([]int, error) {
@@ -227,9 +243,11 @@ func (g *gatedAPI) TopStories(context.Context) ([]int, error) {
 func (g *gatedAPI) Item(ctx context.Context, id int) (Item, error) {
 	page, i := id/1_000_000, id%1_000_000
 	g.mu.Lock()
-	gate, held := g.gates[page], g.front[page] == 4
+	gate := g.gates[page]
 	g.mu.Unlock()
-	if i >= 4 && held {
+	// The fifth item, and only it: see the type comment for why this is one
+	// designated index rather than the whole tail.
+	if i == gatedIndex {
 		select {
 		case <-gate:
 		case <-ctx.Done():
@@ -238,9 +256,6 @@ func (g *gatedAPI) Item(ctx context.Context, id int) (Item, error) {
 	}
 	defer func() {
 		g.mu.Lock()
-		if i < 4 {
-			g.front[page]++
-		}
 		g.done[page]++
 		g.mu.Unlock()
 	}()
