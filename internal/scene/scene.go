@@ -295,6 +295,18 @@ func (r recorder) InkBoundsIn(font, s string, size float32) (geom.Rect, bool) {
 	return r.m.InkBoundsIn(font, s, size)
 }
 
+// HasColorEmoji implements paint.EmojiReporter, so paint.Emoji(recorder)
+// answers inside a widget's Draw rather than only on the painter canvas.
+//
+// A recorder has no font chain of its own, so this is only an answer when the
+// measurer it was built with is itself a reporter — the Painter is. Otherwise
+// false, which is the same instruction to the caller as a negative answer:
+// draw something that is not an emoji.
+func (r recorder) HasColorEmoji(font, s string, size float32) bool {
+	e, ok := r.m.(paint.EmojiReporter)
+	return ok && e.HasColorEmoji(font, s, size)
+}
+
 func (r recorder) Clear(col paint.Color) {
 	r.l.ops = append(r.l.ops, op{kind: opClear, col: col})
 }

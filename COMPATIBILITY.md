@@ -33,8 +33,8 @@ implementer, while reading in a diff exactly like new API. `paint.Measurer`
 went in that way before the manifest recorded signatures.
 
 This is why several things in `paint` are *opt-in capabilities* (`Blender`,
-`GradientFiller`) rather than methods on `Canvas`: a capability an
-implementation has not heard of costs it nothing, and `nil` is a real answer.
+`GradientFiller`, `EmojiReporter`) rather than methods on `Canvas`: a capability
+an implementation has not heard of costs it nothing, and `nil` is a real answer.
 Expect that pattern to be how drawing grows during `v1`.
 
 ## Covered packages

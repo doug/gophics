@@ -319,3 +319,44 @@ func TestSpaceNextToEmojiAdvancesLikeASpace(t *testing.T) {
 		}
 	}
 }
+
+// TestEmojiReporterTellsAColorFaceFromATofuBox is the reason the capability
+// exists at all, and it is a thing measurement cannot do. A Latin-only chain
+// has no emoji face, so U+1F600 falls back to the primary face's
+// missing-glyph box — which has ink, 16x20 at size 32. A caller that asked the
+// Measurer "will anything paint here" would be told yes and would draw the box.
+func TestEmojiReporterTellsAColorFaceFromATofuBox(t *testing.T) {
+	latin := NewPainter()
+	if err := latin.LoadFont(goregular.TTF); err != nil {
+		t.Fatal(err)
+	}
+	// Silence the (correct) missing-glyph warning: provoking it is the point.
+	latin.shaperFor("").OnMissingGlyph(nil)
+
+	if latin.HasColorEmoji("", emoji, 32) {
+		t.Error("a Latin-only chain reported a colour emoji")
+	}
+	if _, ok := latin.InkBoundsIn("", emoji, 32); !ok {
+		t.Fatal("the emoji drew no ink on a Latin-only chain, so there is no " +
+			"tofu box and this test is no longer testing the distinction")
+	}
+}
+
+// TestEmojiReporterFindsTheSystemColorFace is the positive half, and it is
+// capability-skipped for the same reason every other test in this file is.
+func TestEmojiReporterFindsTheSystemColorFace(t *testing.T) {
+	p := emojiPainter(t)
+	for _, c := range []struct {
+		s    string
+		want bool
+	}{
+		{emoji, true},
+		{"a" + emoji + "b", true}, // one colour glyph in a run is enough
+		{"abc", false},            // no emoji in it to find
+		{"", false},
+	} {
+		if got := p.HasColorEmoji("", c.s, 32); got != c.want {
+			t.Errorf("HasColorEmoji(%q) = %v, want %v", c.s, got, c.want)
+		}
+	}
+}

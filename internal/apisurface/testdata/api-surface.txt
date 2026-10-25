@@ -743,6 +743,9 @@ paint.Color.G field float32
 paint.Color.R field float32
 paint.Color.WithAlpha method func(paint.Color, float32) paint.Color
 paint.DropShadow func func(paint.Canvas, geom.Rect, float32, geom.Pt, float32, paint.Color)
+paint.Emoji func func(paint.Canvas) paint.EmojiReporter
+paint.EmojiReporter type interface
+paint.EmojiReporter.HasColorEmoji ifacemethod func(string, string, float32) bool
 paint.EvenStops func func(...paint.Color) []paint.GradientStop
 paint.FillGradient func func(paint.Canvas, geom.Rect, float32, *paint.Gradient)
 paint.GPUAvailable func func() bool
@@ -781,6 +784,7 @@ paint.NewPath func func() *paint.Path
 paint.Painter type struct
 paint.Painter.BeginOffscreen method func(*paint.Painter, geom.Size, float32) paint.Canvas
 paint.Painter.GPUCanvas method func(*paint.Painter, *internal/gfx/gg.Context) paint.Canvas
+paint.Painter.HasColorEmoji method func(*paint.Painter, string, string, float32) bool
 paint.Painter.Image method func(*paint.Painter) image.Image
 paint.Painter.ImageChanged method func(*paint.Painter, image.Image)
 paint.Painter.InkBoundsIn method func(*paint.Painter, string, string, float32) (geom.Rect, bool)

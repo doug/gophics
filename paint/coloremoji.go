@@ -299,3 +299,59 @@ func (c *ggCanvas) drawColorGlyph(src image.Rectangle, box geom.Rect, pos geom.P
 		Dst: box.Translate(geom.Pt{X: pos.X + g.X, Y: pos.Y + g.Y}),
 	})
 }
+
+// EmojiReporter answers, before anything is drawn, whether colour emoji will
+// actually appear — the one question a Measurer cannot. Ink bounds report that
+// *something* paints, and a missing-glyph box paints too, so measuring is no
+// way to tell a grinning face from a tofu rectangle.
+//
+// It is an opt-in capability because the answer is a property of the font chain
+// behind the canvas, which not every Canvas has.
+type EmojiReporter interface {
+	// HasColorEmoji reports whether s, shaped at size through the named family
+	// ("" = the default family) and its fallbacks, reaches at least one colour
+	// glyph this canvas can draw.
+	//
+	// False is the answer to act on rather than a diagnosis: it covers a build
+	// with no emoji face at all, a web build with no system fonts, and a
+	// Windows one whose system emoji font is COLR — which shapes perfectly and
+	// draws nothing (see the package note above). In all three the caller
+	// should show something other than an emoji.
+	HasColorEmoji(font, s string, size float32) bool
+}
+
+// Emoji returns c's colour-emoji capability, or nil when c cannot answer at
+// all. The painter canvas, the GPU canvas over it, and the scene recorder a
+// widget's Draw is handed can all answer.
+//
+//	if e := paint.Emoji(c); e != nil && e.HasColorEmoji("", s, 48) {
+//		c.TextIn("", s, at, 48, col)
+//	} else {
+//		c.TextIn("", "no colour emoji face on this build", at, 13, muted)
+//	}
+//
+// Treat nil and false the same way at the call site: both mean "do not draw an
+// emoji here". They are distinct only in why, and only a canvas from outside
+// this module answers nil.
+func Emoji(c Canvas) EmojiReporter {
+	e, _ := c.(EmojiReporter)
+	return e
+}
+
+// HasColorEmoji implements EmojiReporter. It shapes s rather than inspecting
+// the face list because fallback is per-rune: whether an emoji reaches a colour
+// face is decided during shaping, by the same resolution that will run again
+// when the run is drawn.
+func (p *Painter) HasColorEmoji(font, s string, size float32) bool {
+	for _, g := range p.ShapeIn(font, s, size).Glyphs {
+		if _, ok := p.colorBox(g.Font, g.GID, size); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// HasColorEmoji forwards to the Painter, which owns the font chain.
+func (c *ggCanvas) HasColorEmoji(font, s string, size float32) bool {
+	return c.p.HasColorEmoji(font, s, size)
+}
