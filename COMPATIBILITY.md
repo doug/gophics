@@ -83,12 +83,20 @@ One member of a covered package is outside the promise:
 - **`paint.Painter.GPUCanvas`** takes `*internal/gfx/gg.Context`, a handle from
   the vendored substrate. No caller outside this module can obtain one, so the
   method is already unreachable from outside and excluding it costs nobody
-  anything. Closing it properly needs an exported substrate handle, which is a
-  decision about the fork boundary rather than an API cleanup.
+  anything.
+
+  This one is permanent, not deferred. The obstacle is not the handle but what
+  the handle is for: the adapter behind it drives some forty `gg.Context`
+  methods typed in the substrate's own vocabulary — blend modes, brushes,
+  matrices, mark shapes, image buffers, shaped glyphs — so an exported handle
+  would drag all of that into the promise. That is precisely the surface this
+  file declines to cover two sections above, and the method being unreachable is
+  a better outcome than covering it.
 
 An exclusion is not a loophole: the list is in `internal/apisurface/tiers.go`
 as `tierExceptions`, every entry carries its reason, and the gate fails on a
-*new* one. An empty map is the goal.
+*new* one. The map is meant to stay at one entry, not to grow: a new exclusion
+is a leak, and the one that is there is a decision.
 
 ## How this is enforced
 

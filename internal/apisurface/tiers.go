@@ -75,31 +75,41 @@ var tiers = map[string]Tier{
 }
 
 // tierExceptions records v1 keys whose signatures name something a v1 caller
-// cannot commit to, with the reason each is tolerated for now.
+// cannot commit to, with the reason each is tolerated.
 //
 // A v1 signature that mentions an unstable or unimportable type is a promise
 // with a hole in it: the committed name cannot be used without the uncommitted
 // one, so freezing the first and not the second is not a position anybody can
 // act on. The right answer is usually to move the type, which is a change to
 // somebody else's package — so the leak is recorded here with a reason and the
-// test fails on a *new* one. An empty map is the goal.
+// test fails on a *new* one. An empty map was the goal, and is no longer quite
+// the right target: one entry turned out to be the correct end state rather
+// than an unfixed leak. "No entry without a reason that survives reading" is
+// the standard the test can actually hold.
 //
 // Both entries here were the first thing the signature manifest found, and
 // neither was visible while the manifest recorded names only. app.Headless.Scene
 // has since been fixed — it returns the exported app.Scene projection — which
-// leaves one, and that one is not fixable from inside this package.
+// leaves one. That one is deliberate and permanent rather than a to-do; its
+// entry says why, including the two remedies that were proposed and do not work.
 var tierExceptions = map[string]string{
 	"paint.Painter.GPUCanvas": "takes *internal/gfx/gg.Context, a handle from the " +
 		"vendored substrate. This is a permitted exclusion rather than a thing to " +
 		"fix: no caller outside this module can obtain a *gg.Context in the first " +
 		"place, so the method is unreachable from outside and excluding it from the " +
 		"promise costs nobody anything. " +
-		"An earlier note here proposed passing a gpucontext token instead. That does " +
-		"not work: internal/gfx/gpucontext is itself part of the vendored tree, so " +
-		"the parameter would still name something no caller can import, and exporting " +
-		"it would mean restructuring a fork AGENTS.md says to leave alone. Closing it " +
-		"properly needs an exported substrate handle, which is a decision about the " +
-		"fork boundary and not an API cleanup.",
+		"Two remedies have been written here and neither survives contact. A " +
+		"gpucontext token does not help: internal/gfx/gpucontext is in the same " +
+		"vendored tree, so the parameter would still name a package no caller can " +
+		"import. An exported substrate handle is not blocked by the fork — that tree " +
+		"is modified here routinely, and AGENTS.md asks only that its upstream " +
+		"ADR-citing comments be left alone — but it fails for a better reason: the " +
+		"obstacle is the adapter, not the handle. ggCanvas drives some forty Context " +
+		"methods whose parameters are gg's own vocabulary (BlendMode, Brush, Matrix, " +
+		"MarkShape, ImageBuf, DrawImageOptions, text.ShapedGlyph, text.Face), so an " +
+		"exported handle would have to export all of that with it. Closing this entry " +
+		"therefore means promising the vendored substrate's drawing API under v1, " +
+		"which COMPATIBILITY.md declines. The exclusion is the intended end state.",
 }
 
 // TierOf returns the tier of a module-relative package path, or the empty
