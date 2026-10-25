@@ -260,6 +260,8 @@ func sections() []section {
 			sp("Transform", "A transformed subtree that still takes taps", transformSection{})},
 		{"Custom painting", "Gradients, blend modes, measured text",
 			sp("Custom painting", "Drawing straight onto a paint.Canvas", paintSection{})},
+		{"Colour emoji", "Bitmap glyphs, and an honest answer without them",
+			sp("Colour emoji", "Asking the canvas before drawing an emoji", emojiSection{})},
 		{"Right to left", "Mirror a layout, not its glyphs",
 			sp("Right to left", "Directionality flipping a whole subtree", rtlSection{})},
 	}
@@ -493,5 +495,10 @@ func Config() app.Config {
 		BackgroundDark: theme.Dark().Bg,
 		Font:           goregular.TTF,
 		FontFamilies:   map[string][]byte{"bold": gobold.TTF},
+		// For the colour-emoji section, which is the one thing in the catalog
+		// the bundled Go faces cannot draw at all: they are Latin outlines and
+		// an emoji needs the machine's bitmap emoji face. A no-op on the web
+		// and mobile builds, where the section says so instead.
+		SystemFonts: true,
 	}
 }
