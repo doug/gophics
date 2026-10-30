@@ -103,12 +103,14 @@ func FlattenPath(path *scene.Path, transform scene.Affine, tolerance float32) *S
 // addMonotonicLine adds a line segment, splitting if non-monotonic in Y.
 // A segment is monotonic if it always goes down (Y0 <= Y1).
 func addMonotonicLine(segments *SegmentList, x0, y0, x1, y1 float32) {
-	// Determine winding from original direction
-	// +1 for downward (Y increases), -1 for upward (Y decreases)
-	var winding int8 = 1
-	if y1 < y0 {
-		winding = -1
-	}
+	// The winding sign is derived once, by NewLineSegment, when it normalizes
+	// the segment to Y0 <= Y1: an edge it has to flip was travelling upward and
+	// contributes -1, an edge it leaves alone contributes +1. Deciding it here
+	// as well — from the same y1 < y0 test — negated it twice and left every
+	// segment at +1, so the non-zero rule could not tell inside from outside
+	// and a multi-contour fill lost its holes. Pass the path-order winding and
+	// let the constructor apply the flip.
+	const pathOrderWinding int8 = 1
 
 	// Skip degenerate segments (points or horizontal lines)
 	const epsilon = 1e-6
@@ -123,7 +125,7 @@ func addMonotonicLine(segments *SegmentList, x0, y0, x1, y1 float32) {
 	}
 
 	// Add the segment (constructor will ensure Y0 <= Y1)
-	segments.AddLine(x0, y0, x1, y1, winding)
+	segments.AddLine(x0, y0, x1, y1, pathOrderWinding)
 }
 
 // flattenQuadratic flattens a quadratic Bezier curve to line segments.
