@@ -6,9 +6,10 @@ package paint
 // the trigger without needing a GPU device: importing gg's GPU accelerator (via
 // the gophics_gpu tag) registers a global tile-based CoverageFiller, and gg's
 // RasterizerAuto routes complex multi-contour paths — like a glyph run — to it.
-// That filler mishandles multi-contour winding, filling the gaps between glyphs
-// solid. runFor pins the glyph scratch context to RasterizerAnalytic to avoid
-// it; this test fails if that pin is ever removed.
+// The filler lost the winding sign and filled the gaps between glyphs solid.
+// That cause is fixed, and runFor still pins the glyph scratch context to
+// RasterizerAnalytic; this test fails if that pin is ever removed, which is
+// what makes it worth keeping — it now guards the routing, not the sign.
 
 import (
 	"testing"

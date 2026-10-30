@@ -1170,10 +1170,11 @@ func (p *Painter) runFor(font, s string, size float32, col Color) *cachedRun {
 	scratch.SetGPUDisabled(true)
 	// Force the analytic scanline filler. A glyph run is a dense multi-contour
 	// path; RasterizerAuto routes complex paths to the tile-based CoverageFiller
-	// whenever gg's GPU accelerator is imported (GetCoverageFiller != nil), and
-	// that filler mishandles multi-contour winding — filling the gaps between
-	// glyphs solid, so text renders as an opaque block. AnalyticFiller is the
-	// correct path for multi-contour fills (gg's own software.go says so).
+	// whenever gg's GPU accelerator is imported (GetCoverageFiller != nil). That
+	// filler used to fill the gaps between glyphs solid — text as an opaque
+	// block — because it lost the winding sign. The sign is fixed now, so this
+	// pin is a routing decision held until a benchmark prices the alternative,
+	// not a workaround. gg's own shouldUseTileRasterizer makes the same call.
 	scratch.SetRasterizerMode(gg.RasterizerAnalytic)
 	scratch.SetColor(col.nrgba())
 	scratch.ClearPath()

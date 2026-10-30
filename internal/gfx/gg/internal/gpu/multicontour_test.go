@@ -45,18 +45,19 @@ func coverPixels(t *testing.T, rule gg.FillRule) [64][64]uint8 {
 	return got
 }
 
-// TestTileFillerLeavesAMultiContourHoleEmpty is the regression test under the
-// defect that four call sites already work around:
+// TestTileFillerLeavesAMultiContourHoleEmpty is the regression test for the
+// defect that four call sites used to work around, none of them with a test:
 //
-//	software.go:265          shouldUseTileRasterizer rejects >1 contour
-//	software.go:1277         Stroke forces RasterizerAnalytic
+//	software.go      shouldUseTileRasterizer rejects >1 contour
+//	software.go      Stroke forces RasterizerAnalytic
 //	gpu_render_context.go    dispatchDrawsToSoftware forces it for stroked paths
-//	paint/paint.go:922       runFor forces it for glyph-run scratch contexts
+//	paint/paint.go           runFor forces it for glyph-run scratch contexts
 //
-// Each cites the same thing — the tile filler mishandles multi-contour winding
-// and fills the gap between contours solid — and none of them has a test, so
-// nothing fails if the defect is fixed or if it spreads. The guards are load
-// bearing in the dark.
+// They all cited the same thing: the tile filler filled the gap between
+// contours solid. It did, because the winding sign was derived twice — here and
+// in NewLineSegment — and the two negations cancelled, so the non-zero rule saw
+// every edge as +1. Fixed in flatten.go. The guards remain as routing choices,
+// unpriced rather than load bearing, and this test is what keeps the fix.
 //
 // This asserts the geometry rather than a golden image, because the hole is a
 // mathematical fact under both fill rules and needs no oracle: the centre of a

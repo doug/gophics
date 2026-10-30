@@ -568,9 +568,10 @@ func linearBands(c Canvas, r geom.Rect, g *Gradient, n int, over float32) {
 // radialBands fills discs from the outside in.
 //
 // Discs rather than rings: a ring is a two-contour path, and the tile
-// rasterizer this fallback exists for mishandles multi-contour winding — it
-// fills the hole solid, the same defect that forces glyph runs onto the
-// analytic filler. Discs are one contour each and always correct in shape, at
+// rasterizer this fallback exists for used to fill the hole solid — the same
+// lost winding sign that forced glyph runs onto the analytic filler. That is
+// fixed, so rings would be correct now too; discs stay because they are one
+// contour each and so correct under any filler, at
 // the cost of overdraw, and of a translucent radial ramp compositing
 // approximately because the inner discs lie over the outer ones instead of
 // beside them. An opaque gradient, which is nearly all of them, is exact.

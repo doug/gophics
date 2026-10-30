@@ -94,9 +94,10 @@ func (r *SoftwareRenderer) SetAntiAlias(enabled bool) {
 
 // SetRasterizerMode sets the rasterization algorithm for the next Fill call.
 // RasterizerAuto (default) uses intelligent auto-selection based on path
-// complexity. RasterizerAnalytic forces the scanline AnalyticFiller, which is
-// required for stroke-expanded multi-contour paths where SparseStripsFiller
-// cannot correctly track per-scanline winding.
+// complexity. RasterizerAnalytic forces the scanline AnalyticFiller, which
+// callers still pin for stroke-expanded multi-contour paths — not because the
+// tile filler gets their winding wrong any more, but because nothing has
+// measured it on that geometry yet. See shouldUseTileRasterizer.
 //
 // The mode is NOT auto-reset after each call — the caller is responsible for
 // restoring it (matching the Context.doStroke pattern).
@@ -268,13 +269,17 @@ func shouldUseTileRasterizer(p *Path) bool {
 		return false
 	}
 
-	// The tile-based CoverageFiller (SparseStrips) does not track winding
-	// correctly across multiple contours: with more than one subpath — a text
-	// run's glyphs, or a single glyph with counters/holes — the gaps between
-	// contours get filled solid, so text rasterizes as an opaque block. Route
-	// any multi-contour path to the analytic scanline filler, which handles
-	// multi-contour winding correctly. gg already does this for stroke-expanded
-	// paths (doStroke forces RasterizerAnalytic); fills need the same guard.
+	// Route any multi-contour path to the analytic scanline filler.
+	//
+	// This began as a correctness guard: the tile-based CoverageFiller
+	// (SparseStrips) lost the winding sign, so the gaps between contours — a
+	// text run's glyphs, or a single glyph with counters — filled solid and
+	// text rasterized as an opaque block. That defect is fixed; the sign is
+	// now derived once, in the segment constructor.
+	//
+	// The guard stays because removing it is a routing change, not a bug fix:
+	// it widens what the tile filler rasterizes in production, and nothing has
+	// benchmarked that yet. Delete it when something has.
 	contours := 0
 	for _, v := range p.Verbs() {
 		if v == MoveTo {
@@ -1267,12 +1272,12 @@ func (r *SoftwareRenderer) Stroke(pixmap *Pixmap, p *Path, paint *Paint) error {
 	strokeResultToPath(r.scratchStrokePath, outVerbs, outCoords)
 
 	// Route stroke fills through AnalyticFiller (Skia AAA scanline).
-	// Stroke-expanded multi-contour outlines (e.g., closed path → 4 contours)
-	// require per-scanline winding tracking that the tile-based SparseStripsFiller
-	// does not support (Vello's strip pipeline uses per-strip fill_gap flags).
-	// This matches Skia Ganesh which routes strokes through scanline renderers,
-	// not tile rasterizers. Single-contour strokes work with either filler after
-	// the expander.go fix (#347), but multi-contour needs scanline.
+	// Stroke expansion produces multi-contour outlines (e.g., closed path → 4
+	// contours), which the tile-based filler used to fill solid between the
+	// inner and outer rings. That defect is fixed, so this is now a routing
+	// choice rather than a correction: it matches Skia Ganesh, which sends
+	// strokes through scanline renderers rather than tile rasterizers, and it
+	// holds until a benchmark says the tile filler is faster here.
 	prevMode := r.rasterizerMode
 	r.rasterizerMode = RasterizerAnalytic
 	err := r.Fill(pixmap, r.scratchStrokePath, paint)

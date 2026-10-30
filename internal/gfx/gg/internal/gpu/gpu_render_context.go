@@ -1672,11 +1672,11 @@ func (rc *GPURenderContext) dispatchDrawsToSoftware(pm *gg.Pixmap, sr *gg.Softwa
 			// preTessellateStroke already expanded stroke → fill path with EvenOdd.
 			// Use Fill (not Stroke) to avoid double expansion.
 			//
-			// Force RasterizerAnalytic: stroke expansion produces multi-contour
-			// fill paths (inner + outer outline) that require per-scanline winding
-			// tracking. SparseStripsFiller cannot handle this correctly and
-			// produces visible artifacts inside the stroke ring. This matches
-			// SoftwareRenderer.Stroke() which forces Analytic for the same reason.
+			// Force RasterizerAnalytic, matching SoftwareRenderer.Stroke().
+			// Stroke expansion produces multi-contour fill paths (inner + outer
+			// outline), which the tile filler once filled solid inside the ring.
+			// That defect is fixed; the pin now only keeps this dispatch on the
+			// same filler the direct path uses, until a benchmark moves both.
 			sr.SetRasterizerMode(gg.RasterizerAnalytic)
 			if err := sr.Fill(pm, cmd.path, &cmd.paint); err != nil {
 				slogger().Debug("dispatchDrawsToSoftware: StrokePath Fill failed", "err", err)

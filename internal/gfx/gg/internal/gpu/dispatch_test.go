@@ -322,11 +322,12 @@ func TestDispatchStrokeShape_UnclippedSDF_RectFallback(t *testing.T) {
 // SoftwareRenderer.Stroke() (which forces RasterizerAnalytic internally).
 //
 // Background: stroke expansion produces multi-contour fill paths (inner + outer
-// outline). SoftwareRenderer.Stroke() forces RasterizerAnalytic because
-// SparseStripsFiller does not correctly handle multi-contour winding. The draw
-// queue dispatch (drawCmdStrokePath) was calling sr.Fill() with default Auto
-// mode, routing expanded strokes through SparseStripsFiller and causing
-// visible artifacts (white/gray residual marks inside stroke rings).
+// outline). SoftwareRenderer.Stroke() forces RasterizerAnalytic, originally
+// because SparseStripsFiller lost the winding sign and left visible artifacts
+// (white/gray residual marks) inside stroke rings. The draw queue dispatch
+// (drawCmdStrokePath) called sr.Fill() with default Auto mode and so skipped
+// that pin. The sign is fixed now, so this test guards the dispatch agreeing
+// with the direct path rather than the defect itself.
 //
 // The test draws a large stroked circle (radius=120, lineWidth=1.5) which
 // produces a path with many verbs (well above the SparseStrips threshold).
@@ -397,7 +398,7 @@ func TestDispatchStrokePath_ForcesAnalyticFiller(t *testing.T) {
 	centerAlpha := data[centerIdx+3]
 	if centerAlpha != 0 {
 		t.Errorf("stroke dispatch artifact: center pixel (%d,%d) alpha=%d, want 0 "+
-			"(SparseStripsFiller multi-contour winding bug)", int(cx), int(cy), centerAlpha)
+			"(dispatch skipped the AnalyticFiller pin)", int(cx), int(cy), centerAlpha)
 	}
 
 	// Also check a point well inside the ring (30px from center = 90px from ring).
