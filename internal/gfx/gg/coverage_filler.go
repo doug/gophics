@@ -26,7 +26,7 @@ type ClipBounds struct {
 // zero-cost rectangular clip culling at the rasterizer level (Skia pattern).
 //
 // Implementations:
-//   - SparseStripsFiller (4x4 tiles, CPU/SIMD-optimized) — default
+//   - TileCoverageFiller (4x4 tiles, CPU/SIMD-optimized) — default
 //   - TileComputeFiller (16x16 tiles, GPU workgroup-ready) — alternative
 type CoverageFiller interface {
 	// FillCoverage rasterizes the path and calls callback for each pixel
@@ -49,7 +49,7 @@ var (
 // Typical usage via blank import in the gpu package:
 //
 //	func init() {
-//	    gg.RegisterCoverageFiller(&gpuimpl.SparseStripsFiller{})
+//	    gg.RegisterCoverageFiller(&gpuimpl.TileCoverageFiller{})
 //	}
 func RegisterCoverageFiller(f CoverageFiller) {
 	coverageMu.Lock()
@@ -66,13 +66,13 @@ func GetCoverageFiller() CoverageFiller {
 }
 
 // ForceableFiller is an optional interface for CoverageFillers that support
-// forced algorithm selection. When the user sets RasterizerSparseStrips or
-// RasterizerTileCompute mode, the renderer uses SparseFiller() or ComputeFiller()
+// forced algorithm selection. When the user sets RasterizerTileCoverage or
+// RasterizerTileCompute mode, the renderer uses TileCoverageFiller() or ComputeFiller()
 // instead of the adaptive auto-selection.
 type ForceableFiller interface {
 	CoverageFiller
-	// SparseFiller returns the SparseStrips (4x4 tiles) filler component.
-	SparseFiller() CoverageFiller
+	// TileCoverageFiller returns the TileCoverage (4x4 tiles) filler component.
+	TileCoverageFiller() CoverageFiller
 	// ComputeFiller returns the TileCompute (16x16 tiles) filler component.
 	ComputeFiller() CoverageFiller
 }

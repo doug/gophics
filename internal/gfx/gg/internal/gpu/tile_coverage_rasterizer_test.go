@@ -694,27 +694,27 @@ func TestFineRasterizerRenderToBuffer(t *testing.T) {
 // Sparse Strips Integration Tests
 // =============================================================================
 
-func TestSparseStripsRasterizerBasic(t *testing.T) {
+func TestTileCoverageRasterizerBasic(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	if ssr.Width() != 100 || ssr.Height() != 100 {
-		t.Errorf("Dimensions = (%d, %d), want (100, 100)", ssr.Width(), ssr.Height())
+	if tcr.Width() != 100 || tcr.Height() != 100 {
+		t.Errorf("Dimensions = (%d, %d), want (100, 100)", tcr.Width(), tcr.Height())
 	}
 
-	if ssr.FillRule() != scene.FillNonZero {
+	if tcr.FillRule() != scene.FillNonZero {
 		t.Error("Default fill rule should be NonZero")
 	}
 }
 
-func TestSparseStripsRasterizerRectangle(t *testing.T) {
+func TestTileCoverageRasterizerRectangle(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	path := scene.NewPath().Rectangle(10, 10, 20, 20)
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
-	stats := ssr.GetStats()
+	stats := tcr.GetStats()
 
 	if stats.SegmentCount == 0 {
 		t.Error("Should produce segments")
@@ -727,14 +727,14 @@ func TestSparseStripsRasterizerRectangle(t *testing.T) {
 	}
 }
 
-func TestSparseStripsRasterizerCircle(t *testing.T) {
+func TestTileCoverageRasterizerCircle(t *testing.T) {
 	config := DefaultConfig(200, 200)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	path := scene.NewPath().Circle(100, 100, 50)
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
-	stats := ssr.GetStats()
+	stats := tcr.GetStats()
 
 	// Circle should produce many segments from curve flattening
 	if stats.SegmentCount < 20 {
@@ -742,37 +742,37 @@ func TestSparseStripsRasterizerCircle(t *testing.T) {
 	}
 }
 
-func TestSparseStripsRasterizerStrips(t *testing.T) {
+func TestTileCoverageRasterizerStrips(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	path := scene.NewPath().Rectangle(10, 10, 20, 20)
-	ssr.RasterizeToStrips(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizeToStrips(path, scene.IdentityAffine(), FlattenTolerance)
 
-	strips := ssr.Strips()
+	strips := tcr.Strips()
 	if len(strips.Strips()) == 0 {
 		t.Error("Should produce strips")
 	}
 }
 
-func TestSparseStripsRasterizerRenderToBuffer(t *testing.T) {
+func TestTileCoverageRasterizerRenderToBuffer(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	// Rectangle at (20, 20) with width=30, height=30 spans from (20,20) to (50,50)
 	path := scene.NewPath().Rectangle(20, 20, 30, 30)
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
 	buffer := make([]uint8, 100*100*4)
 	color := [4]uint8{0, 255, 0, 255} // Green
-	ssr.RenderToBuffer(buffer, 100*4, color)
+	tcr.RenderToBuffer(buffer, 100*4, color)
 
 	// NOTE: Current sparse strips implementation only creates tiles for edge regions
 	// where segments cross. Interior tiles are not created (future enhancement).
 	// Test checks edge pixels rather than interior.
 
 	// Check that grid has tiles (edge tiles are created)
-	grid := ssr.Grid()
+	grid := tcr.Grid()
 	if grid.TileCount() == 0 {
 		t.Error("Grid should have tiles for rectangle edges")
 		return
@@ -804,22 +804,22 @@ func TestSparseStripsRasterizerRenderToBuffer(t *testing.T) {
 	}
 }
 
-func TestSparseStripsRasterizerReset(t *testing.T) {
+func TestTileCoverageRasterizerReset(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	path := scene.NewPath().Rectangle(10, 10, 20, 20)
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
-	ssr.Reset()
+	tcr.Reset()
 
-	stats := ssr.GetStats()
+	stats := tcr.GetStats()
 	if stats.SegmentCount != 0 || stats.TileEntryCount != 0 {
 		t.Error("Reset should clear all state")
 	}
 }
 
-func TestSparseStripsRasterizerFillRules(t *testing.T) {
+func TestTileCoverageRasterizerFillRules(t *testing.T) {
 	tests := []struct {
 		name     string
 		fillRule scene.FillStyle
@@ -832,20 +832,20 @@ func TestSparseStripsRasterizerFillRules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := DefaultConfig(100, 100)
 			config.FillRule = tt.fillRule
-			ssr := NewSparseStripsRasterizer(config)
+			tcr := NewTileCoverageRasterizer(config)
 
 			path := scene.NewPath().Rectangle(10, 10, 20, 20)
-			ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+			tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
-			if ssr.FillRule() != tt.fillRule {
-				t.Errorf("FillRule = %v, want %v", ssr.FillRule(), tt.fillRule)
+			if tcr.FillRule() != tt.fillRule {
+				t.Errorf("FillRule = %v, want %v", tcr.FillRule(), tt.fillRule)
 			}
 		})
 	}
 }
 
-func TestSparseStripsPool(t *testing.T) {
-	pool := NewSparseStripsPool()
+func TestTileCoveragePool(t *testing.T) {
+	pool := NewTileCoveragePool()
 	config := DefaultConfig(100, 100)
 
 	ssr1 := pool.Get(config)
@@ -861,39 +861,39 @@ func TestSparseStripsPool(t *testing.T) {
 	}
 }
 
-func TestSparseStripsRasterizerEmptyPath(t *testing.T) {
+func TestTileCoverageRasterizerEmptyPath(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	path := scene.NewPath()
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
-	stats := ssr.GetStats()
+	stats := tcr.GetStats()
 	if stats.SegmentCount != 0 {
 		t.Error("Empty path should produce 0 segments")
 	}
 }
 
-func TestSparseStripsRasterizerNilPath(t *testing.T) {
+func TestTileCoverageRasterizerNilPath(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	ssr.RasterizePath(nil, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(nil, scene.IdentityAffine(), FlattenTolerance)
 
-	stats := ssr.GetStats()
+	stats := tcr.GetStats()
 	if stats.SegmentCount != 0 {
 		t.Error("Nil path should produce 0 segments")
 	}
 }
 
-func TestSparseStripsRasterizerResize(t *testing.T) {
+func TestTileCoverageRasterizerResize(t *testing.T) {
 	config := DefaultConfig(100, 100)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	ssr.SetSize(200, 200)
+	tcr.SetSize(200, 200)
 
-	if ssr.Width() != 200 || ssr.Height() != 200 {
-		t.Errorf("After resize: (%d, %d), want (200, 200)", ssr.Width(), ssr.Height())
+	if tcr.Width() != 200 || tcr.Height() != 200 {
+		t.Errorf("After resize: (%d, %d), want (200, 200)", tcr.Width(), tcr.Height())
 	}
 }
 
@@ -951,35 +951,35 @@ func BenchmarkFineRasterizeRectangle(b *testing.B) {
 	}
 }
 
-func BenchmarkSparseStripsRectangle100x100(b *testing.B) {
+func BenchmarkTileCoverageRectangle100x100(b *testing.B) {
 	config := DefaultConfig(200, 200)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 	path := scene.NewPath().Rectangle(10, 10, 100, 100)
 	transform := scene.IdentityAffine()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ssr.Reset()
-		ssr.RasterizePath(path, transform, FlattenTolerance)
+		tcr.Reset()
+		tcr.RasterizePath(path, transform, FlattenTolerance)
 	}
 }
 
-func BenchmarkSparseStripsCircle(b *testing.B) {
+func BenchmarkTileCoverageCircle(b *testing.B) {
 	config := DefaultConfig(200, 200)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 	path := scene.NewPath().Circle(100, 100, 50)
 	transform := scene.IdentityAffine()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ssr.Reset()
-		ssr.RasterizePath(path, transform, FlattenTolerance)
+		tcr.Reset()
+		tcr.RasterizePath(path, transform, FlattenTolerance)
 	}
 }
 
-func BenchmarkSparseStripsComplexPath(b *testing.B) {
+func BenchmarkTileCoverageComplexPath(b *testing.B) {
 	config := DefaultConfig(400, 400)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	// Create a complex path with curves
 	path := scene.NewPath()
@@ -996,16 +996,16 @@ func BenchmarkSparseStripsComplexPath(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ssr.Reset()
-		ssr.RasterizePath(path, transform, FlattenTolerance)
+		tcr.Reset()
+		tcr.RasterizePath(path, transform, FlattenTolerance)
 	}
 }
 
 func BenchmarkRenderToBuffer(b *testing.B) {
 	config := DefaultConfig(400, 400)
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 	path := scene.NewPath().Rectangle(50, 50, 300, 300)
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
 
 	buffer := make([]uint8, 400*400*4)
 	color := [4]uint8{255, 128, 0, 255}
@@ -1016,7 +1016,7 @@ func BenchmarkRenderToBuffer(b *testing.B) {
 		for j := range buffer {
 			buffer[j] = 0
 		}
-		ssr.RenderToBuffer(buffer, 400*4, color)
+		tcr.RenderToBuffer(buffer, 400*4, color)
 	}
 }
 
@@ -1030,14 +1030,14 @@ func BenchmarkTilePool(b *testing.B) {
 	}
 }
 
-func BenchmarkSparseStripsPool(b *testing.B) {
-	pool := NewSparseStripsPool()
+func BenchmarkTileCoveragePool(b *testing.B) {
+	pool := NewTileCoveragePool()
 	config := DefaultConfig(100, 100)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ssr := pool.Get(config)
-		pool.Put(ssr)
+		tcr := pool.Get(config)
+		pool.Put(tcr)
 	}
 }
 
@@ -1075,10 +1075,10 @@ func TestWindingPropagationBetweenTiles(t *testing.T) {
 	path := scene.NewPath().Rectangle(1, 0, 38, 8) // x, y, w, h
 	config := DefaultConfig(canvasW, canvasH)
 	config.FillRule = scene.FillNonZero
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
-	grid := ssr.Grid()
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	grid := tcr.Grid()
 
 	// Check interior tiles (columns 1 through 8) — these are between
 	// the left and right edges and should be fully filled (alpha=255).
@@ -1183,10 +1183,10 @@ func TestWindingPropagation_EvenOddFillRule(t *testing.T) {
 	path := scene.NewPath().Rectangle(1, 0, 22, 8)
 	config := DefaultConfig(canvasW, canvasH)
 	config.FillRule = scene.FillEvenOdd
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	ssr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
-	grid := ssr.Grid()
+	tcr.RasterizePath(path, scene.IdentityAffine(), FlattenTolerance)
+	grid := tcr.Grid()
 
 	// Interior tiles (columns 1 through 4) should be fully filled
 	for tileCol := int32(1); tileCol <= 4; tileCol++ {

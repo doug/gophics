@@ -92,7 +92,7 @@ func clampToClipBounds(cb *gg.ClipBounds, yStart, yEnd, xStart, xEnd int) (int, 
 	return yStart, yEnd, xStart, xEnd
 }
 
-// segmentsToLineSoup converts SparseStrips SegmentList to tilecompute LineSoup.
+// segmentsToLineSoup converts TileCoverage SegmentList to tilecompute LineSoup.
 // LineSegments store monotonic segments (Y0 <= Y1) with a Winding field.
 // LineSoup expects original (unsorted) direction — we restore it using Winding.
 func segmentsToLineSoup(segs *SegmentList) []tilecompute.LineSoup {

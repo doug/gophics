@@ -6,7 +6,7 @@ import "github.com/doug/gophics/internal/gfx/gg"
 
 const (
 	// extremeSegmentThreshold is the estimated segment count above which
-	// TileCompute (16x16) is preferred over SparseStrips (4x4).
+	// TileCompute (16x16) is preferred over TileCoverage (4x4).
 	// At 10K+ segments, hashmap pressure for 4x4 tiles becomes significant
 	// because the number of active tiles grows quadratically with path complexity,
 	// while 16x16 tiles reduce tile count by 16x.
@@ -23,20 +23,20 @@ const (
 	segmentMultiplier = 3
 )
 
-// AdaptiveFiller selects between SparseStrips (4x4) and TileCompute (16x16)
+// AdaptiveFiller selects between TileCoverage (4x4) and TileCompute (16x16)
 // based on path complexity and canvas size.
 //
-// For most paths, SparseStrips is faster due to smaller tile granularity and
+// For most paths, TileCoverage is faster due to smaller tile granularity and
 // SIMD-friendly 4x4 layout. TileCompute becomes advantageous for extremely
 // complex paths (10K+ segments) on large canvases, where 16x16 tiles reduce
 // the overhead of tile management and backdrop propagation.
 type AdaptiveFiller struct {
-	sparse  SparseStripsFiller
+	sparse  TileCoverageFiller
 	compute TileComputeFiller
 }
 
-// SparseFiller returns the SparseStrips (4x4 tiles) filler component.
-func (f *AdaptiveFiller) SparseFiller() gg.CoverageFiller {
+// TileCoverageFiller returns the TileCoverage (4x4 tiles) filler component.
+func (f *AdaptiveFiller) TileCoverageFiller() gg.CoverageFiller {
 	return &f.sparse
 }
 

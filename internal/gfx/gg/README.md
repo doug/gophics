@@ -45,7 +45,7 @@ The CPU rasterizer automatically selects the optimal algorithm per-path:
 |-----------|-------|----------|
 | **AnalyticFiller** (Skia AAA) | — | Simple paths, small shapes (< 32px). Pixel-perfect with Skia Chrome/Android. |
 | **AnalyticFiller Convex** | — | Convex shapes (rect, circle, triangle). 1.6x faster, kSnapDigit X snapping. |
-| **SparseStrips** | 4×4 | Complex paths, CPU/SIMD workloads |
+| **TileCoverage** | 4×4 | Complex paths, CPU/SIMD workloads |
 | **TileCompute** | 16×16 | Extreme complexity (10K+ segments) |
 
 ```go
@@ -57,7 +57,7 @@ dc.DrawCircle(400, 300, 100)
 dc.Fill()
 
 // Force specific algorithm for benchmarking
-dc.SetRasterizerMode(gg.RasterizerSparseStrips)
+dc.SetRasterizerMode(gg.RasterizerTileCoverage)
 ```
 
 ### Pixel-Perfect Mode (No Anti-Aliasing)
@@ -195,7 +195,7 @@ dc := gg.NewContext(800, 600, gg.WithPixmap(pm))
 | Component | Location | Description |
 |-----------|----------|-------------|
 | **CPU Raster** | `internal/raster/` | Skia AAA analytic anti-aliasing (pixel-perfect port of Chrome/Android rasterizer). General + convex fast path. |
-| **Tile Rasterizers** | `internal/gpu/` (4×4), `internal/gpu/tilecompute/` (16×16) | SparseStrips + TileCompute, both ported from Vello |
+| **Tile Rasterizers** | `internal/gpu/` (4×4), `internal/gpu/tilecompute/` (16×16) | TileCoverage + TileCompute, both ported from Vello |
 | **GPU Accelerator** | `internal/gpu` | Seven-tier GPU pipeline (SDF, Convex, Stencil+Cover, Textured Quad, MSDF Text, Compute, Glyph Mask) |
 | **Scene Text** | `scene/` | TagText glyph references (ADR-022): shape once at recording, resolve at render via DrawShapedGlyphs → Tier 6/4. Atlas zoom resilience (Skia size buckets). |
 | **GPU + Tiles** | `gpu/` | Opt-in via `import _ "github.com/gogpu/gg/gpu"` (GPU + tile rasterizers) |

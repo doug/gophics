@@ -21,8 +21,8 @@ type pixelWinding struct {
 	segDetails   []string // per-segment contribution details
 }
 
-// TestSparseStripsDebug_StrokeSineWave is a diagnostic test that traces exactly
-// what happens inside SparseStripsFiller when rasterizing a self-intersecting
+// TestTileCoverageDebug_StrokeSineWave is a diagnostic test that traces exactly
+// what happens inside TileCoverageFiller when rasterizing a self-intersecting
 // stroke-expanded sine wave. It logs segment contributions, winding accumulation,
 // and final coverage at 3 specific pixel columns (x=55, x=100, x=200) to show
 // WHERE the extra coverage comes from compared to AnalyticFiller.
@@ -32,7 +32,7 @@ type pixelWinding struct {
 // fill rule, the winding number at these intersections can exceed +/-1, but
 // coverage is clamped to 1.0. The key question: do tiles OUTSIDE the 2px stroke
 // band incorrectly accumulate non-zero backdrop winding from these intersections?
-func TestSparseStripsDebug_StrokeSineWave(t *testing.T) {
+func TestTileCoverageDebug_StrokeSineWave(t *testing.T) {
 	const (
 		canvasW     = 400
 		canvasH     = 500
@@ -49,22 +49,22 @@ func TestSparseStripsDebug_StrokeSineWave(t *testing.T) {
 	t.Logf("Stroke-expanded path: %d verbs, %d coords",
 		len(strokePath.Verbs()), len(strokePath.Points()))
 
-	// Phase 2: Run the SparseStrips pipeline manually so we can inspect internals.
+	// Phase 2: Run the TileCoverage pipeline manually so we can inspect internals.
 	config := DefaultConfig(canvasW, canvasH)
 	config.FillRule = scene.FillNonZero
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
 	// Flatten.
-	ssr.flattenCtx.Reset()
-	ssr.flattenCtx.FlattenPathTo(strokePath, scene.IdentityAffine(), FlattenTolerance)
-	segments := ssr.flattenCtx.Segments()
+	tcr.flattenCtx.Reset()
+	tcr.flattenCtx.FlattenPathTo(strokePath, scene.IdentityAffine(), FlattenTolerance)
+	segments := tcr.flattenCtx.Segments()
 	t.Logf("Flattened segments: %d", segments.Len())
 
 	// Coarse rasterize.
-	ssr.coarse.Rasterize(segments)
-	ssr.coarse.SortEntries()
-	backdrop := ssr.coarse.CalculateBackdrop()
-	t.Logf("Coarse entries: %d, backdrop size: %d", len(ssr.coarse.Entries()), len(backdrop))
+	tcr.coarse.Rasterize(segments)
+	tcr.coarse.SortEntries()
+	backdrop := tcr.coarse.CalculateBackdrop()
+	t.Logf("Coarse entries: %d, backdrop size: %d", len(tcr.coarse.Entries()), len(backdrop))
 
 	// Phase 3: For 3 diagnostic columns, trace segments, winding, and coverage.
 	diagnosticColumns := []int{55, 100, 200}
@@ -75,13 +75,13 @@ func TestSparseStripsDebug_StrokeSineWave(t *testing.T) {
 		t.Logf("DIAGNOSTIC COLUMN: x=%d", diagX)
 		t.Logf("========================================")
 
-		analyzeColumn(t, diagX, canvasW, canvasH, segments, ssr.coarse, backdrop)
+		analyzeColumn(t, diagX, canvasW, canvasH, segments, tcr.coarse, backdrop)
 	}
 
 	// Phase 4: Run fine rasterization and report actual coverage map at these columns.
-	ssr.fine.SetFillRule(scene.FillNonZero)
-	ssr.fine.Rasterize(ssr.coarse, segments, backdrop)
-	grid := ssr.fine.Grid()
+	tcr.fine.SetFillRule(scene.FillNonZero)
+	tcr.fine.Rasterize(tcr.coarse, segments, backdrop)
+	grid := tcr.fine.Grid()
 
 	t.Logf("")
 	t.Logf("========================================")
@@ -457,7 +457,7 @@ func logPixelWinding(t *testing.T, y int, pw *pixelWinding) {
 }
 
 // buildDebugSinePath creates the 100-segment damped sine wave as a scene.Path
-// (float32, for direct use with SparseStripsRasterizer).
+// (float32, for direct use with TileCoverageRasterizer).
 func buildDebugSinePath(numSegments int) *scene.Path {
 	p := scene.NewPath()
 	for i := 0; i <= numSegments; i++ {
@@ -475,7 +475,7 @@ func buildDebugSinePath(numSegments int) *scene.Path {
 
 // expandSineStroke takes the centerline sine wave (scene.Path) and produces
 // the stroke-expanded outline using the same stroke expander as software.go.
-// Returns a scene.Path (float32) ready for SparseStripsRasterizer.
+// Returns a scene.Path (float32) ready for TileCoverageRasterizer.
 func expandSineStroke(centerline *scene.Path, width float64) *scene.Path {
 	// Convert scene.Path verbs/points to stroke expander format.
 	verbs := centerline.Verbs()
@@ -547,12 +547,12 @@ func expandSineStroke(centerline *scene.Path, width float64) *scene.Path {
 	return result
 }
 
-// TestSparseStripsDebug_BackdropSpill is a focused test that checks whether
+// TestTileCoverageDebug_BackdropSpill is a focused test that checks whether
 // the CalculateBackdrop function produces non-zero values in tile rows that
 // are far from any actual segment. A non-zero backdrop in a row where no
 // segments actually cross means the fill will "spill" winding from distant
 // self-intersections into tiles that should be empty.
-func TestSparseStripsDebug_BackdropSpill(t *testing.T) {
+func TestTileCoverageDebug_BackdropSpill(t *testing.T) {
 	const (
 		canvasW     = 400
 		canvasH     = 500
@@ -565,22 +565,22 @@ func TestSparseStripsDebug_BackdropSpill(t *testing.T) {
 
 	config := DefaultConfig(canvasW, canvasH)
 	config.FillRule = scene.FillNonZero
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	ssr.flattenCtx.Reset()
-	ssr.flattenCtx.FlattenPathTo(strokePath, scene.IdentityAffine(), FlattenTolerance)
-	segments := ssr.flattenCtx.Segments()
+	tcr.flattenCtx.Reset()
+	tcr.flattenCtx.FlattenPathTo(strokePath, scene.IdentityAffine(), FlattenTolerance)
+	segments := tcr.flattenCtx.Segments()
 
-	ssr.coarse.Rasterize(segments)
-	ssr.coarse.SortEntries()
-	backdrop := ssr.coarse.CalculateBackdrop()
+	tcr.coarse.Rasterize(segments)
+	tcr.coarse.SortEntries()
+	backdrop := tcr.coarse.CalculateBackdrop()
 
-	tileColumns := int(ssr.coarse.TileColumns())
+	tileColumns := int(tcr.coarse.TileColumns())
 	tileRows := (canvasH + TileSize - 1) / TileSize
 
 	// For each tile, check if it has a non-zero backdrop but NO coarse entries
 	// pointing segments that actually cross it. This is the "spill" condition.
-	entries := ssr.coarse.Entries()
+	entries := tcr.coarse.Entries()
 
 	// Build a set of tiles that have actual segment entries.
 	type tileKey struct{ x, y int }
@@ -659,10 +659,10 @@ func TestSparseStripsDebug_BackdropSpill(t *testing.T) {
 	}
 }
 
-// TestSparseStripsDebug_WindingAccumulation traces the winding number at a specific
+// TestTileCoverageDebug_WindingAccumulation traces the winding number at a specific
 // pixel position across all segments to show exactly how winding builds up.
 // Uses x=100 which is in the middle of the sine wave where self-intersection is likely.
-func TestSparseStripsDebug_WindingAccumulation(t *testing.T) {
+func TestTileCoverageDebug_WindingAccumulation(t *testing.T) {
 	const (
 		canvasW     = 400
 		canvasH     = 500
@@ -675,11 +675,11 @@ func TestSparseStripsDebug_WindingAccumulation(t *testing.T) {
 
 	config := DefaultConfig(canvasW, canvasH)
 	config.FillRule = scene.FillNonZero
-	ssr := NewSparseStripsRasterizer(config)
+	tcr := NewTileCoverageRasterizer(config)
 
-	ssr.flattenCtx.Reset()
-	ssr.flattenCtx.FlattenPathTo(strokePath, scene.IdentityAffine(), FlattenTolerance)
-	segments := ssr.flattenCtx.Segments()
+	tcr.flattenCtx.Reset()
+	tcr.flattenCtx.FlattenPathTo(strokePath, scene.IdentityAffine(), FlattenTolerance)
+	segments := tcr.flattenCtx.Segments()
 	allLines := segments.Segments()
 
 	t.Logf("Total flattened segments: %d", len(allLines))

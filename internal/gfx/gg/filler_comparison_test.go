@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/doug/gophics/internal/gfx/gg"
-	_ "github.com/doug/gophics/internal/gfx/gg/raster" // registers AdaptiveFiller (SparseStrips + TileCompute)
+	_ "github.com/doug/gophics/internal/gfx/gg/raster" // registers AdaptiveFiller (TileCoverage + TileCompute)
 )
 
-// TestStrokeSineWave_AnalyticVsSparseStrips measures the rendering difference
-// between AnalyticFiller and SparseStripsFiller for a stroke-expanded 100-segment
+// TestStrokeSineWave_AnalyticVsTileCoverage measures the rendering difference
+// between AnalyticFiller and TileCoverageFiller for a stroke-expanded 100-segment
 // sine wave polyline. This is the exact reproducer for issue #347.
 //
 // The test strokes the sine wave path with both fillers by toggling the global
@@ -20,7 +20,7 @@ import (
 //   - Maximum Y spread at each X column (visual stroke width)
 //   - Coverage distribution histograms
 //   - Exact pixel difference count and locations
-func TestStrokeSineWave_AnalyticVsSparseStrips(t *testing.T) {
+func TestStrokeSineWave_AnalyticVsTileCoverage(t *testing.T) {
 	const (
 		canvasW     = 800
 		canvasH     = 500
@@ -39,13 +39,13 @@ func TestStrokeSineWave_AnalyticVsSparseStrips(t *testing.T) {
 	// spanning roughly 700x400 pixels = 280,000 px^2 area.
 	// threshold = 2048 / sqrt(280000) ~ 3.87 -> clamped to 32.
 	// Since 397 >> 32, shouldUseTileRasterizer returns true when a CoverageFiller
-	// is registered, routing to SparseStrips instead of AnalyticFiller.
+	// is registered, routing to TileCoverage instead of AnalyticFiller.
 	t.Logf("")
 	t.Logf("=== ROUTING ANALYSIS ===")
 	t.Logf("When CoverageFiller is registered (import _ gg/gpu or gg/raster),")
 	t.Logf("Fill() routes complex stroke-expanded paths to the tile rasterizer.")
 	t.Logf("The adaptive threshold is ~32 for large bboxes; stroke expansion of")
-	t.Logf("100-segment polyline produces ~397 verbs >> 32, triggering SparseStrips.")
+	t.Logf("100-segment polyline produces ~397 verbs >> 32, triggering TileCoverage.")
 
 	// --- Render 1: AnalyticFiller (no CoverageFiller registered) ---
 	pmAnalytic := gg.NewPixmap(canvasW, canvasH)
@@ -61,17 +61,17 @@ func TestStrokeSineWave_AnalyticVsSparseStrips(t *testing.T) {
 		t.Fatalf("AnalyticFiller Stroke failed: %v", err)
 	}
 
-	// --- Render 2: SparseStripsFiller (AdaptiveFiller registered by raster/) ---
+	// --- Render 2: TileCoverageFiller (AdaptiveFiller registered by raster/) ---
 	pmSparse := gg.NewPixmap(canvasW, canvasH)
 	pmSparse.Clear(gg.White)
 
-	// Restore the AdaptiveFiller (which uses SparseStrips for this path size).
+	// Restore the AdaptiveFiller (which uses TileCoverage for this path size).
 	gg.RegisterCoverageFiller(savedFiller)
 
 	rSparse := gg.NewSoftwareRenderer(canvasW, canvasH)
 	paintS := makeTestStrokePaint(lineWidth)
 	if err := rSparse.Stroke(pmSparse, sinePath, paintS); err != nil {
-		t.Fatalf("SparseStripsFiller Stroke failed: %v", err)
+		t.Fatalf("TileCoverageFiller Stroke failed: %v", err)
 	}
 
 	// --- Measure and compare ---
@@ -88,15 +88,15 @@ func TestStrokeSineWave_AnalyticVsSparseStrips(t *testing.T) {
 
 	t.Logf("")
 	t.Logf("=== COMPARISON ===")
-	t.Logf("Non-white pixels: Analytic=%d, SparseStrips=%d, delta=%d (%.1f%%)",
+	t.Logf("Non-white pixels: Analytic=%d, TileCoverage=%d, delta=%d (%.1f%%)",
 		analyticStats.nonWhiteCount, sparseStats.nonWhiteCount,
 		sparseStats.nonWhiteCount-analyticStats.nonWhiteCount,
 		pctDelta(analyticStats.nonWhiteCount, sparseStats.nonWhiteCount))
 
-	t.Logf("Full-black pixels (coverage=255): Analytic=%d, SparseStrips=%d",
+	t.Logf("Full-black pixels (coverage=255): Analytic=%d, TileCoverage=%d",
 		analyticStats.fullBlackCount, sparseStats.fullBlackCount)
 
-	t.Logf("Mean coverage (non-white): Analytic=%.2f, SparseStrips=%.2f",
+	t.Logf("Mean coverage (non-white): Analytic=%.2f, TileCoverage=%.2f",
 		analyticStats.meanCov, sparseStats.meanCov)
 
 	// Column-wise Y-spread analysis (visual stroke width).
@@ -128,14 +128,14 @@ func TestStrokeSineWave_AnalyticVsSparseStrips(t *testing.T) {
 
 	t.Logf("")
 	t.Logf("=== COLUMN Y-SPREAD (visual stroke width in pixels) ===")
-	t.Logf("Max Y-spread:  Analytic=%d, SparseStrips=%d", maxASpread, maxSSpread)
-	t.Logf("Avg Y-spread:  Analytic=%.2f, SparseStrips=%.2f", avgA, avgS)
+	t.Logf("Max Y-spread:  Analytic=%d, TileCoverage=%d", maxASpread, maxSSpread)
+	t.Logf("Avg Y-spread:  Analytic=%.2f, TileCoverage=%.2f", avgA, avgS)
 	t.Logf("Active columns: %d", activeColumns)
 
 	// Coverage histogram comparison.
 	t.Logf("")
 	t.Logf("=== COVERAGE HISTOGRAM (non-white pixels, 8 bins) ===")
-	t.Logf("Range           | Analytic  | SparseStrips | Delta")
+	t.Logf("Range           | Analytic  | TileCoverage | Delta")
 	t.Logf("----------------|-----------|--------------|------")
 	for i := 0; i < 8; i++ {
 		lo := i * 32
@@ -188,7 +188,7 @@ func TestStrokeSineWave_AnalyticVsSparseStrips(t *testing.T) {
 		if shown >= 20 {
 			break
 		}
-		t.Logf("  x=%d: Analytic spread=%d, SparseStrips spread=%d (delta=%+d)",
+		t.Logf("  x=%d: Analytic spread=%d, TileCoverage spread=%d (delta=%+d)",
 			sd.x, sd.a, sd.s, sd.s-sd.a)
 		shown++
 	}

@@ -32,7 +32,7 @@ func init() {
 		gg.Logger().Warn("GPU accelerator not available", "err", err)
 	}
 
-	// Coverage filler: AdaptiveFiller auto-selects between SparseStrips (4x4
+	// Coverage filler: AdaptiveFiller auto-selects between TileCoverage (4x4
 	// tiles, SIMD-optimized) and TileCompute (16x16 tiles) based on path
 	// complexity and canvas size.
 	gg.RegisterCoverageFiller(&gpuimpl.AdaptiveFiller{})

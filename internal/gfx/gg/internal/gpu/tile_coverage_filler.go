@@ -7,15 +7,15 @@ import (
 	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
-// SparseStripsFiller implements gg.CoverageFiller using the SparseStrips
+// TileCoverageFiller implements gg.CoverageFiller using the TileCoverage
 // rasterizer (4x4 tiles). This is the default filler, optimized for CPU
 // with SIMD-friendly tile sizes.
-type SparseStripsFiller struct{}
+type TileCoverageFiller struct{}
 
-// FillCoverage rasterizes the path using SparseStrips and calls callback
+// FillCoverage rasterizes the path using TileCoverage and calls callback
 // for each pixel with non-zero coverage. If clipBounds is non-nil, tiles
 // entirely outside the clip rectangle are skipped (ADR-052 Layer A).
-func (f *SparseStripsFiller) FillCoverage(
+func (f *TileCoverageFiller) FillCoverage(
 	path *gg.Path, width, height int, fillRule gg.FillRule,
 	clipBounds *gg.ClipBounds,
 	callback func(x, y int, coverage uint8),
@@ -30,18 +30,18 @@ func (f *SparseStripsFiller) FillCoverage(
 		return
 	}
 
-	// 2. Get SparseStripsRasterizer from pool
+	// 2. Get TileCoverageRasterizer from pool
 	config := DefaultConfig(uint16(width), uint16(height)) //nolint:gosec // width/height bounded by viewport
 	config.FillRule = convertToSceneFillRule(fillRule)
-	ssr := globalSparseStripsPool.Get(config)
-	defer globalSparseStripsPool.Put(ssr)
+	tcr := globalTileCoveragePool.Get(config)
+	defer globalTileCoveragePool.Put(tcr)
 
 	// 3. Rasterize
-	ssr.RasterizePath(scenePath, scene.IdentityAffine(), FlattenTolerance)
+	tcr.RasterizePath(scenePath, scene.IdentityAffine(), FlattenTolerance)
 
 	// 4. Walk TileGrid → callback
 	// Layer A (ADR-052): skip tiles entirely outside clip bounds.
-	grid := ssr.Grid()
+	grid := tcr.Grid()
 	grid.ForEach(func(tile *Tile) {
 		baseX := int(tile.PixelX())
 		baseY := int(tile.PixelY())

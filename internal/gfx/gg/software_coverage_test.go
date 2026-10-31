@@ -836,10 +836,10 @@ func TestSoftwareRendererForcedAnalytic(t *testing.T) {
 	}
 }
 
-func TestSoftwareRendererForcedSparseStrips(t *testing.T) {
-	// Without a registered filler, forced SparseStrips falls back to analytic
+func TestSoftwareRendererForcedTileCoverage(t *testing.T) {
+	// Without a registered filler, forced TileCoverage falls back to analytic
 	r := NewSoftwareRenderer(100, 100)
-	r.rasterizerMode = RasterizerSparseStrips
+	r.rasterizerMode = RasterizerTileCoverage
 	pm := NewPixmap(100, 100)
 
 	p := NewPath()
@@ -849,7 +849,7 @@ func TestSoftwareRendererForcedSparseStrips(t *testing.T) {
 
 	err := r.Fill(pm, p, paint)
 	if err != nil {
-		t.Fatalf("Fill with forced SparseStrips (no filler): %v", err)
+		t.Fatalf("Fill with forced TileCoverage (no filler): %v", err)
 	}
 }
 

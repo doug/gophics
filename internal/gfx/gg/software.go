@@ -26,7 +26,7 @@ type SoftwareRenderer struct {
 	deviceScale float32
 
 	// rasterizerMode is set by Context before calling Fill/Stroke
-	// to support forced algorithm selection (RasterizerSparseStrips, etc.).
+	// to support forced algorithm selection (RasterizerTileCoverage, etc.).
 	// Reset to RasterizerAuto after each call.
 	rasterizerMode RasterizerMode
 
@@ -272,7 +272,7 @@ func shouldUseTileRasterizer(p *Path) bool {
 	// Route any multi-contour path to the analytic scanline filler.
 	//
 	// This began as a correctness guard: the tile-based CoverageFiller
-	// (SparseStrips) lost the winding sign, so the gaps between contours — a
+	// (TileCoverage) lost the winding sign, so the gaps between contours — a
 	// text run's glyphs, or a single glyph with counters — filled solid and
 	// text rasterized as an opaque block. That defect is fixed; the sign is
 	// now derived once, in the segment constructor.
@@ -506,8 +506,8 @@ func (r *SoftwareRenderer) Fill(pixmap *Pixmap, p *Path, paint *Paint) error {
 	case RasterizerAnalytic:
 		// Skip CoverageFiller entirely → always use AnalyticFiller below.
 
-	case RasterizerSparseStrips:
-		if filler := r.forcedFiller(RasterizerSparseStrips); filler != nil {
+	case RasterizerTileCoverage:
+		if filler := r.forcedFiller(RasterizerTileCoverage); filler != nil {
 			r.fillWithCoverageFiller(pixmap, p, paint, filler)
 			return nil
 		}
@@ -904,7 +904,7 @@ func (r *SoftwareRenderer) blendCoveragePaint(pixmap *Pixmap, x, y int, coverage
 
 // forcedFiller returns the CoverageFiller for a forced rasterizer mode.
 // If the registered filler implements ForceableFiller, the specific sub-filler
-// (SparseStrips or TileCompute) is returned. Otherwise, the filler is used as-is.
+// (TileCoverage or TileCompute) is returned. Otherwise, the filler is used as-is.
 func (r *SoftwareRenderer) forcedFiller(mode RasterizerMode) CoverageFiller {
 	filler := GetCoverageFiller()
 	if filler == nil {
@@ -915,8 +915,8 @@ func (r *SoftwareRenderer) forcedFiller(mode RasterizerMode) CoverageFiller {
 		return filler
 	}
 	switch mode {
-	case RasterizerSparseStrips:
-		return ff.SparseFiller()
+	case RasterizerTileCoverage:
+		return ff.TileCoverageFiller()
 	case RasterizerTileCompute:
 		return ff.ComputeFiller()
 	default:

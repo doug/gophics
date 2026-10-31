@@ -8,15 +8,18 @@ import (
 	"github.com/doug/gophics/internal/gfx/gg/scene"
 )
 
-// SparseStripsRasterizer is the main entry point for vello-style sparse strips rendering.
-// It orchestrates the complete pipeline: flatten -> coarse -> fine -> render.
+// TileCoverageRasterizer turns a path into per-pixel coverage over 4×4 tiles:
+// flatten Beziers to monotonic line segments, bin each segment into the tiles
+// it crosses, then compute analytic anti-aliased coverage per pixel. That is
+// what RasterizePath does and the only path TileCoverageFiller takes.
 //
-// The sparse strips algorithm works by:
-// 1. Flattening Bezier curves to monotonic line segments
-// 2. Coarse rasterization: binning segments into tiles they intersect
-// 3. Fine rasterization: calculating analytic anti-aliased coverage per pixel
-// 4. Rendering: outputting coverage as strips for efficient GPU rendering
-type SparseStripsRasterizer struct {
+// The strips field below, and RasterizeToStrips and RenderStripsToBuffer
+// beside it, are a second and unreachable pipeline: Vello-style sparse
+// strips, which nothing outside this file's own tests calls. They are what
+// the type's former name, SparseStripsRasterizer, actually described — the
+// rename left them here rather than deleting code and renaming it in one
+// step. Deleting them is the next item in this phase.
+type TileCoverageRasterizer struct {
 	// Pipeline components
 	flattenCtx *FlattenContext
 	coarse     *CoarseRasterizer
@@ -32,11 +35,11 @@ type SparseStripsRasterizer struct {
 	backdrop []int32
 
 	// Pool for reuse
-	pool *SparseStripsPool
+	pool *TileCoveragePool
 }
 
-// SparseStripsConfig configures the sparse strips rasterizer.
-type SparseStripsConfig struct {
+// TileCoverageConfig configures a TileCoverageRasterizer.
+type TileCoverageConfig struct {
 	Width     uint16
 	Height    uint16
 	FillRule  scene.FillStyle
@@ -44,8 +47,8 @@ type SparseStripsConfig struct {
 }
 
 // DefaultConfig returns a default configuration.
-func DefaultConfig(width, height uint16) SparseStripsConfig {
-	return SparseStripsConfig{
+func DefaultConfig(width, height uint16) TileCoverageConfig {
+	return TileCoverageConfig{
 		Width:     width,
 		Height:    height,
 		FillRule:  scene.FillNonZero,
@@ -53,9 +56,9 @@ func DefaultConfig(width, height uint16) SparseStripsConfig {
 	}
 }
 
-// NewSparseStripsRasterizer creates a new sparse strips rasterizer.
-func NewSparseStripsRasterizer(config SparseStripsConfig) *SparseStripsRasterizer {
-	return &SparseStripsRasterizer{
+// NewTileCoverageRasterizer returns a rasterizer sized by config.
+func NewTileCoverageRasterizer(config TileCoverageConfig) *TileCoverageRasterizer {
+	return &TileCoverageRasterizer{
 		flattenCtx: NewFlattenContext(),
 		coarse:     NewCoarseRasterizer(config.Width, config.Height),
 		fine:       NewFineRasterizer(config.Width, config.Height),
@@ -63,53 +66,53 @@ func NewSparseStripsRasterizer(config SparseStripsConfig) *SparseStripsRasterize
 		width:      config.Width,
 		height:     config.Height,
 		fillRule:   config.FillRule,
-		pool:       globalSparseStripsPool,
+		pool:       globalTileCoveragePool,
 	}
 }
 
 // Reset clears the rasterizer state for reuse with new geometry.
-func (ssr *SparseStripsRasterizer) Reset() {
-	ssr.flattenCtx.Reset()
-	ssr.coarse.Reset()
-	ssr.fine.Reset()
-	ssr.strips.Reset()
-	ssr.backdrop = nil
+func (tcr *TileCoverageRasterizer) Reset() {
+	tcr.flattenCtx.Reset()
+	tcr.coarse.Reset()
+	tcr.fine.Reset()
+	tcr.strips.Reset()
+	tcr.backdrop = nil
 }
 
 // SetFillRule sets the fill rule for rendering.
-func (ssr *SparseStripsRasterizer) SetFillRule(rule scene.FillStyle) {
-	ssr.fillRule = rule
-	ssr.fine.SetFillRule(rule)
-	ssr.strips.SetFillRule(rule)
+func (tcr *TileCoverageRasterizer) SetFillRule(rule scene.FillStyle) {
+	tcr.fillRule = rule
+	tcr.fine.SetFillRule(rule)
+	tcr.strips.SetFillRule(rule)
 }
 
 // raster.FillRule returns the current fill rule.
-func (ssr *SparseStripsRasterizer) FillRule() scene.FillStyle {
-	return ssr.fillRule
+func (tcr *TileCoverageRasterizer) FillRule() scene.FillStyle {
+	return tcr.fillRule
 }
 
 // SetSize changes the rasterizer viewport dimensions.
-func (ssr *SparseStripsRasterizer) SetSize(width, height uint16) {
-	if ssr.width != width || ssr.height != height {
-		ssr.width = width
-		ssr.height = height
-		ssr.coarse = NewCoarseRasterizer(width, height)
-		ssr.fine = NewFineRasterizer(width, height)
+func (tcr *TileCoverageRasterizer) SetSize(width, height uint16) {
+	if tcr.width != width || tcr.height != height {
+		tcr.width = width
+		tcr.height = height
+		tcr.coarse = NewCoarseRasterizer(width, height)
+		tcr.fine = NewFineRasterizer(width, height)
 	}
 }
 
 // Width returns the viewport width.
-func (ssr *SparseStripsRasterizer) Width() uint16 {
-	return ssr.width
+func (tcr *TileCoverageRasterizer) Width() uint16 {
+	return tcr.width
 }
 
 // Height returns the viewport height.
-func (ssr *SparseStripsRasterizer) Height() uint16 {
-	return ssr.height
+func (tcr *TileCoverageRasterizer) Height() uint16 {
+	return tcr.height
 }
 
 // RasterizePath rasterizes a single path to the tile grid.
-func (ssr *SparseStripsRasterizer) RasterizePath(
+func (tcr *TileCoverageRasterizer) RasterizePath(
 	path *scene.Path,
 	transform scene.Affine,
 	tolerance float32,
@@ -123,28 +126,28 @@ func (ssr *SparseStripsRasterizer) RasterizePath(
 	}
 
 	// Phase 1: Flatten path to monotonic line segments
-	ssr.flattenCtx.Reset()
-	ssr.flattenCtx.FlattenPathTo(path, transform, tolerance)
-	segments := ssr.flattenCtx.Segments()
+	tcr.flattenCtx.Reset()
+	tcr.flattenCtx.FlattenPathTo(path, transform, tolerance)
+	segments := tcr.flattenCtx.Segments()
 
 	if segments.Len() == 0 {
 		return
 	}
 
 	// Phase 2: Coarse rasterization - bin segments into tiles
-	ssr.coarse.Rasterize(segments)
-	ssr.coarse.SortEntries()
+	tcr.coarse.Rasterize(segments)
+	tcr.coarse.SortEntries()
 
 	// Phase 3: Calculate backdrop winding
-	ssr.backdrop = ssr.coarse.CalculateBackdrop()
+	tcr.backdrop = tcr.coarse.CalculateBackdrop()
 
 	// Phase 4: Fine rasterization - analytic anti-aliasing
-	ssr.fine.SetFillRule(ssr.fillRule)
-	ssr.fine.Rasterize(ssr.coarse, segments, ssr.backdrop)
+	tcr.fine.SetFillRule(tcr.fillRule)
+	tcr.fine.Rasterize(tcr.coarse, segments, tcr.backdrop)
 }
 
 // RasterizeToStrips rasterizes a path and generates sparse strips.
-func (ssr *SparseStripsRasterizer) RasterizeToStrips(
+func (tcr *TileCoverageRasterizer) RasterizeToStrips(
 	path *scene.Path,
 	transform scene.Affine,
 	tolerance float32,
@@ -158,58 +161,58 @@ func (ssr *SparseStripsRasterizer) RasterizeToStrips(
 	}
 
 	// Phase 1: Flatten
-	ssr.flattenCtx.Reset()
-	ssr.flattenCtx.FlattenPathTo(path, transform, tolerance)
-	segments := ssr.flattenCtx.Segments()
+	tcr.flattenCtx.Reset()
+	tcr.flattenCtx.FlattenPathTo(path, transform, tolerance)
+	segments := tcr.flattenCtx.Segments()
 
 	if segments.Len() == 0 {
 		return
 	}
 
 	// Phase 2: Coarse rasterization
-	ssr.coarse.Rasterize(segments)
-	ssr.coarse.SortEntries()
+	tcr.coarse.Rasterize(segments)
+	tcr.coarse.SortEntries()
 
 	// Phase 3: Calculate backdrop
-	ssr.backdrop = ssr.coarse.CalculateBackdrop()
+	tcr.backdrop = tcr.coarse.CalculateBackdrop()
 
 	// Phase 4: Generate strips
-	ssr.strips.SetFillRule(ssr.fillRule)
-	ssr.strips.RenderTiles(ssr.coarse, segments, ssr.backdrop)
+	tcr.strips.SetFillRule(tcr.fillRule)
+	tcr.strips.RenderTiles(tcr.coarse, segments, tcr.backdrop)
 }
 
 // Grid returns the tile grid with computed coverage.
-func (ssr *SparseStripsRasterizer) Grid() *TileGrid {
-	return ssr.fine.Grid()
+func (tcr *TileCoverageRasterizer) Grid() *TileGrid {
+	return tcr.fine.Grid()
 }
 
 // Strips returns the strip renderer with generated strips.
-func (ssr *SparseStripsRasterizer) Strips() *StripRenderer {
-	return ssr.strips
+func (tcr *TileCoverageRasterizer) Strips() *StripRenderer {
+	return tcr.strips
 }
 
 // Segments returns the flattened segments.
-func (ssr *SparseStripsRasterizer) Segments() *SegmentList {
-	return ssr.flattenCtx.Segments()
+func (tcr *TileCoverageRasterizer) Segments() *SegmentList {
+	return tcr.flattenCtx.Segments()
 }
 
 // RenderToBuffer renders the rasterized coverage to a pixel buffer.
-func (ssr *SparseStripsRasterizer) RenderToBuffer(
+func (tcr *TileCoverageRasterizer) RenderToBuffer(
 	buffer []uint8,
 	stride int,
 	color [4]uint8,
 ) {
-	ssr.fine.RenderToBuffer(buffer, int(ssr.width), int(ssr.height), stride, color)
+	tcr.fine.RenderToBuffer(buffer, int(tcr.width), int(tcr.height), stride, color)
 }
 
 // RenderStripsToBuffer renders strips to a pixel buffer.
-func (ssr *SparseStripsRasterizer) RenderStripsToBuffer(
+func (tcr *TileCoverageRasterizer) RenderStripsToBuffer(
 	buffer []uint8,
 	stride int,
 	color [4]uint8,
 ) {
-	strips := ssr.strips.Strips()
-	alphas := ssr.strips.Alphas()
+	strips := tcr.strips.Strips()
+	alphas := tcr.strips.Alphas()
 
 	if len(strips) == 0 {
 		return
@@ -311,50 +314,50 @@ func renderStripAlphas(buffer []uint8, stride, x, y, width int, alphas []uint8, 
 	}
 }
 
-// SparseStripsPool manages pooled rasterizers for reuse.
-type SparseStripsPool struct {
+// TileCoveragePool manages pooled rasterizers for reuse.
+type TileCoveragePool struct {
 	mu   sync.Mutex
-	pool []*SparseStripsRasterizer
+	pool []*TileCoverageRasterizer
 }
 
-// globalSparseStripsPool is the default pool.
-var globalSparseStripsPool = NewSparseStripsPool()
+// globalTileCoveragePool is the default pool.
+var globalTileCoveragePool = NewTileCoveragePool()
 
-// NewSparseStripsPool creates a new pool.
-func NewSparseStripsPool() *SparseStripsPool {
-	return &SparseStripsPool{
-		pool: make([]*SparseStripsRasterizer, 0, 4),
+// NewTileCoveragePool creates a new pool.
+func NewTileCoveragePool() *TileCoveragePool {
+	return &TileCoveragePool{
+		pool: make([]*TileCoverageRasterizer, 0, 4),
 	}
 }
 
 // Get retrieves a rasterizer from the pool or creates a new one.
-func (p *SparseStripsPool) Get(config SparseStripsConfig) *SparseStripsRasterizer {
+func (p *TileCoveragePool) Get(config TileCoverageConfig) *TileCoverageRasterizer {
 	p.mu.Lock()
 	if len(p.pool) > 0 {
-		ssr := p.pool[len(p.pool)-1]
+		tcr := p.pool[len(p.pool)-1]
 		p.pool = p.pool[:len(p.pool)-1]
 		p.mu.Unlock()
 
-		ssr.Reset()
-		ssr.SetSize(config.Width, config.Height)
-		ssr.SetFillRule(config.FillRule)
-		return ssr
+		tcr.Reset()
+		tcr.SetSize(config.Width, config.Height)
+		tcr.SetFillRule(config.FillRule)
+		return tcr
 	}
 	p.mu.Unlock()
 
-	return NewSparseStripsRasterizer(config)
+	return NewTileCoverageRasterizer(config)
 }
 
 // Put returns a rasterizer to the pool.
-func (p *SparseStripsPool) Put(ssr *SparseStripsRasterizer) {
-	if ssr == nil {
+func (p *TileCoveragePool) Put(tcr *TileCoverageRasterizer) {
+	if tcr == nil {
 		return
 	}
-	ssr.Reset()
+	tcr.Reset()
 
 	p.mu.Lock()
 	if len(p.pool) < 16 {
-		p.pool = append(p.pool, ssr)
+		p.pool = append(p.pool, tcr)
 	}
 	p.mu.Unlock()
 }
@@ -369,11 +372,11 @@ func RasterizePath(
 	config := DefaultConfig(width, height)
 	config.FillRule = fillRule
 
-	ssr := globalSparseStripsPool.Get(config)
-	defer globalSparseStripsPool.Put(ssr)
+	tcr := globalTileCoveragePool.Get(config)
+	defer globalTileCoveragePool.Put(tcr)
 
-	ssr.RasterizePath(path, transform, FlattenTolerance)
-	return ssr.Grid()
+	tcr.RasterizePath(path, transform, FlattenTolerance)
+	return tcr.Grid()
 }
 
 // Stats contains statistics about the rasterization process.
@@ -386,12 +389,12 @@ type Stats struct {
 }
 
 // GetStats returns statistics about the current rasterization state.
-func (ssr *SparseStripsRasterizer) GetStats() Stats {
+func (tcr *TileCoverageRasterizer) GetStats() Stats {
 	return Stats{
-		SegmentCount:    ssr.flattenCtx.Segments().Len(),
-		TileEntryCount:  len(ssr.coarse.Entries()),
-		ActiveTileCount: ssr.fine.Grid().TileCount(),
-		StripCount:      len(ssr.strips.Strips()),
-		AlphaByteCount:  len(ssr.strips.Alphas()),
+		SegmentCount:    tcr.flattenCtx.Segments().Len(),
+		TileEntryCount:  len(tcr.coarse.Entries()),
+		ActiveTileCount: tcr.fine.Grid().TileCount(),
+		StripCount:      len(tcr.strips.Strips()),
+		AlphaByteCount:  len(tcr.strips.Alphas()),
 	}
 }

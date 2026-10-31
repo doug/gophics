@@ -71,7 +71,7 @@ func TestRasterizerMode_String(t *testing.T) {
 	}{
 		{RasterizerAuto, "Auto"},
 		{RasterizerAnalytic, "Analytic"},
-		{RasterizerSparseStrips, "SparseStrips"},
+		{RasterizerTileCoverage, "TileCoverage"},
 		{RasterizerTileCompute, "TileCompute"},
 		{RasterizerSDF, "SDF"},
 		{RasterizerMode(99), "Unknown"},

@@ -34,7 +34,7 @@ func donut() *gg.Path {
 func coverPixels(t *testing.T, rule gg.FillRule) [64][64]uint8 {
 	t.Helper()
 	var got [64][64]uint8
-	(&SparseStripsFiller{}).FillCoverage(donut(), 64, 64, rule, nil,
+	(&TileCoverageFiller{}).FillCoverage(donut(), 64, 64, rule, nil,
 		func(x, y int, coverage uint8) {
 			if x < 0 || x >= 64 || y < 0 || y >= 64 {
 				t.Errorf("coverage reported outside the pixmap at (%d,%d)", x, y)

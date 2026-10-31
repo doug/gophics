@@ -27,12 +27,12 @@ const (
 	// Best for: debugging, simple UIs, guaranteed minimal overhead.
 	RasterizerAnalytic
 
-	// RasterizerSparseStrips forces SparseStrips (4x4 tiles) for all paths.
-	// Bypasses the adaptive threshold and always uses SparseStrips regardless
+	// RasterizerTileCoverage forces TileCoverage (4x4 tiles) for all paths.
+	// Bypasses the adaptive threshold and always uses TileCoverage regardless
 	// of path complexity.
 	// Requires a CoverageFiller with ForceableFiller support to be registered.
 	// Best for: CPU-optimized rendering, SIMD-friendly workloads.
-	RasterizerSparseStrips
+	RasterizerTileCoverage
 
 	// RasterizerTileCompute forces TileCompute (16x16 tiles) for all paths.
 	// Bypasses the adaptive threshold and always uses TileCompute regardless
@@ -54,8 +54,8 @@ func (m RasterizerMode) String() string {
 		return "Auto"
 	case RasterizerAnalytic:
 		return "Analytic"
-	case RasterizerSparseStrips:
-		return "SparseStrips"
+	case RasterizerTileCoverage:
+		return "TileCoverage"
 	case RasterizerTileCompute:
 		return "TileCompute"
 	case RasterizerSDF:

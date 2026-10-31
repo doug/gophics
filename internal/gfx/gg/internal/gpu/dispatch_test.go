@@ -323,19 +323,19 @@ func TestDispatchStrokeShape_UnclippedSDF_RectFallback(t *testing.T) {
 //
 // Background: stroke expansion produces multi-contour fill paths (inner + outer
 // outline). SoftwareRenderer.Stroke() forces RasterizerAnalytic, originally
-// because SparseStripsFiller lost the winding sign and left visible artifacts
+// because TileCoverageFiller lost the winding sign and left visible artifacts
 // (white/gray residual marks) inside stroke rings. The draw queue dispatch
 // (drawCmdStrokePath) called sr.Fill() with default Auto mode and so skipped
 // that pin. The sign is fixed now, so this test guards the dispatch agreeing
 // with the direct path rather than the defect itself.
 //
 // The test draws a large stroked circle (radius=120, lineWidth=1.5) which
-// produces a path with many verbs (well above the SparseStrips threshold).
-// If the dispatch incorrectly routes to SparseStripsFiller, the center pixel
+// produces a path with many verbs (well above the TileCoverage threshold).
+// If the dispatch incorrectly routes to TileCoverageFiller, the center pixel
 // will have non-zero coverage (artifact). With correct AnalyticFiller routing,
 // the center pixel remains zero (only the stroke ring has coverage).
 func TestDispatchStrokePath_ForcesAnalyticFiller(t *testing.T) {
-	// Register CoverageFiller so auto-selection can route to SparseStrips.
+	// Register CoverageFiller so auto-selection can route to TileCoverage.
 	prevFiller := gg.GetCoverageFiller()
 	gg.RegisterCoverageFiller(&AdaptiveFiller{})
 	defer func() {
@@ -380,8 +380,8 @@ func TestDispatchStrokePath_ForcesAnalyticFiller(t *testing.T) {
 		t.Fatal("preTessellateStroke produced nil path")
 	}
 	if cmd.path.NumVerbs() < 64 {
-		t.Skipf("expanded stroke has only %d verbs (below SparseStrips threshold); "+
-			"test requires enough verbs to trigger SparseStripsFiller routing", cmd.path.NumVerbs())
+		t.Skipf("expanded stroke has only %d verbs (below TileCoverage threshold); "+
+			"test requires enough verbs to trigger TileCoverageFiller routing", cmd.path.NumVerbs())
 	}
 
 	// Dispatch to software (this is the code path under test).
@@ -423,11 +423,11 @@ func TestDispatchStrokePath_ForcesAnalyticFiller(t *testing.T) {
 //
 // This isolates the filler selection: both paths use the same expanded stroke
 // geometry — the only difference is whether the dispatch correctly forces
-// AnalyticFiller or incorrectly allows SparseStripsFiller.
+// AnalyticFiller or incorrectly allows TileCoverageFiller.
 //
-// The test registers the real AdaptiveFiller (SparseStrips) so that
+// The test registers the real AdaptiveFiller (TileCoverage) so that
 // SoftwareRenderer.Fill() with RasterizerAuto routes complex paths through
-// SparseStripsFiller. Without this registration, all paths always go through
+// TileCoverageFiller. Without this registration, all paths always go through
 // AnalyticFiller and the bug is invisible.
 func TestDispatchStrokePath_MatchesAnalyticFiller(t *testing.T) {
 	// Save and restore the previous filler to avoid test pollution.
@@ -510,7 +510,7 @@ func TestDispatchStrokePath_MatchesAnalyticFiller(t *testing.T) {
 
 	if diffPixels > 0 {
 		t.Errorf("stroke dispatch vs forced AnalyticFiller: %d pixels differ (maxDiff=%d); "+
-			"draw queue dispatch likely routed expanded stroke to SparseStripsFiller "+
+			"draw queue dispatch likely routed expanded stroke to TileCoverageFiller "+
 			"instead of forcing AnalyticFiller for multi-contour winding",
 			diffPixels, maxDiff)
 	}
