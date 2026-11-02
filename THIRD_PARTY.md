@@ -57,3 +57,24 @@ The bottom of the GPU stack remains an ordinary module dependency (not vendored)
 `golang.org/x/*` packages are also external. None require CGo; the whole module
 builds with `CGO_ENABLED=0` (the mobile `gomobile bind` path in `shell/mobile`
 is the one contained exception).
+
+## Bundled font assets
+
+The docs site redistributes one font, served to its own WebAssembly demos
+because a browser will not give a WebAssembly page the bytes of an installed
+font — so the desktop route (`Config.SystemFonts`) has nothing to do on the web
+and the face has to be fetched instead.
+
+| Path | Origin | License |
+|---|---|---|
+| `docs/fonts/NotoColorEmoji-gallery-subset.ttf` | `github.com/googlefonts/noto-emoji` (tag `v2026-09-24-unicode18_0`, `2D/fonts/NotoColorEmoji.ttf`) — subset to the 8 emoji the gallery shows | OFL-1.1 |
+
+The licence text ships beside it as `docs/fonts/LICENSE-NotoColorEmoji.txt`, as
+OFL section 2 requires. Copyright 2013 Google LLC. The copyright statement names
+no Reserved Font Name, so the subset keeps the original name; `docs/fonts/README.md`
+records the exact subsetting command and the source file's SHA-256.
+
+It is the **CBDT/CBLC bitmap** build, not the COLRv1 face that fonts.google.com
+serves under the same name. gophics rasterizes colour bitmap glyphs (sbix and
+CBDT) and not COLR paint graphs, so the two are not interchangeable here — the
+COLRv1 file would load without error and draw nothing.

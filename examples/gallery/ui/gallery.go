@@ -23,6 +23,7 @@ import (
 	"github.com/doug/gophics/layout"
 	"github.com/doug/gophics/paint"
 	"github.com/doug/gophics/shell"
+	"github.com/doug/gophics/text"
 	"github.com/doug/gophics/theme"
 	"github.com/doug/gophics/widget"
 )
@@ -498,7 +499,24 @@ func Config() app.Config {
 		// For the colour-emoji section, which is the one thing in the catalog
 		// the bundled Go faces cannot draw at all: they are Latin outlines and
 		// an emoji needs the machine's bitmap emoji face. A no-op on the web
-		// and mobile builds, where the section says so instead.
+		// and mobile builds.
 		SystemFonts: true,
+		// The web half of the same thing, because SystemFonts cannot close the
+		// gap there: a browser will not hand a WebAssembly page the bytes of an
+		// installed font, so the face has to be fetched. Served from this
+		// site's own origin rather than a CDN, which is the arrangement
+		// text.FetchFontSource is shaped for — the URLs belong to the app so a
+		// gophics page never phones a third party for a glyph.
+		//
+		// It is a subset: the eight emoji this catalog actually shows, 27KB out
+		// of Noto Color Emoji's 10.7MB. It must stay a CBDT/CBLC bitmap build —
+		// the COLRv1 face that fonts.google.com serves under the same name
+		// would fetch happily and render nothing, because gophics rasterizes
+		// colour bitmaps and not COLR paint graphs. See docs/fonts/README.md.
+		//
+		// A no-op off the web, so it is safe to leave set in a shared Config.
+		WebFonts: map[text.Script]string{
+			text.ScriptEmoji: "/fonts/NotoColorEmoji-gallery-subset.ttf",
+		},
 	}
 }
