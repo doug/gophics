@@ -33,7 +33,7 @@ func init() {
 	}
 
 	// Coverage filler: AdaptiveFiller auto-selects between TileCoverage (4x4
-	// tiles, SIMD-optimized) and TileCompute (16x16 tiles) based on path
+	// tiles) and TileCompute (16x16 tiles) based on path
 	// complexity and canvas size.
 	gg.RegisterCoverageFiller(&gpuimpl.AdaptiveFiller{})
 }

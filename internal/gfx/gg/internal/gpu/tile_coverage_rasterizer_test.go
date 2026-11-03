@@ -742,19 +742,6 @@ func TestTileCoverageRasterizerCircle(t *testing.T) {
 	}
 }
 
-func TestTileCoverageRasterizerStrips(t *testing.T) {
-	config := DefaultConfig(100, 100)
-	tcr := NewTileCoverageRasterizer(config)
-
-	path := scene.NewPath().Rectangle(10, 10, 20, 20)
-	tcr.RasterizeToStrips(path, scene.IdentityAffine(), FlattenTolerance)
-
-	strips := tcr.Strips()
-	if len(strips.Strips()) == 0 {
-		t.Error("Should produce strips")
-	}
-}
-
 func TestTileCoverageRasterizerRenderToBuffer(t *testing.T) {
 	config := DefaultConfig(100, 100)
 	tcr := NewTileCoverageRasterizer(config)

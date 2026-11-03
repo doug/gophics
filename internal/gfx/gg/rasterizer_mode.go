@@ -31,7 +31,7 @@ const (
 	// Bypasses the adaptive threshold and always uses TileCoverage regardless
 	// of path complexity.
 	// Requires a CoverageFiller with ForceableFiller support to be registered.
-	// Best for: CPU-optimized rendering, SIMD-friendly workloads.
+	// Best for: dense paths, where per-tile work amortizes the binning pass.
 	RasterizerTileCoverage
 
 	// RasterizerTileCompute forces TileCompute (16x16 tiles) for all paths.
