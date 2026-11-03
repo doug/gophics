@@ -20,9 +20,6 @@ var blitShaderSource string
 //go:embed shaders/blend.wgsl
 var blendShaderSource string
 
-//go:embed shaders/strip.wgsl
-var stripShaderSource string
-
 //go:embed shaders/composite.wgsl
 var compositeShaderSource string
 
@@ -42,9 +39,6 @@ type ShaderModules struct {
 	// Blend is the 29-mode blend shader
 	Blend ShaderModuleID
 
-	// Strip is the strip rasterization compute shader
-	Strip ShaderModuleID
-
 	// Composite is the final layer compositing shader
 	Composite ShaderModuleID
 }
@@ -53,7 +47,6 @@ type ShaderModules struct {
 func (s *ShaderModules) IsValid() bool {
 	return s.Blit != InvalidShaderModule &&
 		s.Blend != InvalidShaderModule &&
-		s.Strip != InvalidShaderModule &&
 		s.Composite != InvalidShaderModule
 }
 
@@ -76,9 +69,6 @@ func CompileShaders() (*ShaderModules, error) {
 	if blendShaderSource == "" {
 		return nil, errors.New("blend shader source is empty")
 	}
-	if stripShaderSource == "" {
-		return nil, errors.New("strip shader source is empty")
-	}
 	if compositeShaderSource == "" {
 		return nil, errors.New("composite shader source is empty")
 	}
@@ -92,7 +82,6 @@ func CompileShaders() (*ShaderModules, error) {
 	modules := &ShaderModules{
 		Blit:      ShaderModuleID(1),
 		Blend:     ShaderModuleID(2),
-		Strip:     ShaderModuleID(3),
 		Composite: ShaderModuleID(4),
 	}
 
@@ -107,11 +96,6 @@ func GetBlitShaderSource() string {
 // GetBlendShaderSource returns the WGSL source for the blend shader.
 func GetBlendShaderSource() string {
 	return blendShaderSource
-}
-
-// GetStripShaderSource returns the WGSL source for the strip shader.
-func GetStripShaderSource() string {
-	return stripShaderSource
 }
 
 // GetCompositeShaderSource returns the WGSL source for the composite shader.

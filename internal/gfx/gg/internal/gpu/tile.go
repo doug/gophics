@@ -19,7 +19,8 @@ const TileShift = 2
 const TileMask = TileSize - 1
 
 // Tile represents a 4×4 pixel tile with coverage data.
-// This is the core unit of the sparse strips algorithm.
+// This is the core unit of the tile coverage algorithm — the one
+// TileCoverageRasterizer runs, and now the only one in the package.
 //
 // The coverage array stores anti-aliased alpha values for each pixel
 // in row-major order: [row0: 0-3, row1: 4-7, row2: 8-11, row3: 12-15]

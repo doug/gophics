@@ -17,7 +17,6 @@ func TestShaderSourcesNonEmpty(t *testing.T) {
 	}{
 		{"blit", GetBlitShaderSource()},
 		{"blend", GetBlendShaderSource()},
-		{"strip", GetStripShaderSource()},
 		{"composite", GetCompositeShaderSource()},
 	}
 
@@ -66,18 +65,6 @@ func TestShaderSourcesContainExpectedContent(t *testing.T) {
 				"BLEND_SOURCE_OVER",
 				"blend_porter_duff",
 				"BlendParams",
-			},
-		},
-		{
-			name:   "strip",
-			source: GetStripShaderSource(),
-			required: []string{
-				"@compute",
-				"@workgroup_size",
-				"Strip",
-				"StripParams",
-				"coverage",
-				"textureStore",
 			},
 		},
 		{
@@ -269,9 +256,6 @@ func TestCompileShaders(t *testing.T) {
 	if modules.Blend == InvalidShaderModule {
 		t.Error("Blend shader module is invalid")
 	}
-	if modules.Strip == InvalidShaderModule {
-		t.Error("Strip shader module is invalid")
-	}
 	if modules.Composite == InvalidShaderModule {
 		t.Error("Composite shader module is invalid")
 	}
@@ -286,27 +270,22 @@ func TestShaderModulesIsValid(t *testing.T) {
 	}{
 		{
 			name:    "all valid",
-			modules: ShaderModules{Blit: 1, Blend: 2, Strip: 3, Composite: 4},
+			modules: ShaderModules{Blit: 1, Blend: 2, Composite: 4},
 			want:    true,
 		},
 		{
 			name:    "blit invalid",
-			modules: ShaderModules{Blit: 0, Blend: 2, Strip: 3, Composite: 4},
+			modules: ShaderModules{Blit: 0, Blend: 2, Composite: 4},
 			want:    false,
 		},
 		{
 			name:    "blend invalid",
-			modules: ShaderModules{Blit: 1, Blend: 0, Strip: 3, Composite: 4},
-			want:    false,
-		},
-		{
-			name:    "strip invalid",
-			modules: ShaderModules{Blit: 1, Blend: 2, Strip: 0, Composite: 4},
+			modules: ShaderModules{Blit: 1, Blend: 0, Composite: 4},
 			want:    false,
 		},
 		{
 			name:    "composite invalid",
-			modules: ShaderModules{Blit: 1, Blend: 2, Strip: 3, Composite: 0},
+			modules: ShaderModules{Blit: 1, Blend: 2, Composite: 0},
 			want:    false,
 		},
 		{
@@ -379,21 +358,6 @@ func TestWGSLSyntaxBasics(t *testing.T) {
 				{"vec4<f32>", "vec4 type"},
 			},
 		},
-		{
-			name:   "strip",
-			source: GetStripShaderSource(),
-			checks: []struct {
-				pattern string
-				desc    string
-			}{
-				{"struct Strip", "strip struct"},
-				{"struct StripParams", "params struct"},
-				{"var<storage, read>", "storage buffer"},
-				{"var<uniform>", "uniform buffer"},
-				{"texture_storage_2d", "storage texture"},
-				{"@builtin(global_invocation_id)", "compute builtin"},
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -455,23 +419,6 @@ func TestBlendShaderSeparableFunctions(t *testing.T) {
 	}
 }
 
-// TestStripShaderEntryPoints verifies strip shader has expected entry points.
-func TestStripShaderEntryPoints(t *testing.T) {
-	source := GetStripShaderSource()
-
-	entryPoints := []string{
-		"fn cs_main",
-		"fn cs_accumulate",
-		"fn cs_colored",
-	}
-
-	for _, fn := range entryPoints {
-		if !strings.Contains(source, fn) {
-			t.Errorf("strip shader missing entry point: %s", fn)
-		}
-	}
-}
-
 // TestCompositeShaderEntryPoints verifies composite shader has expected entry points.
 func TestCompositeShaderEntryPoints(t *testing.T) {
 	source := GetCompositeShaderSource()
@@ -499,7 +446,6 @@ func TestShaderSourceLineCount(t *testing.T) {
 	}{
 		{"blit", GetBlitShaderSource(), 30, "simple texture copy"},
 		{"blend", GetBlendShaderSource(), 200, "29 blend modes"},
-		{"strip", GetStripShaderSource(), 80, "strip rasterization"},
 		{"composite", GetCompositeShaderSource(), 100, "layer compositing"},
 	}
 

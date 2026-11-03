@@ -83,8 +83,9 @@ const (
 // =============================================================================
 
 // VelloComputeStage identifies one of the 8 stages in the Vello compute pipeline.
-// All constants are prefixed with "Vello" to avoid conflicts with the existing
-// PipelineStage enum (StageCoarse, StageFine) in sparse_strips_gpu.go.
+// All constants are prefixed with "Vello" because they once had to avoid a
+// PipelineStage enum in sparse_strips_gpu.go; that file and its enum are gone,
+// so the prefix is now only a name, not a disambiguation.
 type VelloComputeStage int
 
 const (
